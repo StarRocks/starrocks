@@ -58,7 +58,7 @@ Status PersistentIndexLoadExecutor::init() {
     int max_threads = std::max<int>(1, config::pindex_load_thread_pool_num_max);
     RETURN_IF_ERROR(
             ThreadPoolBuilder("pindex_load").set_min_threads(0).set_max_threads(max_threads).build(&_load_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("pindex_load", _load_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), pindex_load, _load_pool.get());
     return Status::OK();
 }
 

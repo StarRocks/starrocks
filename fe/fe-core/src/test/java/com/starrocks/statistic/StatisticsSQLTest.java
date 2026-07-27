@@ -277,6 +277,28 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
+        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+
+        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
+                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
+                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
+
+        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
+                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
+        Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
+        Assertions.assertFalse(sql.contains("histogram("), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
+    }
+
+    @Test
     public void testEscapeFullSQL() throws Exception {
         Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
@@ -398,16 +420,22 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testCacheExternalQueryColumnStatics() {
+        // table_uuid is stored hashed (StatisticUtils.hashTableUuidForPkStorage) to stay within
+        // BE's primary_key_limit_size; queries match both the hashed and raw value so historical
+        // rows written before hashing was introduced remain visible.
+        String hashedTableUUID = StatisticUtils.hashTableUuidForPkStorage("a");
+        String tableUUIDPredicate = "table_uuid in (\"" + hashedTableUUID + "\", \"a\")";
+
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.INT));
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
         Assertions.assertEquals(0, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
                 Lists.newArrayList("col1", "col2", "col3"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT));
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col1\", \"col2\")");
-        assertContains(sql, "table_uuid = \"a\" and column_name in (\"col3\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col1\", \"col2\")");
+        assertContains(sql, tableUUIDPredicate + " and column_name in (\"col3\")");
         Assertions.assertEquals(1, StringUtils.countMatches(sql, "UNION ALL"));
 
         sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a",
@@ -438,7 +466,8 @@ public class StatisticsSQLTest extends PlanTestBase {
     public void testExternalTableCollectionStatsType() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(ArrayType.ARRAY_INT, new MapType(IntegerType.INT, StringType.STRING)));
-        assertContains(sql, "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string)");
+        assertContains(sql, "cast(max(cast(nullif(max, '') as string)) as string)," +
+                " cast(min(cast(nullif(min, '') as string)) as string)");
     }
 
     @Test

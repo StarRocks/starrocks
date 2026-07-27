@@ -44,9 +44,9 @@
 
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/primitive/schema_helper.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace starrocks {
 

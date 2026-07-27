@@ -29,23 +29,23 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/primitives/driver_observer.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/primitives/event.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/scan/morsel_queue.h"
-#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
-#include "exec/pipeline/source_operator.h"
-#include "exec/runtime/fragment_runtime_state.h"
-#include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/primitives/driver_observer.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/event.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/scan/morsel_queue.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -102,6 +102,10 @@ PipelineDriver::PipelineDriver()
           _driver_id(0) {}
 
 PipelineDriver::~PipelineDriver() noexcept {
+    // Queued or blocked drivers abandoned when the driver executor is closed during shutdown are
+    // destroyed without going through finalize(), so unschedule the global runtime-filter timer here
+    // as well; otherwise the timer thread may run a task whose owning shared_ptr is already gone.
+    _unschedule_global_rf_timer();
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
@@ -457,10 +461,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
                             if (capacity_exceed || maybe_chunk.value()->has_capacity_limit_reached()) {
+                                LOG(WARNING) << "Large column detected after " << i << "-th operator "
+                                             << curr_op->get_name() << " in " << to_readable_string();
                                 return Status::CapacityLimitExceed(
-                                        fmt::format("Large column detected at "
-                                                    "after {}-th operator {} in {}",
-                                                    i, curr_op->get_name(), to_readable_string()));
+                                        "Large column detected, please reduce rows per batch or the size of "
+                                        "string/array values");
                             }
                         }
 
@@ -884,11 +889,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _update_driver_level_timer();
 
-    if (_global_rf_timer != nullptr) {
-        if (_pipeline_timer_context != nullptr) {
-            _pipeline_timer_context->unschedule_and_join(_global_rf_timer.get());
-        }
-    }
+    _unschedule_global_rf_timer();
 
     if (_driver_observer != nullptr) {
         _driver_observer->on_driver_finished(runtime_state);
@@ -937,6 +938,16 @@ void PipelineDriver::_update_global_rf_timer() {
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
+}
+
+void PipelineDriver::_unschedule_global_rf_timer() noexcept {
+    // Move the task out first so it stays alive while we synchronize with a callback that may already
+    // be running on the timer thread but has not yet taken its shared_from_this() reference. Otherwise
+    // doRun() could observe a zero use_count and throw std::bad_weak_ptr.
+    auto task = std::move(_global_rf_timer);
+    if (task != nullptr && _pipeline_timer_context != nullptr) {
+        _pipeline_timer_context->unschedule_and_join(task.get());
+    }
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {

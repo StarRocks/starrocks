@@ -23,7 +23,7 @@
 #include "common/memory/mem_hook_allocator.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"

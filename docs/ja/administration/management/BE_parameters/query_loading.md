@@ -378,6 +378,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BEプロセスにおけるファイルディスクリプタの最小数。
 - 導入バージョン: -
 
+### object_storage_client_cache_size
+
+- デフォルト: 8
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クライアントファクトリーごとにキャッシュされるオブジェクトストレージクライアント（S3 互換および Azure Blob）の最大数。この値はクライアント作成のたびに読み取られるため、値を下げても即座には反映されず、以降の作成時にキャッシュされたクライアントが退避されるにつれて徐々に反映されます。`1` 未満の値は `1` として扱われます。
+- 導入バージョン: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - デフォルト: -1
@@ -621,13 +630,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列のZoneMapの最小/最大に使用されるプレフィックス長。
 - 導入バージョン: -
 
+### jvm_call_thread_pool_size
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: いいえ
+- 説明: pthread上で実行する必要がある内部JNI処理（HDFS/libhdfsのcloseおよびstat操作、JNIグローバル参照の解放など）に使用されるJVM呼び出しPriorityThreadPoolのサイズを設定します。このプールは`udf_thread_pool_size`とは独立しており、一般的なJVM処理がJava UDFの実行と競合しないようにします。
+- 導入バージョン: -
+
 ### udf_thread_pool_size
 
 - デフォルト: 1
 - タイプ: Int
 - 単位: スレッド
 - 変更可能: いいえ
-- 説明: ExecEnvで作成されるUDF呼び出しPriorityThreadPoolのサイズを設定します（ユーザー定義関数/UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのUDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
+- 説明: JavaEnvが所有するJava UDF呼び出しPriorityThreadPoolのサイズを設定します（Java UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのJava UDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
 - 導入バージョン: v3.2.0
 
 ### update_memory_limit_percent

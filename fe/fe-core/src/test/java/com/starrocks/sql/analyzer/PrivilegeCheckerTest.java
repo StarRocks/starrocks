@@ -3021,14 +3021,12 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
             // ignore
         }
         String showSql = "show full functions in db1";
-        String expectError = "Access denied for user 'test' to database 'db1'";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
         ctxToTestUser();
         Authorizer.check(statement, starRocksAssert.getCtx());
 
         ctxToRoot();
         grantOrRevoke("grant create materialized view on DATABASE db1 to test");
-        expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
         Authorizer.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
@@ -3183,7 +3181,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        AuthorizationMgr manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
@@ -3565,8 +3562,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
         String createSql2 = "create pipe p2 " +
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
-        String dropSql = "drop pipe p1";
-        String dropSql2 = "drop pipe p2";
         ConnectContext ctx = starRocksAssert.getCtx();
 
         ctxToTestUser();
@@ -3790,7 +3785,6 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testPipePEntryObject() throws Exception {
         PipeManagerTest.mockRepoExecutorDML();
 
-        GlobalStateMgr mgr = GlobalStateMgr.getCurrentState();
         ctxToRoot();
         starRocksAssert.getCtx().setDatabase("db1");
         starRocksAssert.withTable("create table db1.tbl_pipe (id int, str string) properties('replication_num'='1') ");

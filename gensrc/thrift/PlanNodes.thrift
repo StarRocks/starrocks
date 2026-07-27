@@ -164,6 +164,7 @@ enum TFileFormatType {
     FORMAT_JSON = 9,
     FORMAT_CSV_ZSTD = 10,
     FORMAT_AVRO = 11,
+    FORMAT_ARROW = 12,
 }
 
 // CDC envelope format for JSON data
@@ -240,6 +241,27 @@ enum TFileScanType {
     FILES_QUERY
 }
 
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers the
+// INCLUDE METADATA (<KEY> AS <alias>, ...) clause into hidden source slots described by
+// TRoutineLoadMetaColumn, so the BE scanner fills the slot from the Kafka/Pulsar message rather than
+// the payload. TIMESTAMP is the Kafka record timestamp / Pulsar publish time; EVENT_TIME is the Pulsar
+// event time; HEADERS is the whole header/property map (a single value is read with element_at).
+enum TStreamSourceMetaKind {
+    TOPIC = 0,
+    PARTITION = 1,
+    OFFSET = 2,
+    MESSAGE_ID = 3,
+    TIMESTAMP = 4,
+    EVENT_TIME = 5,
+    KEY = 6,
+    HEADERS = 7
+}
+
+struct TRoutineLoadMetaColumn {
+    1: optional Types.TSlotId slot_id
+    2: optional TStreamSourceMetaKind kind
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -304,6 +326,9 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
+    // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
+    35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
 // Broker scan range
@@ -482,10 +507,6 @@ struct TBinlogScanRange {
 struct TBenchmarkScanRange {
   1: optional i64 start_row
   2: optional i64 row_count
-}
-
-struct TChangesScanNode {
-    // no implementation, only used for placeholder in TPlanNode
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -762,6 +783,12 @@ struct TLakeScanNode {
   57: optional TVectorSearchOptions vector_search_options
 
   60: optional list<Exprs.TExpr> partition_conjuncts
+
+  // Per-scan decision (session flag on AND not disabled by the duplicate-lake-table gate), made at plan
+  // build, that this lake scan should take the prepared physical split scan path. Absent means off.
+  62: optional bool use_prepared_physical_split_scan
+
+  63: optional TTableSampleOptions sample_options
 }
 
 struct TEqJoinCondition {
@@ -1593,9 +1620,6 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
-
-  // just a placeholder
-  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

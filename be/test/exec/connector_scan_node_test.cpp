@@ -140,6 +140,25 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_cloud(si
     return scan_ranges;
 }
 
+TEST_F(ConnectorScanNodeTest, PublishesScanNodeHintsToDataSourceProvider) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT)};
+    auto* descs = create_table_desc(runtime_state.get(), types);
+    auto tnode = create_tplan_node_cloud();
+    auto scan_node = std::make_shared<ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+
+    ASSERT_OK(scan_node->init(*tnode, runtime_state.get()));
+    auto* provider = scan_node->data_source_provider();
+    ASSERT_NE(nullptr, provider);
+    ASSERT_GT(scan_node->estimated_scan_row_bytes(), 0);
+    ASSERT_EQ(scan_node->estimated_scan_row_bytes(), provider->estimated_scan_row_bytes());
+    ASSERT_FALSE(provider->is_filtered_above_iterator());
+
+    ScanNode* base_scan_node = scan_node.get();
+    base_scan_node->set_filtered_above_iterator(true);
+    ASSERT_TRUE(provider->is_filtered_above_iterator());
+}
+
 TEST_F(ConnectorScanNodeTest, test_convert_scan_range_to_morsel_queue_factory_cloud) {
     std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
     std::vector<TypeDescriptor> types;

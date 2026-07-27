@@ -419,7 +419,6 @@ public class MetadataMgr {
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {
-        TableName tableName = new TableName(catalogName, dbName, tblName);
         com.starrocks.sql.ast.QualifiedName qualifiedName = com.starrocks.sql.ast.QualifiedName.of(
                 catalogName != null ? java.util.Arrays.asList(catalogName, dbName, tblName)
                         : java.util.Arrays.asList(dbName, tblName));

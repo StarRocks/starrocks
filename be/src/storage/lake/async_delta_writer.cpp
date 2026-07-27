@@ -23,9 +23,10 @@
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
 #include "common/util/stack_trace_mutex.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
@@ -290,7 +291,11 @@ inline Status AsyncDeltaWriterImpl::do_open() {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     if (_block_merge_token == nullptr) {
-        _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        if (UNLIKELY(executor == nullptr)) {
+            return Status::InternalError("LoadSpillBlockMergeExecutor init failed");
+        }
+        _block_merge_token = executor->create_token();
     }
     return _writer->open();
 }

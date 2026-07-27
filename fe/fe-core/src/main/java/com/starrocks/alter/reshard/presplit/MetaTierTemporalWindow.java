@@ -16,28 +16,31 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.common.util.DateUtils;
 
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.zone.ZoneRules;
+import java.util.Optional;
 
 /**
- * The value windows the meta tier accepts for temporal sort-key boundaries. DATE accepts
- * {@code [0001-01-01, 9999-12-31]}; DATETIME accepts the narrower {@code [1970-01-01, 9999-12-31]}.
- * A value outside its window falls back to data tier (it is not a load failure). The upper bound
- * is the StarRocks DATE/DATETIME domain ceiling for both.
+ * The value window the meta tier accepts for DATE and DATETIME sort-key boundaries:
+ * {@code [0001-01-01, 9999-12-31]}. A value outside it falls back to data tier (it is not a load
+ * failure). The upper bound is the StarRocks DATE/DATETIME domain ceiling.
  *
- * <p>Why DATE reaches year 1 but DATETIME stops at the epoch — the FE-computed boundary must equal
- * the value the BE load stores:
+ * <p>Why the window reaches year 1 — the FE-computed boundary must equal the value the BE load
+ * stores, and that holds for every representable value down to the start of the unambiguous AD range:
  * <ul>
  *   <li>DATE carries no sub-second part, and BE decodes a day-of-epoch by adding a fixed Julian
  *       offset and converting with the same proleptic-Gregorian algorithm {@link LocalDate} uses
- *       (no 1582 cutover), so a DATE boundary is FE/BE-identical for every representable value down
- *       to the start of the unambiguous AD range.</li>
- *   <li>DATETIME below 1970-01-01 is not yet safe: the BE Parquet INT64-timestamp load splits the
- *       signed tick with truncating division and does not borrow a whole second for a negative
- *       sub-second remainder, so a pre-1970 fractional-second value decodes to a value that does not
- *       match the FE {@code Math.floorDiv}/{@code floorMod} boundary (and the BE ORC pre-epoch path
- *       drops the sub-second). Until the BE load handles a negative sub-second, a sub-1970 DATETIME
- *       stays on the data tier.</li>
+ *       (no 1582 cutover), so a DATE boundary is FE/BE-identical.</li>
+ *   <li>DATETIME below 1970-01-01 is safe too: the BE timestamp load reconstructs the same wall
+ *       clock the FE computes with {@code Math.floorDiv}/{@code floorMod} — keeping the sub-second of
+ *       a pre-1970 value rather than dropping or corrupting it — and both the load and the
+ *       boundary-string parse pack the calendar date through the same proleptic conversion, so a
+ *       pre-1970 (and pre-1582) DATETIME boundary matches the loaded value down to year 1.</li>
  * </ul>
  *
  * <p>This lives in one place — rather than being duplicated per reader like the integer-stat
@@ -49,34 +52,19 @@ import java.time.LocalDateTime;
 final class MetaTierTemporalWindow {
 
     private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1, 1, 1);
-    private static final LocalDate MIN_SUPPORTED_DATETIME_DATE = LocalDate.of(1970, 1, 1);
     private static final LocalDate MAX_SUPPORTED_DATE = LocalDate.of(9999, 12, 31);
 
     private MetaTierTemporalWindow() {
     }
 
     /**
-     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal)
-     * if a DATE sort-key boundary is outside {@code [0001-01-01, 9999-12-31]}.
+     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal) if the
+     * calendar date of a DATE or DATETIME sort-key boundary is outside {@code [0001-01-01, 9999-12-31]}.
      */
-    static void rejectDateOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
+    static void rejectOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
         if (date.isBefore(MIN_SUPPORTED_DATE) || date.isAfter(MAX_SUPPORTED_DATE)) {
             throw new MetaTierUnavailableException(
-                    "DATE meta tier supports [0001-01-01, 9999-12-31] only; value "
-                            + date + " is outside that window");
-        }
-    }
-
-    /**
-     * Throw {@link MetaTierUnavailableException} if the calendar date of a DATETIME sort-key boundary
-     * is outside {@code [1970-01-01, 9999-12-31]}. The lower bound is the epoch (not year 1 as for
-     * DATE) because the BE timestamp load does not yet decode a pre-1970 sub-second value to a
-     * boundary-matching wall clock — see the class comment.
-     */
-    static void rejectDateTimeOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
-        if (date.isBefore(MIN_SUPPORTED_DATETIME_DATE) || date.isAfter(MAX_SUPPORTED_DATE)) {
-            throw new MetaTierUnavailableException(
-                    "DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
+                    "DATE/DATETIME meta tier supports [0001-01-01, 9999-12-31] only; value "
                             + date + " is outside that window");
         }
     }
@@ -100,5 +88,38 @@ final class MetaTierTemporalWindow {
             return dateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
         }
         return dateTime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
+    }
+
+    /**
+     * Resolve the load session timezone to the FIXED UTC offset the BE load applies when shifting a
+     * UTC-adjusted Parquet timestamp / ORC TIMESTAMP_INSTANT to a local DATETIME wall clock, or empty
+     * when the meta tier cannot safely reproduce that shift.
+     *
+     * <p>The BE adds the session-tz offset to the UTC instant (Parquet Int64ToDateTimeConverter when
+     * isAdjustedToUTC=true; ORC orc_ts_to_native_ts when is_instant=true). We can match that boundary
+     * only for a FIXED-OFFSET zone, where every instant (incl. pre-1970) gets the same constant offset,
+     * so adding it to the decoded UTC min/max is order-preserving. A DST / named zone applies a
+     * per-instant offset (the BE row load uses per-instant cctz), which one scalar cannot reproduce and
+     * which can even reorder wall clocks near a fall-back transition -- return empty so the reader defers
+     * to the data tier (never a wrong split). Named-zone aliases (CST/PRC) resolve to Asia/Shanghai, also
+     * non-fixed, so they defer too.
+     *
+     * <p>FE reproduces the exact BE zone: the FE stamps TQueryGlobals.time_zone from the session variable
+     * (CoordinatorPreprocessor.genQueryGlobals) and offset forms are canonicalized to +-HH:MM at SET time,
+     * so ZoneId.of parses them. Any unresolvable / non-fixed zone -> empty (fail-safe).
+     */
+    static Optional<ZoneOffset> fixedLoadOffset(String loadTimeZone) {
+        if (loadTimeZone == null || loadTimeZone.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            ZoneRules rules = ZoneId.of(loadTimeZone).getRules();
+            if (!rules.isFixedOffset()) {
+                return Optional.empty();
+            }
+            return Optional.of(rules.getOffset(Instant.EPOCH));
+        } catch (DateTimeException unresolvable) {
+            return Optional.empty();
+        }
     }
 }

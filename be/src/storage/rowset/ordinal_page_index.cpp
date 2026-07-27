@@ -40,8 +40,8 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "runtime/runtime_env.h"
-#include "storage/primitive/key_coder.h"
 #include "storage/rowset/page_io.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 

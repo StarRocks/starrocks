@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
@@ -49,7 +50,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -103,6 +103,7 @@ public class SplitTabletJob extends TabletReshardJob {
         return dbId;
     }
 
+    @Override
     public long getTableId() {
         return tableId;
     }
@@ -219,8 +220,7 @@ public class SplitTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -304,6 +304,10 @@ public class SplitTabletJob extends TabletReshardJob {
 
         // 3. Add the new versions of materialized index to catalog
         addNewMaterializedIndexes();
+
+        // 3b. Now that the reshard output tablets are visible, proactively enqueue them for async
+        // vector-index build (leader-only path; no-op for non-async-vector-index tables).
+        VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
 
         // 3. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
@@ -576,10 +580,13 @@ public class SplitTabletJob extends TabletReshardJob {
                     ? 0 : idx.getGroupSchema(rangeGroupId).getColocateColumnCount();
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
+            // vectorIndexBuildInfos is required by the publishVersion signature but intentionally
+            // ignored here: reshard output tablets are enqueued for async vector-index build AFTER
+            // they become visible (see VectorIndexBuildScheduler.onReshardComplete in runRunningJob),
+            // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
                     computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
-            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
 
             return tabletRange;
         } catch (Exception e) {
@@ -619,10 +626,20 @@ public class SplitTabletJob extends TabletReshardJob {
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
         boolean nonCanonicalCrossing = false;
+        // True if any source index of this split was empty (rowCount == 0), i.e. a pre-split — whose new
+        // shards were created in the SPREAD group only. Recomputed here from the catalog (not threaded
+        // from the PENDING phase) so it is replay-safe; used to arm the backstop for a boundary-less
+        // pre-split below.
+        boolean anySpreadPreSplit = false;
+        // New child ranges captured during the walk below, reused after the splice for the best-effort
+        // immediate PACK reassignment. sortKeyColumns is hoisted out of the lock so that same reassign
+        // can reuse it (it is immutable schema, always assigned inside the lock before the walk).
+        Map<Long, Range<Tuple>> newChildRanges = new HashMap<>();
+        List<Column> sortKeyColumns = null;
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
-            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+            sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
 
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
@@ -634,25 +651,38 @@ public class SplitTabletJob extends TabletReshardJob {
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
                     MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    anySpreadPreSplit |= oldIndex != null && oldIndex.getRowCount() == 0;
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
-                        if (splittingTablet == null || splittingTablet.isIdenticalTablet()) {
+                        // getSplittingTablet() returns null for a fallback-to-identical replacement (BE
+                        // returned only the first child range -> fallbackToIdenticalTablet) and for merges,
+                        // so use the ReshardingTablet interface accessors below to still process an identical
+                        // replacement: a pre-split creates even that replacement in the SPREAD group only, so
+                        // its range must be collected for the reconcile or it is stranded SPREAD-only and
+                        // loses its colocate placement. An identical replacement introduces no boundary, so
+                        // skip the boundary/straddle logic for it.
+                        boolean identical = reshardingTablet.getIdenticalTablet() != null;
+                        if (splittingTablet == null && !identical) {
                             continue;
                         }
                         Tablet oldTablet = oldIndex == null ? null
-                                : oldIndex.getTablet(splittingTablet.getOldTabletId());
-                        if (oldTablet != null && oldTablet.getRange() != null
+                                : oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
+                        if (!identical && oldTablet != null && oldTablet.getRange() != null
                                 && !ColocateRangeUtils.isContainedInOwningColocateRange(
                                         oldTablet.getRange().getRange(),
                                         currentRanges, sortKeyColumns, colocateColumnCount)) {
                             oldStradlesBoundary = true;
                         }
-                        for (Long newTabletId : splittingTablet.getNewTabletIds()) {
+                        for (Long newTabletId : reshardingTablet.getNewTabletIds()) {
                             Tablet newTablet = newIndex.getTablet(newTabletId);
                             if (newTablet == null || newTablet.getRange() == null) {
                                 continue;
                             }
                             Range<Tuple> newRange = newTablet.getRange().getRange();
+                            newChildRanges.put(newTabletId, newRange);
+                            if (identical) {
+                                continue;
+                            }
                             boolean canonicalLow = ColocateRangeUtils.hasCanonicalLowerBound(
                                     newRange, sortKeyColumns, colocateColumnCount);
                             if (canonicalLow) {
@@ -673,16 +703,57 @@ public class SplitTabletJob extends TabletReshardJob {
         boolean hasNewCanonical = canonicalLowers.stream().anyMatch(lower ->
                 !ColocateRangeMgr.hasBoundaryAt(currentRanges,
                         new Tuple(lower.getValues().subList(0, colocateColumnCount))));
-        if (!hasNewCanonical && !oldStradlesBoundary && !nonCanonicalCrossing) {
-            return;
+        // Splice a new colocate boundary + mark the group unstable ONLY when this split actually
+        // introduced or crossed one. A within-prefix (Level-2) split introduces no boundary, so this
+        // block is skipped and the group stays stable — but the PACK reconcile below still runs.
+        if (hasNewCanonical || oldStradlesBoundary || nonCanonicalCrossing) {
+            try {
+                colocateTableIndex.applyRangeSplitResult(grpId, canonicalLowers, colocateColumnCount,
+                        () -> GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                                dbId, tableId, 0L, 0L, PlacementPolicy.PACK));
+            } catch (DdlException e) {
+                throw new TabletReshardException(
+                        "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+            }
+        } else if (anySpreadPreSplit && !newChildRanges.isEmpty()) {
+            // Boundary-less (Level-2) pre-split: nothing was spliced above, so the group would otherwise
+            // stay stable and the periodic ColocateChecker backstop would never revisit it. But the new
+            // shards were created SPREAD-only, so mark the group unstable to arm that backstop as a safety
+            // net should the immediate best-effort reconcile below fail — otherwise their PACK placement
+            // could be lost. The backstop re-stabilizes the group once the children are placed (ranges are
+            // unchanged, so its alignment step is a no-op).
+            colocateTableIndex.markAllGroupsWithSameColocateGroupIdUnstable(grpId, true);
         }
+
+        // Place each new child into its owning ColocateRange's PACK shard group. This MUST run for every
+        // range-colocate split, not only when a boundary was spliced above: a pre-split creates its new
+        // shards in the SPREAD group ONLY (so StarOS spreads them across CNs at creation), so even a
+        // within-prefix (Level-2) split — whose boundary is not spliced, leaving the group stable so the
+        // periodic ColocateChecker backstop never revisits it — still needs its children reconciled into
+        // the existing owning PACK group, or their colocate placement is lost permanently.
+        // reconcileTabletPackPlacement is idempotent: for an online split (children already carry the
+        // right PACK group) it is a no-op; for a SPREAD-only pre-split child it adds the owning PACK group
+        // (removing none). Best-effort: a failure here must never abort the already-published split — for
+        // a boundary-splicing split the group is left unstable so the backstop still converges it; a
+        // within-prefix split relies on this immediate pass, so the shared helper logs and retries on the
+        // expected StarOS checked failures but is intentionally not blanket-wrapped.
         try {
-            colocateTableIndex.applyRangeSplitResult(grpId, canonicalLowers, colocateColumnCount,
-                    () -> GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
-                            dbId, tableId, 0L, 0L, PlacementPolicy.PACK));
-        } catch (DdlException e) {
-            throw new TabletReshardException(
-                    "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+            List<ColocateRange> updatedRanges = colocateTableIndex.getColocateRanges(grpId);
+            // Only reconcile children that map cleanly into exactly one post-split ColocateRange. A child
+            // whose range straddles a boundary (legacy/mismatched BE, or a multi-way split with a
+            // non-canonical crossing) has no single well-defined PACK group; leave it to the backstop.
+            Map<Long, Range<Tuple>> containedChildRanges = new HashMap<>();
+            for (Map.Entry<Long, Range<Tuple>> entry : newChildRanges.entrySet()) {
+                if (ColocateRangeUtils.isContainedInOwningColocateRange(
+                        entry.getValue(), updatedRanges, sortKeyColumns, colocateColumnCount)) {
+                    containedChildRanges.put(entry.getKey(), entry.getValue());
+                }
+            }
+            ColocateChecker.reconcileTabletPackPlacement(containedChildRanges, updatedRanges,
+                    colocateColumnCount, "split of table " + tableId);
+        } catch (Exception e) {
+            LOG.warn("best-effort immediate PACK reassignment after split of table {} failed; "
+                    + "leaving convergence to the colocate checker: {}", tableId, e.getMessage());
         }
     }
 
@@ -710,33 +781,24 @@ public class SplitTabletJob extends TabletReshardJob {
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
+
+            // Installing the new materialized indexes changes the partition's tablet layout:
+            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
+            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
+            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
+            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
+            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
+            // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
+            // partition-replace commit point. This runs on both the leader (runRunningJob) and the
+            // replay path (replayCleaningJob), so followers re-plan too.
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
 
     private void removeOldMaterializedIndexes() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
-
-                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
-                        .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition
-                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
-                    if (oldIndex == null) {
-                        continue;
-                    }
-                    // Remove old tablets from inverted index
-                    for (Tablet tablet : oldIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
-                    }
-                }
-            }
+            recycleOldMaterializedIndexes(dbId, lockedTable.get(), reshardingPhysicalPartitions);
         }
     }
 
@@ -877,6 +939,18 @@ public class SplitTabletJob extends TabletReshardJob {
                     "Missing old MaterializedIndex for range-colocate split");
         }
 
+        // Pre-split (empty source, rowCount == 0) is the case whose following load wants to fan out.
+        // Its new shards must NOT be created into a PACK colocate group here: at PENDING the group's
+        // ColocateRanges are still the OLD/parent ones (the per-bucket ranges are only spliced in
+        // post-publish), so every new shard would resolve to the single parent PACK group. PACK
+        // affinity (+10000) dwarfs the SPREAD penalty (-100), so a batch sharing one PACK group herds
+        // onto a single CN (StarOS #1275) and the following load opens ChannelNum=1. Hoisted above the
+        // loop so addShardPlacementsForTablet can drop the PACK group for pre-split; the correct
+        // per-bucket PACK groups + alignment are still established by the post-publish
+        // applyColocateRangeSplitResult()/reconcile backstop (unchanged). Online split (non-empty)
+        // keeps its PACK grouping (and the WITH_SHARD pin below).
+        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
+
         // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
         // payload follows the ReshardingTablet iteration order; the same batch produced
         // by a leader-switch re-run emits a byte-equivalent payload.
@@ -884,7 +958,7 @@ public class SplitTabletJob extends TabletReshardJob {
         Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
         for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
             addShardPlacementsForTablet(reshardingTablet, oldIndex, newIndex,
-                    colocateRanges, colocateColumnCount,
+                    colocateRanges, colocateColumnCount, spreadNewShards,
                     newToOldShardId, newShardIdToGroupIds);
         }
         if (newToOldShardId.isEmpty()) {
@@ -897,19 +971,29 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        // spreadNewShards (computed above) also drops the WITH_SHARD pin here: pre-split splits a
+        // freshly created EMPTY tablet, so there is no warm cache to preserve and the new shards
+        // should spread rather than pin to the source worker. Online split (non-empty source) keeps
+        // the WITH_SHARD pin to reuse the source worker's warm cache.
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise the background warehouse (online split) — unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
-                shardProperties, WarehouseManager.DEFAULT_RESOURCE);
+                shardProperties, computeResource,
+                spreadNewShards);
     }
 
-    private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,
+    @VisibleForTesting
+    static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,
                                                     MaterializedIndex oldIndex,
                                                     MaterializedIndex newIndex,
                                                     List<ColocateRange> colocateRanges,
                                                     int colocateColumnCount,
+                                                    boolean spreadNewShards,
                                                     Map<Long, Long> newToOldShardId,
                                                     Map<Long, List<Long>> newShardIdToGroupIds) {
         long oldTabletId = reshardingTablet.getFirstOldTabletId();
@@ -934,7 +1018,14 @@ public class SplitTabletJob extends TabletReshardJob {
             long newTabletId = newTabletIds.get(i);
             List<Long> groupIds = new ArrayList<>(2);
             groupIds.add(newIndex.getShardGroupId()); // SPREAD group is unchanged
-            if (colocateRanges != null) {
+            // Pre-split (spreadNewShards): deliberately omit the PACK colocate group. At this point the
+            // group's registered ColocateRanges are still the OLD/parent ones (the per-bucket ranges are
+            // spliced only post-publish), so every new shard would resolve to the single parent PACK
+            // group and StarOS would herd the whole batch onto one CN (PACK +10000 ≫ SPREAD -100). With
+            // only the SPREAD group the fresh shards spread at creation; the post-publish
+            // applyColocateRangeSplitResult()/reconcile backstop then assigns each shard its correct
+            // per-bucket PACK group. Online split keeps its PACK grouping (its ranges are already final).
+            if (colocateRanges != null && !spreadNewShards) {
                 Range<Tuple> rangeForPackLookup = i < perNewTabletRanges.size()
                         ? perNewTabletRanges.get(i).getRange()
                         : oldTablet.getRange().getRange();

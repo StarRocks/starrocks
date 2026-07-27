@@ -16,8 +16,8 @@
 
 #include "common/status.h"
 #include "exec/lookup_stream_mgr.h"
-#include "exec/pipeline/operator_factory.h"
-#include "storage/primitive/tablet_info.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks::pipeline {
 

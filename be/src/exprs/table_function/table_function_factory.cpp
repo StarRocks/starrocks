@@ -18,16 +18,15 @@
 
 #include "column/column.h"
 #include "column/runtime_type_traits.h"
+#include "common/storage_define.h"
 #include "exprs/table_function/generate_series.h"
 #include "exprs/table_function/json_each.h"
-#include "exprs/table_function/list_rowsets.h"
 #include "exprs/table_function/multi_unnest.h"
 #include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "exprs/table_function/unnest_bitmap.h"
-#include "storage/primitive/storage_define.h"
-#include "udf/java/java_function_fwd.h"
+#include "exprs/udf/java/java_function_fwd.h"
 
 namespace starrocks {
 
@@ -127,22 +126,22 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
     APPLY_FOR_ALL_INT_TYPE(M)
 #undef M
-
-    // ----=====---- list_rowsets ----====----
-    add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},
-                         {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BOOLEAN, TYPE_VARCHAR},
-                         std::make_shared<ListRowsets>());
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;
 
+void register_builtin_table_function(std::string name, const std::vector<LogicalType>& arg_type,
+                                     const std::vector<LogicalType>& return_type, const TableFunctionPtr& table_func) {
+    TableFunctionResolver::instance()->add_function_mapping(std::move(name), arg_type, return_type, table_func);
+}
+
 const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
                                         const std::vector<LogicalType>& return_type,
-                                        TFunctionBinaryType::type binary_type) {
+                                        TFunctionBinaryType::type binary_type, bool is_arrow_input) {
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaUDTFFunction();
+        return is_arrow_input ? getArrowJavaUDTFFunction() : getJavaUDTFFunction();
     }
     return nullptr;
 }

@@ -202,6 +202,9 @@ public class TypeSerializer {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
                 scalarType.setType(TypeSerializer.toThrift(primitiveType));
+                if (type.isDatetimeNtz()) {
+                    scalarType.setDatetime_is_ntz(true);
+                }
                 node.setScalar_type(scalarType);
                 break;
             }

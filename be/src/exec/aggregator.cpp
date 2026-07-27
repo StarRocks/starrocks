@@ -30,8 +30,8 @@
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -42,12 +42,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/java/java_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -300,7 +300,7 @@ Status Aggregator::open(RuntimeState* state) {
     if (_has_udaf) {
         auto& opts = state->query_options();
         bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
-        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -409,7 +409,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(call_agg_create());
 #else
         if (_has_udaf) {
-            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
@@ -639,8 +639,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             const TypeDescriptor& arg_type = arg_types[0];
+            bool is_arrow_input = fn.__isset.input_type && fn.input_type == "arrow";
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
-                                                state->func_version());
+                                                state->func_version(), is_arrow_input);
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
@@ -811,7 +812,7 @@ void Aggregator::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();

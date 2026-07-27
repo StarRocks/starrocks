@@ -388,15 +388,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするかどうか。有効化されると、システムは公開操作中にスレッドプールを使用してセグメントを並行処理し、大規模なテーブルのパフォーマンスを大幅に向上させます。
 - 導入バージョン: -
 
-### enable_pk_index_eager_build
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: データインポートおよびコンパクションの段階で、Primary Key インデックスファイルを即座に構築するかどうかを決定します。有効化されると、システムはデータ書き込み時に永続的な PK インデックスファイルを直接生成し、後続のクエリパフォーマンスを向上させます。
-- 導入バージョン: -
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - デフォルト: true
@@ -871,7 +862,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: Bytes
 - 変更可能: はい
-- 説明: `enable_pk_index_eager_build` が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えたときのみ、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
+- 説明: インポートまたはコンパクションで生成されるデータがこの閾値を超えたときに、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
 - 導入バージョン: -
 
 ### primary_key_limit_size

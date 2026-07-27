@@ -21,6 +21,7 @@ set(RUNTIME_SRCS
     byte_buffer.cpp
     message_body_sink.cpp
     current_thread.cpp
+    chunk_accumulator.cpp
     chunk_helper.cpp
     descriptors.cpp
     descriptors_ext.cpp
@@ -48,10 +49,17 @@ set(RUNTIME_SRCS
     prof/heap_prof.cpp
     serde/chunk_encode_context.cpp
     serde/protobuf_chunk_serde.cpp
-    env/diagnose_daemon.cpp
+    diagnose_daemon.cpp
+    process_memory_metrics.cpp
     runtime_env.cpp
-    env/global_thread_pools.cpp
-    env/java/java_env.cpp
+    global_thread_pools.cpp
+    java/java_env.cpp
+    java/java_global_ref.cpp
+    java/java_runtime.cpp
+    java/native_method_helper.cpp
+    java/jvm_metrics.cpp
+    java/jvm_helper.cpp
+    java/jvm_class.cpp
 )
 
 ADD_BE_LIB(Runtime

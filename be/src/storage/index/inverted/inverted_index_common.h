@@ -15,7 +15,7 @@
 #pragma once
 #include "common/global_types.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/inverted_index_common.h"
+#include "storage_primitive/inverted_index_common.h"
 
 namespace starrocks {
 

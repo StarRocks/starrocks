@@ -14,7 +14,7 @@
 
 #include "storage/column_predicate_inverted_index_fallback.h"
 
-#include "storage/primitive/column_expr_predicate.h"
+#include "storage_primitive/column_expr_predicate.h"
 
 namespace starrocks {
 
@@ -38,19 +38,15 @@ Status InvertedIndexFallbackPredicate::evaluate(const Column* column, uint8_t* s
     DCHECK(from == 0);
     DCHECK_LE(to, _rowid_buffer->size());
 
-    const bool is_negated = is_negated_expr();
-    const uint8_t hit_value = is_negated ? 0 : 1;
-    const uint8_t miss_value = is_negated ? 1 : 0;
+    // `_bitmap` already holds the rows for which the wrapped predicate is TRUE
+    // (built via seek_inverted_index, which folds in the negation and NULL
+    // handling), so selection is a plain membership test — no flip here.
     roaring::BulkContext ctx;
     const auto& rowids = *_rowid_buffer;
     for (uint16_t i = from; i < to; i++) {
-        selection[i] = _bitmap.containsBulk(ctx, rowids[i]) ? hit_value : miss_value;
+        selection[i] = _bitmap.containsBulk(ctx, rowids[i]) ? 1 : 0;
     }
     return Status::OK();
-}
-
-bool InvertedIndexFallbackPredicate::is_negated_expr() const {
-    return _wrapped_predicate->is_negated_expr();
 }
 
 Status InvertedIndexFallbackPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from,

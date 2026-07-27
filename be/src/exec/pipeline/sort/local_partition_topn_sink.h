@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/sort/local_partition_topn_context.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

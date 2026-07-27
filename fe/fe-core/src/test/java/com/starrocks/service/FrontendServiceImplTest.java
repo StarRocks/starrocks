@@ -115,7 +115,6 @@ import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -1555,7 +1554,7 @@ public class FrontendServiceImplTest {
         request.keys = Lists.newArrayList("mysql_server_version");
         request.values = Lists.newArrayList("5.1.1");
 
-        TSetConfigResponse result = impl.setConfig(request);
+        impl.setConfig(request);
         Assertions.assertEquals("5.1.1", GlobalVariable.version);
 
         request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
@@ -1809,8 +1808,47 @@ public class FrontendServiceImplTest {
         loadRequest.setAuth_code(100);
         loadRequest.setUser("user1");
         loadRequest.setUser_ip("127.0.0.1");
-        TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
-        TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
+    }
+
+    @Test
+    public void testStreamLoadPutPipeline() throws Exception {
+        // Cover the pipeline stream load path (Config.enable_pipeline_stream_load + backend_id):
+        // FrontendServiceImpl pipeline branch -> LoadPlanner (syncStreamLoad) -> StreamLoadScanNode
+        // pinned-BE branch -> DefaultCoordinator.buildLocalStreamLoadParams. The mock cluster has
+        // backend 10001, so the scan is pinned to it and a BE-local params blob is materialized.
+        boolean savedFlag = Config.enable_pipeline_stream_load;
+        Config.enable_pipeline_stream_load = true;
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+            beginRequest.setLabel("test_pipeline_label");
+            beginRequest.setDb("test");
+            beginRequest.setTbl("site_access_empty");
+            beginRequest.setUser("root");
+            beginRequest.setPasswd("");
+            TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+            Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+            TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+            loadRequest.setDb("test");
+            loadRequest.setTbl("site_access_empty");
+            loadRequest.setTxnId(beginResult.getTxnId());
+            loadRequest.setLoadId(new TUniqueId(4, 5));
+            loadRequest.setFileType(TFileType.FILE_STREAM);
+            loadRequest.setUser("root");
+            loadRequest.setColumnSeparator(",");
+            // Pin the scan to the mock backend that "owns the pipe".
+            loadRequest.setBackend_id(10001);
+
+            TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertNotNull(result.getParams());
+            Assertions.assertTrue(result.getParams().is_pipeline);
+        } finally {
+            Config.enable_pipeline_stream_load = savedFlag;
+        }
     }
 
     @Test

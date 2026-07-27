@@ -14,11 +14,11 @@
 
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 
-#include "exec/exec_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

@@ -42,9 +42,9 @@
 #include "common/status.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

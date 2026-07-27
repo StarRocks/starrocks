@@ -43,7 +43,6 @@ class Expr;
 class ExprContext;
 class RuntimeState;
 class SchemaScanner;
-class IcebergDeleteFileMeta;
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
@@ -81,7 +80,6 @@ private:
     friend class TupleDescriptor;
     friend class SchemaScanner;
     friend class OlapTableSchemaParam;
-    friend class IcebergDeleteFileMeta;
 
     const SlotId _id;
     TypeDescriptor _type;

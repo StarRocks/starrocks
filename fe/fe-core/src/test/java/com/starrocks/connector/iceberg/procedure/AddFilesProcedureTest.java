@@ -219,7 +219,6 @@ public class AddFilesProcedureTest {
 
     @Test
     public void testCreateDataFileFromLocationWithMetrics() throws Exception {
-        AddFilesProcedure procedure = AddFilesProcedure.getInstance();
 
         // Mock table schema and partition spec
         Schema schema = new Schema(

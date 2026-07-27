@@ -43,6 +43,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
@@ -54,7 +55,7 @@
 #include "compute_env/spill/spiller_factory.h"
 #include "compute_env/spill/task_executor.h"
 #include "compute_env/workgroup/scan_task.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -66,7 +67,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/storage_define.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {

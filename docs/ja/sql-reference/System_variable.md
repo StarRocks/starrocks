@@ -6,6 +6,7 @@ description: "StarRocks が提供する多くのシステム変数の設定と�
 # システム変数
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
@@ -432,6 +433,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データタイプ**: String
 * **導入バージョン**: v3.4.2, v3.5.0
 
+### default_view_sql_security
+
+* **説明**: `CREATE VIEW` ステートメントで `SECURITY` 句が指定されていない場合に適用される、デフォルトの SQL SECURITY 特性です。`NONE`（明示的な `SECURITY NONE` 句と同等）はビューを参照する際に実行ユーザーがそのビュー自体に対する `SELECT` 権限を持っていればよく、ビューが参照するテーブルは実行ユーザーに対してチェックされないことを意味します。`INVOKER`（`SECURITY INVOKER` と同等）は実行ユーザーがビューの参照するテーブルに対する `SELECT` 権限も持っている必要があることを意味します。ステートメント内で明示的に指定された `SECURITY NONE` または `SECURITY INVOKER` 句は、常にこの変数より優先されます。この変数は `CREATE VIEW` にのみ影響し、`ALTER VIEW` には影響しません。
+* **スコープ**: Session
+* **デフォルト**: `NONE`
+* **データタイプ**: String
+* **有効な値**: `NONE`, `INVOKER`
+* **導入バージョン**: v4.1.1
+
 ### disable_colocate_join
 
 * **説明**: Colocation Join を有効にするかどうかを制御するために使用されます。デフォルト値は `false` で、機能が有効です。この機能が無効になっている場合、クエリプランニングは Colocation Join を実行しようとしません。
@@ -621,6 +631,27 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **データ型**: Boolean
 * **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_lake_prepared_physical_split_scan
+
+* **説明**: 共有データクラスタ内のクラウドネイティブ（レイク）テーブルに対して prepared physical split scan を有効にするかどうか。有効にすると、各セグメントは一度だけプルーニングされ、その prepared read state が同一タブレットの split 子タスク間で共有されるため、大きい、またはデータが偏ったタブレットのスキャンを高速化できます。この最適化はスキャンノードごとに判断され、さらにクラウドネイティブテーブルであることと Query Cache が無効であることを必要とします。共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **説明**: prepared-physical-split scan において、scan range 数がすでに pipeline DOP に達している場合でも、単一の巨大な lake タブレットを分割できるようにするデータ偏りのしきい値。あるタブレットの行数が、この比率に driver あたりの理想的な分担（総行数を有効 DOP で割った値）を掛けた値を超えると、そのタブレットは偏ったストラグラーとみなされて分割されます。値が大きいほど分割にはより極端な偏りが必要になり、値が小さいほど積極的に分割します。正の有限な数値である必要があります。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: 1.5
+* **データ型**: Double
+* **導入バージョン**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **説明**: 同一クエリ内で 2 つ以上の scan オペレータによってスキャンされるクラウドネイティブ（レイク）テーブル（セルフジョインや、複数回参照されるテーブルなど）に対して、prepared physical split scan を許可するかどうか。`false`（デフォルト）の場合、そのような重複スキャンは通常のスキャンにフォールバックします。この最適化が scan ごとに再利用する prepared read state を、同一テーブルの兄弟 scan 間で共有することは安全ではないためです。`true` に設定すると、それらのスキャンを最適化に再度組み込みます。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -1180,6 +1211,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 3000
 * **単位**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **説明**: tablet のサイズに基づいて単一 tablet 最適化を制御します。クエリが単一の tablet に絞り込まれると、StarRocks は集計を 1 フェーズで実行し、結果を単一ノードに集約して shuffle を省略できます。小さな tablet には効率的ですが、tablet が大きい場合はクエリ全体を単一ノードで直列化します。選択された単一 tablet の行数がこのしきい値を超える場合、この最適化は無効になり、通常の分散（shuffle）プランが使用されます。`-1` に設定すると、このゲートが無効になり、tablet のサイズに関係なく常に単一 tablet 最適化が適用されます。
+* **デフォルト**: 10000000
+* **データ型**: Long
+* **導入バージョン**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **説明**: マテリアライズドビューの書き換えルールが消費できる最大時間を指定します。しきい値に達すると、このルールはクエリ書き換えに使用されません。
@@ -1394,6 +1432,22 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **説明**: レイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してパーティションフィルターなしのクエリを許可するかどうか。`false` に設定すると、有効なパーティションフィルターを含まないクエリは拒否され、意図しないフルテーブルスキャンを防止します。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **エイリアス**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **説明**: 単一のレイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してスキャンできるパーティションの最大数。`0` に設定すると制限なし。上限を超えるとクエリはエラーを返します。なお、増分的にスプリットを列挙するカタログタイプ（Iceberg、Delta Lake）では、制限チェックはスキャンレンジのディスパッチ時に行われ、クエリが即座に拒否されるのではなく、実行途中で失敗する場合があります。
+* **スコープ**: セッション
+* **デフォルト**: `0`（制限なし）
+* **タイプ**: Int
+* **エイリアス**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **説明**: FE がスキャンレンジを構築するときに、各タブレットの内部スキャンレンジに `skip_disk_cache` をマークするよう指示するセッションフラグです。`true` に設定すると、`OlapScanNode.addScanRangeLocations()` は作成された `TInternalScanRange` オブジェクトに対して `internalRange.setSkip_disk_cache(true)` を設定するため、下流の BE スキャンノードはそのスキャンでローカルディスクキャッシュをバイパスするよう指示されます。この設定はセッション単位で適用され、プラン／スキャンレンジ構築時に評価されます。ページキャッシュスキップの制御には `skip_page_cache` と組み合わせて使用し、データキャッシュ関連の変数（`enable_scan_datacache` / `enable_populate_datacache`）と併せて適切に利用してください。
@@ -1539,5 +1593,7 @@ StarRocks のバージョン。変更できません。
 * **デフォルト**: 28800（8 時間）。
 * **単位**: 秒
 * **データ型**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

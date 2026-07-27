@@ -26,6 +26,12 @@ import java.util.Objects;
  * that map the new sort key and partition-source columns back to their positions in
  * the source table, and the partition's data size estimate used to derive the
  * Bernoulli sampling rate.
+ *
+ * <p>{@code sortKeyProjectionIsVerbatim} lets a caller pre-build the sort-key SELECT
+ * projection itself (e.g. a raw {@code CAST(...) AS <alias>} literal for a sort-key
+ * column absent from the source, mixed with plain column names): when {@code true},
+ * {@code sortKeySourceColumnNames} entries are emitted into the sampling SQL exactly
+ * as given, instead of each being backtick-quoted as an identifier.
  */
 public record InternalPartitionScanContext(
         String dbName,
@@ -34,7 +40,8 @@ public record InternalPartitionScanContext(
         List<String> sortKeySourceColumnNames,
         List<String> partitionSourceColumnNames,
         long partitionSizeBytes,
-        ComputeResource computeResource) implements ScanContext {
+        ComputeResource computeResource,
+        boolean sortKeyProjectionIsVerbatim) implements ScanContext {
 
     public InternalPartitionScanContext {
         Objects.requireNonNull(dbName, "dbName");
@@ -46,5 +53,21 @@ public record InternalPartitionScanContext(
         if (partitionSizeBytes < 0) {
             throw new IllegalArgumentException("partitionSizeBytes must be non-negative, was " + partitionSizeBytes);
         }
+    }
+
+    /**
+     * Backward-compatible constructor for callers whose sort-key projection is always a plain
+     * column-name list to be backtick-quoted downstream (the common case).
+     */
+    public InternalPartitionScanContext(
+            String dbName,
+            String tableName,
+            String partitionName,
+            List<String> sortKeySourceColumnNames,
+            List<String> partitionSourceColumnNames,
+            long partitionSizeBytes,
+            ComputeResource computeResource) {
+        this(dbName, tableName, partitionName, sortKeySourceColumnNames, partitionSourceColumnNames,
+                partitionSizeBytes, computeResource, /*sortKeyProjectionIsVerbatim=*/ false);
     }
 }

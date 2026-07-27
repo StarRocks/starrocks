@@ -24,22 +24,22 @@
 #include "roaring/roaring.hh"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
 #include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/types.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 // Verifies that InvertedIndexFallbackPredicate, which is the wrapper introduced
 // by the OR-MATCH fallback path, evaluates correctly against its segment-local
-// rowid bitmap. The wrapped ColumnExprPredicate carries no real expression
-// context here (passing nullptr expr_ctx is a documented no-op), so calls into
-// the wrapped predicate that depend on the AST (is_negated_expr, is_match_expr)
-// return the safe defaults. That is precisely the surface we want to exercise:
-// the bitmap-vs-rowid loop and the [from, to) bounds contract.
+// rowid bitmap. The bitmap is always the set of rows for which the wrapped
+// predicate is TRUE (the visitor builds it through seek_inverted_index, which
+// folds in negation and NULL handling), so evaluate() is a plain membership
+// test with no negation flip. That is precisely the surface we want to
+// exercise: the bitmap-vs-rowid loop and the [from, to) bounds contract.
 class InvertedIndexFallbackPredicateTest : public ::testing::Test {
 protected:
     static ColumnExprPredicate* make_wrapped(ColumnId cid = 0) {
@@ -218,24 +218,24 @@ TEST_F(InvertedIndexFallbackPredicateTest, seek_inverted_index_is_rejected) {
     EXPECT_TRUE(st.is_internal_error());
 }
 
-// is_negated_expr() forwards to the wrapped predicate; with an empty expr ctx
-// chain the wrapped predicate reports false, so hits stay 1 and misses stay 0.
-// This is the same expectation as evaluate_mixed, just exercised through the
-// is_negated_expr() forwarding code path explicitly.
-TEST_F(InvertedIndexFallbackPredicateTest, non_negated_uses_hit_one) {
+// evaluate() no longer flips on negation: the bitmap already is the predicate's
+// TRUE-set. For a negated MATCH the visitor stores (all_rows - matches - nulls)
+// there, and evaluate must select exactly those rows by membership. Simulate
+// that TRUE-set directly and assert rows in the bitmap are selected, rows absent
+// (a match or a NULL row, both excluded upstream) are not.
+TEST_F(InvertedIndexFallbackPredicateTest, evaluate_treats_bitmap_as_true_set) {
     std::unique_ptr<ColumnExprPredicate> wrapped(make_wrapped());
-    EXPECT_FALSE(wrapped->is_negated_expr());
+    // rowids 10 and 40 are the negated-predicate TRUE-set; 20 (a match) and
+    // 30 (a NULL row) were dropped upstream and must stay unselected.
+    roaring::Roaring true_set;
+    true_set.add(10);
+    true_set.add(40);
+    std::vector<rowid_t> rowids{10, 20, 30, 40};
 
-    roaring::Roaring bitmap;
-    bitmap.add(50);
-    std::vector<rowid_t> rowids{50, 60};
-
-    InvertedIndexFallbackPredicate pred(wrapped.get(), std::move(bitmap), &rowids);
-    EXPECT_FALSE(pred.is_negated_expr());
-
-    std::vector<uint8_t> sel(2, 0);
-    ASSERT_OK(pred.evaluate(/*column=*/nullptr, sel.data(), 0, 2));
-    EXPECT_EQ("1,0", render(sel, 2));
+    InvertedIndexFallbackPredicate pred(wrapped.get(), std::move(true_set), &rowids);
+    std::vector<uint8_t> sel(4, 0);
+    ASSERT_OK(pred.evaluate(/*column=*/nullptr, sel.data(), 0, 4));
+    EXPECT_EQ("1,0,0,1", render(sel, 4));
 }
 
 // ---------------------------------------------------------------------------
@@ -246,13 +246,14 @@ TEST_F(InvertedIndexFallbackPredicateTest, non_negated_uses_hit_one) {
 // (non-Expr predicate, non-MATCH Expr predicate) and the compound-node
 // template overload that recurses through OR-subtrees.
 //
-// The "MATCH wrap" path (load bitmap, allocate InvertedIndexFallbackPredicate,
-// set_col_pred) is reachable only with a real MATCH expression whose AST
-// satisfies ColumnExprPredicate::read_inverted_index's structural checks
-// (MATCH_EXPR root with slot_ref + string_literal children). Standing up that
-// expression machinery at the BE unit-test level is significantly heavier than
-// the surface it would cover. End-to-end coverage of that path, plus the
-// SegmentIterator::do_get_next() branches that flip on
+// The "MATCH wrap" path (seek_inverted_index into the segment bitmap, allocate
+// InvertedIndexFallbackPredicate, set_col_pred) is reachable only with a real
+// MATCH expression whose AST satisfies seek_inverted_index's structural checks
+// (MATCH_EXPR root with slot_ref + string_literal children) plus a live
+// InvertedIndexIterator. Standing up that machinery at the BE unit-test level is
+// significantly heavier than the surface it would cover. End-to-end coverage of
+// that path -- including that a negated MATCH inside an OR excludes NULL rows --
+// plus the SegmentIterator::do_get_next() branches that flip on
 // _inverted_index_ctx->has_fallback_predicates, comes from the SQL-tester
 // integration suite under test/sql/test_inverted_index.
 
@@ -264,7 +265,7 @@ protected:
     std::vector<rowid_t> rowid_buffer;
 
     OrMatchFallbackVisitor make_visitor() {
-        return OrMatchFallbackVisitor{iterators, pool, &rowid_buffer, &has_fallback};
+        return OrMatchFallbackVisitor{iterators, pool, &rowid_buffer, &has_fallback, /*num_rows=*/1024};
     }
 };
 
@@ -340,6 +341,24 @@ TEST_F(OrMatchFallbackVisitorTest, recurses_through_nested_compound) {
     ASSERT_OK(visitor(or_node));
 
     EXPECT_FALSE(has_fallback);
+}
+
+// Unit-tests the extracted query-type decision used by inverted-index pushdown,
+// including the new fallback (std::nullopt) for LIKE patterns containing '_'.
+TEST(ChooseInvertedIndexQueryTypeTest, all_branches) {
+    using QT = InvertedIndexQueryType;
+    // For valid_like cases valid_match is false, so `op` is ignored; pass any value.
+    const auto IGN = TExprOpcode::MATCH_ANY;
+
+    EXPECT_EQ(QT::MATCH_ANY_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ANY, "x").value());
+    EXPECT_EQ(QT::MATCH_ALL_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ALL, "x").value());
+
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "foo_bar").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "中_文").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "a_b%c").has_value());
+
+    EXPECT_EQ(QT::MATCH_WILDCARD_QUERY, choose_inverted_index_query_type(true, false, IGN, "foo%bar").value());
+    EXPECT_EQ(QT::EQUAL_QUERY, choose_inverted_index_query_type(true, false, IGN, "foobar").value());
 }
 
 } // namespace starrocks

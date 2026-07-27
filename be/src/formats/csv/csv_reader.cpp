@@ -27,13 +27,13 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
         ++begin;
     }
 
-    size_t end = len - 1;
+    size_t end = len;
 
-    while (end > begin && value[end] == ' ') {
+    while (end > begin && value[end - 1] == ' ') {
         --end;
     }
 
-    return std::make_pair(value + begin, end - begin + 1);
+    return std::make_pair(value + begin, end - begin);
 }
 
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
@@ -58,6 +58,9 @@ inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _column_delimiter_length) {
@@ -90,6 +93,9 @@ inline bool CSVReader::is_row_delimiter(bool expandBuffer) {
                 if (_buff.limit_offset() - p < 1) {
                     return false;
                 }
+                // readMore() may have expanded (reallocated) the buffer via _storage.resize(),
+                // freeing the storage base_ptr was taken from. Refresh it before the next read.
+                base_ptr = _buff.base_ptr();
             }
         }
         if (i == _row_delimiter_length) {

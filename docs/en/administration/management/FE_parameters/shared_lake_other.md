@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## View FE configuration items
@@ -368,8 +370,8 @@ This topic introduces the following types of FE configurations:
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions.
+- Is mutable: Yes
+- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions. Setting it to `0` or a negative value disables AutoVacuum entirely.
 - Introduced in: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`
@@ -716,6 +718,8 @@ This topic introduces the following types of FE configurations:
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
 
+<EditonSpecificFEItemSharedLakeOther />
+
 ## Other
 
 ### `agent_task_resend_wait_time_ms`
@@ -935,7 +939,7 @@ This topic introduces the following types of FE configurations:
 
 ### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
+- Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
@@ -1088,7 +1092,7 @@ This topic introduces the following types of FE configurations:
 
 ### `jwt_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1214,7 +1218,7 @@ This topic introduces the following types of FE configurations:
 
 ### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
+- Default: 8
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1286,7 +1290,7 @@ This topic introduces the following types of FE configurations:
 
 ### `oauth2_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No

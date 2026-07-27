@@ -44,8 +44,9 @@ OrchestrationEnv::~OrchestrationEnv() {
     destroy();
 }
 
-Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
+Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor) {
     DCHECK(exec_env != nullptr);
+    DCHECK(stream_load_executor != nullptr);
     _exec_env = exec_env;
 
     _fragment_mgr = std::make_unique<FragmentMgr>(exec_env, metrics);
@@ -75,13 +76,14 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics) {
             metrics, [this] { return _runtime_filter_worker == nullptr ? nullptr : _runtime_filter_worker->metrics(); },
             [this] { return _runtime_filter_worker == nullptr ? 0 : _runtime_filter_worker->queue_size(); });
 
-    _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics, _fragment_mgr.get());
+    _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics);
     _external_scan_orchestrator =
             std::make_unique<ExternalScanOrchestrator>(exec_env, _external_scan_context_mgr.get());
 
     _stream_load_orchestrator = std::make_unique<StreamLoadOrchestrator>(exec_env, _fragment_mgr.get());
 
-    _routine_load_task_executor = std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get());
+    _routine_load_task_executor =
+            std::make_unique<RoutineLoadTaskExecutor>(exec_env, _stream_load_orchestrator.get(), stream_load_executor);
     RETURN_IF_ERROR(_routine_load_task_executor->init(metrics));
     _routine_load_task_executor_started = true;
 

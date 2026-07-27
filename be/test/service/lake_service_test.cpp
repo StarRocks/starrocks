@@ -6167,7 +6167,7 @@ protected:
         opts.is_compaction = false;
         opts.defer_vector_index_build = true;
 
-        auto vi_name = lake::gen_vector_index_filename(seg_name, kIndexId);
+        auto vi_name = lake::gen_vector_index_filename(seg_name, kTabletId, kIndexId);
         opts.vector_index_file_paths[kIndexId] = _tablet_mgr->segment_location(kTabletId, vi_name);
 
         ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(seg_path));
@@ -6210,6 +6210,8 @@ protected:
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(seg_name);
             segment_meta->add_vector_index_ids(kIndexId);
+            // Record the .vi owner as the write path does; it names the built .vi file.
+            segment_meta->set_segment_vector_index_uid(kTabletId);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
@@ -6242,7 +6244,8 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_full_path) {
     ASSERT_TRUE(response.has_new_built_version());
     EXPECT_EQ(2, response.new_built_version());
 
-    auto vi_path = _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_name, kIndexId));
+    auto vi_path =
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_name, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path)) << "deferred .vi should have been built by the RPC";
 }
 
@@ -6272,9 +6275,9 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_partial_failure)
     EXPECT_EQ(2, response.new_built_version());
 
     EXPECT_TRUE(fs::path_exist(
-            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_ok, kIndexId))));
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_ok, kTabletId, kIndexId))));
     EXPECT_FALSE(fs::path_exist(
-            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_bad, kIndexId))));
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_bad, kTabletId, kIndexId))));
 }
 
 TEST_F(LakeServiceTest, test_build_vector_index_missing_tablet_id) {

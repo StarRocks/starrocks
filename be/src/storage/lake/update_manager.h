@@ -63,7 +63,7 @@ class RssidFileInfoContainer {
 public:
     void add_rssid_to_file(const TabletMetadata& metadata);
     void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
-                           const std::map<int, FileInfo>& replace_segments);
+                           const std::map<int, SegmentFileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
     const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
@@ -221,7 +221,7 @@ public:
     // exclusion between publish_resharding_tablet and publish_version, so
     // the cached _data_version cannot advance past metadata->version()
     // during this call.
-    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
@@ -238,8 +238,6 @@ public:
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
-
-    void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
     Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -300,8 +298,7 @@ private:
     PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
     // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
-                                               int64_t tablet_id, int64_t txn_id);
+    bool _use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

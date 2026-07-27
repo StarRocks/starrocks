@@ -55,7 +55,6 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
@@ -425,7 +424,7 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testReloadTables() throws Exception {
-        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         StarRocksAssert starRocksAssert = new StarRocksAssert();

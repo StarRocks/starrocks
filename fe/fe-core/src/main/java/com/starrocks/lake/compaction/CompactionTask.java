@@ -16,7 +16,6 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.proto.AbortCompactionRequest;
-import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.CompactStat;
@@ -129,7 +128,7 @@ public class CompactionTask {
             AbortCompactionRequest abortRequest = new AbortCompactionRequest();
             abortRequest.txnId = request.txnId;
             try {
-                Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
+                rpcChannel.abortCompaction(abortRequest);
                 LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
             } catch (Exception e) {
                 LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,

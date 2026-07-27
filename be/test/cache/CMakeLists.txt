@@ -19,6 +19,7 @@ endif()
 
 set(CACHE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
     data_cache_hit_rate_counter_test.cpp
     datacache_metrics_test.cpp
     datacache_utils_test.cpp
@@ -45,7 +46,7 @@ set(CACHE_TEST_LINK_LIBS
 
 list(APPEND CACHE_TEST_LINK_LIBS
     Runtime
-    FSCore
+    FileSystem
     IO
     Common
     Base

@@ -1,0 +1,429 @@
+-- name: test_push_down_local_agg_through_union_all @mac
+DROP TABLE IF EXISTS t_push_down_local_agg_union_all_result_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_push_down_local_agg_union_all_result_${uuid0} (
+    id INT NOT NULL,
+    v_int INT NULL,
+    v_decimal DECIMAL(10,2) NULL,
+    v_double DOUBLE NULL,
+    v_str VARCHAR(64) NULL,
+    v_date DATE NULL,
+    v_array ARRAY<INT> NULL
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_push_down_local_agg_union_all_result_${uuid0} VALUES
+    (1, 10, 1.50, 1.25, 'alpha', '2024-01-01', [1, 2, 3]),
+    (2, NULL, NULL, NULL, 'beta', NULL, []),
+    (3, -5, -2.25, -3.50, '', '2024-01-03', [3]),
+    (4, 10, 1.50, 2.75, 'alpha', '2024-01-04', NULL),
+    (5, 0, 0.00, 0.00, NULL, '2024-01-05', [5, NULL]),
+    (6, 7, 3.33, 7.50, 'gamma', '2024-01-06', [6, 7]),
+    (7, NULL, NULL, NULL, NULL, NULL, NULL),
+    (8, 100, 9.99, 100.25, 'delta', '2024-01-08', [8]),
+    (9, -5, -2.25, -5.75, 'beta', '2024-01-09', [9, 10, 11, 12]),
+    (10, 10, 1.50, 10.50, 'alpha', '2024-01-10', []);
+-- result:
+-- !result
+SET new_planner_agg_stage = 2;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'true');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(*), COUNT(1), COUNT(v_int), SUM(v_int), AVG(v_int), MIN(v_int), MAX(v_int), NDV(v_int), HLL_CARDINALITY(HLL_RAW(v_int)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY())))), SUM(v_int + 1), SUM((v_int + 1) * (v_int + 1)), MAX((v_int + 1) * (v_int + 1)) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(*), COUNT(1), COUNT(v_int), SUM(v_int), AVG(v_int), MIN(v_int), MAX(v_int),
+       NDV(v_int), HLL_CARDINALITY(HLL_RAW(v_int)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY())))),
+       SUM(v_int + 1), SUM((v_int + 1) * (v_int + 1)), MAX((v_int + 1) * (v_int + 1))
+FROM (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+10	10	8	127	15.875	-5	100	5	5	84	135	10661	10201
+-- !result
+function: assert_explain_verbose_contains('SELECT INTERSECT_COUNT(TO_BITMAP(id), v_int, 10) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'intersect_count', '10')
+-- result:
+None
+-- !result
+SELECT INTERSECT_COUNT(TO_BITMAP(id), v_int, 10)
+FROM (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+3
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(v_decimal), SUM(v_decimal), AVG(v_decimal), MIN(v_decimal), MAX(v_decimal), NDV(v_decimal), HLL_CARDINALITY(HLL_RAW(v_decimal)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_decimal), HLL_EMPTY())))) FROM (SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(v_decimal), SUM(v_decimal), AVG(v_decimal), MIN(v_decimal), MAX(v_decimal),
+       NDV(v_decimal), HLL_CARDINALITY(HLL_RAW(v_decimal)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_decimal), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	13.32	1.66500000	-2.25	9.99	5	5	84
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(v_double), SUM(v_double), AVG(v_double), MIN(v_double), MAX(v_double), NDV(v_double), HLL_CARDINALITY(HLL_RAW(v_double)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_double), HLL_EMPTY())))) FROM (SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(v_double), SUM(v_double), AVG(v_double), MIN(v_double), MAX(v_double),
+       NDV(v_double), HLL_CARDINALITY(HLL_RAW(v_double)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_double), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	113.0	14.125	-5.75	100.25	8	8	132
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(v_str), SUM(CHAR_LENGTH(v_str)), MAX(LEFT(v_str, 3)), MIN(LEFT(v_str, 3)), NDV(v_str), HLL_CARDINALITY(HLL_RAW(v_str)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_str), HLL_EMPTY())))) FROM (SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(v_str), SUM(CHAR_LENGTH(v_str)), IFNULL(SUM(CHAR_LENGTH(v_str)), 0),
+       IFNULL(SUM(CHAR_LENGTH(v_str)) * 10 / COUNT(*), 0),
+       IFNULL(MAX(LEFT(v_str, 3)), ''), IFNULL(MIN(LEFT(v_str, 3)), ''),
+       NDV(v_str), HLL_CARDINALITY(HLL_RAW(v_str)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_str), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	33	33	33.0	gam		5	5	84
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(v_date), MIN(v_date), MAX(v_date), NDV(v_date), HLL_CARDINALITY(HLL_RAW(v_date)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_date), HLL_EMPTY())))) FROM (SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(v_date), MIN(v_date), MAX(v_date), NDV(v_date), HLL_CARDINALITY(HLL_RAW(v_date)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_date), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	2024-01-01	2024-01-10	8	8	132
+-- !result
+function: assert_explain_verbose_contains('SELECT COUNT(v_array), IFNULL(AVG(ARRAY_LENGTH(v_array)), -1), COUNT(*) * 4 * GREATEST(0, IFNULL(AVG(ARRAY_LENGTH(v_array)), -1)), NDV(CRC32_HASH(v_array)), HLL_CARDINALITY(HLL_RAW(CRC32_HASH(v_array))), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(CRC32_HASH(v_array)), HLL_EMPTY())))) FROM (SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+SELECT COUNT(v_array), IFNULL(AVG(ARRAY_LENGTH(v_array)), -1),
+       COUNT(*) * 4 * GREATEST(0, IFNULL(AVG(ARRAY_LENGTH(v_array)), -1)),
+       NDV(CRC32_HASH(v_array)),
+       HLL_CARDINALITY(HLL_RAW(CRC32_HASH(v_array))),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(CRC32_HASH(v_array)), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	1.625	65.0	7	7	116
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');
+-- result:
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(*), COUNT(1), COUNT(v_int), SUM(v_int), AVG(v_int), MIN(v_int), MAX(v_int), NDV(v_int), HLL_CARDINALITY(HLL_RAW(v_int)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY())))), SUM(v_int + 1), SUM((v_int + 1) * (v_int + 1)), MAX((v_int + 1) * (v_int + 1)) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(*), COUNT(1), COUNT(v_int), SUM(v_int), AVG(v_int), MIN(v_int), MAX(v_int),
+       NDV(v_int), HLL_CARDINALITY(HLL_RAW(v_int)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY())))),
+       SUM(v_int + 1), SUM((v_int + 1) * (v_int + 1)), MAX((v_int + 1) * (v_int + 1))
+FROM (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+10	10	8	127	15.875	-5	100	5	5	84	135	10661	10201
+-- !result
+function: assert_explain_not_contains('SELECT INTERSECT_COUNT(TO_BITMAP(id), v_int, 10) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT INTERSECT_COUNT(TO_BITMAP(id), v_int, 10)
+FROM (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+3
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(v_decimal), SUM(v_decimal), AVG(v_decimal), MIN(v_decimal), MAX(v_decimal), NDV(v_decimal), HLL_CARDINALITY(HLL_RAW(v_decimal)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_decimal), HLL_EMPTY())))) FROM (SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_decimal FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(v_decimal), SUM(v_decimal), AVG(v_decimal), MIN(v_decimal), MAX(v_decimal),
+       NDV(v_decimal), HLL_CARDINALITY(HLL_RAW(v_decimal)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_decimal), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_decimal
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	13.32	1.66500000	-2.25	9.99	5	5	84
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(v_double), SUM(v_double), AVG(v_double), MIN(v_double), MAX(v_double), NDV(v_double), HLL_CARDINALITY(HLL_RAW(v_double)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_double), HLL_EMPTY())))) FROM (SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_double FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(v_double), SUM(v_double), AVG(v_double), MIN(v_double), MAX(v_double),
+       NDV(v_double), HLL_CARDINALITY(HLL_RAW(v_double)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_double), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_double
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	113.0	14.125	-5.75	100.25	8	8	132
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(v_str), SUM(CHAR_LENGTH(v_str)), MAX(LEFT(v_str, 3)), MIN(LEFT(v_str, 3)), NDV(v_str), HLL_CARDINALITY(HLL_RAW(v_str)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_str), HLL_EMPTY())))) FROM (SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_str FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(v_str), SUM(CHAR_LENGTH(v_str)), IFNULL(SUM(CHAR_LENGTH(v_str)), 0),
+       IFNULL(SUM(CHAR_LENGTH(v_str)) * 10 / COUNT(*), 0),
+       IFNULL(MAX(LEFT(v_str, 3)), ''), IFNULL(MIN(LEFT(v_str, 3)), ''),
+       NDV(v_str), HLL_CARDINALITY(HLL_RAW(v_str)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_str), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_str
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	33	33	33.0	gam		5	5	84
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(v_date), MIN(v_date), MAX(v_date), NDV(v_date), HLL_CARDINALITY(HLL_RAW(v_date)), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_date), HLL_EMPTY())))) FROM (SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_date FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(v_date), MIN(v_date), MAX(v_date), NDV(v_date), HLL_CARDINALITY(HLL_RAW(v_date)),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_date), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_date
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	2024-01-01	2024-01-10	8	8	132
+-- !result
+function: assert_explain_not_contains('SELECT COUNT(v_array), IFNULL(AVG(ARRAY_LENGTH(v_array)), -1), COUNT(*) * 4 * GREATEST(0, IFNULL(AVG(ARRAY_LENGTH(v_array)), -1)), NDV(CRC32_HASH(v_array)), HLL_CARDINALITY(HLL_RAW(CRC32_HASH(v_array))), LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(CRC32_HASH(v_array)), HLL_EMPTY())))) FROM (SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_array FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) u', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+SELECT COUNT(v_array), IFNULL(AVG(ARRAY_LENGTH(v_array)), -1),
+       COUNT(*) * 4 * GREATEST(0, IFNULL(AVG(ARRAY_LENGTH(v_array)), -1)),
+       NDV(CRC32_HASH(v_array)),
+       HLL_CARDINALITY(HLL_RAW(CRC32_HASH(v_array))),
+       LENGTH(HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(CRC32_HASH(v_array)), HLL_EMPTY()))))
+FROM (
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_array
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+) u;
+-- result:
+8	1.625	65.0	7	7	116
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');
+-- result:
+-- !result
+function: assert_explain_not_contains('SELECT cast(4 * 10 as BIGINT), HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY()))), cast((COUNT(*) - COUNT(v_int)) * 10 / COUNT(*) as BIGINT), cast(-1.0 as BIGINT) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) base_cte_table', 'AGGREGATE (merge serialize)')
+-- result:
+None
+-- !result
+WITH base_cte_table AS (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+)
+SELECT cast(9 as INT), cast(10001 as BIGINT), 'v_int',
+       cast(0 as BIGINT), cast(4 * 10 as BIGINT),
+       HLL_CARDINALITY(IFNULL(HLL_RAW(v_int), HLL_EMPTY())),
+       cast((COUNT(*) - COUNT(v_int)) * 10 / COUNT(*) as BIGINT), '', '',
+       cast(-1.0 as BIGINT)
+FROM base_cte_table;
+-- result:
+9	10001	v_int	0	40	5	2			-1
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'true');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('SELECT cast(4 * 10 as BIGINT), HEX(HLL_SERIALIZE(IFNULL(HLL_RAW(v_int), HLL_EMPTY()))), cast((COUNT(*) - COUNT(v_int)) * 10 / COUNT(*) as BIGINT), cast(-1.0 as BIGINT) FROM (SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id <= 4 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 4 AND id <= 10 UNION ALL SELECT id, v_int FROM t_push_down_local_agg_union_all_result_${uuid0} WHERE id > 100) base_cte_table', 'AGGREGATE (merge serialize)', 'AGGREGATE (update serialize)', 'UNION')
+-- result:
+None
+-- !result
+WITH base_cte_table AS (
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id <= 4
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 4 AND id <= 10
+    UNION ALL
+    SELECT id, v_int
+    FROM t_push_down_local_agg_union_all_result_${uuid0}
+    WHERE id > 100
+)
+SELECT cast(9 as INT), cast(10001 as BIGINT), 'v_int',
+       cast(0 as BIGINT), cast(4 * 10 as BIGINT),
+       HLL_CARDINALITY(IFNULL(HLL_RAW(v_int), HLL_EMPTY())),
+       cast((COUNT(*) - COUNT(v_int)) * 10 / COUNT(*) as BIGINT), '', '',
+       cast(-1.0 as BIGINT)
+FROM base_cte_table;
+-- result:
+9	10001	v_int	0	40	5	2			-1
+-- !result
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');
+-- result:
+-- !result
+DROP TABLE t_push_down_local_agg_union_all_result_${uuid0};
+-- result:
+-- !result

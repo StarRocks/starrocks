@@ -25,8 +25,8 @@
 #include "common/config_exec_env_fwd.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks {
@@ -206,6 +206,20 @@ TEST(ComputeEnvTest, ComputeEnvInstallsDriverLimiterMetric) {
 
     token.reset();
     env.destroy();
+}
+
+TEST(ComputeEnvTest, ComputeEnvInstallsQueryCacheMetrics) {
+    init_compute_env_test_context();
+    MetricRegistry registry("test_registry");
+    ComputeEnv env;
+
+    ASSERT_OK(env.init(make_compute_env_options(&registry)));
+    registry.trigger_hook();
+    assert_metric_value(&registry, "query_cache_capacity", "4194304");
+    assert_metric_value(&registry, "query_cache_lookup_count", "0");
+
+    env.destroy();
+    ASSERT_EQ(nullptr, registry.get_metric("query_cache_capacity"));
 }
 
 TEST(ComputeEnvTest, LoadPathLifecycle) {

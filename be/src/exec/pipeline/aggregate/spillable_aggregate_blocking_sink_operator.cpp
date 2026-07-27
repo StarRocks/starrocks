@@ -22,12 +22,12 @@
 #include "base/failpoint/fail_point.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
@@ -101,8 +101,10 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
 void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
     AggregateBlockingSinkOperator::close(state);
-    DCHECK(is_finished());
-    DCHECK(!need_input());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !need_input());
 }
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
@@ -354,6 +356,8 @@ OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
 
     spill_channel->set_spiller(spiller);
+    // Anchor the spill channel to the aggregator's lifetime (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(aggregator.get());
     aggregator->set_spiller(spiller);
     aggregator->set_spill_channel(std::move(spill_channel));
 

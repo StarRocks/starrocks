@@ -100,6 +100,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 优化器在存储格式未知或列 Schema 不可用时，用于估算外部文件表（FILES() 和 ENGINE=file 表）行数的平均行大小（字节）。行数估算公式为 `总文件字节数 / connector_row_size_estimate_bytes`。值越小，估算行数越大，可能影响 Join 顺序决策。
 - 引入版本: v3.4
 
+### `connector_table_analyze_scan_bytes_cap`
+
+- 默认值: 2147483648（2 GB）
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**主**扫描字节预算。每个 (分区, 列) 的统计扫描会累计其打开的 split 的字节数，一旦达到该预算即提前停止（软上限：最后一个 split 可能略微超出）。因此单个过大的分区或未分区表会被收集为一个有上界的降级样本，而不是失败或超时。取值 `0` 或更小表示该维度不限制。请按收集的列数进行校准，因为一个分区会为每一列各跑一个独立扫描。将该参数与 `connector_table_analyze_scan_files_cap`、`connector_table_analyze_scan_rows_cap` 同时设为 `0` 或更小，即可完全关闭有界成本收集并回退为全量扫描。可通过 `ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**次**扫描文件数预算。统计扫描在打开该数量的文件后即提前停止，用于限制由大量小文件组成的分区的收集成本。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- 默认值: 10000000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - 默认值: 12 * 3600
@@ -362,6 +389,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用谓词列收集。如果禁用，谓词列在查询优化期间将不会被记录。
 - 引入版本: -
 
+### `push_down_non_grouped_aggregate_below_union`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在物理计划中将不带 GROUP BY 的聚合下推到 Union 下方。
+- 引入版本: -
+
 ### `enable_query_queue_v2`
 
 - 默认值: true
@@ -448,6 +484,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：毫秒
 - 是否可变：Yes
 - 描述：同步等待统计信息的超时时间（当 `enable_sync_statistics_load` 启用时）。若在此时间内统计信息不可用，查询将在没有统计信息的情况下继续执行，这可能导致次优执行计划。请根据集群性能和工作负载特性将此值设置为合理的时间。
+- 引入版本：-
+
+### `sync_statistics_load_per_query_budget_ms`
+
+- 默认值：-1
+- 类型：Int
+- 单位：毫秒
+- 是否可变：Yes
+- 描述：当 `enable_sync_statistics_load` 启用时，单个查询同步等待统计信息的总预算。`-1` 表示使用 `sync_statistics_load_timeout_ms` 作为总预算。`0` 表示禁用统计信息同步等待。正数表示显式设置总预算。单次统计信息等待仍受 `sync_statistics_load_timeout_ms` 限制；预算耗尽后，查询将在缺少不可用统计信息的情况下继续执行。
 - 引入版本：-
 
 ### `enable_udf`
@@ -681,11 +726,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- 默认值: MAX
+- 默认值: PBE
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：MBE（基于内存）、PBE（基于并行度）、MAX（取 MBE 和 PBE 的最大值）和 MIN（取 MBE 和 PBE 的最小值）。MBE 根据预测内存或计划成本除以每个槽位内存目标来估算槽位，并受 `totalSlots` 限制。PBE 根据片段并行度（扫描范围计数或基数/每槽位行数）和基于 CPU 成本的计算（使用每槽位 CPU 成本）推导出槽位，然后将结果限制在 [numSlots/2, numSlots] 范围内。MAX 和 MIN 通过取其最大值或最小值来组合 MBE 和 PBE。如果配置值无效，则使用默认值 (`MAX`)。
+- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：`PBE`（基于并行度，默认值）、`MBE`（基于内存成本）和 `CBE`（基于 CPU 成本）。PBE 根据扫描并行度估算查询槽位（受 worker 数量上限）：OLAP 表使用剪枝后剩余的扫描范围数，因此只有极小的查询才会低于 worker 数；connector/外表扫描按满并行度（worker 数）处理，而不是当作单槽位查询。MBE 根据查询的内存成本除以 `query_queue_v2_mem_bytes_per_slot` 估算槽位。CBE 根据计划 CPU 成本除以 `query_queue_v2_cpu_costs_per_slot` 估算槽位。MBE 和 CBE 的单查询槽位还会被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。为向后兼容，旧值 `MAX` 和 `MIN` 仍被接受，并按默认估算器处理；其他值会被配置校验拒绝。
 - 引入版本: v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -694,7 +739,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制计算系统总查询槽位时使用的逻辑并发“层数”。在 shared-nothing 模式下，总槽位 = `query_queue_v2_concurrency_level` * BE 数量 * 每个 BE 的核心数（来自 BackendResourceStat）。在多仓库模式下，有效并发会缩减为 max(1, `query_queue_v2_concurrency_level` / 4)。如果配置值为非正数，则视为 `4`。更改此值会增加或减少 totalSlots（以及因此的并发查询容量），并影响每个槽位的资源：memBytesPerSlot 通过将每个 worker 内存除以（每个 worker 的核心数 * 并发）得出，并且 CPU 记账使用 `query_queue_v2_cpu_costs_per_slot`。将其设置为与集群大小成比例；非常大的值可能会减少每个槽位的内存并导致资源碎片。
+- 描述: 作为相对于默认层级 `4` 的容量层级来解释。对于默认（PBE）和基于 CPU 成本（CBE）的估算器，系统总查询槽位计算为 `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)`（来自 BackendResourceStat）。对于基于内存成本（MBE）的估算器，总槽位改为根据仓库内存预算推导。如果配置值为非正数，则视为 `4`。totalSlots 会被下限约束为至少 `number_of_workers`。增大此值会提高 totalSlots（以及并发查询容量）；在默认值 `4` 时，总容量等于 `number_of_workers * cores_per_worker`。请按集群所需并发度成比例设置。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -703,8 +748,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 规划器 CPU 成本单位
 - 是否可变: Yes
-- 描述: 每个槽位的 CPU 成本阈值，用于根据查询的规划器 CPU 成本估算查询所需的槽位数量。调度器计算槽位为整数（`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`），然后将结果限制在 [1, totalSlots] 范围内（totalSlots 来自查询队列 V2 `V2` 参数）。V2 代码将非正值规范化为 1 (Math.max(1, value))，因此非正值实际上变为 `1`。增加此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减少此值会增加每个查询的槽位。与 `query_queue_v2_num_rows_per_slot` 和并发设置一起调整，以控制并行度与资源粒度。
+- 描述: 基于 CPU 成本的估算器（CBE）使用的每槽位 CPU 成本阈值，用于根据查询的计划 CPU 成本估算所需槽位数量。调度器计算槽位为 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)`，然后将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。非正值会被规范化为 `1`。增大此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减小此值会增加每个查询的槽位。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 基于内存成本的估算器（MBE）使用的每槽位内存目标。当 `query_queue_slots_estimator_strategy` 为 `MBE` 时，总槽位根据仓库内存预算推导，单个查询的槽位根据其总内存成本除以该值估算，并被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。如果为非正数，Query Queue V2 使用每核平均 worker 内存。
+- 引入版本: -
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -712,7 +766,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 行
 - 是否可变: Yes
-- 描述: 当估算每个查询的槽位计数时，分配给单个调度槽位的目标源行记录数。StarRocks 计算 `estimated_slots` = (源节点的基数) / `query_queue_v2_num_rows_per_slot`，然后将结果限制在 [1, totalSlots] 范围内，如果计算值为非正数，则强制最小值为 1。totalSlots 来自可用资源（大致为 DOP * `query_queue_v2_concurrency_level` * worker/BE 数量），因此取决于集群/核心计数。增加此值以减少槽位计数（每个槽位处理更多行）并降低调度开销；减少此值以增加并行度（更多、更小的槽位），直至达到资源限制。
+- 描述: 为向后兼容 Query Queue V2 现有的序列化 / 调试输出而保留。PBE、MBE、CBE 槽位估算器均不再使用它。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
@@ -803,6 +857,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: 用于刷新统计信息缓存的线程池大小。
+- 引入版本: -
+
+### `enable_statistic_cache_metrics`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否为 `CachedStatisticStorage` 持有的统计信息缓存（列、表、分区、直方图、外部表以及多列统计信息缓存）启用统计记录。
 - 引入版本: -
 
 ### `statistic_collect_interval_sec`
@@ -934,6 +997,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
 - 引入版本: v4.0
+
+### `enable_pipeline_routine_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Routine Load 任务是否在 Pipeline 引擎上执行。启用后，每个任务在其分配的 BE 上本地执行（由该 BE 从 Kafka/Pulsar 消费数据），而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Routine Load 使用旧版执行路径，行为与之前完全一致。请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
+
+### `enable_pipeline_stream_load`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 经典同步 Stream Load 是否在 Pipeline 引擎上执行，而非使用旧版非 Pipeline 引擎。设置为 `false`（默认）时，Stream Load 使用旧版执行路径，行为与之前完全一致。（Routine Load 请使用 `enable_pipeline_routine_load`。）请在所有 BE 节点都升级到支持 Pipeline Load 的版本之后再开启;若部分 BE 仍为旧版本,开启后可能导致导入静默提交 0 行(旧版 BE 会忽略 Pipeline 扫描分片)。
+- 引入版本: -
 
 ### `enable_routine_load_lag_metrics`
 

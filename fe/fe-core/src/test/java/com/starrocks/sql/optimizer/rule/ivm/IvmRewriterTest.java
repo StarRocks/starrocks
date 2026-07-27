@@ -31,13 +31,10 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -56,7 +53,7 @@ import java.util.Map;
  * - Gate: skip when {@code enable_ivm_refresh} is off
  * - Convergence success: Delta markers eliminated for supported patterns
  * - Convergence failure: throw SemanticException for unsupported patterns
- * - appendPkLoadOpColumn: __op column + TopN for PK MVs
+ * - appendPkLoadOpColumn: __op column for PK MVs
  * - isPrimaryKeyTargetMv: various statement types
  */
 public class IvmRewriterTest {
@@ -240,9 +237,7 @@ public class IvmRewriterTest {
 
         IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
 
-        // Append-only Iceberg → constant __ACTION__ → TopN is skipped. Top is Project(__op).
         OptExpression rewrittenChild = root.inputAt(0);
-        Assertions.assertFalse(rewrittenChild.getOp() instanceof LogicalTopNOperator);
         Assertions.assertTrue(rewrittenChild.getOp() instanceof LogicalProjectOperator);
         LogicalProjectOperator opProjectOp = (LogicalProjectOperator) rewrittenChild.getOp();
         // Should contain __op column
@@ -298,10 +293,7 @@ public class IvmRewriterTest {
 
         IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
 
-        // Append-only Iceberg → constant __ACTION__ → TopN is skipped. Top is Project(__op).
         OptExpression rewrittenChild = root.inputAt(0);
-        Assertions.assertFalse(rewrittenChild.getOp() instanceof LogicalTopNOperator,
-                "No TopN expected for append-only Iceberg (constant __ACTION__)");
         Assertions.assertTrue(rewrittenChild.getOp() instanceof LogicalProjectOperator);
         LogicalProjectOperator opProjectOp = (LogicalProjectOperator) rewrittenChild.getOp();
         boolean hasOpColumn = opProjectOp.getColumnRefMap().keySet().stream()
@@ -357,101 +349,6 @@ public class IvmRewriterTest {
                 "__op must reference __ACTION__ directly");
     }
 
-    /** TopN is skipped when {@code __ACTION__} is provably constant (no DELETEs to order). */
-    @Test
-    public void testTopNSkippedWhenActionConstant(@Mocked IcebergTable table,
-                                                   @Mocked MaterializedView targetMv,
-                                                   @Mocked InsertStmt insertStmt) {
-        mockIcebergTable(table);
-        new Expectations() {
-            {
-                insertStmt.getTargetTable();
-                result = targetMv;
-                minTimes = 0;
-
-                targetMv.getKeysType();
-                result = KeysType.PRIMARY_KEYS;
-                minTimes = 0;
-            }
-        };
-
-        ColumnRefFactory factory = new ColumnRefFactory();
-        OptimizerContext context = OptimizerFactory.mockContext(factory);
-        context.getSessionVariable().setEnableIVMRefresh(true);
-        context.setStatement(insertStmt);
-
-        ColumnRefOperator idRef = factory.create("id", IntegerType.INT, false);
-        ColumnRefOperator dataRef = factory.create("data", StringType.STRING, true);
-        OptExpression scan = newIcebergScan(factory, table, idRef, dataRef,
-                TvrTableDelta.of(TvrVersion.of(100L), TvrVersion.of(200L)));
-
-        OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
-        deriveLogicalProperty(root);
-        IvmRewriter.rewrite(root, newTaskContext(context), new TaskScheduler(), new ColumnRefSet());
-
-        OptExpression top = root.inputAt(0);
-        Assertions.assertTrue(top.getOp() instanceof LogicalProjectOperator,
-                "top operator must be Project when __ACTION__ is constant; no TopN expected");
-        Assertions.assertFalse(top.getOp() instanceof LogicalTopNOperator);
-    }
-
-    /**
-     * Regression: when {@code __ACTION__} is forwarded through an aliasing projection
-     * (e.g., {@code IvmDeltaFilterRule} attaches {@code action → action}), the constant
-     * produced at the scan must still be detected — TopN is skipped.
-     */
-    @Test
-    public void testTopNSkippedAcrossAliasForwardingProjection(@Mocked IcebergTable table,
-                                                                @Mocked MaterializedView targetMv,
-                                                                @Mocked InsertStmt insertStmt) {
-        mockIcebergTable(table);
-        new Expectations() {
-            {
-                insertStmt.getTargetTable();
-                result = targetMv;
-                minTimes = 0;
-
-                targetMv.getKeysType();
-                result = KeysType.PRIMARY_KEYS;
-                minTimes = 0;
-            }
-        };
-
-        ColumnRefFactory factory = new ColumnRefFactory();
-        OptimizerContext context = OptimizerFactory.mockContext(factory);
-        context.getSessionVariable().setEnableIVMRefresh(true);
-        context.setStatement(insertStmt);
-
-        ColumnRefOperator idRef = factory.create("id", IntegerType.INT, false);
-        ColumnRefOperator dataRef = factory.create("data", StringType.STRING, true);
-        OptExpression scan = newIcebergScan(factory, table, idRef, dataRef,
-                TvrTableDelta.of(TvrVersion.of(100L), TvrVersion.of(200L)));
-        // Filter above scan → IvmDeltaFilterRule attaches a passthrough Projection carrying
-        // `actionColumn → actionColumn` on the Filter operator. Without alias-chain walking,
-        // isActionColumnConstant would miss the constant and keep the TopN.
-        OptExpression filter = OptExpression.create(
-                new LogicalFilterOperator(ConstantOperator.createBoolean(true)), scan);
-        OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), filter);
-        deriveLogicalProperty(root);
-
-        IvmRewriter.rewrite(root, newTaskContext(context), new TaskScheduler(), new ColumnRefSet());
-
-        Assertions.assertFalse(containsTopN(root.inputAt(0)),
-                "TopN must be skipped when __ACTION__ is constant, even through alias forwarding");
-    }
-
-    private static boolean containsTopN(OptExpression expr) {
-        if (expr.getOp() instanceof LogicalTopNOperator) {
-            return true;
-        }
-        for (OptExpression child : expr.getInputs()) {
-            if (containsTopN(child)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Test
     public void testNoPkLoadOpColumnForDupKeysMv(@Mocked IcebergTable table,
                                                   @Mocked MaterializedView targetMv,
@@ -488,10 +385,11 @@ public class IvmRewriterTest {
 
         IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
 
-        // For DUP_KEYS MV, no TopN or __op should be added
+        // DUP_KEYS MV is not a PK target → appendPkLoadOpColumn does not run → no __op column.
         OptExpression rewrittenChild = root.inputAt(0);
-        Assertions.assertFalse(rewrittenChild.getOp() instanceof LogicalTopNOperator,
-                "DUP_KEYS MV should NOT have TopN");
+        boolean hasOpColumn = rewrittenChild.getOutputColumns().getColumnRefOperators(factory).stream()
+                .anyMatch(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        Assertions.assertFalse(hasOpColumn, "DUP_KEYS MV should NOT have a __op column");
     }
 
     @Test
@@ -516,9 +414,11 @@ public class IvmRewriterTest {
 
         IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
 
-        // No statement → no __op, no TopN
+        // No statement → isPrimaryKeyTargetMv false → appendPkLoadOpColumn does not run → no __op column.
         OptExpression rewrittenChild = root.inputAt(0);
-        Assertions.assertFalse(rewrittenChild.getOp() instanceof LogicalTopNOperator);
+        boolean hasOpColumn = rewrittenChild.getOutputColumns().getColumnRefOperators(factory).stream()
+                .anyMatch(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        Assertions.assertFalse(hasOpColumn, "no-statement MV should NOT have a __op column");
     }
 
     // ==================== Helpers ====================

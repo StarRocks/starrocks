@@ -589,6 +589,12 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    double lake_tablet_internal_parallel_skew_split_ratio() const {
+        return _query_options.__isset.lake_tablet_internal_parallel_skew_split_ratio
+                       ? _query_options.lake_tablet_internal_parallel_skew_split_ratio
+                       : 1.5;
+    }
+
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
@@ -640,6 +646,10 @@ public:
 
     bool lower_upper_support_utf8() const {
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
+    }
+
+    bool ngram_search_support_utf8() const {
+        return _query_options.__isset.ngram_search_support_utf8 && _query_options.ngram_search_support_utf8;
     }
 
     bool enable_global_late_materialization() const {

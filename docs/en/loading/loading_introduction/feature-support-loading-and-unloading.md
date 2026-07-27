@@ -16,7 +16,7 @@ This document outlines the features of various data loading and unloading method
     <tr>
         <th rowspan="2"></th>
         <th rowspan="2">Data Source</th>
-        <th colspan="7">File Format</th>
+        <th colspan="8">File Format</th>
     </tr>
     <tr>
         <th>CSV</th>
@@ -26,6 +26,7 @@ This document outlines the features of various data loading and unloading method
         <th>Avro</th>
         <th>ProtoBuf</th>
         <th>Thrift</th>
+        <th>Arrow</th>
     </tr>
     <tr>
         <td>Stream Load</td>
@@ -35,6 +36,7 @@ This document outlines the features of various data loading and unloading method
         <td>To be supported</td>
         <td>To be supported</td>
         <td colspan="3">To be supported</td>
+        <td>Yes</td>
     </tr>
     <tr>
         <td>INSERT from FILES</td>
@@ -45,6 +47,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.4.4+)</td>
         <td colspan="2">To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -52,7 +55,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.2.3+)</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">To be supported</td>
+        <td colspan="4">To be supported</td>
     </tr>
     <tr>
         <td>Routine Load</td>
@@ -64,6 +67,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.0+) [1]</td>
         <td>To be supported</td>
         <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Spark Load</td>
@@ -72,7 +76,7 @@ This document outlines the features of various data loading and unloading method
         <td>To be supported</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">To be supported</td>
+        <td colspan="4">To be supported</td>
     </tr>
     <tr>
         <td>Connectors</td>
@@ -81,7 +85,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes</td>
         <td>To be supported</td>
         <td>To be supported</td>
-        <td colspan="3">To be supported</td>
+        <td colspan="4">To be supported</td>
     </tr>
     <tr>
         <td>Kafka Connector [2]</td>
@@ -91,10 +95,11 @@ This document outlines the features of various data loading and unloading method
         <td>To be supported</td>
         <td colspan="2">Yes (v3.0+)</td>
         <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>PIPE [4]</td>
-        <td colspan="8">Consistent with INSERT from FILES</td>
+        <td colspan="9">Consistent with INSERT from FILES</td>
     </tr>
 </table>
 
@@ -400,6 +405,20 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>ORC</td>
+    </tr>
+    <tr>
+        <td>Arrow</td>
+        <td>
+            <ul>
+                <li>lz4</li>
+                <li>zstd</li>
+            </ul>
+        </td>
+        <td>Yes [4]</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
 </table>
 

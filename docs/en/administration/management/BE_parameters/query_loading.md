@@ -109,7 +109,7 @@ This topic introduces the following types of BE configurations:
 
 ### enable_json_flat
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
@@ -319,7 +319,7 @@ This topic introduces the following types of BE configurations:
 - Default: 10
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values `> 0` and `< 1000` enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
@@ -386,6 +386,15 @@ This topic introduces the following types of BE configurations:
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
+### object_storage_client_cache_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of object storage clients (S3-compatible and Azure Blob) cached per client factory. The value is read on each client creation, so lowering it takes effect gradually as cached clients are evicted during subsequent creations. Values below `1` are treated as `1`.
+- Introduced in: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - Default: -1
@@ -400,7 +409,7 @@ This topic introduces the following types of BE configurations:
 - Default: -1
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
@@ -409,7 +418,7 @@ This topic introduces the following types of BE configurations:
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
 
@@ -640,11 +649,11 @@ This topic introduces the following types of BE configurations:
 
 ### jvm_call_thread_pool_size
 
-- Default: 1
+- Default: 4
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as HDFS/libhdfs close and stat operations and JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM work does not compete with Java UDF execution.
 - Introduced in: -
 
 ### udf_thread_pool_size
@@ -653,7 +662,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the UDF call PriorityThreadPool created in ExecEnv (used for executing user-defined functions / UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent UDF executions; keep small to avoid excessive CPU and memory contention.
+- Description: Sets the size of the Java UDF call PriorityThreadPool owned by JavaEnv (used for executing Java UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent Java UDF executions; keep small to avoid excessive CPU and memory contention.
 - Introduced in: v3.2.0
 
 ### update_memory_limit_percent

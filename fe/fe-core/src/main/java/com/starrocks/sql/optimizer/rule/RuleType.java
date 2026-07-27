@@ -229,14 +229,6 @@ public enum RuleType {
     TF_INNER_TO_SEMI,
     TF_LARGE_IN_PREDICATE_TO_JOIN,
 
-    // TVR transform rules
-    TF_TVR_TABLE_SCAN,
-    TF_TVR_AGGREGATE,
-    TF_TVR_PROJECT,
-    TF_TVR_FILTER,
-    TF_TVR_JOIN,
-    TF_TVR_UNION_ALL,
-
     // IVM delta/version rewrite rules (unified framework)
     TF_IVM_DELTA_ICEBERG_SCAN,
     TF_IVM_DELTA_FILTER,
@@ -324,7 +316,6 @@ public enum RuleType {
     GP_FINE_GRAINED_RANGE_PREDICATE,
     GP_ELIMINATE_OP_WITH_CONSTANT,
     GP_VECTOR_REWRITE,
-    GP_TVR_REWRITE,
     GP_IVM_DELTA_REWRITE,
 
     NUM_RULES;

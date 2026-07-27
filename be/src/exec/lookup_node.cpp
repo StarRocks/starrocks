@@ -18,12 +18,12 @@
 
 #include "base/failpoint/fail_point.h"
 #include "exec/exec_env.h"
-#include "exec/exec_node.h"
 #include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/lookup_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

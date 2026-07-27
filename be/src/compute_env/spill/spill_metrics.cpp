@@ -18,6 +18,8 @@ namespace starrocks {
 
 namespace {
 
+#define REGISTER_SPILL_METRIC(name) registry->register_metric(#name, &name)
+
 void register_labeled(MetricRegistry* registry, const char* storage_type, SpillMetrics::LabeledCounters* bucket) {
     MetricLabels labels;
     labels.add("storage_type", storage_type);
@@ -73,6 +75,15 @@ void SpillMetrics::install(MetricRegistry* registry) {
 
     register_labeled(registry, "local", &_local);
     register_labeled(registry, "remote", &_remote);
+
+    REGISTER_SPILL_METRIC(load_spill_local_blocks_read_total);
+    REGISTER_SPILL_METRIC(load_spill_local_blocks_write_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_blocks_read_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_blocks_write_total);
+    REGISTER_SPILL_METRIC(load_spill_local_bytes_read_total);
+    REGISTER_SPILL_METRIC(load_spill_local_bytes_write_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_bytes_read_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_bytes_write_total);
 }
 
 } // namespace starrocks

@@ -61,7 +61,9 @@ ADD_BE_LIB(Base
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/filter.cpp
   simd/rle_simd.cpp
+  simd/delta_decode.cpp
   stats/ndv_estimator.cpp
   metrics.cpp
   string/base85.cpp
@@ -71,6 +73,7 @@ ADD_BE_LIB(Base
   string/string_parser.cpp
   string/url_parser.cpp
   string/slice.cpp
+  string/utf8.cpp
   string/utf8_check.cpp
   system/errno.cpp
   time/date_func.cpp

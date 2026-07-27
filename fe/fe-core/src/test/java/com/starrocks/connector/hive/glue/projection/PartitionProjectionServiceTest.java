@@ -461,6 +461,37 @@ public class PartitionProjectionServiceTest {
         assertEquals("s3://bucket/data/us/2024/", partition.getFullPath());
     }
 
+    /**
+     * Regression guard: OpenCSVSerde text tables under partition projection must thread the
+     * SerDe library through to the converter so quote/escape reach the projected partitions.
+     * The single-arg overload drops them, so getTextFileFormatDesc must pass HIVE_TABLE_SERDE_LIB.
+     */
+    @Test
+    void testProjectedPartitionCarriesOpenCSVSerdeQuoteEscape() {
+        HiveTable table = mock(HiveTable.class);
+        Map<String, String> properties = new HashMap<>(ImmutableMap.of(
+                "projection.enabled", "true",
+                "projection.region.type", "enum",
+                "projection.region.values", "us,eu",
+                "storage.location.template", "s3://bucket/data/${region}/",
+                HiveTable.HIVE_TABLE_SERDE_LIB, "org.apache.hadoop.hive.serde2.OpenCSVSerde"));
+        when(table.getProperties()).thenReturn(properties);
+        when(table.getPartitionColumnNames()).thenReturn(List.of("region"));
+        when(table.getTableLocation()).thenReturn("s3://bucket/data");
+        when(table.getStorageFormat()).thenReturn(HiveStorageFormat.TEXTFILE);
+        // Empty serde properties: OpenCSVSerde defaults ('"' / '\') must still apply.
+        when(table.getSerdeProperties()).thenReturn(ImmutableMap.of());
+
+        Map<String, Partition> partitions =
+                service.getProjectedPartitionsFromNames(table, Arrays.asList("region=us"));
+
+        Partition partition = partitions.get("region=us");
+        assertNotNull(partition);
+        assertNotNull(partition.getTextFileFormatDesc());
+        assertEquals('"', partition.getTextFileFormatDesc().getEnclose());
+        assertEquals('\\', partition.getTextFileFormatDesc().getEscape());
+    }
+
     private HiveTable createMockHiveTableWithNullLocation(Map<String, String> properties,
                                                            List<String> partitionColumnNames) {
         HiveTable table = mock(HiveTable.class);

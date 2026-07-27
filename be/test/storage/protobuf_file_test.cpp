@@ -24,10 +24,10 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/util.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

@@ -509,6 +509,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         ImportColumnsStmt importColumnsStmt = null;
         ImportWhereStmt importWhereStmt = null;
         PartitionRef partitionNames = null;
+        ImportMetadataStmt importMetadataStmt = null;
         for (ParseNode parseNode : loadPropertyList) {
             if (parseNode instanceof ColumnSeparator) {
                 // check column separator
@@ -528,6 +529,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of columns info");
                 }
                 importColumnsStmt = (ImportColumnsStmt) parseNode;
+            } else if (parseNode instanceof ImportMetadataStmt) {
+                // check INCLUDE METADATA clause
+                if (importMetadataStmt != null) {
+                    throw new AnalysisException("repeat setting of INCLUDE METADATA");
+                }
+                importMetadataStmt = (ImportMetadataStmt) parseNode;
             } else if (parseNode instanceof ImportWhereStmt) {
                 // check where expr
                 if (importWhereStmt != null) {
@@ -554,8 +561,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 }
             }
         }
-        return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,
-                partitionNames);
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt,
+                importWhereStmt, partitionNames);
+        routineLoadDesc.setMetadata(importMetadataStmt);
+        return routineLoadDesc;
     }
 
     public void checkJobProperties() throws StarRocksException {

@@ -290,7 +290,7 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         try {
             sql = "drop user test";
-            DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assertions.fail();
         } catch (AnalysisException e) {
             Assertions.assertTrue(e.getMessage().contains("cannot find user 'test'@'%'"));

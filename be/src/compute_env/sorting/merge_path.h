@@ -27,7 +27,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "compute_env/sorting/merge.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 

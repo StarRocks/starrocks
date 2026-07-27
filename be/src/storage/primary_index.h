@@ -22,7 +22,7 @@
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index.h"
-#include "storage/primitive/chunk_iterator.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

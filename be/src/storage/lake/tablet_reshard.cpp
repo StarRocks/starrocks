@@ -21,12 +21,14 @@
 
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "gutil/strings/join.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
 
@@ -320,7 +322,20 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
         return old_tablet_old_metadata_or.status();
     }
 
-    const auto& old_tablet_old_metadata = old_tablet_old_metadata_or.value();
+    // Flush the old tablet's PK-index memtable into sstables before copying metadata to the
+    // identical new tablet, mirroring the pre-split flush in split_tablet. Without it the identical
+    // child inherits an sstable_meta that does not cover recently-written rowsets whose
+    // overwrite/delete resolution lived only in the in-memory memtable; the child's cold PK-index
+    // rebuild then re-derives an index inconsistent with the inherited delvec, surfacing as a
+    // duplicate-key on rebuild or a delvec-inconsistency when a cross-published op_write is applied.
+    // flush_pk_memtable is a no-op for non-PK / non-cloud-native-persistent-index tablets.
+    auto flushed_old_metadata_or =
+            tablet_manager->update_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(), new_version);
+    if (!flushed_old_metadata_or.ok()) {
+        g_tablet_reshard_identical_failed << 1;
+        return flushed_old_metadata_or.status();
+    }
+    const auto& old_tablet_old_metadata = flushed_old_metadata_or.value();
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
     old_tablet_new_metadata->set_version(new_version);
@@ -342,6 +357,23 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     return Status::OK();
 }
 
+// Delete the output files of a compaction that is being dropped during a
+// split/merge cross-publish, logging what was removed. This is the only place
+// the reshard path deletes data files, and it is otherwise invisible
+// (delete_files_async only logs at VLOG level), so record it at INFO for
+// post-mortem traceability. Input sstables that the persistent-index compaction
+// reused verbatim as its output ("full contain / only do move") are already
+// excluded by collect_compaction_output_files, so this never deletes a
+// still-referenced file.
+void delete_dropped_compaction_output_files(const TxnLogPB& txn_log, const char* reshard_kind) {
+    auto output_files = tablet_reshard_helper::collect_compaction_output_files(
+            txn_log, StorageEnv::GetInstance()->lake_tablet_manager());
+    LOG(INFO) << "Drop pending compaction during " << reshard_kind << " cross-publish, tablet=" << txn_log.tablet_id()
+              << " txn=" << txn_log.txn_id() << ", delete " << output_files.size() << " compaction output file(s): ["
+              << JoinStrings(output_files, ", ") << "]";
+    delete_files_async(std::move(output_files));
+}
+
 // Transform |txn_log| (which still carries the old tablet id) for publish
 // on the merged tablet. Drops compaction as a no-op (background compaction
 // will rerun it on the merged tablet) and asynchronously deletes the output
@@ -351,8 +383,7 @@ Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
     if (!txn_log->has_op_compaction() && !txn_log->has_op_parallel_compaction()) {
         return Status::OK();
     }
-    delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-            *txn_log, StorageEnv::GetInstance()->lake_tablet_manager()));
+    delete_dropped_compaction_output_files(*txn_log, "merge");
     txn_log->clear_op_compaction();
     txn_log->clear_op_parallel_compaction();
     return Status::OK();
@@ -382,8 +413,7 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
                                      const PublishTabletInfo& publish_tablet_info) {
     if (txn_log->has_op_compaction() || txn_log->has_op_parallel_compaction()) {
         if (publish_tablet_info.get_split_index() == 0) {
-            delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-                    *txn_log, StorageEnv::GetInstance()->lake_tablet_manager()));
+            delete_dropped_compaction_output_files(*txn_log, "split");
         }
         txn_log->clear_op_compaction();
         txn_log->clear_op_parallel_compaction();

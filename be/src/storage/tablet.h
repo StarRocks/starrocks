@@ -47,21 +47,22 @@
 #include "base/concurrency/once.h"
 #include "base/phmap/phmap.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/base_tablet.h"
 #include "storage/data_dir.h"
-#include "storage/primitive/olap_tuple.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
+#include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {
 
 class DataDir;
+class FlatJsonConfig;
 class RowsetReadOptions;
 class Tablet;
 class TabletMeta;
@@ -310,6 +311,8 @@ public:
     // This will modify the TabletMeta, and save_meta() will be called outside
     // to persist it. See run_update_meta_info_task() in agent_task.cpp
     void update_binlog_config(const BinlogConfig& binlog_config);
+
+    void update_flat_json_config(const FlatJsonConfig& flat_json_config);
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
 

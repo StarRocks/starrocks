@@ -1263,9 +1263,6 @@ public class DatabaseTransactionMgrTest {
 
     @Test
     public void testPublishVersionMissing() throws StarRocksException {
-        TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
-        DatabaseTransactionMgr masterDbTransMgr =
-                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         // begin transaction
         long transactionId1 = masterTransMgr
@@ -1445,7 +1442,7 @@ public class DatabaseTransactionMgrTest {
 
         latchLock.await();
         // WRITE lock is held — canTxnFinished should time out and throw ERR_LOCK_ERROR
-        LockTimeoutException exception = Assertions.assertThrows(LockTimeoutException.class,
+        Assertions.assertThrows(LockTimeoutException.class,
                 () -> masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
                         Config.finish_transaction_default_lock_timeout_ms));
 

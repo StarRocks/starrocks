@@ -38,9 +38,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Groups a {@link SampleSet}'s rows into per-target-partition buckets ready
@@ -82,13 +84,19 @@ public final class PartitionSampleGrouper {
      * @param dbId            db id for the intensive lock scope
      * @param totalFileBytes  total bytes of the load's input (per {@code Estimates});
      *                        used to apportion {@code estimatedBytes} across groups
+     * @param sampledSecondaryIndexMetaIds  authoritative secondary index-id set the
+     *                        sampler projected ({@link SampleSet#getSecondaryIndexMetaIds()});
+     *                        an existing partition whose currently-resolved secondary
+     *                        index-id set differs is dropped as ineligible (a rollup
+     *                        appeared or vanished since the sample)
      * @return list of {@link PartitionSamples} sorted by sample-count descending
      *         (heaviest first), capped at
      *         {@link Config#tablet_pre_split_max_partitions_per_load}; possibly
      *         empty
      */
     public static List<PartitionSamples> group(SampleSet samples, OlapTable table, ConnectContext ctx,
-                                               long dbId, long totalFileBytes) {
+                                               long dbId, long totalFileBytes,
+                                               Set<Long> sampledSecondaryIndexMetaIds) {
         List<Tuple> partitionSourceTuples = samples.getPartitionSourceTuples();
         if (partitionSourceTuples.isEmpty()) {
             // Sampler did not project partition source columns (target was unpartitioned).
@@ -128,7 +136,13 @@ public final class PartitionSampleGrouper {
                 group = new RawGroup(formatted);
                 rawGroups.put(formatted, group);
             }
-            group.rows.add(new SampleRow(sortKeyTuples.get(rowIndex).getValues(), partitionSourceTuple));
+            // Carry the id-tagged secondary-index tuples through only when the sampler
+            // projected them; getSecondaryIndexTuples() is empty for single-index targets,
+            // so never index into it in that case.
+            List<IndexTuple> secondaryIndexTuples = samples.getSecondaryIndexTuples().isEmpty()
+                    ? List.of() : samples.getSecondaryIndexTuples().get(rowIndex);
+            group.rows.add(new SampleRow(
+                    sortKeyTuples.get(rowIndex).getValues(), partitionSourceTuple, secondaryIndexTuples));
         }
 
         if (rawGroups.isEmpty()) {
@@ -230,6 +244,20 @@ public final class PartitionSampleGrouper {
                     PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
                     continue;
                 }
+                // Resolve every visible index (base + rollups) and confirm the resolved
+                // secondary index-id set still matches what the sampler projected. A
+                // rollup that appeared or vanished since the sample, or a rollup that no
+                // longer resolves (multi-tablet / non-scalar sort key), drops the whole
+                // partition -- the authoritative re-check runs again at plan time. The base
+                // oldTabletId stays on PartitionSamples; per-index targets are re-resolved
+                // at plan time, not carried from here.
+                List<IndexPreSplitTarget> indexTargets =
+                        PreSplitTargets.resolveVisibleIndexTargets(table, physicalPartition);
+                if (indexTargets == null
+                        || !resolvedSecondaryIndexMetaIds(indexTargets).equals(sampledSecondaryIndexMetaIds)) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+                    continue;
+                }
                 long oldTabletId = baseIndex.getTablets().get(0).getId();
                 resolved.add(new PartitionSamples(
                         group.formattedValues, group.partitionName, true,
@@ -243,6 +271,18 @@ public final class PartitionSampleGrouper {
         // already explain why each group was dropped. There WERE groups; they were
         // ineligible, not empty. Return the (possibly empty) heaviest-first list.
         return resolved;
+    }
+
+    /**
+     * The secondary (non-base) index-meta ids of a base-first
+     * {@link IndexPreSplitTarget} list -- the base is always {@code targets.get(0)}.
+     */
+    private static Set<Long> resolvedSecondaryIndexMetaIds(List<IndexPreSplitTarget> indexTargets) {
+        Set<Long> secondaryIds = new HashSet<>();
+        for (int i = 1; i < indexTargets.size(); i++) {
+            secondaryIds.add(indexTargets.get(i).indexMetaId());
+        }
+        return secondaryIds;
     }
 
     private static List<String> formatPartitionTuple(List<Variant> partitionSourceTuple,

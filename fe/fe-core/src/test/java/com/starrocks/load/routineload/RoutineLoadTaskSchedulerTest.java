@@ -83,7 +83,6 @@ public class RoutineLoadTaskSchedulerTest {
     @Test
     public void testRunOneCycle(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob1,
                                 @Injectable KafkaRoutineLoadJob routineLoadJob) {
-        long beId = 100L;
 
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 100L);

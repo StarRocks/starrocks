@@ -47,7 +47,7 @@ Status PersistentIndexCompactionManager::init() {
                             .set_min_threads(1)
                             .set_max_threads(max_pk_index_compaction_thread_cnt)
                             .build(&_worker_thread_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("pk_index_compaction", _worker_thread_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), pk_index_compaction, _worker_thread_pool.get());
 
     return Status::OK();
 }

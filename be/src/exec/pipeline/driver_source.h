@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::pipeline {
 class DriverSource;

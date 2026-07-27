@@ -16,7 +16,7 @@
 
 #include "base/phmap/phmap_dump.h"
 #include "exec/aggregate/agg_hash_set.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

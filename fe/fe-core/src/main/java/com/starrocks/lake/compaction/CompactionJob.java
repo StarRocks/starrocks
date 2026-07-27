@@ -46,9 +46,14 @@ public class CompactionJob {
     private boolean allowPartialSuccess = false;
     private final ComputeResource computeResource;
     private String warehouse;
+    private final Quantiles scoreBefore;
+    private Quantiles scoreAfter;
+    private boolean partialSuccess; // whether job is partial successful
+    private CompactionProfile profile;
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
-            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse) {
+            boolean allowPartialSuccess, ComputeResource computeResource, String warehouse,
+            Quantiles scoreBefore) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -59,6 +64,10 @@ public class CompactionJob {
         this.allowPartialSuccess = allowPartialSuccess;
         this.computeResource = computeResource;
         this.warehouse = warehouse;
+        this.scoreBefore = scoreBefore;
+        this.scoreAfter = null;
+        this.partialSuccess = false;
+        this.profile = null;
     }
 
     Database getDb() {
@@ -101,7 +110,6 @@ public class CompactionJob {
 
     public CompactionTask.TaskResult getResult() {
         int allSuccess = 0;
-        int partialSuccess = 0;
         int noneSuccess = 0;
         for (CompactionTask task : tasks) {
             CompactionTask.TaskResult subTaskResult = task.getResult();
@@ -109,7 +117,6 @@ public class CompactionJob {
                 case NOT_FINISHED:
                     return subTaskResult; // early return
                 case PARTIAL_SUCCESS:
-                    partialSuccess++;
                     break;
                 case NONE_SUCCESS:
                     noneSuccess++;
@@ -123,10 +130,13 @@ public class CompactionJob {
             }
         }
         if (allSuccess == tasks.size()) {
+            this.partialSuccess = false;
             return CompactionTask.TaskResult.ALL_SUCCESS;
         } else if (noneSuccess == tasks.size()) {
+            this.partialSuccess = false;
             return CompactionTask.TaskResult.NONE_SUCCESS;
         } else {
+            this.partialSuccess = true;
             return CompactionTask.TaskResult.PARTIAL_SUCCESS;
         }
     }
@@ -155,6 +165,10 @@ public class CompactionJob {
         this.finishTs = System.currentTimeMillis();
     }
 
+    public void setScoreAfter(Quantiles scoreAfter) {
+        this.scoreAfter = scoreAfter;
+    }
+
     public void abort() {
         tasks.forEach(CompactionTask::abort);
     }
@@ -168,8 +182,15 @@ public class CompactionJob {
     }
 
     public String getDebugString() {
-        return String.format("txnId=%d, partition=%s, warehouse=%s, cngroup=%d", txnId, getFullPartitionName(), warehouse,
-                computeResource.getWorkerGroupId());
+        if (finishTs > 0) {
+            return String.format("txnId=%d, partition=%s, warehouse=%s, cnGroup=%d, profile=%s",
+                    txnId, getFullPartitionName(), warehouse, computeResource.getWorkerGroupId(),
+                    profile);
+        } else {
+            return String.format("txnId=%d, partition=%s, warehouse=%s, cnGroup=%d, scoreBefore=%s",
+                    txnId, getFullPartitionName(), warehouse, computeResource.getWorkerGroupId(),
+                    scoreBefore);
+        }
     }
 
     public boolean getAllowPartialSuccess() {
@@ -180,7 +201,22 @@ public class CompactionJob {
         return computeResource;
     }
 
+    public Quantiles getScoreBefore() {
+        return scoreBefore;
+    }
+
+    public Quantiles getScoreAfter() {
+        return scoreAfter;
+    }
+
+    public boolean isPartialSuccess() {
+        return partialSuccess;
+    }
+
     public String getExecutionProfile() {
+        if (profile != null) {
+            return profile.toString();
+        }
         if (tasks.isEmpty() || finishTs == 0L) {
             return "";
         }
@@ -233,7 +269,8 @@ public class CompactionJob {
                 }
             }
         }
-        return new CompactionProfile(stat).toString();
+        profile = new CompactionProfile(stat, scoreBefore, scoreAfter, partialSuccess);
+        return profile.toString();
     }
 
     public long getSuccessCompactInputFileSize() {

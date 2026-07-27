@@ -364,7 +364,7 @@ public class FeExecuteCoordinator extends Coordinator {
                                 .orElseThrow(() -> new IllegalStateException("No match for slotId: " + slotId));
                     })
                     .collect(Collectors.toList());
-            for (final List<ScalarOperator> row : valuesOperator.getRows()) {
+            for (int i = 0; i < valuesOperator.getRows().size(); i++) {
                 serializer.reset();
                 serializeAlignedRow(alignedRow, serializer);
                 res.add(serializer.toByteBuffer());

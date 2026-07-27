@@ -790,9 +790,6 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             final String query = "select k1, v1, v2 from t1 where k1 > 10";
             final Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor(query);
             final MvRewritePreprocessor preprocessor = result.first;
-            final Table t1 = getTable(DB_NAME, "t1");
-            final OptExpression logicalTree = result.second;
-            final Set<Table> queryTables = ImmutableSet.of(t1);
 
             // correlation with different levels and same other params
             {

@@ -30,7 +30,6 @@
 #include "exprs/expr_factory.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/utils.h"
 
 namespace starrocks::pipeline {
 

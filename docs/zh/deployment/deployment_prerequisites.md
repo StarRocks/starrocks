@@ -37,7 +37,7 @@ StarRocks 支持 HDD 和 SSD 作为存储介质。
 
 ## 操作系统
 
-StarRocks 支持在 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9 或 Ubuntu Linux 22.04 上部署。
+StarRocks 支持在 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、Ubuntu Linux 22.04 或 Ubuntu Linux 24.04 上部署。
 
 ## 软件
 

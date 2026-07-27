@@ -21,7 +21,7 @@
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/runtime_filter/runtime_filter_registry.h"
+#include "exec_primitive/runtime_filter/runtime_filter_registry.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif

@@ -22,8 +22,10 @@ import java.util.List;
 /**
  * Represents a CREATE TABLE AS SELECT (CTAS) statement
  * Syntax:
- * CREATE TABLE table_name [( column_name_list )]
- * opt_engine opt_partition opt_properties KW_AS query_stmt
+ * CREATE [TEMPORARY] TABLE [IF NOT EXISTS] table_name [( column_name_list )]
+ * [ENGINE = engine_name] [key_desc] [COMMENT 'comment']
+ * [partition_desc] [distribution_desc] [order_by_desc] [properties]
+ * AS query_stmt
  */
 public class CreateTableAsSelectStmt extends StatementBase {
     private final CreateTableStmt createTableStmt;

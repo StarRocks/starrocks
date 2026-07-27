@@ -17,8 +17,8 @@
 #include "column/global_dict/decoder.h"
 #include "common/global_types.h"
 #include "compute_env/global_dict/parser.h"
-#include "exec/olap_common.h"
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks::pipeline {
 

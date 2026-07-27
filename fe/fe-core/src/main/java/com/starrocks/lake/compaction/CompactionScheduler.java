@@ -34,6 +34,7 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -170,6 +171,9 @@ public class CompactionScheduler extends Daemon {
                     history.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_failure);
                     abortTransactionIgnoreException(job, errorMsg);
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+                    }
                     continue;
                 }
             }
@@ -184,6 +188,16 @@ public class CompactionScheduler extends Daemon {
                 } else if (LOG.isDebugEnabled()) {
                     LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
                             cost / 1000, runningCompactions.size());
+                }
+                if (MetricRepo.hasInit) {
+                    // Mutually exclusive status counters: a partial-success commit lands
+                    // only in PARTIAL_SUCCESS, not also in SUCCESS, so dashboards can sum
+                    // success + partial + failed without double-counting.
+                    if (job.isPartialSuccess()) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS.increase(1L);
+                    }
                 }
                 int factor = (statistics != null) ? statistics.getPunishFactor() : 1;
                 compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_success * factor);
@@ -234,9 +248,16 @@ public class CompactionScheduler extends Daemon {
             }
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job, {}", job.getDebugString());
+            if (MetricRepo.hasInit) {
+                // Feed the partition's MAX tablet score because the trigger logic itself selects
+                // partitions by max score, so this metric reflects the same criterion. Rounded to
+                // the nearest integer for the long-valued gauge; sub-integer precision is not needed.
+                Quantiles scoreBefore = job.getScoreBefore();
+                if (scoreBefore != null) {
+                    MetricRepo.recordCompactionScoreAtTrigger(Math.round(scoreBefore.getMax()));
+                }
             }
+            LOG.debug("Started compaction, {}", job.getDebugString());
         }
     }
 
@@ -322,9 +343,16 @@ public class CompactionScheduler extends Daemon {
             table = (OlapTable) stateMgr.getLocalMetastore()
                         .getTable(db.getId(), tableId);
 
-            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
-            // will not be used after the schema change job finished.
-            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+            // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
+            //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
+            //   - ROLLUP on a range-distribution table: this is an online-rewrite rollup (LakeRangeRollupJob) whose
+            //     flip replays the shadow tablets' per-version txn vlogs over [alter_version + 1, new_version). A
+            //     compaction commits a partition version with no vlog, leaving a gap the flip cannot bridge, which
+            //     wedges the publish forever. Only range-distribution rollups take the online-rewrite path (there
+            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets); traditional
+            //     hash rollups build eagerly via BE alter tasks, hold no such dependency, and must keep compacting.
+            if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    || (table.getState() == OlapTable.OlapTableState.ROLLUP && table.isRangeDistribution()))) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
                 return null;
             }
@@ -360,14 +388,14 @@ public class CompactionScheduler extends Daemon {
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
-                                              info.computeResource, info.warehouseName);
+                                              info.computeResource, info.warehouseName,
+                                              partitionStatisticsSnapshot.getCompactionScore());
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
                         partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
-                LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
                         job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
@@ -384,6 +412,9 @@ public class CompactionScheduler extends Daemon {
             abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
             history.offer(CompactionRecord.build(job, e.getMessage()));
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+            }
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
@@ -561,9 +592,6 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, job.getTxnId());
-        }
 
         VisibleStateWaiter waiter;
 
@@ -633,6 +661,25 @@ public class CompactionScheduler extends Daemon {
 
     protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
         return runningCompactions;
+    }
+
+    // Total number of tablets currently being compacted across all running jobs. This is the
+    // same unit the scheduler caps with Config.lake_compaction_max_tasks (see the per-warehouse
+    // taskRunning accounting and getRunningTaskInfo()), i.e. one running compaction "task" == one
+    // tablet still awaiting its BE/CN response. getNumTabletCompactionTasks() counts only
+    // not-yet-done tasks, so a job in its commit/visibility phase (all responses in, not yet
+    // removed from runningCompactions) contributes 0; this count can therefore be either above
+    // or below the running-job count. Weakly-consistent read over the ConcurrentHashMap; no
+    // locking needed.
+    public int getRunningTabletCompactionTaskCount() {
+        return getRunningCompactions().values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
+    }
+
+    public void setScoreAfter(PartitionIdentifier partition, Quantiles scoreAfter) {
+        CompactionJob job = runningCompactions.get(partition);
+        if (job != null) {
+            job.setScoreAfter(scoreAfter);
+        }
     }
 
     public boolean existCompaction(long txnId) {

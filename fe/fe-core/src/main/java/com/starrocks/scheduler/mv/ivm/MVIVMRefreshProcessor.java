@@ -25,6 +25,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -284,7 +285,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
             if (isAncestryBrokenError(e)) {
-                throw new SemanticException(formatPartitionShapeChangeError(
+                throw new SemanticException(formatNonAppendOnlyBreakingError(
                         String.format("snapshot ancestry broken for base table %s.%s (%s)",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
                         e);
@@ -294,7 +295,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
-            throw new SemanticException(formatPartitionShapeChangeError(
+            throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("no tvr delta traits found for base table %s.%s",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
@@ -304,7 +305,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
             logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
-            throw new SemanticException(formatPartitionShapeChangeError(
+            throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("tvr delta lineage inconsistent for base table %s.%s "
                                     + "(last delta snapshot %s != max delta snapshot %s)",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName(),
@@ -313,7 +314,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
-                    throw new SemanticException(formatPartitionShapeChangeError(
+                    throw new SemanticException(formatNonAppendOnlyBreakingError(
                             String.format("non-append-only change on base table %s.%s (delta: %s)",
                                     baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
                 } else {
@@ -337,13 +338,13 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return message != null && message.contains("is not a parent ancestor");
     }
 
-    private String formatPartitionShapeChangeError(String reasonFragment) {
+    private String formatNonAppendOnlyBreakingError(String reasonFragment) {
         return String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "
-                        + "INCREMENTAL materialized views do not support partition-shape changes "
+                        + "INCREMENTAL materialized views %s "
                         + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
                         + "Drop and recreate the materialized view to recover.",
-                mv.getName(), reasonFragment);
+                mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,

@@ -25,7 +25,7 @@
 #include "common/statusor.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks::workgroup {

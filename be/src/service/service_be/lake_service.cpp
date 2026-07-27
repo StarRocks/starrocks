@@ -37,11 +37,11 @@
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "data_workflows/snapshot/lake_snapshot_loader.h"
 #include "exec/exec_env.h"
-#include "exec/write_combined_txn_log.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/combined_txn_log_writer.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -523,7 +523,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         res.status().to_protobuf(response->mutable_status());
                     }
                     TRACE("finished");
-                    g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
+                    auto tablet_publish_cost = butil::gettimeofday_us() - run_ts;
+                    // Emit the per-tablet total into the child trace so the sub-latencies can be
+                    // reconciled against the whole: total - sum(sub-counters) is the still-untraced
+                    // residual, which makes an uncovered slow step obvious at a glance.
+                    TRACE_COUNTER_INCREMENT("publish_tablet_total_us", tablet_publish_cost);
+                    g_publish_tablet_version_latency << tablet_publish_cost;
                 },
                 [&, tablet_info] {
                     g_publish_version_failed_tasks << 1;

@@ -49,22 +49,34 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Direct unit tests for the range-aware branches of {@link OutputPropertyDeriver}:
- * scan rebuild with partitions, Repeat preserve/drop, projection remap.
- * {@code visitPhysicalJoin} range emission is exercised indirectly via
- * {@link ChildOutputPropertyGuarantorRangeTest}; here we keep the tests
- * constructor-driven to avoid a full {@code GroupExpression} fixture.
+ * scan rebuild with partitions, Repeat preserve/drop, projection remap, and the
+ * range-colocate dominated-side output selection in {@code visitPhysicalJoin}
+ * (left / right / full-outer null-relaxed). Tests are constructor-driven to
+ * avoid a full {@code GroupExpression} fixture.
  */
 class OutputPropertyDeriverRangeTest {
 
     private static OutputPropertyDeriver newDeriver(List<PhysicalPropertySet> childrenOutputProperties) {
         return new OutputPropertyDeriver(null, null, childrenOutputProperties);
+    }
+
+    // Non-null EMPTY requirements so that, if a child combo were ever misrouted
+    // into the shuffle-join branch, computeShuffleJoinOutputProperty returns
+    // PhysicalPropertySet.EMPTY (the requirements are not shuffle) and the method
+    // returns normally — reproducing a "silently derive a degenerate output"
+    // outcome rather than an incidental NPE, so a throw assertion is meaningful.
+    private static OutputPropertyDeriver newDeriverWithEmptyRequirements(
+            List<PhysicalPropertySet> childrenOutputProperties) {
+        return new OutputPropertyDeriver(null, PhysicalPropertySet.EMPTY, childrenOutputProperties);
     }
 
     private static RangeDistributionSpec buildRangeSkeleton(long tableId, int... colIds) {
@@ -238,10 +250,22 @@ class OutputPropertyDeriverRangeTest {
      */
     private static void stubInnerJoinWithEmptyColumns(PhysicalHashJoinOperator node,
                                                       ExpressionContext context) {
+        stubJoinWithEmptyColumns(node, context, JoinOperator.INNER_JOIN);
+    }
+
+    /**
+     * Stubs the join-operator and expression-context methods that
+     * {@code visitPhysicalJoin} touches before it inspects the child
+     * distribution specs, for an arbitrary join type. Empty ON columns keep
+     * {@code updateEquivalentDescriptor} a no-op so a test can assert the
+     * dominated-side spec selection in isolation.
+     */
+    private static void stubJoinWithEmptyColumns(PhysicalHashJoinOperator node,
+                                                 ExpressionContext context, JoinOperator joinType) {
         new Expectations() {
             {
                 node.getJoinType();
-                result = JoinOperator.INNER_JOIN;
+                result = joinType;
                 minTimes = 0;
                 node.getOnPredicate();
                 result = null;
@@ -259,18 +283,89 @@ class OutputPropertyDeriverRangeTest {
         };
     }
 
+    private static Method visitPhysicalJoinMethod() throws NoSuchMethodException {
+        Method method = OutputPropertyDeriver.class.getDeclaredMethod(
+                "visitPhysicalJoin",
+                com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator.class,
+                ExpressionContext.class);
+        method.setAccessible(true);
+        return method;
+    }
+
+    private static PhysicalPropertySet invokeVisitPhysicalJoin(
+            OutputPropertyDeriver deriver, PhysicalHashJoinOperator node, ExpressionContext context)
+            throws Exception {
+        return (PhysicalPropertySet) visitPhysicalJoinMethod().invoke(deriver, node, context);
+    }
+
+    /**
+     * Asserts a range×range join of {@code joinType} derives the left- or
+     * right-side range spec (the non-null-relaxed dominated cases). Full-outer
+     * has distinct null-relaxed assertions and is tested separately.
+     */
+    private void assertRangeJoinEmitsDominatedSide(PhysicalHashJoinOperator node, ExpressionContext context,
+            JoinOperator joinType, boolean expectRightSide) throws Exception {
+        RangeDistributionSpec leftSpec = buildRangeSkeleton(100L, 1, 2);
+        RangeDistributionSpec rightSpec = buildRangeSkeleton(200L, 1, 2);
+        OutputPropertyDeriver deriver = newDeriver(List.of(propertyOf(leftSpec), propertyOf(rightSpec)));
+        stubJoinWithEmptyColumns(node, context, joinType);
+
+        PhysicalPropertySet out = invokeVisitPhysicalJoin(deriver, node, context);
+        assertSame(expectRightSide ? rightSpec : leftSpec, out.getDistributionProperty().getSpec(),
+                joinType + " range-colocate join must output the "
+                        + (expectRightSide ? "right" : "left") + "-side range spec");
+    }
+
+    @Test
+    void visitPhysicalJoinRangeInnerEmitsLeftSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.INNER_JOIN, false);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeRightOuterEmitsRightSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.RIGHT_OUTER_JOIN, true);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeRightSemiEmitsRightSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.RIGHT_SEMI_JOIN, true);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeFullOuterEmitsNullRelaxedLeftSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        RangeDistributionSpec leftSpec = buildRangeSkeleton(100L, 1, 2);
+        RangeDistributionSpec rightSpec = buildRangeSkeleton(200L, 1, 2);
+        OutputPropertyDeriver deriver = newDeriver(List.of(propertyOf(leftSpec), propertyOf(rightSpec)));
+        stubJoinWithEmptyColumns(node, context, JoinOperator.FULL_OUTER_JOIN);
+
+        PhysicalPropertySet out = invokeVisitPhysicalJoin(deriver, node, context);
+        DistributionSpec outSpec = out.getDistributionProperty().getSpec();
+        assertInstanceOf(RangeDistributionSpec.class, outSpec);
+        RangeDistributionSpec rangeOut = (RangeDistributionSpec) outSpec;
+        // Full-outer output is a fresh null-relaxed spec derived from the left side.
+        assertNotSame(leftSpec, rangeOut, "full-outer must produce a new null-relaxed range spec");
+        assertEquals(leftSpec.getColocateColumns().size(), rangeOut.getColocateColumns().size());
+        rangeOut.getColocateColumns().forEach(col ->
+                assertFalse(col.isNullStrict(), "full-outer output colocate cols must be null-relaxed"));
+        assertEquals(100L, rangeOut.getEquivalentDescriptor().getTableId(),
+                "null-relaxed spec keeps the left-side table id");
+    }
+
     private static StarRocksPlannerException invokeVisitPhysicalJoinExpectingThrow(
             OutputPropertyDeriver deriver, PhysicalHashJoinOperator node, ExpressionContext context) {
         // visitPhysicalJoin is private; reflect to invoke it.  Wrap the
         // InvocationTargetException so JUnit's assertThrows sees the real cause.
         return assertThrows(StarRocksPlannerException.class, () -> {
             try {
-                Method method = OutputPropertyDeriver.class.getDeclaredMethod(
-                        "visitPhysicalJoin",
-                        com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator.class,
-                        ExpressionContext.class);
-                method.setAccessible(true);
-                method.invoke(deriver, node, context);
+                visitPhysicalJoinMethod().invoke(deriver, node, context);
             } catch (java.lang.reflect.InvocationTargetException e) {
                 if (e.getCause() instanceof RuntimeException) {
                     throw (RuntimeException) e.getCause();
@@ -310,6 +405,60 @@ class OutputPropertyDeriverRangeTest {
         StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
         assertTrue(ex.getMessage().contains("Children output property distribution error"),
                 "expected the children-distribution diagnostic, got: " + ex.getMessage());
+    }
+
+    // Shared body for the shuffle-join-branch precedence guards below. A
+    // (leftSource, SHUFFLE_ENFORCE) child combo whose leftSource is neither
+    // shuffle nor shuffle-enforce (LOCAL / BUCKET) is not a legal shuffle join,
+    // so the deriver must reject it with the clean children-distribution error.
+    // Follows the assertRangeJoinEmitsDominatedSide helper idiom above.
+    private void assertShuffleEnforceRightRejectsLeft(PhysicalHashJoinOperator node,
+            ExpressionContext context, HashDistributionDesc.SourceType leftSource) {
+        stubInnerJoinWithEmptyColumns(node, context);
+        OutputPropertyDeriver deriver = newDeriverWithEmptyRequirements(List.of(
+                propertyOf(buildHashSpec(leftSource, 1)),
+                propertyOf(buildHashSpec(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE, 2))));
+
+        StarRocksPlannerException ex = invokeVisitPhysicalJoinExpectingThrow(deriver, node, context);
+        assertTrue(ex.getMessage().contains("Children output property distribution error"),
+                "expected the children-distribution diagnostic, got: " + ex.getMessage());
+    }
+
+    /**
+     * Operator-precedence regression guard for the shuffle-join branch.
+     *
+     * <p>A (LOCAL, SHUFFLE_ENFORCE) child combo is not a legal shuffle join: the
+     * left side is bucket-local. The intended guard —
+     * {@code (leftShuffle || leftEnforce) && (rightShuffle || rightEnforce)} —
+     * evaluates to false here, so the deriver must reject it with the clean
+     * children-distribution error.
+     *
+     * <p>Before the parentheses were added, {@code &&} bound tighter than
+     * {@code ||}, so the guard collapsed to
+     * {@code [(leftShuffle || leftEnforce) && rightShuffle] || rightEnforce}.
+     * With the right side SHUFFLE_ENFORCE the trailing {@code || rightEnforce}
+     * forced the branch true regardless of the left side, and this combo slipped
+     * into the shuffle-join branch, silently deriving a degenerate output
+     * property instead of throwing.
+     */
+    @Test
+    void visitPhysicalJoinThrowsOnLocalLeftShuffleEnforceRight(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        assertShuffleEnforceRightRejectsLeft(node, context, HashDistributionDesc.SourceType.LOCAL);
+    }
+
+    /**
+     * Same precedence guard as
+     * {@link #visitPhysicalJoinThrowsOnLocalLeftShuffleEnforceRight}, but with a
+     * BUCKET left side — the other left source type that is neither shuffle nor
+     * shuffle-enforce, so the correct guard also rejects it.
+     */
+    @Test
+    void visitPhysicalJoinThrowsOnBucketLeftShuffleEnforceRight(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) {
+        assertShuffleEnforceRightRejectsLeft(node, context, HashDistributionDesc.SourceType.BUCKET);
     }
 
     @Test

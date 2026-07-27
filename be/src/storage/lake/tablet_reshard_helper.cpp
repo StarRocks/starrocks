@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <numeric>
 #include <roaring/roaring.hh>
+#include <unordered_set>
 
 #include "base/uid_util.h"
 #include "common/logging.h"
@@ -314,6 +315,17 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
         }
     }
 
+    if (txn_log->has_op_add_index()) {
+        // ADD INDEX fast-path .idx files, peer of op_schema_change above: on a split
+        // cross-publish this OpAddIndex is applied to every new tablet, so its .idx must be
+        // marked shared or one child could later reclaim a file another child still uses.
+        for (auto& se : *txn_log->mutable_op_add_index()->mutable_segment_entries()) {
+            if (se.has_entry()) {
+                se.mutable_entry()->set_shared_file(true);
+            }
+        }
+    }
+
     if (txn_log->has_op_replication()) {
         // Each replication op_write flows through the same apply_opwrite path on
         // publish (see txn_log_applier.cpp apply_write_log). Share the same rule as
@@ -354,6 +366,12 @@ void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_d
         }
     }
 
+    if (tablet_metadata->has_idg_meta()) {
+        for (auto& idg : *tablet_metadata->mutable_idg_meta()->mutable_idgs()) {
+            set_idg_shared(&idg.second, true);
+        }
+    }
+
     if (tablet_metadata->has_sstable_meta()) {
         for (auto& sstable : *tablet_metadata->mutable_sstable_meta()->mutable_sstables()) {
             sstable.set_shared(true);
@@ -365,6 +383,12 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared) {
     auto* shared_files = dcg->mutable_shared_files();
     shared_files->Clear();
     shared_files->Resize(dcg->column_files_size(), shared);
+}
+
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared) {
+    for (auto& entry : *idg->mutable_entries()) {
+        entry.set_shared_file(shared);
+    }
 }
 
 void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
@@ -613,6 +637,33 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
 
 namespace {
 
+// Append the output sstable file paths of |op|, skipping any that alias an input
+// sstable. The persistent-index parallel compaction "full contain / only do move"
+// optimization (LakePersistentIndexParallelCompactMgr) re-emits an input sstable as
+// its own output verbatim, keeping the same physical file and only re-stamping the
+// fileset_id. Such a file is still referenced by the base metadata and every sibling
+// tablet, so it must NOT be queued for deletion when a pending compaction is dropped
+// during a split/merge cross-publish. Templated over the op message so both
+// OpCompaction and OpParallelCompaction share it. This is the deletion-side mirror of
+// MetaFileBuilder::remove_compacted_sst, which applies the same invariant (by
+// filename) to the orphaning side of a normal compaction publish.
+template <typename OpCompactionLike>
+void append_non_reused_output_sstables(const OpCompactionLike& op, int64_t tablet_id, TabletManager* tablet_manager,
+                                       std::vector<std::string>* output_paths) {
+    std::unordered_set<std::string> input_filenames;
+    for (const auto& sstable : op.input_sstables()) {
+        input_filenames.insert(sstable.filename());
+    }
+    if (op.has_output_sstable() && !input_filenames.contains(op.output_sstable().filename())) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op.output_sstable().filename()));
+    }
+    for (const auto& sstable : op.output_sstables()) {
+        if (!input_filenames.contains(sstable.filename())) {
+            output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
+        }
+    }
+}
+
 // Append output-side files of a single OpCompaction. Used both for the
 // top-level op_compaction and for every op_parallel_compaction.subtask_compactions[*].
 //
@@ -661,12 +712,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
     for (const auto& file_meta : op_compaction.ssts()) {
         output_paths->emplace_back(tablet_manager->sst_location(tablet_id, file_meta.name()));
     }
-    if (op_compaction.has_output_sstable()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op_compaction.output_sstable().filename()));
-    }
-    for (const auto& sstable : op_compaction.output_sstables()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-    }
+    append_non_reused_output_sstables(op_compaction, tablet_id, tablet_manager, output_paths);
     if (op_compaction.has_lcrm_file()) {
         output_paths->emplace_back(tablet_manager->lcrm_location(tablet_id, op_compaction.lcrm_file().name()));
     }
@@ -674,7 +720,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
 
 } // namespace
 
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
+std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
     DCHECK(tablet_manager != nullptr);
 
     const int64_t tablet_id = txn_log.tablet_id();
@@ -688,13 +734,7 @@ std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& tx
         for (const auto& subtask : op_parallel_compaction.subtask_compactions()) {
             append_compaction_output_files(subtask, tablet_id, tablet_manager, &output_paths);
         }
-        if (op_parallel_compaction.has_output_sstable()) {
-            output_paths.emplace_back(
-                    tablet_manager->sst_location(tablet_id, op_parallel_compaction.output_sstable().filename()));
-        }
-        for (const auto& sstable : op_parallel_compaction.output_sstables()) {
-            output_paths.emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-        }
+        append_non_reused_output_sstables(op_parallel_compaction, tablet_id, tablet_manager, &output_paths);
         // orphan_lcrm_files holds the ORIGINAL per-subtask lcrm files copied
         // by the parallel-compaction manager (tablet_parallel_compaction_manager.cpp),
         // distinct from the merged lcrm placed on each subtask_compactions[i]

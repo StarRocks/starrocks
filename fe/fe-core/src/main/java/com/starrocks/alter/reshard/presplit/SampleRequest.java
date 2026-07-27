@@ -33,10 +33,19 @@ import java.util.Objects;
  * boundaries. Empty for unpartitioned targets (no projection extension, no
  * tuple population) — existing callers use the four-arg constructor and see
  * no behavior change.
+ *
+ * <p>{@code secondaryIndexSortKeys} names additional visible indexes (rollups)
+ * whose sort keys should be projected and sampled alongside the base sort key,
+ * so each index can be split per predicted partition from the same sample.
+ * They flow through to the per-row secondary-index tuples in
+ * {@link SampleSet#getSecondaryIndexTuples()}. Empty when the target has no
+ * rollup (no projection extension, no tuple population) -- existing callers
+ * use the shorter constructors and see no behavior change.
  */
 public final class SampleRequest {
     private final ScanContext scanContext;
     private final List<Column> sortKey;
+    private final List<SecondaryIndexSpec> secondaryIndexSortKeys;
     private final List<Column> partitionSourceColumns;
     private final long sampleByteLimit;
     private final long seed;
@@ -46,7 +55,7 @@ public final class SampleRequest {
 
     public SampleRequest(ScanContext scanContext, List<Column> sortKey,
                          List<Column> partitionSourceColumns, long sampleByteLimit, long seed) {
-        this(scanContext, sortKey, partitionSourceColumns, sampleByteLimit, seed, /*queryTimeoutSeconds=*/ 0);
+        this(scanContext, sortKey, ImmutableList.of(), partitionSourceColumns, sampleByteLimit, seed);
     }
 
     /**
@@ -57,10 +66,25 @@ public final class SampleRequest {
         this(scanContext, sortKey, ImmutableList.of(), sampleByteLimit, seed);
     }
 
-    private SampleRequest(ScanContext scanContext, List<Column> sortKey, List<Column> partitionSourceColumns,
+    /**
+     * Constructor additionally carrying {@code secondaryIndexSortKeys} for the
+     * multi-index data-tier sampler; the shorter constructors above default it
+     * to an empty list.
+     */
+    public SampleRequest(ScanContext scanContext, List<Column> sortKey,
+                         List<SecondaryIndexSpec> secondaryIndexSortKeys,
+                         List<Column> partitionSourceColumns, long sampleByteLimit, long seed) {
+        this(scanContext, sortKey, secondaryIndexSortKeys, partitionSourceColumns, sampleByteLimit, seed,
+                /*queryTimeoutSeconds=*/ 0);
+    }
+
+    private SampleRequest(ScanContext scanContext, List<Column> sortKey,
+                          List<SecondaryIndexSpec> secondaryIndexSortKeys,
+                          List<Column> partitionSourceColumns,
                           long sampleByteLimit, long seed, int queryTimeoutSeconds) {
         this.scanContext = Objects.requireNonNull(scanContext, "scanContext");
         Objects.requireNonNull(sortKey, "sortKey");
+        Objects.requireNonNull(secondaryIndexSortKeys, "secondaryIndexSortKeys");
         Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
         Preconditions.checkArgument(!sortKey.isEmpty(), "sortKey must be non-empty");
         Preconditions.checkArgument(sampleByteLimit > 0,
@@ -68,6 +92,7 @@ public final class SampleRequest {
         Preconditions.checkArgument(queryTimeoutSeconds >= 0,
                 "queryTimeoutSeconds must be non-negative, was %s", queryTimeoutSeconds);
         this.sortKey = ImmutableList.copyOf(sortKey);
+        this.secondaryIndexSortKeys = ImmutableList.copyOf(secondaryIndexSortKeys);
         this.partitionSourceColumns = ImmutableList.copyOf(partitionSourceColumns);
         this.sampleByteLimit = sampleByteLimit;
         this.seed = seed;
@@ -76,11 +101,12 @@ public final class SampleRequest {
 
     /**
      * Returns a copy with the sampling sub-query's wall-clock cap set to
-     * {@code queryTimeoutSeconds}; all other fields carry through. Used by the
-     * data-tier pipeline to bound the sample to the remaining pre-submit budget.
+     * {@code queryTimeoutSeconds}; all other fields, including
+     * {@code secondaryIndexSortKeys}, carry through. Used by the data-tier
+     * pipeline to bound the sample to the remaining pre-submit budget.
      */
     public SampleRequest withQueryTimeoutSeconds(int queryTimeoutSeconds) {
-        return new SampleRequest(scanContext, sortKey, partitionSourceColumns,
+        return new SampleRequest(scanContext, sortKey, secondaryIndexSortKeys, partitionSourceColumns,
                 sampleByteLimit, seed, queryTimeoutSeconds);
     }
 
@@ -90,6 +116,10 @@ public final class SampleRequest {
 
     public List<Column> getSortKey() {
         return sortKey;
+    }
+
+    public List<SecondaryIndexSpec> getSecondaryIndexSortKeys() {
+        return secondaryIndexSortKeys;
     }
 
     public List<Column> getPartitionSourceColumns() {

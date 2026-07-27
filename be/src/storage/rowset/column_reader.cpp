@@ -59,7 +59,7 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_file_reader.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
@@ -640,7 +640,17 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
 
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
-        RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
+        if (Status st = bf_iter->read_bloom_filter(pid, &bf); !st.ok()) {
+            // Defensive: a bloom filter for this data page is unavailable (e.g. a
+            // build-vs-read granularity mismatch left fewer bloom filters than
+            // data pages). Degrade to NO pruning for this page instead of failing
+            // the query or reading out of bounds: keep the page's full row range
+            // so no matching row can be lost.
+            LOG_EVERY_N(WARNING, 100) << "skip bloom-filter pruning for data page " << pid << ": " << st;
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+            continue;
+        }
 
         const bool satisfy = std::ranges::any_of(predicates, [&](const ColumnPredicate* pred) {
             if constexpr (is_original_bf) {

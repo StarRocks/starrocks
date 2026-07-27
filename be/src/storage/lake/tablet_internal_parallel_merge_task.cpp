@@ -16,37 +16,34 @@
 
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load_spill/load_spill_merge_input_batch.h"
 #include "compute_env/spill/block_group.h"
-#include "compute_env/spill/options.h"
-#include "compute_env/spill/serde.h"
-#include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/vacuum.h"
-#include "storage/load_chunk_spiller.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_engine.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
-                                                                 std::unique_ptr<LoadSpillPipelineMergeTask> task,
+                                                                 std::unique_ptr<LoadSpillMergeInputBatch> task,
                                                                  const Schema* schema, std::atomic<bool>* quit_flag,
-                                                                 RuntimeProfile::Counter* write_io_timer)
+                                                                 RuntimeProfile::Counter* write_io_timer, bool op_aware,
+                                                                 bool need_rssid_rowids)
         : _writer(std::move(writer)),
           _task(std::move(task)),
           _schema(schema),
           _quit_flag(quit_flag),
-          _write_io_timer(write_io_timer) {
+          _write_io_timer(write_io_timer),
+          _op_aware(op_aware),
+          _need_rssid_rowids(need_rssid_rowids) {
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(_writer->tablet_id()) + "-" + std::to_string(_writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
@@ -59,69 +56,232 @@ TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
     }
 }
 
+namespace {
+
+// Write one merged chunk. Plain (no __op) merge: write the chunk as a segment. Op-aware merge
+// (trailing __op column, REPLACE-aggregated so the latest op per key wins): split into upsert rows
+// (-> a segment, __op dropped) and net-deleted keys (accumulated into `deletes` for this batch's del
+// file); set `wrote_upsert` when an upsert segment was produced. `merge_schema` carries __op (used by
+// the PK encoder, which reads only the leading key columns); `write_schema` is the segment schema.
+Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, const Schema& merge_schema,
+                              const Schema& write_schema, const std::vector<size_t>& char_field_indexes,
+                              PrimaryKeyEncodingType pk_enc, MutableColumnPtr* deletes, bool* wrote_upsert,
+                              bool* had_deletes, const std::vector<uint64_t>* rssid_rowids) {
+    if (!has_op) {
+        ChunkHelper::padding_char_columns(char_field_indexes, write_schema, writer->tablet_schema(), chunk);
+        // Separate-sort-key unsort path forwards per-row ordering keys so the writer can resolve
+        // duplicate primary keys by last-flushed-wins; otherwise the plain write overload is used.
+        if (rssid_rowids != nullptr) {
+            return writer->write(*chunk, *rssid_rowids);
+        }
+        return writer->write(*chunk, nullptr);
+    }
+    // Split the merged chunk by __op (last column).
+    const size_t op_idx = chunk->num_columns() - 1;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(chunk->get_column_by_index(op_idx)->accept(&visitor));
+    const auto* ops = visitor.result();
+    const size_t nrows = chunk->num_rows();
+    std::vector<uint32_t> up_idx;
+    std::vector<uint32_t> del_idx;
+    up_idx.reserve(nrows);
+    for (uint32_t i = 0; i < nrows; i++) {
+        (ops[i] == TOpType::UPSERT ? up_idx : del_idx).push_back(i);
+    }
+    // Net-deleted keys.
+    if (!del_idx.empty()) {
+        *had_deletes = true;
+        if (writer->tablet_schema()->has_separate_sort_key()) {
+            // Separate-sort-key unsort path: the merge is ordered by sort key, so a DELETE and a later
+            // UPSERT of the same PK are not adjacent and cannot be REPLACE-aggregated to the latest op
+            // before this split. Instead feed the DELETE rows (with their per-row ordering keys) to the
+            // eager SST writer, which reconciles them against the upserts by order (last op wins) and,
+            // for a PK whose latest op is a DELETE, hands the key back at flush to be written to this
+            // batch's del file (see flush_segment_writer) so publish erases even a pre-existing row.
+            // rssid_rowids is always present on this path.
+            DCHECK(rssid_rowids != nullptr);
+            auto del_chunk = chunk->clone_empty_with_schema(del_idx.size());
+            del_chunk->append_selective(*chunk, del_idx.data(), 0, del_idx.size());
+            std::vector<uint64_t> del_rssid_rowids;
+            del_rssid_rowids.reserve(del_idx.size());
+            for (uint32_t i : del_idx) {
+                del_rssid_rowids.push_back((*rssid_rowids)[i]);
+            }
+            RETURN_IF_ERROR(writer->append_pk_index_deletes(*del_chunk, del_rssid_rowids));
+        } else {
+            // sort-key == PK: the merge already reduced each PK to its latest op, so all DELETEs here
+            // are net deletes; encode them for this batch's del file.
+            if (*deletes == nullptr) {
+                RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(merge_schema, deletes, pk_enc));
+            }
+            PrimaryKeyEncoder::encode_selective(merge_schema, *chunk, del_idx.data(), del_idx.size(), deletes->get(),
+                                                pk_enc);
+        }
+    }
+    // Write upsert rows as a chunk without __op. Copy the upsert rows into a temp chunk (Chunk-level
+    // append_selective handles the immutable columns), then repackage its leading data columns into a
+    // segment chunk backed by a FRESH copy of write_schema. Do NOT clone-then-remove_column_by_index:
+    // clone_empty_with_schema shares the SchemaPtr and remove_column_by_index mutates it in place, which
+    // would shrink the reused loop chunk's shared schema and corrupt the next iteration's op split.
+    if (!up_idx.empty()) {
+        auto tmp = chunk->clone_empty_with_schema(up_idx.size());
+        tmp->append_selective(*chunk, up_idx.data(), 0, up_idx.size());
+        Columns up_cols(tmp->columns().begin(), tmp->columns().begin() + write_schema.num_fields()); // drop __op
+        auto up_chunk = std::make_shared<Chunk>(std::move(up_cols), std::make_shared<Schema>(write_schema));
+        ChunkHelper::padding_char_columns(char_field_indexes, write_schema, writer->tablet_schema(), up_chunk.get());
+        if (rssid_rowids != nullptr) {
+            // Both op-aware split and the unsort path are active: forward only the upsert rows' ordering
+            // keys, aligned with the rows selected into up_chunk.
+            std::vector<uint64_t> up_rssid_rowids;
+            up_rssid_rowids.reserve(up_idx.size());
+            for (uint32_t i : up_idx) {
+                up_rssid_rowids.push_back((*rssid_rowids)[i]);
+            }
+            RETURN_IF_ERROR(writer->write(*up_chunk, up_rssid_rowids));
+        } else {
+            RETURN_IF_ERROR(writer->write(*up_chunk, nullptr));
+        }
+        *wrote_upsert = true;
+    }
+    return Status::OK();
+}
+
+// After the merge loop: flush this batch's segments and (for an op-aware batch with net-deletes) its del
+// file, then finish the writer. A net-delete-only batch (deletes but no upsert segment) first writes a
+// 0-row segment so its del file anchors at a real segment index (assigned in merge_other_writer) instead
+// of colliding with a later batch's segment 0 -- which would let the delete (reserved UINT32_MAX rowid)
+// sort after, and wrongly erase, a key re-upserted in that later segment. Mirrors the serial path, which
+// writes a 0-row segment for a delete-only flush.
+Status finalize_merged_batch(TabletWriter* writer, bool has_op, const Schema& write_schema,
+                             const MutableColumnPtr& deletes, bool wrote_upsert, bool had_deletes,
+                             RuntimeProfile::Counter* write_io_timer) {
+    // A batch that produced deletes but no upsert segment still needs a 0-row anchor segment so its
+    // SST and del file attach to a real segment index rather than colliding with a later batch's
+    // segment 0. `had_deletes` covers both del-file sinks: the column encoded here (sort-key==PK) and
+    // the winning keys the unsort writer writes during flush() (separate-sort-key).
+    if (has_op && had_deletes && !wrote_upsert) {
+        SCOPED_TIMER(write_io_timer);
+        auto empty_chunk = ChunkFactory::new_chunk(write_schema, 0);
+        RETURN_IF_ERROR(writer->write(*empty_chunk, nullptr));
+    }
+    {
+        SCOPED_TIMER(write_io_timer);
+        RETURN_IF_ERROR(writer->flush());
+    }
+    // Only the sort-key==PK path routes deletes through this `deletes` column; the separate-sort-key
+    // path's writer wrote its own del file during flush() above, so there is nothing to write here.
+    if (deletes != nullptr && deletes->size() > 0) {
+        SCOPED_TIMER(write_io_timer);
+        // op_offset is a placeholder here; the real (global) value is assigned in merge_other_writer when
+        // this batch's writer is consolidated into the parent, based on the cumulative segment count.
+        RETURN_IF_ERROR(writer->flush_del_file(*deletes, kUnknownDelOpOffset));
+    }
+    SCOPED_TIMER(write_io_timer);
+    return writer->finish();
+}
+
+// Proactively batch-delete the merged-and-committed spill files: under flat layout their per-block dtors
+// are no-ops (skip_file_deletion = true). Only FileBlocks under flat layout return a non-empty path;
+// LogBlock and legacy FileBlock return nullopt and are skipped. MUST run before release_block_groups()
+// clears the vector. Callers invoke this only on merge success -- failed-merge files are reclaimed by the
+// offline vacuum_full job once the txn is inactive, avoiding races with files still in use upstream.
+void hot_delete_merged_spill_files(TabletWriter* writer, LoadSpillMergeInputBatch* task) {
+    std::vector<std::string> spill_paths;
+    for (const auto& bg : task->block_groups) {
+        if (bg == nullptr) continue;
+        for (const auto& block : bg->blocks()) {
+            if (block == nullptr) continue;
+            if (auto p = block->path(); p.has_value() && !p->empty()) {
+                spill_paths.emplace_back(std::move(*p));
+            }
+        }
+    }
+    if (!spill_paths.empty()) {
+        VLOG(2) << "load spill hot delete: " << spill_paths.size() << " files for txn " << writer->txn_id();
+        delete_files_async(std::move(spill_paths));
+    }
+}
+
+} // namespace
+
 void TabletInternalParallelMergeTask::run() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     MonotonicStopWatch timer;
     timer.start();
-    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(*_schema);
+    // Op-aware spill: when the merged schema's last column is __op (REPLACE-aggregated, so per key the
+    // latest op by slot wins), each merged chunk is split into upsert rows (-> segments) and deleted keys
+    // (-> a del file); see write_one_merged_chunk / finalize_merged_batch. The del file's op_offset is
+    // assigned at result consolidation (TabletWriter::merge_other_writer) so it follows this batch's
+    // segments and a later batch's re-upsert of the same key correctly wins.
+    // op_aware is set by the sink only when the memtable actually kept a hidden __op column (PK load with
+    // an op slot + preserve-order feature on). It is NOT inferred from the last column name, so a real user
+    // column happening to be named "__op" (e.g. allow_system_reserved_names) is never mistaken for it.
+    const bool has_op = _op_aware;
+    DCHECK(!has_op || (!_schema->field_names().empty() && _schema->field_names().back() == "__op"));
+    // Schema used to write segments (drops the trailing __op when present).
+    std::vector<ColumnId> write_cids;
+    for (size_t i = 0; i + (has_op ? 1 : 0) < _schema->num_fields(); i++) {
+        write_cids.push_back(static_cast<ColumnId>(i));
+    }
+    Schema write_schema(const_cast<Schema*>(_schema), write_cids);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(write_schema);
+    PrimaryKeyEncodingType pk_enc = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (has_op) {
+        auto enc_or = _writer->tablet_schema()->primary_key_encoding_type_or_error();
+        if (!enc_or.ok()) {
+            update_status(enc_or.status());
+            return;
+        }
+        pk_enc = enc_or.value();
+    }
+
     auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
 
-    // CANCELLATION CHECK: Loop while quit flag is not set. The condition "_quit_flag == nullptr ||"
-    // handles the case where quit_flag is nullptr (cancellation not supported). When nullptr,
-    // we skip the quit check entirely and run to completion. When non-null, we check the
-    // atomic flag on each iteration to support early termination on error or user cancellation.
+    // Per-row ordering keys for the separate-sort-key unsort path (empty otherwise); pulled alongside
+    // each chunk so the writer resolves duplicate primary keys by last-flushed-wins.
+    std::vector<uint64_t> rssid_rowids;
+    MutableColumnPtr deletes;  // accumulates net-deleted keys for this batch's del file (sort-key==PK)
+    bool wrote_upsert = false; // whether this batch produced any upsert segment
+    bool had_deletes = false;  // whether this batch saw any DELETE rows (either delete sink)
+    // CANCELLATION CHECK: read and write each merged chunk. _quit_flag (when non-null) lets a sibling
+    // task's error abort the loop early; when nullptr, cancellation is unsupported and we run to completion.
     while (_quit_flag == nullptr || !_quit_flag->load()) {
         chunk->reset();
-        auto itr_st = _task->merge_itr->get_next(chunk);
+        // For the separate-sort-key unsort path, pull per-row ordering keys (rssid_rowids) alongside
+        // the chunk so the writer can resolve duplicate primary keys by last-flushed-wins. Kept in
+        // lockstep with the chunk rows; no row filtering happens between here and append_sst_record.
+        Status itr_st;
+        if (_need_rssid_rowids) {
+            rssid_rowids.clear();
+            itr_st = _task->merge_itr->get_next(chunk, &rssid_rowids);
+        } else {
+            itr_st = _task->merge_itr->get_next(chunk);
+        }
         if (itr_st.is_end_of_file()) {
             break;
-        } else if (itr_st.ok()) {
-            SCOPED_TIMER(_write_io_timer);
-            ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
-            st = _writer->write(*chunk, nullptr);
-            if (!st.ok()) {
-                break;
-            }
-        } else {
+        }
+        if (!itr_st.ok()) {
             st = itr_st;
             break;
         }
-    }
-    if (st.ok()) {
         SCOPED_TIMER(_write_io_timer);
-        st = _writer->flush();
-    }
-    if (st.ok()) {
-        SCOPED_TIMER(_write_io_timer);
-        st = _writer->finish();
-    }
-    // Hot-delete spill files written under flat layout: their per-block dtors are no-ops
-    // (skip_file_deletion = true), so we proactively batch-delete the merged-and-committed
-    // files here. Only collect when:
-    //   1. Merge succeeded — failed-merge files are reclaimed by the offline vacuum_full job
-    //      once the txn becomes inactive, avoiding races with files still in use upstream.
-    //   2. Block::path() returns a non-empty value — i.e. it is a FileBlock under flat layout.
-    //      LogBlock and legacy FileBlock return nullopt and are filtered out (no-op).
-    // MUST run BEFORE release_block_groups() because that call clears the vector.
-    if (st.ok()) {
-        std::vector<std::string> spill_paths;
-        for (const auto& bg : _task->block_groups) {
-            if (bg == nullptr) continue;
-            for (const auto& block : bg->blocks()) {
-                if (block == nullptr) continue;
-                if (auto p = block->path(); p.has_value() && !p->empty()) {
-                    spill_paths.emplace_back(std::move(*p));
-                }
-            }
-        }
-        if (!spill_paths.empty()) {
-            VLOG(2) << "load spill hot delete: " << spill_paths.size() << " files for txn " << _writer->txn_id();
-            delete_files_async(std::move(spill_paths));
+        st = write_one_merged_chunk(_writer.get(), chunk, has_op, *_schema, write_schema, char_field_indexes, pk_enc,
+                                    &deletes, &wrote_upsert, &had_deletes,
+                                    _need_rssid_rowids ? &rssid_rowids : nullptr);
+        if (!st.ok()) {
+            break;
         }
     }
-    // Release block groups to free up spill disk space
+    if (st.ok()) {
+        st = finalize_merged_batch(_writer.get(), has_op, write_schema, deletes, wrote_upsert, had_deletes,
+                                   _write_io_timer);
+    }
+    if (st.ok()) {
+        hot_delete_merged_spill_files(_writer.get(), _task.get());
+    }
+    // Release block groups to free up spill disk space.
     _task->release_block_groups();
     timer.stop();
     LOG(INFO) << fmt::format(
@@ -134,6 +294,10 @@ void TabletInternalParallelMergeTask::run() {
 
 void TabletInternalParallelMergeTask::cancel() {
     update_status(Status::Cancelled("TabletInternalParallelMergeTask cancelled"));
+}
+
+int64_t TabletInternalParallelMergeTask::slot_idx() const {
+    return _task->slot_idx;
 }
 
 void TabletInternalParallelMergeTask::update_status(const Status& st) {

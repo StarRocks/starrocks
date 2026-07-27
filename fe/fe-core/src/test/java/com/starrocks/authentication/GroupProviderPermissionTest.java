@@ -760,7 +760,6 @@ public class GroupProviderPermissionTest {
 
         // Test all Group Provider types should fail after revoke
         for (String type : providerTypes) {
-            String sql = "CREATE GROUP PROVIDER IF NOT EXISTS " + type + "_provider PROPERTIES(\"type\" = \"" + type + "\")";
             
             // Permission check should fail for user without SECURITY privilege
             Assertions.assertThrows(AccessDeniedException.class, () -> {

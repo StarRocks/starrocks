@@ -22,8 +22,9 @@
 #include "base/string/string_parser.hpp"
 #include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
+#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
-#include "storage/primitive/lake_file_name.h"
+#include "storage_primitive/lake_file_name.h"
 
 namespace starrocks::lake {
 
@@ -103,28 +104,33 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
-// Generate vector index filename from segment filename.
-// e.g. "0123_abcd.dat" + index_id 123 -> "0123_abcd_123.vi"
-inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t index_id) {
+// Generate vector index filename from segment filename. The tablet_id disambiguates
+// segments that share a physical file across tablets (file bundling), where the recorded
+// segment filename is the shared bundle name and the offset alone is not on the read path;
+// without it those tablets would collide on the same .vi path and overwrite each other.
+// Non-bundled segments carry it too (redundant but keeps naming uniform, no special-casing).
+// e.g. "0123_abcd.dat" + tablet 9 + index 123 -> "0123_abcd_9_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t tablet_id, int64_t index_id) {
     if (segment_filename.ends_with(".dat")) {
-        return fmt::format("{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), index_id);
+        return fmt::format("{}_{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), tablet_id, index_id);
     }
-    return fmt::format("{}_{}.vi", segment_filename, index_id);
+    return fmt::format("{}_{}_{}.vi", segment_filename, tablet_id, index_id);
 }
 
 // Compute the vector-index file path that sits next to a segment file in shared-data
 // layout: split |segment_path| into directory + basename, compute the .vi filename
 // from the basename, then re-join under the original directory.
 //
-//   "data/000_abcd.dat"  + 0  -> "data/000_abcd_0.vi"
-//   "/foo/bar/seg.dat"   + 5  -> "/foo/bar/seg_5.vi"
-//   "seg.dat"            + 7  -> "seg_7.vi"            (no directory part)
-//   "/seg.dat"           + 1  -> "seg_1.vi"            (root-only directory)
-inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t index_id) {
+//   "data/000_abcd.dat"  + tablet 9 + 0  -> "data/000_abcd_9_0.vi"
+//   "/foo/bar/seg.dat"   + tablet 9 + 5  -> "/foo/bar/seg_9_5.vi"
+//   "seg.dat"            + tablet 9 + 7  -> "seg_9_7.vi"            (no directory part)
+//   "/seg.dat"           + tablet 9 + 1  -> "seg_9_1.vi"            (root-only directory)
+inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t tablet_id,
+                                                           int64_t index_id) {
     const size_t last_slash = segment_path.find_last_of('/');
     std::string_view basename =
             (last_slash == std::string_view::npos) ? segment_path : segment_path.substr(last_slash + 1);
-    std::string vi_filename = gen_vector_index_filename(basename, index_id);
+    std::string vi_filename = gen_vector_index_filename(basename, tablet_id, index_id);
     if (last_slash == std::string_view::npos) {
         return vi_filename;
     }
@@ -133,6 +139,23 @@ inline std::string gen_vector_index_path_from_segment_path(std::string_view segm
         return vi_filename;
     }
     return fmt::format("{}/{}", dir, vi_filename);
+}
+
+// The per-segment unique id embedded in a persisted segment's .vi filenames
+// (segment_vector_index_uid): its value is the id of the tablet that WROTE the segment, used purely
+// as a unique key and carried verbatim across tablet split so every reader resolves the same .vi.
+// Every segment that records vector_index_ids also records this uid (stamped at write time by the
+// tablet writers / segment rewrite), so callers must only ask for it on a vector-indexed segment;
+// the DCHECK guards that invariant.
+inline int64_t resolve_segment_vector_index_uid(const SegmentMetadataPB& segment_meta) {
+    DCHECK(segment_meta.has_segment_vector_index_uid())
+            << "vector-indexed segment missing its recorded vector index uid: " << segment_meta.filename();
+    return segment_meta.segment_vector_index_uid();
+}
+
+// .vi filename for one index of a persisted (vector-indexed) segment, named by its recorded uid.
+inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB& segment_meta, int64_t index_id) {
+    return gen_vector_index_filename(segment_meta.filename(), resolve_segment_vector_index_uid(segment_meta), index_id);
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration

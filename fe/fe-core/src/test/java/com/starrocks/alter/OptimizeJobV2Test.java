@@ -68,22 +68,22 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeParser() throws Exception {
         String stmt = "alter table testTable7 distributed by hash(v1)";
-        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
         stmt = "alter table testTable7 primary key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
         }
 
         stmt = "alter table testTable7 order by (v1)";
-        alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
         stmt = "alter table testTable7 partition (t1) duplicate key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
@@ -91,7 +91,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 duplicate key(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support"));
@@ -99,7 +99,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -108,7 +108,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 temporary partition (t1) distributed by hash(v1)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("not support optimize temp partition"));
@@ -116,7 +116,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by random";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -125,7 +125,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         stmt = "alter table testTable7 partition (t1) distributed by hash(v3)";
         try {
-            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assertions.fail();
         } catch (Exception e) {
             LOG.warn("Alter fail:", e);
@@ -156,7 +156,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();

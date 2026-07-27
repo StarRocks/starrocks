@@ -374,7 +374,6 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "jdbc_parttbl_mv6"));
-        HashMap<String, String> taskRunProperties = new HashMap<>();
         // check corner case: the first partition of base table is 0000 to 20230801
         // p20230801 of mv should not be created
         refreshMVRange(materializedView.getName(), "20230801", "20230802", false);

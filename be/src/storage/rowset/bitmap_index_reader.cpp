@@ -47,9 +47,9 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/bitmap_range_iterator.h"
-#include "storage/primitive/range.h"
 #include "storage/types.h"
+#include "storage_primitive/bitmap_range_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 

@@ -31,19 +31,18 @@
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_runtime_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/query_scan_metrics.h"
-#include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
@@ -61,10 +60,10 @@
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -887,8 +886,10 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c3 = ADD_COUNTER(_runtime_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
     }
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {

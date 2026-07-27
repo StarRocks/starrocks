@@ -50,6 +50,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -312,6 +313,12 @@ public class EditLog {
                 case OperationType.OP_ERASE_PARTITION_V2: {
                     ErasePartitionLog erasePartitionLog = (ErasePartitionLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
+                    break;
+                }
+                case OperationType.OP_ERASE_MATERIALIZED_INDEX: {
+                    EraseMaterializedIndexLog log = (EraseMaterializedIndexLog) journal.data();
+                    globalStateMgr.getRecycleBin().replayEraseMaterializedIndex(new RecycleMaterializedIndexInfo(
+                            log.getDbId(), log.getTableId(), log.getPhysicalPartitionId(), log.getIndexId()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {
@@ -1635,6 +1642,11 @@ public class EditLog {
 
     public void logErasePartition(long partitionId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
+    }
+
+    public void logEraseMaterializedIndex(RecycleMaterializedIndexInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_MATERIALIZED_INDEX, new EraseMaterializedIndexLog(
+                info.getDbId(), info.getTableId(), info.getPhysicalPartitionId(), info.getIndexId()), walApplier);
     }
 
     public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {

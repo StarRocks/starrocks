@@ -149,6 +149,57 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+    public void testInsertOverwriteAbortsWhenTableStateNotNormal() throws Exception {
+        // Guards against the race where an overwrite passes analysis while the table is NORMAL,
+        // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(301L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
+
+        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            Assertions.assertThrows(DmlException.class, runner::run);
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
+    }
+
+    @Test
+    public void testDoCommitAbortsWhenTableStateNotNormal() {
+        // Guards the same race as testInsertOverwriteAbortsWhenTableStateNotNormal, but at doCommit()
+        // itself: the table can flip out of NORMAL after prepare()'s own check passed (e.g. an ALTER
+        // submits while the load is running), so doCommit() re-checks right before the partition swap.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(304L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            // doCommit() wraps every exception from its try block into DmlException("replace partitions
+            // failed", cause) (see its catch (Exception e) below the state check) -- the original message
+            // survives only as the cause.
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::testDoCommit);
+            Assertions.assertNotNull(ex.getCause());
+            Assertions.assertTrue(ex.getCause().getMessage().contains("table state is"));
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
     public void testInsertOverwriteWithDuplicatePartitions() throws SQLException {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";

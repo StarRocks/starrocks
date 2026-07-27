@@ -21,7 +21,6 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.dbi.DbConfigManager;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.RollbackException;
-import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.sleepycat.je.rep.impl.RepImpl;
 import com.sleepycat.je.rep.stream.MatchpointSearchResults;
 import com.sleepycat.je.utilint.DatabaseUtil;
@@ -297,7 +296,6 @@ public class BDBEnvironmentTest {
     private void printHAStatus() {
         LOG.info("---------------------");
         LOG.info("{}", leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
-        RepGroupImpl imp = leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl();
         LOG.info("---------------------");
     }
 

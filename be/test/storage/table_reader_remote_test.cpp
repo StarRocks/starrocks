@@ -27,7 +27,6 @@
 #include "gutil/walltime.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -40,6 +39,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

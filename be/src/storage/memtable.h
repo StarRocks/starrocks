@@ -19,11 +19,13 @@
 
 #include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
+#include "common/storage_define.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/chunk_aggregator.h"
-#include "storage/primitive/primary_key_encoding_types.h"
-#include "storage/primitive/storage_define.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_aggregator.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks {
 

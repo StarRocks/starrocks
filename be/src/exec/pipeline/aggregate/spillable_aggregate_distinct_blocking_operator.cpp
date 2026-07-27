@@ -17,10 +17,10 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/query_context.h"
-#include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/sorted_streaming_aggregator.h"
 
@@ -177,6 +177,8 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);
 
     spill_channel->set_spiller(spiller);
+    // Anchor the spill channel to the aggregator's lifetime (see SpillProcessOperator prepare/close).
+    spill_channel->set_guarded_context(aggregator.get());
     aggregator->set_spiller(spiller);
     aggregator->set_spill_channel(std::move(spill_channel));
 

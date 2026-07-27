@@ -23,6 +23,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/configbase.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "common/storage_define.h"
 #include "common/system/mem_info.h"
 #include "exec/exec_env.h"
 #include "formats/orc/lzo_decompressor_registration.h"
@@ -30,7 +31,6 @@
 #include "platform/aws/aws_sdk_guard.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/primitive/storage_define.h"
 #include "types/time_types.h"
 
 namespace starrocks::lake {

@@ -75,12 +75,14 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
             return null;
         }
         InsertFromFilesScanContext scanContext =
-                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource());
+                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
+                        context.getSessionVariable().getTimeZone());
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
-                sumFileBytes(sourceTable), context.getCurrentComputeResource());
+                sumFileBytes(sourceTable), context.getCurrentComputeResource(),
+                SecondaryIndexSpec.forVisibleRollups(target));
     }
 
     /**

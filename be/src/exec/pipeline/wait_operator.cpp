@@ -19,7 +19,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 

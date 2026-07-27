@@ -16,12 +16,29 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DefaultExpr;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Range;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -32,9 +49,13 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -46,6 +67,14 @@ public class RangeDistributionGuardTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
+        // Keep the background rollup loop from running the LakeRangeRollupJob that the "allowed"
+        // tests construct (it would attempt a real sample/rewrite that needs a backend). Tests
+        // inspect the just-constructed job and then clear the handler's job map.
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            protected void runAfterLeaseValid() {
+            }
+        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -107,14 +136,172 @@ public class RangeDistributionGuardTest {
         return null; // unreachable
     }
 
+    /**
+     * Fetch the single unfinished rollup job the just-run ALTER constructed, then clear the handler's
+     * job map so it is not picked up by the (mocked-out) background loop and does not leak into other
+     * tests. Mirrors {@code LakeRollupJobTest.createJob}.
+     */
+    private static AlterJobV2 fetchAndClearRollupJob() {
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        List<AlterJobV2> jobs = new java.util.ArrayList<>(handler.getAlterJobsV2().values());
+        handler.clearJobs();
+        assertEquals(1, jobs.size(), "expected exactly one rollup job to be constructed");
+        return jobs.get(0);
+    }
+
+    /**
+     * Inject a "finished" rollup into the table: register its meta + a NORMAL {@link MaterializedIndex}
+     * in every physical partition (mirrors the post-FINISHED catalog state {@code visualiseShadowIndex}
+     * produces). {@code schema} must have at least two columns (used as the sort-key prefix [0,1]).
+     */
+    private static long injectFinishedRollup(OlapTable table, String name, List<Column> schema) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
+    }
+
+    /**
+     * On a shared-data (lake) range DUP table, {@code ADD ROLLUP ... ORDER BY (...)} is now allowed:
+     * the handler constructs a {@link LakeRangeRollupJob} (the additive range-rollup path) instead of
+     * rejecting it. The job is constructed (not run); we inspect its routing then clear it.
+     */
     @Test
-    public void testAddRollupRejectedOnRangeDistribution() throws Exception {
+    public void testLakeRangeRollupAllowed() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_rollup"));
-        DdlException exception = assertThrowsDdlException(() ->
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup add rollup r2(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob,
+                "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r2", ((LakeRangeRollupJob) job).getRollupIndexName());
+    }
+
+    /**
+     * The constructed rollup's schema is stored in SORT-KEY order ({@code [k2, k1, v1]} for ORDER BY
+     * (k2, k1) over selected (k1, k2, v1)) with the sort-key columns as the leading prefix
+     * ({@code sortKeyIdxes == [0, 1]}). This makes the optimizer's prefix-index scorer (which scores by
+     * schema column order) select the rollup for {@code WHERE k2 = ...}.
+     */
+    @Test
+    public void testLakeRangeRollupSchemaStoredInSortKeyOrder() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_order"));
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_order add rollup r_sk(k1, k2, v1) order by (k2, k1)");
+        LakeRangeRollupJob job = (LakeRangeRollupJob) fetchAndClearRollupJob();
+
+        List<Column> rollupSchema = Deencapsulation.getField(job, "rollupSchema");
+        List<String> schemaNames = rollupSchema.stream().map(Column::getName).collect(
+                java.util.stream.Collectors.toList());
+        assertEquals(List.of("k2", "k1", "v1"), schemaNames, "rollup schema must be in sort-key order");
+        // The sort-key columns are the leading prefix and are keys; the rest are values.
+        assertTrue(rollupSchema.get(0).isKey() && rollupSchema.get(1).isKey());
+        assertTrue(!rollupSchema.get(2).isKey());
+
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "rollupSortKeyIdxes");
+        assertEquals(List.of(0, 1), sortKeyIdxes, "sort key must be the leading schema prefix");
+    }
+
+    /**
+     * A shared-nothing range table rollup stays rejected: the additive range-rollup path is
+     * shared-data only (it builds a K-tablet shadow via the lake online-rewrite machinery), so the
+     * routing predicate requires {@code isCloudNativeTable()}. This is asserted on the predicate
+     * directly because a SHARED_DATA test cluster cannot host a genuine shared-nothing OLAP table.
+     */
+    @Test
+    public void testSharedNothingRangeRollupRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_sn"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_sn");
+        // Sanity: the real (cloud-native) range table IS routable.
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table));
+        // A shared-nothing table (isCloudNativeTable() == false) is NOT routable -> stays rejected.
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isCloudNativeTable() {
+                return false;
+            }
+        };
+        assertTrue(!MaterializedViewHandler.isRangeRollupRoutable(table),
+                "shared-nothing range table must not be routed to LakeRangeRollupJob");
+    }
+
+    /**
+     * A colocate range table rollup stays rejected (parallel to the sort-key-reorder colocate
+     * rejection): the rollup would build a fresh K-tablet layout independent of the colocate range
+     * manager's expected ranges.
+     */
+    @Test
+    public void testRangeRollupOnColocateRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_colocate"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_colocate");
+        // Simulate colocate membership via the table's group property: the routing predicate now reads
+        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        table.setColocateGroup("t_guard_rollup_colocate_group");
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
+    }
+
+    /**
+     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the rollup
+     * re-route, mirroring the sort-key-reorder auto-increment rejection).
+     */
+    @Test
+    public void testRangeRollupWithAutoIncrementRejected() throws Exception {
+        starRocksAssert.withTable("create table t_guard_rollup_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_rollup_autoinc add rollup r1(k1, k2) order by (k2, k1)");
+    }
+
+    /**
+     * A PRIMARY KEY range table rollup stays rejected. ADD ROLLUP on a PK table is rejected up front
+     * by {@code process} ("Do not support add rollup on primary key table"); the range-rollup guard
+     * additionally excludes PRIMARY_KEYS. Either way the ALTER must throw.
+     */
+    @Test
+    public void testRangeRollupOnPrimaryKeyRejected() throws Exception {
+        starRocksAssert.withTable("create table t_guard_rollup_pk "
+                + "(k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        assertThrows(Throwable.class, () ->
                 starRocksAssert.alterTable(
-                        "alter table t_guard_rollup add rollup r1(k1, v1)"));
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + exception.getMessage());
+                        "alter table t_guard_rollup_pk add rollup r1(k1, k2) order by (k2, k1)"));
+    }
+
+    /**
+     * Force-drop / CANCEL must recognize an in-flight {@link LakeRangeRollupJob} by its rollup index
+     * name (parallel to {@code RollupJobV2}/{@code LakeRollupJob}). The job is constructed by the
+     * ALTER, then {@code cancelRollupJobsForForceDrop} finds and cancels it.
+     */
+    @Test
+    public void testCancelRecognizesLakeRangeRollupJob() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_cancel"));
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_cancel");
+        try {
+            starRocksAssert.alterTable(
+                    "alter table t_guard_rollup_cancel add rollup r_cancel(k1, k2, v1) order by (k2, k1)");
+            // The job is registered (unfinished) under the table id; cancel must match it by name.
+            boolean cancelled = handler.cancelRollupJobsForForceDrop(table.getId(), "r_cancel", "test");
+            assertTrue(cancelled, "cancelRollupJobsForForceDrop must recognize the LakeRangeRollupJob");
+            // A non-matching name must NOT be recognized.
+            assertTrue(!handler.cancelRollupJobsForForceDrop(table.getId(), "no_such_rollup", "test"));
+        } finally {
+            handler.clearJobs();
+        }
     }
 
     @Test
@@ -126,6 +313,9 @@ public class RangeDistributionGuardTest {
                         "select k1, v1 from t_guard_syncmv"));
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
+        // A plain ADD ROLLUP IS supported now; the sync-MV message must not blanket-claim otherwise.
+        assertFalse(exception.getMessage().toLowerCase(Locale.ROOT).contains("rollup is not supported"),
+                "sync-MV message must not claim rollup is unsupported: " + exception.getMessage());
     }
 
     /**
@@ -146,6 +336,183 @@ public class RangeDistributionGuardTest {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
         assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
                 "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
+    }
+
+    // ---- Integer sort-key widen -> data-rewrite route ----
+
+    // A range table with NOT NULL integer keys, so `MODIFY COLUMN k BIGINT KEY NOT NULL` is a PURE type
+    // widen (keyness + nullability unchanged). `keys`/`orderBy` let a test diverge the sort key from the
+    // key columns.
+    private static String intKeyRangeTableDdl(String name, String colDefs, String keys, String orderBy) {
+        return "create table " + name + " (" + colDefs + ")\n" + keys + "\norder by(" + orderBy + ")\n"
+                + "properties('replication_num' = '1');";
+    }
+
+    private AlterJobV2 buildJobFor(String tableName, String alterSql) throws Exception {
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", tableName);
+        return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenRoutedToRangeRewrite() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_dup",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_dup", "alter table t_widen_dup modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
+        // The rewrite carries the WIDENED column type (shadow-prefixed until flip).
+        LakeRangeRewriteSchemaChangeJob rewrite = (LakeRangeRewriteSchemaChangeJob) job;
+        Column widened = rewrite.getNewSchema().stream()
+                .filter(c -> Column.removeNamePrefix(c.getName()).equalsIgnoreCase("k1"))
+                .findFirst().orElseThrow();
+        assertEquals(PrimitiveType.BIGINT, widened.getPrimitiveType(),
+                "widened key must carry the new BIGINT type in the rewrite schema");
+        // The boundary sampler projects the widened key as CAST(origin AS wide) -- the real values, not a
+        // constant default (which would collapse the boundaries).
+        List<String> projection = rewrite.buildSampleProjectionForTest(
+                new java.util.TreeSet<>(java.util.List.of("k1", "k2", "v1")));
+        assertTrue(projection.stream().anyMatch(p -> p.toLowerCase(Locale.ROOT).contains("cast(`k1`")
+                        && p.toLowerCase(Locale.ROOT).contains("bigint")),
+                "sample projection must CAST the origin k1 to bigint, got: " + projection);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenPreservesExplicitSortKey() throws Exception {
+        // Sort key (k2, k1) diverges from the key column order (k1, k2). A widen of k1 must PRESERVE the
+        // explicit sort key, not re-derive it from the key columns.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_orderby",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k2, k1"));
+        AlterJobV2 job = buildJobFor("t_widen_orderby",
+                "alter table t_widen_orderby modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "newSortKeyIdxes");
+        assertEquals(List.of(1, 0), sortKeyIdxes,
+                "explicit ORDER BY (k2, k1) must be preserved across the widen, not re-derived to (k1, k2)");
+    }
+
+    @Test
+    public void testModifyIntKeyWidenTinyintToIntRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_tiny",
+                "k1 tinyint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_tiny", "alter table t_widen_tiny modify column k1 int key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenAggRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_agg",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int SUM", "AGGREGATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_agg", "alter table t_widen_agg modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenUniqueRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_uniq",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "UNIQUE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_uniq", "alter table t_widen_uniq modify column k1 bigint key not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    @Test
+    public void testModifyDupValueColumnInSortKeyWidenRouted() throws Exception {
+        // A DUP table can sort by a value column: ORDER BY (k1, v1) makes v1 a range sort-key column.
+        // Widening v1 (staying a value column) is still a pure widen of a range sort-key column and routes.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_dupval",
+                "k1 int NOT NULL, k2 int, v1 int NOT NULL", "DUPLICATE KEY(k1)", "k1, v1"));
+        AlterJobV2 job = buildJobFor("t_widen_dupval", "alter table t_widen_dupval modify column v1 bigint not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a DUP value column in the range sort key must route when widened, got: " + job);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenAggWithoutKeyKeywordRouted() throws Exception {
+        // On an AGG table a column with no aggregation method is a key column, so `MODIFY COLUMN k1
+        // BIGINT NOT NULL` (KEY omitted) still preserves keyness -- it is a pure widen and must route.
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_agg_nokw",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int SUM", "AGGREGATE KEY(k1, k2)", "k1, k2"));
+        AlterJobV2 job = buildJobFor("t_widen_agg_nokw", "alter table t_widen_agg_nokw modify column k1 bigint not null");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "an AGG key widen without the KEY keyword must still route, got: " + job);
+    }
+
+    @Test
+    public void testModifyKeyBigintToLargeintNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_large",
+                "k1 bigint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // BIGINT -> LARGEINT crosses the IntVariant/LargeIntVariant boundary: not an in-scope widen.
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_large modify column k1 largeint key not null");
+    }
+
+    @Test
+    public void testModifyKeyNarrowingNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_narrow",
+                "k1 bigint NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_narrow modify column k1 int key not null");
+    }
+
+    @Test
+    public void testModifyKeyNonIntegerNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_nonint",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_nonint modify column k1 varchar(30) key not null");
+    }
+
+    @Test
+    public void testModifyIntKeyWidenWithPositionMoveNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_pos",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // A position move would break the preserved positional sort key -> not routed as a pure widen.
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_widen_pos modify column k1 bigint key not null first");
+    }
+
+    @Test
+    public void testModifyIntKeyBareDropKeyNotRouted() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_bare",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // Bare MODIFY (no KEY) on a DUP key drops keyness -> a keyness change bundled with a type change,
+        // neither a pure widen nor a pure keyness flip -> rejected.
+        assertAlterRejectedWithRangeDistribution("alter table t_widen_bare modify column k1 bigint");
+    }
+
+    @Test
+    public void testHashTableIntKeyWidenNotRoutedToRangeRewrite() throws Exception {
+        // Distribute by k2 so k1 (the widened key) is not the distribution column (modifying a
+        // distribution column is independently rejected, which would mask the routing check).
+        starRocksAssert.withTable("create table t_widen_hash (k1 int NOT NULL, k2 int NOT NULL, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\nDISTRIBUTED BY HASH(k2) BUCKETS 3\n"
+                + "properties('replication_num' = '1');");
+        // The universal wrapper (needsRangeRewriteSchemaChange requires isRangeDistribution) must keep a
+        // HASH-distributed table off the rewrite route.
+        AlterJobV2 job = buildJobFor("t_widen_hash", "alter table t_widen_hash modify column k1 bigint key not null");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a HASH-distributed table must NOT route to the range rewrite, got: " + job);
+    }
+
+    @Test
+    public void testModifyIntKeyWidenMultiClauseRejected() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_multi",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        DdlException e = assertThrowsDdlException(() -> buildJobFor("t_widen_multi",
+                "alter table t_widen_multi modify column k1 bigint key not null, add column v2 int"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("combined"),
+                "expected a multi-clause rejection, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testModifyValueColumnWidenNotRoutedToRangeRewrite() throws Exception {
+        starRocksAssert.withTable(intKeyRangeTableDdl("t_widen_value",
+                "k1 int NOT NULL, k2 int NOT NULL, v1 int", "DUPLICATE KEY(k1, k2)", "k1, k2"));
+        // v1 is NOT in the sort key: a value-column widen is an ordinary schema change, not the range rewrite.
+        AlterJobV2 job = buildJobFor("t_widen_value", "alter table t_widen_value modify column v1 bigint");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "a non-sort-key value column widen must NOT route to the range rewrite, got: " + job);
     }
 
     @Test
@@ -185,12 +552,11 @@ public class RangeDistributionGuardTest {
     @Test
     public void testColocateRangeTableRejectsSortKeyReorder() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_colocate"));
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_colocate");
+        // Simulate colocate membership via the table's group property: the routing predicate now reads
+        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        table.setColocateGroup("t_guard_colocate_group");
         assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate order by (k2, k1)");
     }
 
@@ -210,35 +576,50 @@ public class RangeDistributionGuardTest {
     /**
      * On an AGG range-distribution table, adding a column with no aggregate
      * function is auto-promoted to a key column by the schema-change handler
-     * (no explicit KEY keyword needed). The guard must catch this path too;
-     * an earlier draft checked isKey() before promotion and let this through.
+     * (no explicit KEY keyword needed). The added column joins the (key-derived)
+     * range sort key -- a trailing sort-key add -- so it now runs the metadata-only
+     * async schema-evolution job (the routing predicate's auto-promote handling must
+     * catch this path too; an earlier draft checked isKey() before promotion and
+     * would have missed it).
      */
     @Test
-    public void testAddNoAggregateColumnOnAggRangeTableRejected() throws Exception {
+    public void testAddNoAggregateColumnOnAggRangeTableRunsMetadataOnly() throws Exception {
         starRocksAssert.withTable(
                 "create table t_guard_addagg (k1 int, v1 int sum)\n" +
                 "AGGREGATE KEY(k1)\n" +
                 "order by(k1)\n" +
                 "properties('replication_num' = '1');");
         // No KEY keyword and no aggregate -> AGG promotion turns this into a key.
-        Throwable exception = assertThrows(Throwable.class, () ->
-                starRocksAssert.alterTable(
-                        "alter table t_guard_addagg add column c_promoted int default '0'"));
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + exception.getMessage());
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser(
+                        "alter table t_guard_addagg add column c_promoted int default '0'", connectContext);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_addagg");
+        AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+        assertMetadataOnlyJob(job);
     }
 
+    /**
+     * On a shared-data (lake) range DUP table, DROP of a range sort-key column is now allowed: the
+     * handler routes it to {@link LakeRangeRewriteSchemaChangeJob} instead of rejecting it (see
+     * {@code RangeKeyColumnRoutingTest} for the full DUP/AGG/PK/UNIQUE routing matrix). The job is built
+     * (not run) via {@code analyzeAndCreateJob} to assert routing without needing a backend.
+     */
     @Test
-    public void testDropSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+    public void testDropSortKeyColumnRoutedToRangeRewriteOnRangeDistribution() throws Exception {
         // DUP range table: k1, k2 are both sort/key columns.
         starRocksAssert.withTable(rangeTableDdl("t_guard_dropsk"));
-        Throwable exception = assertThrows(Throwable.class, () ->
-                starRocksAssert.alterTable(
-                        "alter table t_guard_dropsk drop column k2"));
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + exception.getMessage());
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("k2"),
-                "Expected 'k2' (offending column) in: " + exception.getMessage());
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser("alter table t_guard_dropsk drop column k2", connectContext);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_dropsk");
+        AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
     }
 
     @Test
@@ -313,15 +694,19 @@ public class RangeDistributionGuardTest {
                 "alter table t_guard_shrink modify column k1 varchar(5) KEY NOT NULL");
     }
 
+    // An integer sort-key widen (INT -> BIGINT) is now ROUTED to the data-rewrite job (see
+    // testModifyIntKeyWidenRoutedToRangeRewrite). A type change that is NOT an in-scope integer widen --
+    // e.g. INT -> DECIMAL, which changes the FE Variant subclass -- stays rejected by the range-sort-key
+    // guard.
     @Test
-    public void testNonVarcharTypeChangeSortKeyColumnRejectedOnRangeDistribution() throws Exception {
+    public void testNonIntegerTypeChangeSortKeyColumnRejectedOnRangeDistribution() throws Exception {
         starRocksAssert.withTable(
                 "create table t_guard_int (k1 int NOT NULL, k2 int NOT NULL, v1 int)\n" +
                 "DUPLICATE KEY(k1, k2)\n" +
                 "order by(k1, k2)\n" +
                 "properties('replication_num' = '1');");
         assertAlterRejectedWithRangeDistribution(
-                "alter table t_guard_int modify column k1 bigint KEY NOT NULL");
+                "alter table t_guard_int modify column k1 decimal(20, 0) KEY NOT NULL");
     }
 
     /**
@@ -386,5 +771,989 @@ public class RangeDistributionGuardTest {
         // widen, so the relaxation must not apply and it must stay rejected.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_flip modify column k1 varchar(40)");
+    }
+
+    /**
+     * Inject a FINISHED range-rollup index directly into the table (simulating the post-FINISHED catalog
+     * state), then {@code ALTER TABLE ... DROP ROLLUP} and assert the rollup meta + index are removed
+     * while the base index is entirely untouched.
+     *
+     * <p>This is the regression for the generic meta-id deletion path
+     * ({@code MaterializedViewHandler.java#processBatchDropRollup}): a {@link LakeRangeRollupJob} that
+     * finished and promoted its shadow to NORMAL must be removable by the standard DROP ROLLUP DDL.
+     */
+    @Test
+    public void testFinishedRangeRollupCanBeDropped() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_drop_finished"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_drop_finished");
+        long baseMetaId = table.getBaseIndexMetaId();
+
+        // Inject a FINISHED rollup: register its meta then add a NORMAL MaterializedIndex
+        // to every physical partition (mirrors what visualiseShadowIndex does after FINISHED).
+        long rollupMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> rollupSchema = table.getSchemaByIndexMetaId(baseMetaId).subList(0, 2);
+        table.setIndexMeta(rollupMetaId, "r_finished", rollupSchema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            MaterializedIndex rollupIdx = new MaterializedIndex(physId, rollupMetaId,
+                    MaterializedIndex.IndexState.NORMAL,
+                    com.starrocks.catalog.PhysicalPartition.INVALID_SHARD_GROUP_ID);
+            pp.createRollupIndex(rollupIdx);
+        }
+        assertTrue(table.hasMaterializedIndex("r_finished"),
+                "rollup must be present after injection");
+        assertNotNull(table.getIndexMetaByMetaId(rollupMetaId),
+                "rollup meta must be registered");
+
+        // DROP ROLLUP via the standard DDL path.
+        starRocksAssert.alterTable("alter table t_guard_drop_finished drop rollup r_finished");
+
+        // Rollup index meta and physical indexes must be gone.
+        assertFalse(table.hasMaterializedIndex("r_finished"),
+                "rollup must be removed after DROP ROLLUP");
+        // The base index meta id and meta must be untouched.
+        assertEquals(baseMetaId, table.getBaseIndexMetaId(),
+                "base meta id must not change after DROP ROLLUP");
+        assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
+                "base meta must remain after DROP ROLLUP");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex base = pp.getLatestIndex(baseMetaId);
+            assertNotNull(base, "base physical index must remain in every partition");
+        }
+    }
+
+    /**
+     * An in-flight {@link LakeRangeRollupJob} (shadow index in SHADOW state) is cancelled via
+     * {@code CANCEL ALTER TABLE MATERIALIZED VIEW <name>}: the job transitions to CANCELLED and the
+     * base index is untouched throughout.
+     *
+     * <p>The existing {@link #testCancelRecognizesLakeRangeRollupJob()} checks that
+     * {@link MaterializedViewHandler#cancelRollupJobsForForceDrop} matches the job by rollup name.
+     * This test additionally verifies that after cancel the job is in CANCELLED state and the base
+     * index remains fully intact, covering the regression that cancel must not damage the base.
+     */
+    @Test
+    public void testInFlightRangeRollupCancelLeavesBaseIntact() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_cancel_base"));
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_cancel_base");
+        long baseMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseMetaId);
+        assertNotNull(baseMeta, "base meta must be present before cancel");
+
+        try {
+            starRocksAssert.alterTable(
+                    "alter table t_guard_cancel_base add rollup r_inflight(k1, k2, v1) order by (k2, k1)");
+            AlterJobV2 job = handler.getAlterJobsV2().values().iterator().next();
+            assertTrue(job instanceof LakeRangeRollupJob,
+                    "constructed job must be a LakeRangeRollupJob");
+            // Cancel via the MATERIALIZED VIEW cancel path (same as cancelMV, routes by rollup name).
+            // cancelRollupJobsForForceDrop drives the cancel path the production force-drop uses.
+            boolean cancelled = handler.cancelRollupJobsForForceDrop(
+                    table.getId(), "r_inflight", "test cancel");
+            assertTrue(cancelled, "cancel must succeed for an in-flight LakeRangeRollupJob");
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState(),
+                    "job must be in CANCELLED state after cancel");
+            // Base index must be untouched.
+            assertEquals(baseMetaId, table.getBaseIndexMetaId(),
+                    "base meta id must not change after cancel");
+            assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
+                    "base meta must remain after cancel");
+            for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+                assertNotNull(pp.getLatestIndex(baseMetaId),
+                        "base physical index must remain in every partition after cancel");
+            }
+            // Table state must return to NORMAL after cancel.
+            assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(),
+                    "table state must be NORMAL after cancel");
+        } finally {
+            handler.clearJobs();
+        }
+    }
+
+    /**
+     * A range DUP rollup may declare a DUPLICATE KEY that is a strict prefix of its ORDER BY (sort key),
+     * mirroring CreateTableAnalyzer's exemption for DUP base tables. The existing
+     * {@code checkAndPrepareMaterializedView} requires the DUPLICATE KEY to be a prefix of the rollup
+     * column list, so the column list leads with {@code k2}. For
+     * {@code ADD ROLLUP r(k2, k1, v1) DUPLICATE KEY(k2) ORDER BY(k2, k1)} the built schema is stored in
+     * sort-key order {@code [k2, k1, v1]} but only {@code k2} (the declared DUPLICATE KEY) is a key; the
+     * trailing sort-key column {@code k1} is a value (AggregateType.NONE). Without this fix the rollup
+     * path would have widened the key set to every ORDER BY column. The sort key still spans the full
+     * ORDER BY {@code (k2, k1)} so storage order is unchanged.
+     */
+    @Test
+    public void testRangeDupRollupHonorsNarrowerDuplicateKey() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_dupkey"));
+        starRocksAssert.alterTable(
+                "alter table t_guard_dupkey add rollup r_dup(k2, k1, v1) duplicate key(k2) order by (k2, k1)");
+        LakeRangeRollupJob job = (LakeRangeRollupJob) fetchAndClearRollupJob();
+
+        List<Column> rollupSchema = Deencapsulation.getField(job, "rollupSchema");
+        List<String> schemaNames = rollupSchema.stream().map(Column::getName).collect(
+                java.util.stream.Collectors.toList());
+        assertEquals(List.of("k2", "k1", "v1"), schemaNames, "rollup schema must be in sort-key order");
+        // Only the declared DUPLICATE KEY (k2) is a key; k1 (trailing sort-key col) and v1 are values.
+        assertTrue(rollupSchema.get(0).isKey(), "k2 (the DUPLICATE KEY) must be a key");
+        assertFalse(rollupSchema.get(1).isKey(), "k1 must NOT be a key (DUPLICATE KEY is a strict prefix)");
+        assertFalse(rollupSchema.get(2).isKey(), "v1 must NOT be a key");
+        assertEquals(com.starrocks.sql.ast.AggregateType.NONE, rollupSchema.get(1).getAggregationType(),
+                "non-key k1 must be a value column (AggregateType.NONE)");
+
+        // The sort key still spans the FULL ORDER BY (k2, k1): storage order is unchanged.
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "rollupSortKeyIdxes");
+        assertEquals(List.of(0, 1), sortKeyIdxes, "sort key must span both ORDER BY columns (k2, k1)");
+    }
+
+    /**
+     * A range-distribution table supports at most one routable rollup per ALTER TABLE statement (the
+     * additive path promotes its shadow to NORMAL directly and cannot share a multi-job ROLLUP-state
+     * batch). A batch with two ADD ROLLUP clauses must be rejected up front.
+     */
+    @Test
+    public void testRangeRollupBatchWithMultipleClausesRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_batch"));
+        // A single ADD ROLLUP may list multiple rollupItems (comma-separated), each becoming its own
+        // AddRollupClause: "add rollup r1(...) ..., r2(...) ...".
+        DdlException exception = assertThrowsDdlException(() ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_batch "
+                                + "add rollup r1(k1, k2, v1) order by (k2, k1), "
+                                + "r2(k1, k2, v1) order by (k1, k2)"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("at most one rollup"),
+                "Expected 'at most one rollup' in: " + exception.getMessage());
+        // No job should have been constructed.
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    /**
+     * A range table that already carries a rollup ({@code getIndexMetaIdToMeta().size() > 1}) is STILL
+     * routable to {@link LakeRangeRollupJob}: a second (sequential) ADD ROLLUP is allowed. Each additive
+     * job is serialized by the table's OlapTableState and operates only on its own shadow index meta id,
+     * so a completed rollup does not interfere. Asserted on the predicate and via a real ALTER (which
+     * constructs, not runs, the job).
+     */
+    @Test
+    public void testRangeRollupWithExistingRollupIsRouted() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_existing"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_existing");
+        // Sanity: a fresh range table (only the base index) is routable.
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table));
+
+        // Inject a finished rollup so the table now has two indexes.
+        injectFinishedRollup(table, "r_existing",
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+
+        // With a second index present the table is STILL routable (multiple rollups supported).
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table),
+                "a range table with an existing rollup must still be routable to LakeRangeRollupJob");
+        // A real second ADD ROLLUP now constructs a LakeRangeRollupJob (previously rejected).
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_existing add rollup r_new(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r_new", ((LakeRangeRollupJob) job).getRollupIndexName());
+    }
+
+    /**
+     * Scope confirmation: a UNIQUE-key range table is in scope (DUP/AGG/UNIQUE). {@code createRangeRollupJob}
+     * handles {@code isAggregationFamily()} = AGG and UNIQUE, so a UNIQUE range rollup routes to
+     * {@link LakeRangeRollupJob}. (Passes independently of the size()==1 relaxation — a fresh UNIQUE table
+     * has one index — but confirms the scope the message/docs claim.)
+     */
+    @Test
+    public void testUniqueKeyRangeRollupRouted() throws Exception {
+        starRocksAssert.withTable(
+                "create table t_guard_rollup_uniq (k1 int not null, k2 int not null, v1 int)\n"
+                + "unique key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_uniq add rollup r_uk(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob,
+                "Expected a LakeRangeRollupJob for a UNIQUE range table, got: " + job);
+    }
+
+    /**
+     * {@code ADD ROLLUP ... FROM <non-base index>} is rejected on a range table: a range-distribution
+     * rollup is always derived from the base index. The selected column {@code v1} is absent from the
+     * FROM source {@code r_src} on purpose — the FROM check must fire BEFORE column-schema validation,
+     * so the error is the base-index/FROM message, not "Column[v1] does not exist".
+     */
+    @Test
+    public void testRangeRollupFromNonBaseRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_from"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_from");
+        // Fully inject a finished rollup "r_src" whose schema is [k1, k2] (omits v1).
+        injectFinishedRollup(table, "r_src",
+                new ArrayList<>(table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2)));
+
+        // Explicit "duplicate key" is required here: without it, the pre-fix schema-validation branch's
+        // "does not exist in base index" wording coincidentally contains "base index" too, which would
+        // make this assertion pass for the wrong reason and mask the ordering bug being tested.
+        DdlException exception = assertThrowsDdlException(() ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_from add rollup r2(k1, k2, v1) duplicate key(k1, k2) "
+                                + "order by (k2, k1) from r_src"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("base index"),
+                "Expected 'base index' in: " + exception.getMessage());
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd / resolveEffectiveSortKeyColumns
+    //
+    // These are additive, self-contained pieces (not wired into the ALTER dispatch yet), so they are
+    // exercised as pure functions over a hand-built resolved SchemaChangeData rather than by driving a
+    // real ADD COLUMN KEY through analyzeAndCreateJob (which today still routes to the existing
+    // needsRangeRewriteSchemaChange path before finalAnalyze ever runs).
+    // ------------------------------------------------------------------------------------------
+
+    private static String dupRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String aggRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int sum)\n" +
+                "AGGREGATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String uniqueRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "UNIQUE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static String primaryKeyRangeTableWithValueDdl(String name) {
+        return "create table " + name + " (k1 int not null, k2 int not null, v1 int)\n" +
+                "PRIMARY KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static OlapTable getTable(String name) {
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+    }
+
+    private static Column constKeyColumn(OlapTable table, String name) {
+        Column column = new Column(name, IntegerType.INT);
+        column.setIsKey(true);
+        column.setUniqueId(table.getMaxColUniqueId() + 1000);
+        column.setDefaultValue("0");
+        return column;
+    }
+
+    /**
+     * Build a resolved {@link SchemaChangeData} simulating {@code ADD COLUMN <newKeyColumn> KEY} on
+     * {@code table}: the base index schema with {@code newKeyColumn} inserted as a brand-new trailing
+     * key column (after the existing key columns, keeping the key set a contiguous prefix), and a
+     * candidate sort key that is the table's current effective sort key plus that new column,
+     * expressed via {@code sortKeyUniqueIds} -- the resolver's highest-precedence tier, so this is
+     * valid regardless of which tier the live table itself uses.
+     */
+    private static SchemaChangeData buildTrailingKeyAddCandidate(OlapTable table, Column newKeyColumn) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(newKeyColumn.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        return SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+    }
+
+    @Test
+    public void testDupTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_dup"));
+        OlapTable table = getTable("t_meta_dup");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testAggTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_meta_agg"));
+        OlapTable table = getTable("t_meta_agg");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testUniqueTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_meta_unique"));
+        OlapTable table = getTable("t_meta_unique");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * Same AGG scenario as {@link #testAggTrailingKeyAddIsMetadataOnly}, but the candidate sort key is
+     * expressed via {@code sortKeyIdxes} (schema position) instead of {@code sortKeyUniqueIds},
+     * exercising the resolver's second precedence tier at the classifier level, over a resolved schema
+     * whose key columns (k1, k2, c_new) form a contiguous leading prefix matching those idxes.
+     */
+    @Test
+    public void testAggIdxBasedTrailingKeyAddIsMetadataOnly() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_meta_agg_idx"));
+        OlapTable table = getTable("t_meta_agg_idx");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        // k1, k2, c_new form the leading contiguous key prefix -> idxes [0, 1, 2].
+        assertTrue(newSchema.get(0).isKey() && newSchema.get(1).isKey() && newSchema.get(2).isKey());
+        assertFalse(newSchema.get(3).isKey());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyIdxes(List.of(0, 1, 2))
+                .build();
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testPrimaryKeyTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(primaryKeyRangeTableWithValueDdl("t_meta_pk"));
+        OlapTable table = getTable("t_meta_pk");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * Promoting an EXISTING value column to key (a value-to-key flip) is not an ADD of a brand-new
+     * column: the classifier must reject it even though the resulting sort key also grows by one.
+     */
+    @Test
+    public void testPromotingExistingColumnNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_promote"));
+        OlapTable table = getTable("t_meta_promote");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        List<Column> newSchema = new ArrayList<>();
+        Column promotedV1 = null;
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                Column copy = column.deepCopy();
+                copy.setIsKey(true);
+                promotedV1 = copy;
+                newSchema.add(copy);
+            } else {
+                newSchema.add(column);
+            }
+        }
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(promotedV1.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testColocateTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_colocate"));
+        OlapTable table = getTable("t_meta_colocate");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testAutoIncrementTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_meta_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = getTable("t_meta_autoinc");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * A single ADD COLUMNS clause that co-adds the trailing key AND another brand-new (value) column
+     * must NOT be classified as metadata-only: the extra column may need materialization (e.g.
+     * AUTO_INCREMENT / generated / non-constant default) that the metadata-only path does not perform.
+     * The batch must fall through to the data-rewrite path, which materializes it.
+     */
+    @Test
+    public void testCoAddedValueColumnNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_coadd"));
+        OlapTable table = getTable("t_meta_coadd");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        // A second brand-new column co-added in the same clause: a value column.
+        Column newValueColumn = new Column("v_new", IntegerType.INT);
+        newValueColumn.setIsKey(false);
+        newValueColumn.setUniqueId(table.getMaxColUniqueId() + 2000);
+        newValueColumn.setDefaultValue("0");
+
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newKeyColumn);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(newValueColumn);
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(newKeyColumn.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    /**
+     * Adding two brand-new trailing key columns (both constant-default) in one clause is metadata-only:
+     * the candidate sort key is the old sort key plus both new keys as a trailing block, in order.
+     */
+    @Test
+    public void testMultipleTrailingKeyAddsAreMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_multi_key"));
+        OlapTable table = getTable("t_meta_multi_key");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        List<Column> oldSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        MaterializedIndexMeta oldIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        List<Column> oldSortKey = MetaUtils.resolveEffectiveSortKeyColumns(
+                oldSchema, oldIndexMeta.getSortKeyUniqueIds(), oldIndexMeta.getSortKeyIdxes());
+
+        Column c1 = constKeyColumn(table, "c_new1");
+        Column c2 = new Column("c_new2", IntegerType.INT);
+        c2.setIsKey(true);
+        c2.setUniqueId(table.getMaxColUniqueId() + 2000);
+        c2.setDefaultValue("0");
+
+        List<Column> newSchema = new ArrayList<>();
+        for (Column column : oldSchema) {
+            if (column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+        newSchema.add(c1);
+        newSchema.add(c2);
+        for (Column column : oldSchema) {
+            if (!column.isKey()) {
+                newSchema.add(column);
+            }
+        }
+
+        List<Integer> candidateSortKeyUniqueIds = new ArrayList<>();
+        for (Column column : oldSortKey) {
+            candidateSortKeyUniqueIds.add(column.getUniqueId());
+        }
+        candidateSortKeyUniqueIds.add(c1.getUniqueId());
+        candidateSortKeyUniqueIds.add(c2.getUniqueId());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeData resolved = SchemaChangeData.newBuilder()
+                .withDatabase(db)
+                .withTable(table)
+                .withNewIndexMetaIdToSchema(baseIndexMetaId, newSchema)
+                .withSortKeyUniqueIds(candidateSortKeyUniqueIds)
+                .build();
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testMultiIndexTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_multi"));
+        OlapTable table = getTable("t_meta_multi");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+
+        long extraMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> rollupSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId()).subList(0, 2);
+        table.setIndexMeta(extraMetaId, "r_meta_multi", rollupSchema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testTempPartitionsTableNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_temp"));
+        OlapTable table = getTable("t_meta_temp");
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean existTempPartitions() {
+                return true;
+            }
+        };
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    @Test
+    public void testNonConstDefaultNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_nonconst"));
+        OlapTable table = getTable("t_meta_nonconst");
+        Column newKeyColumn = constKeyColumn(table, "c_new");
+        // Force a variable (non-constant) default, as if DEFAULT uuid() had been specified.
+        Deencapsulation.setField(newKeyColumn, "defaultExpr", new DefaultExpr("uuid()", false));
+        SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, newKeyColumn);
+        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+    }
+
+    // -- resolveEffectiveSortKeyColumns: BE-compatible precedence (tablet_schema.cpp) --
+
+    private static List<Column> threeColumnSchema() {
+        Column a = new Column("a", IntegerType.INT);
+        a.setIsKey(true);
+        a.setUniqueId(10);
+        Column b = new Column("b", IntegerType.INT);
+        b.setIsKey(true);
+        b.setUniqueId(11);
+        Column c = new Column("c", IntegerType.INT);
+        c.setUniqueId(12);
+        return new ArrayList<>(List.of(a, b, c));
+    }
+
+    @Test
+    public void testResolverPrefersSortKeyUniqueIds() {
+        List<Column> schema = threeColumnSchema();
+        // Reordered relative to schema position, and ignores sortKeyIdxes entirely.
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
+                schema, List.of(11, 10), List.of(2, 1, 0));
+        assertEquals(List.of("b", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsNull() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(schema, null, List.of(2, 0));
+        assertEquals(List.of("c", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToSortKeyIdxesWhenUniqueIdsEmpty() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
+                schema, List.of(), List.of(2, 0));
+        assertEquals(List.of("c", "a"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToKeyColumnsWhenBothNull() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(schema, null, null);
+        assertEquals(List.of("a", "b"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    @Test
+    public void testResolverFallsBackToKeyColumnsWhenBothEmpty() {
+        List<Column> schema = threeColumnSchema();
+        List<Column> resolved = MetaUtils.resolveEffectiveSortKeyColumns(
+                schema, List.of(), List.of());
+        assertEquals(List.of("a", "b"),
+                resolved.stream().map(Column::getName).collect(java.util.stream.Collectors.toList()));
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // End-to-end ADD COLUMN dispatch: a qualifying trailing key-column add on a shared-data range
+    // table is routed to the async metadata-only schema-evolution job (in-place range reprojection),
+    // NOT the K-tablet data-rewrite job. Jobs are built (not run) via analyzeAndCreateJob.
+    // ------------------------------------------------------------------------------------------
+
+    // DUP range table with a key-derived sort key (no explicit ORDER BY): the new key column joins
+    // the derived sort key, so the add is metadata-only.
+    private static String dupRangeKeyDerivedDdl(String name) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "properties('replication_num' = '1');";
+    }
+
+    private static AlterJobV2 buildAlterJob(String tableName, String alterSql) throws Exception {
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        OlapTable table = getTable(tableName);
+        return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+    }
+
+    private static LakeTableAsyncFastSchemaChangeJob assertMetadataOnlyJob(AlterJobV2 job) {
+        assertNotNull(job, "expected a job to be built");
+        assertFalse(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "must NOT be the K-tablet data-rewrite job, got: " + job);
+        assertTrue(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                "expected the async metadata-only job, got: " + job);
+        LakeTableAsyncFastSchemaChangeJob aj = (LakeTableAsyncFastSchemaChangeJob) job;
+        assertNotNull(aj.getTargetRanges(), "targetRanges must be set");
+        assertFalse(aj.getTargetRanges().isEmpty(), "targetRanges must be non-empty");
+        return aj;
+    }
+
+    private static void assertContiguousKeyPrefix(List<Column> columns) {
+        boolean sawValue = false;
+        for (Column column : columns) {
+            if (column.isKey()) {
+                assertFalse(sawValue, "key column after a value column breaks the prefix: " + column.getName());
+            } else {
+                sawValue = true;
+            }
+        }
+    }
+
+    private static int countBaseTablets(OlapTable table) {
+        long baseId = table.getBaseIndexMetaId();
+        int count = 0;
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex idx = pp.getLatestIndex(baseId);
+            if (idx != null) {
+                count += idx.getTablets().size();
+            }
+        }
+        return count;
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyDup() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_dup"));
+        OlapTable table = getTable("t_add_meta_dup");
+        long baseId = table.getBaseIndexMetaId();
+        short oldShortKey = table.getIndexMetaByMetaId(baseId).getShortKeyColumnCount();
+        long oldKeyCount = table.getSchemaByIndexMetaId(baseId).stream().filter(Column::isKey).count();
+        int tabletCount = countBaseTablets(table);
+
+        AlterJobV2 job = buildAlterJob("t_add_meta_dup",
+                "alter table t_add_meta_dup add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+        assertEquals(tabletCount, aj.getTargetRanges().size(), "one target range per base tablet");
+
+        SchemaInfo si = aj.getSchemaInfoList().get(0);
+        Column added = si.getColumns().stream().filter(c -> c.getName().equalsIgnoreCase("c"))
+                .findFirst().orElseThrow();
+        assertTrue(added.isKey(), "added column c must be a key");
+        // DUP key-derived sort key == key columns, so the sort-key arity grows with the key count.
+        long newKeyCount = si.getColumns().stream().filter(Column::isKey).count();
+        assertEquals(oldKeyCount + 1, newKeyCount, "sort/key arity grew by one");
+        assertTrue(si.getShortKeyColumnCount() > oldShortKey, "short key count grew");
+        assertContiguousKeyPrefix(si.getColumns());
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyAgg() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_add_meta_agg"));
+        assertOrderByRangeTrailingKeyAddMetadataOnly("t_add_meta_agg");
+    }
+
+    @Test
+    public void testAddTrailingKeyColRunsMetadataOnlyUnique() throws Exception {
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_add_meta_uniq"));
+        assertOrderByRangeTrailingKeyAddMetadataOnly("t_add_meta_uniq");
+    }
+
+    // AGG/UNIQUE range tables carry an explicit sort key (sortKeyIdxes); the new key column is appended
+    // to it in lockstep, so both the sort-key arity and the short-key count grow.
+    private void assertOrderByRangeTrailingKeyAddMetadataOnly(String tableName) throws Exception {
+        OlapTable table = getTable(tableName);
+        long baseId = table.getBaseIndexMetaId();
+        int oldSortKeyArity = table.getIndexMetaByMetaId(baseId).getSortKeyIdxes().size();
+        short oldShortKey = table.getIndexMetaByMetaId(baseId).getShortKeyColumnCount();
+
+        AlterJobV2 job = buildAlterJob(tableName,
+                "alter table " + tableName + " add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+
+        SchemaInfo si = aj.getSchemaInfoList().get(0);
+        assertEquals(oldSortKeyArity + 1, si.getSortKeyIndexes().size(), "sort key arity grew by one");
+        int lastIdx = si.getSortKeyIndexes().get(si.getSortKeyIndexes().size() - 1);
+        assertEquals("c", si.getColumns().get(lastIdx).getName(), "new column is the trailing sort key");
+        assertTrue(si.getColumns().get(lastIdx).isKey());
+        assertTrue(si.getShortKeyColumnCount() > oldShortKey, "short key count grew");
+        assertContiguousKeyPrefix(si.getColumns());
+    }
+
+    /**
+     * The resolved schema of a metadata-only AGG/UNIQUE trailing key add keeps the key columns a
+     * contiguous leading prefix and points {@code sort_key_idxes} exactly at those prefix positions --
+     * the FE obligation the BE merge/aggregate path relies on (design's AGG/UNIQUE lockstep rule).
+     */
+    @Test
+    public void testAggUniqueAddContiguousKeyPrefixAndSortKeyIdxes() throws Exception {
+        starRocksAssert.withTable(aggRangeTableWithValueDdl("t_add_meta_ck_agg"));
+        starRocksAssert.withTable(uniqueRangeTableWithValueDdl("t_add_meta_ck_uniq"));
+        for (String tableName : new String[] {"t_add_meta_ck_agg", "t_add_meta_ck_uniq"}) {
+            AlterJobV2 job = buildAlterJob(tableName,
+                    "alter table " + tableName + " add column c int key default '0'");
+            LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+            SchemaInfo si = aj.getSchemaInfoList().get(0);
+            assertContiguousKeyPrefix(si.getColumns());
+            List<Integer> sortKeyIdxes = si.getSortKeyIndexes();
+            long keyCount = si.getColumns().stream().filter(Column::isKey).count();
+            assertEquals(keyCount, sortKeyIdxes.size(), "sort key covers exactly the key columns");
+            for (int i = 0; i < sortKeyIdxes.size(); i++) {
+                assertEquals(i, sortKeyIdxes.get(i).intValue(), "sort key idx matches key prefix position");
+                assertTrue(si.getColumns().get(sortKeyIdxes.get(i)).isKey());
+            }
+        }
+    }
+
+    /**
+     * A tablet with a bounded (non-all) range is reprojected in place: each existing boundary tuple
+     * gains one trailing NULL sentinel for the new column, its prefix values preserved.
+     */
+    @Test
+    public void testAddTrailingKeyColReprojectsBoundedRangeWithNullSentinel() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_bounded"));
+        OlapTable table = getTable("t_add_meta_bounded");
+        long baseId = table.getBaseIndexMetaId();
+        long tabletId = -1;
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            for (Tablet t : pp.getLatestIndex(baseId).getTablets()) {
+                t.setRange(new TabletRange(Range.of(
+                        new Tuple(List.of(Variant.of(IntegerType.INT, "10"), Variant.of(IntegerType.INT, "20"))),
+                        new Tuple(List.of(Variant.of(IntegerType.INT, "30"), Variant.of(IntegerType.INT, "40"))),
+                        true, false)));
+                tabletId = t.getId();
+            }
+        }
+
+        AlterJobV2 job = buildAlterJob("t_add_meta_bounded",
+                "alter table t_add_meta_bounded add column c int key default '0'");
+        LakeTableAsyncFastSchemaChangeJob aj = assertMetadataOnlyJob(job);
+
+        Range<Tuple> reprojected = aj.getTargetRanges().get(tabletId).getRange();
+        assertEquals(3, reprojected.getLowerBound().getValues().size(), "lower bound arity grew to 3");
+        assertEquals(3, reprojected.getUpperBound().getValues().size(), "upper bound arity grew to 3");
+        assertTrue(reprojected.getLowerBound().getValues().get(2) instanceof NullVariant,
+                "trailing lower sentinel is NULL");
+        assertTrue(reprojected.getUpperBound().getValues().get(2) instanceof NullVariant,
+                "trailing upper sentinel is NULL");
+        assertEquals("10", reprojected.getLowerBound().getValues().get(0).getStringValue(),
+                "existing prefix values preserved");
+        assertEquals("40", reprojected.getUpperBound().getValues().get(1).getStringValue(),
+                "existing prefix values preserved");
+    }
+
+    /**
+     * A PRIMARY KEY range table's ADD COLUMN KEY is rejected during statement analysis (a PK key column
+     * cannot carry the aggregate the analyzer assigns), so it never reaches the metadata-only
+     * classifier -- existing behavior, not the async job.
+     */
+    @Test
+    public void testPkRangeAddKeyColNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(primaryKeyRangeTableWithValueDdl("t_add_meta_pk"));
+        assertThrows(Throwable.class, () ->
+                buildAlterJob("t_add_meta_pk", "alter table t_add_meta_pk add column c int key default '0'"));
+    }
+
+    /**
+     * Promoting an existing value column to a key is a MODIFY (keyness flip), not an ADD, so it is
+     * never diverted to the metadata-only ADD job; it stays on the MODIFY path and is rejected on
+     * range tables.
+     */
+    @Test
+    public void testPromoteExistingColumnToKeyNotMetadataOnly() throws Exception {
+        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_add_meta_promote"));
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_promote", "alter table t_add_meta_promote modify column v1 int key"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * Colocate range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY is not
+     * diverted and the existing range-distribution rejection applies (unaffected by the diversion).
+     */
+    @Test
+    public void testColocateRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo"));
+        // needsRangeRewriteSchemaChange reads the table's colocate-group property while
+        // isMetadataOnlyTrailingKeyAdd reads ColocateTableIndex; set both so the table is colocate to
+        // each guard and the ADD COLUMN KEY stays on the existing range-distribution rejection.
+        getTable("t_add_meta_colo").setColocateGroup("t_add_meta_colo_group");
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_colo", "alter table t_add_meta_colo add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * AUTO_INCREMENT range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY stays
+     * on the existing range-distribution rejection (unaffected by the diversion).
+     */
+    @Test
+    public void testAutoIncrementRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable("create table t_add_meta_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_autoinc",
+                        "alter table t_add_meta_autoinc add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
+                "Expected 'range distribution' in: " + e.getMessage());
+    }
+
+    /**
+     * With temp partitions present, the schema-change loop rejects early (unchanged), so an ADD COLUMN
+     * KEY never reaches the metadata-only diversion.
+     */
+    @Test
+    public void testTempPartitionRangeAddKeyColUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_temp"));
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean existTempPartitions() {
+                return true;
+            }
+        };
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_temp", "alter table t_add_meta_temp add column c int key default '0'"));
+        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("temp partition"),
+                "Expected 'temp partition' in: " + e.getMessage());
+    }
+
+    /**
+     * Regression: adding a VALUE column (not a key) to a range DUP table is unaffected by the
+     * diversion -- it is applied as an ordinary fast-schema-evolution change, never the metadata-only
+     * trailing-key job.
+     */
+    @Test
+    public void testDupValueColumnAddUnaffected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_val"));
+        AlterJobV2 job = buildAlterJob("t_add_meta_val",
+                "alter table t_add_meta_val add column c int default '0'");
+        assertFalse(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                "value-column add must not be the metadata-only job, got: " + job);
+    }
+
+    /**
+     * Regression: an ordinary (non-range) table's ADD COLUMN KEY is unaffected -- it stays on the
+     * standard schema-change path, never the metadata-only trailing-key job.
+     */
+    @Test
+    public void testNonRangeAddKeyColUnaffected() throws Exception {
+        boolean saved = Config.enable_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            starRocksAssert.withTable("create table t_add_meta_hash (k1 int, k2 int, v1 int)\n"
+                    + "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 2\n"
+                    + "properties('replication_num' = '1');");
+            AlterJobV2 job = buildAlterJob("t_add_meta_hash",
+                    "alter table t_add_meta_hash add column c int key default '0'");
+            assertFalse(job instanceof LakeTableAsyncFastSchemaChangeJob,
+                    "non-range add key must not be metadata-only, got: " + job);
+        } finally {
+            Config.enable_range_distribution = saved;
+        }
+    }
+
+    /**
+     * A batch combining the trailing key-column ADD with another SCHEMA_CHANGE clause (ADD and MODIFY
+     * both map to AlterOpType.SCHEMA_CHANGE, so conflict analysis allows the batch) must NOT be routed
+     * to the metadata-only async job: that job would carry the MODIFY'd column's new type in the
+     * schema with no data rewrite, while old segments still hold the pre-MODIFY encoding. The batch
+     * must be rejected precisely, mirroring {@code buildRoutedAddKeyColumnJob}'s single-clause check.
+     */
+    @Test
+    public void testAddTrailingKeyColCombinedWithModifyColumnRejected() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_combined"));
+        DdlException e = assertThrowsDdlException(() ->
+                buildAlterJob("t_add_meta_combined",
+                        "alter table t_add_meta_combined add column c int key default '0', "
+                                + "modify column v1 bigint"));
+        assertTrue(e.getMessage().contains("can not be combined with other alter operations"),
+                "Expected combined-op rejection in: " + e.getMessage());
     }
 }

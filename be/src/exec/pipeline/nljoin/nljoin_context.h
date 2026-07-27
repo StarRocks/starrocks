@@ -26,11 +26,11 @@
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spiller.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr_context.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks {
 class RuntimeFilterBuildDescriptor;

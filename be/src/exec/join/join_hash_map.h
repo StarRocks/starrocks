@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/join/join_hash_map_base.h"
 #include "exec/join/join_hash_table_descriptor.h"
 #include "exec/join/join_type_traits.h"
 
@@ -31,16 +32,16 @@ class ColumnRef;
 
 // When hash table is empty, specific its implemention.
 // TODO: Merge with JoinHashMap?
-class JoinHashMapForEmpty {
+class JoinHashMapForEmpty : public JoinHashMapAdapter<JoinHashMapForEmpty> {
 public:
     explicit JoinHashMapForEmpty(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
 
-    void build_prepare(RuntimeState* state) {}
-    void probe_prepare(RuntimeState* state) {}
-    void build(RuntimeState* state) {}
+    void build_prepare(RuntimeState* state) override {}
+    void probe_prepare(RuntimeState* state) override {}
+    void build(RuntimeState* state) override {}
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-               bool* has_remain) {
+               bool* has_remain) override {
         DCHECK_EQ(0, _table_items->row_count);
         *has_remain = false;
         _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
@@ -65,7 +66,7 @@ public:
         }
         return;
     }
-    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) {
+    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) override {
         // For RIGHT ANTI-JOIN, RIGHT SEMI-JOIN, FULL OUTER-JOIN, right table is empty,
         // do nothing for probe_remain.
         DCHECK_EQ(0, _table_items->row_count);
@@ -180,7 +181,7 @@ private:
 //     then `JoinHashMapMethod::lookup_init` to initialize the chained buckets for each row.
 
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-class JoinHashMap {
+class JoinHashMap : public JoinHashMapAdapter<JoinHashMap<LT, CT, MT>> {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using BuildKeyConstructor = typename JoinKeyConstructorTypeTraits<CT, LT>::BuildType;
@@ -190,13 +191,13 @@ public:
     explicit JoinHashMap(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
 
-    void build_prepare(RuntimeState* state);
-    void probe_prepare(RuntimeState* state);
+    void build_prepare(RuntimeState* state) override;
+    void probe_prepare(RuntimeState* state) override;
 
-    void build(RuntimeState* state);
+    void build(RuntimeState* state) override;
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
-               bool* has_remain);
-    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+               bool* has_remain) override;
+    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) override;
     template <bool is_remain>
     void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
@@ -334,5 +335,20 @@ private:
     JoinHashTableItems* _table_items = nullptr;
     HashTableProbeState* _probe_state = nullptr;
 };
+
+// Factory whose definition lives in join_hash_map.hpp and is explicitly instantiated in the
+// join_hash_map_*_inst.cpp files. Callers (JoinHashTable::build) only see this declaration, so
+// they never have to complete the heavy polymorphic JoinHashMap<...> types just to create one.
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+std::unique_ptr<JoinHashMapBase> make_join_hash_map(JoinHashTableItems* table_items, HashTableProbeState* probe_state);
+
+// Runtime factory table (defined in join_hash_map_factory.cpp, populated by the
+// join_hash_map_*_inst.cpp files at static init). Lets JoinHashTable::build() select a
+// concrete hash map by (key-constructor-unary, method-unary) without naming any concrete
+// JoinHashMap<LT, CT, MT> in build.cpp.
+using JoinHashMapFactoryFn = std::unique_ptr<JoinHashMapBase> (*)(JoinHashTableItems*, HashTableProbeState*);
+void register_join_hash_map_factory(JoinKeyConstructorUnaryType cut, JoinHashMapMethodUnaryType mut,
+                                    JoinHashMapFactoryFn fn);
+JoinHashMapFactoryFn find_join_hash_map_factory(JoinKeyConstructorUnaryType cut, JoinHashMapMethodUnaryType mut);
 
 } // namespace starrocks

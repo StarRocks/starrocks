@@ -42,6 +42,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/bloom_filter.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
@@ -102,7 +103,15 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     size_t num_to_read = 1;
     size_t num_read = num_to_read;
     RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, column.get()));
-    DCHECK(num_to_read == num_read);
+    // Hard check (not just a debug DCHECK): seeking to exactly num_values() is a
+    // legal past-the-last seek that yields num_read == 0 at EOF. Reading
+    // viewer.value(0) on the empty column would then be an out-of-bounds read.
+    // Returning an error lets ColumnReader::bloom_filter degrade to no-pruning
+    // instead of crashing when an ordinal has no backing bloom filter.
+    if (num_read != num_to_read) {
+        return Status::Corruption(strings::Substitute("bloom filter ordinal $0 has no value (read $1 of $2)", ordinal,
+                                                      num_read, num_to_read));
+    }
 
     ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
     auto value = viewer.value(0);

@@ -22,7 +22,7 @@
 #include "common/system/cpu_info.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/scan_task_queue_factory.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "glog/logging.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"

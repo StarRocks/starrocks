@@ -234,7 +234,7 @@ Status AgentServer::Impl::start() {
                                 .set_max_queue_size(queue_size)                                                  \
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
                                 .build(&pool));                                                                  \
-        AgentMetrics::instance()->register_thread_pool_metrics(#name, pool.get());                               \
+        REGISTER_AGENT_THREAD_POOL_METRICS(AgentMetrics::instance(), name, pool.get());                          \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.

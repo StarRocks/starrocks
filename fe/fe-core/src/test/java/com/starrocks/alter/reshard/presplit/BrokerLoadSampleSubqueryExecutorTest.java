@@ -309,7 +309,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(
                         Mockito.mock(com.starrocks.catalog.TableFunctionTable.class),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -334,7 +334,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
                         new BrokerDesc(Map.of()),
                         List.of(mockFileGroup("parquet")),
                         List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("tenant"), bigintColumn("position")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -366,7 +366,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
                         new BrokerDesc(Map.of()),
                         List.of(mockFileGroup("parquet")),
                         List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(groupId, nullableTrailing),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -396,7 +396,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
                         new BrokerDesc(Map.of()),
                         List.of(mockFileGroup("parquet")),
                         List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
-                        expectedComputeResource),
+                        expectedComputeResource, "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -418,7 +418,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
             List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
         return new SampleRequest(
                 new BrokerLoadScanContext(brokerDesc, fileGroups, fileStatusesPerGroup,
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("sort_key")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);

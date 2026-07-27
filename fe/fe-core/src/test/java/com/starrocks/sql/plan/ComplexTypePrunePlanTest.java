@@ -327,7 +327,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String sql = "select count(c1), sum(case when t2.c2_sub2 is not null then 1 else 0 end) " +
                 "from array_struct_nest, unnest(c2) as t(t1), unnest(c2) as tt(t2) " +
                 "where t1.c2_sub1 = 5";
-        String plan = getVerboseExplain(sql);
+        getVerboseExplain(sql);
         // After fix: both c2_sub1 (used by t1.c2_sub1 in WHERE) and c2_sub2 (used by t2.c2_sub2) must
         // be retained in the pruned type, otherwise BE crashes when reading the missing field.
         assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
@@ -395,5 +395,23 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         sql = "select count(distinct map{'a': 1})";
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
+    @Test
+    public void testUnnestDerivedInputOutputWidthRegression() throws Exception {
+        // Regression guard: for a derived UNNEST input c3.c3_sub1 (a synthesized ColumnRef, not a
+        // scan ref) only c3_sub1_sub1 is used, so the scan is pruned to struct<c3_sub1_sub1>. The
+        // UNNEST output type must EQUAL that pruned input element, not stay full struct<c3_sub1_sub1,
+        // c3_sub1_sub2>. Before this fix canSafelyPruneUnnestOutput() treated every non-scan input as
+        // unsafe and left the output wider than its input element, mismatching shuffle decode /
+        // StructColumn::append on non-OLAP scans.
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        String plan = getVerboseExplain(sql);
+        // scan side is pruned to a single-field element:
+        assertContains(plan, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        // therefore the UNNEST output MUST also be the single-field element - not the full 2-field struct:
+        assertContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11)>]");
+        assertNotContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` int(11)>]");
+        FeConstants.runningUnitTest = false;
     }
 }

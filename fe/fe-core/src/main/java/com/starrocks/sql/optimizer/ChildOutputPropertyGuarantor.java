@@ -106,9 +106,15 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
      *     {@code HINT_JOIN_SKEW}, or {@code HINT_JOIN_BUCKET} disables
      *     colocate. Only {@code null} or {@code HINT_JOIN_COLOCATE} lets
      *     the range fast path proceed.
-     * <li>Join-type allowlist: INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI.
-     *     Right-family and full-outer joins are rejected (NULL-key runtime
-     *     correctness validation deferred past P2).
+     * <li>Join-type allowlist: INNER, LEFT/RIGHT OUTER, LEFT/RIGHT SEMI,
+     *     LEFT/RIGHT ANTI, FULL OUTER. All equi-join families are colocate-safe
+     *     because a colocate range join is bucket-local: rows sharing a colocate
+     *     key (NULL included — NULL sorts into the first ColocateRange on every
+     *     table in the group) always land in the same bucket, so the unmatched
+     *     right rows a right/full-outer join must emit are produced by the right
+     *     scan node in the same fragment. CROSS, NULL-aware anti, and ASOF joins
+     *     stay rejected (no covering equijoin key / cross-bucket NULL semantics /
+     *     inequality match).
      * <li>{@code disable_colocate_join} session kill switch (shared with
      *     hash colocate).
      * <li>Structural {@link RangeDistributionSpec#canColocate}: same group,
@@ -139,10 +145,15 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 || HintNode.HINT_JOIN_BUCKET.equals(hint)) {
             return false;
         }
-        if (joinType != JoinOperator.INNER_JOIN
-                && joinType != JoinOperator.LEFT_OUTER_JOIN
-                && joinType != JoinOperator.LEFT_SEMI_JOIN
-                && joinType != JoinOperator.LEFT_ANTI_JOIN) {
+        boolean supportedJoinType = joinType == JoinOperator.INNER_JOIN
+                || joinType == JoinOperator.LEFT_OUTER_JOIN
+                || joinType == JoinOperator.LEFT_SEMI_JOIN
+                || joinType == JoinOperator.LEFT_ANTI_JOIN
+                || joinType == JoinOperator.RIGHT_OUTER_JOIN
+                || joinType == JoinOperator.RIGHT_SEMI_JOIN
+                || joinType == JoinOperator.RIGHT_ANTI_JOIN
+                || joinType == JoinOperator.FULL_OUTER_JOIN;
+        if (!supportedJoinType) {
             return false;
         }
         if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
@@ -551,9 +562,12 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
         // Range-colocate dispatch:
         // - both children range + canRangeColocateJoin → skip exchange (return).
-        // - otherwise, normalize any range child to hash SHUFFLE_JOIN via
-        //   convertRangeToHashShuffle, then fall through to the existing
-        //   hash/hash compatibility path unchanged.
+        // - both children range but NOT colocate → force a full (PARTITIONED)
+        //   shuffle on both sides and return (see below).
+        // - exactly one range child (range × hash) → normalize the range child to
+        //   hash SHUFFLE_JOIN via convertRangeToHashShuffle, then fall through to the
+        //   existing hash/hash compatibility path unchanged (the hash side is a valid
+        //   crc32 bucket-shuffle stay side).
         DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
         DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
         boolean leftIsRange = leftRawSpec instanceof RangeDistributionSpec;
@@ -565,6 +579,24 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     leftShuffleColumns, rightShuffleColumns)) {
                 return visitOperator(node, context);
             }
+            // Two range children that cannot colocate (disable_colocate_join, different
+            // group, unstable/empty group, unsupported join type, ...) must be joined
+            // via a full PARTITIONED shuffle — a range table can never be the local
+            // (stay) side of a bucket-shuffle, because bucket-shuffle re-buckets the
+            // other side with crc32 which does not match the range tablet layout.
+            //
+            // We must NOT use convertRangeToHashShuffle (SourceType.SHUFFLE_JOIN) here:
+            // a range scan natively satisfies a SHUFFLE_JOIN requirement
+            // (RangeDistributionSpec.isSatisfyHashShuffle), so for a null-safe key (<=>)
+            // — whose required distribution is already null-strict, matching the enforced
+            // one — the memo discards the shuffle enforcer and reuses the un-exchanged
+            // range scan, yielding a SHUFFLE_HASH_BUCKET join that silently drops all
+            // matches. enforceChildShuffleDistribution uses SourceType.SHUFFLE_ENFORCE,
+            // which a range scan does not satisfy, so the shuffle exchange is guaranteed
+            // on both sides and the join is PARTITIONED.
+            enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+            enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+            return visitOperator(node, context);
         }
         if (leftIsRange) {
             leftChild = convertRangeToHashShuffle(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);

@@ -882,8 +882,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Tracers.init(connectContext, "TIMER", "optimizer");
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
 
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
+        getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
@@ -1026,7 +1025,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                     "    UNPARTITIONED\n" +
                     "\n" +
                     "  27:Project\n" +
-                    "  |  <slot 603> : array_contains(DictDecode(625: array_agg, [<place-holder>]), 'asdfasdfasdf')\n" +
+                    "  |  <slot 603> : array_contains(625: array_agg, dict_encode('asdfasdfasdf', 625))\n" +
                     "  |  \n" +
                     "  26:AGGREGATE (merge finalize)\n" +
                     "  |  output: array_agg(625: array_agg)\n" +
@@ -1079,7 +1078,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Tracers.register(connectContext);
         Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+        getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();

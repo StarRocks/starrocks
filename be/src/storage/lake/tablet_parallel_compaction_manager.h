@@ -29,8 +29,8 @@
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_splitter.h"
-#include "storage/primitive/olap_tuple.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {
 class ThreadPool;

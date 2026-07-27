@@ -50,8 +50,8 @@
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

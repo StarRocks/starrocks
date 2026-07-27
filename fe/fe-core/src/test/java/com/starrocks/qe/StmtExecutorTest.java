@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -27,6 +28,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.DeleteMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -41,6 +43,7 @@ import com.starrocks.qe.QueryDetail.QueryMemState;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
@@ -66,6 +69,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -552,6 +559,92 @@ public class StmtExecutorTest {
 
         executor.handleDMLStmt(execPlan, stmt);
         Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+    }
+
+    @Test
+    public void testInsertIntoFilesSinkFailureDoesNotAbortFeTransaction(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        // An INSERT INTO FILES(...) sink targets a TableFunctionTable, which begins no FE
+        // transaction (see the transaction-begin skip in handleDMLStmt) and resolves no real Database.
+        // When the sink fails at runtime, the abort branch must NOT call
+        // transactionMgr.abortTransaction(database.getId(), ...): there is no txn to abort, and in
+        // production `database` is null so that call previously threw a (swallowed) NPE.
+        MetricRepo.init(); // handleDMLStmt bumps MetricRepo counters before the sink runs
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        Table targetTable = new Table(Table.TableType.TABLE_FUNCTION);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+
+        // A non-null database makes the (previously buggy) abort branch observable: before the fix it
+        // would call abortTransaction; after the fix the table-function branch skips it. In production
+        // getDb returns null for a files sink, which is what produced the NPE.
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database(10001L, "test_files_db");
+            }
+        };
+
+        AtomicInteger abortCount = new AtomicInteger(0);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason,
+                                         List<TabletCommitInfo> finishedTablets,
+                                         List<TabletFailInfo> failedTablets,
+                                         TxnCommitAttachment txnCommitAttachment) {
+                abortCount.incrementAndGet();
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+                // Mimic the sink failing at runtime (e.g. "The specified bucket does not exist").
+                throw new RuntimeException(
+                        "S3: Fail to create multipart upload for object: The specified bucket does not exist");
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "";
+            }
+        };
+
+        Exception ex = Assertions.assertThrows(Exception.class, () -> executor.handleDMLStmt(execPlan, stmt));
+        // The original sink error must still surface to the caller.
+        Assertions.assertTrue(ex.getMessage() != null && ex.getMessage().contains("The specified bucket does not exist"),
+                "expected original sink error to propagate, got: " + ex.getMessage());
+        // No FE transaction abort must be attempted for a table function (INSERT INTO FILES) sink.
+        Assertions.assertEquals(0, abortCount.get());
     }
 
     @Test

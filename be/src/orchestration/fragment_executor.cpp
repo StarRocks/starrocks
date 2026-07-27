@@ -34,17 +34,16 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/data_source_provider.h"
-#include "exec/batch_write/batch_write_mgr.h"
+#include "connector_primitive/data_source_provider.h"
+#include "data_sink/exchange/data_stream_sender.h"
+#include "data_sink/result/result_sink.h"
+#include "data_sink/tablet/olap_table_sink.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
-#include "exec/data_sinks/data_stream_sender.h"
-#include "exec/data_sinks/result_sink.h"
-#include "exec/data_sinks/tablet_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_env.h"
 #include "exec/exec_factory.h"
-#include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
@@ -53,11 +52,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/runtime/fragment_context_manager.h"
@@ -67,6 +63,10 @@
 #include "exec/runtime/schedule/common.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/scan_node.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
@@ -84,7 +84,7 @@ using WorkGroupPtr = workgroup::WorkGroupPtr;
 using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
 
 /// FragmentExecutor.
-FragmentExecutor::FragmentExecutor() {
+FragmentExecutor::FragmentExecutor(BatchWriteMgr* batch_write_mgr) : _batch_write_mgr(batch_write_mgr) {
     _fragment_start_time = MonotonicNanos();
 }
 
@@ -310,7 +310,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 
@@ -704,13 +703,14 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                         broker_scan_range.__isset.enable_batch_write && broker_scan_range.enable_batch_write;
                 StreamLoadContext* ctx = nullptr;
                 if (is_batch_write) {
-                    auto* batch_write_mgr = exec_env->batch_write_mgr();
-                    ASSIGN_OR_RETURN(ctx, BatchWriteMgr::create_and_register_pipe(
-                                                  exec_env, batch_write_mgr, db_name, table_name,
-                                                  broker_scan_range.batch_write_parameters, label, txn_id, load_id,
-                                                  broker_scan_range.batch_write_interval_ms));
+                    if (_batch_write_mgr == nullptr) {
+                        return Status::ServiceUnavailable("Batch write manager is unavailable");
+                    }
+                    ASSIGN_OR_RETURN(ctx, _batch_write_mgr->create_and_register_pipe(
+                                                  db_name, table_name, broker_scan_range.batch_write_parameters, label,
+                                                  txn_id, load_id, broker_scan_range.batch_write_interval_ms));
                     fragment_attachments.emplace_back(std::make_unique<StreamLoadContextHandle>(
-                            ctx, [batch_write_mgr](StreamLoadContext* context) {
+                            ctx, [batch_write_mgr = _batch_write_mgr](StreamLoadContext* context) {
                                 batch_write_mgr->unregister_stream_load_pipe(context);
                             }));
                 } else {

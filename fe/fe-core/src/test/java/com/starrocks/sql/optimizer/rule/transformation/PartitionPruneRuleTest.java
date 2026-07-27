@@ -77,7 +77,6 @@ public class PartitionPruneRuleTest {
                 new Column("dealDate", DateType.DATE, false)
         );
 
-        List<ColumnId> columnNames = Lists.newArrayList(ColumnId.create(columns.get(0).getName()));
 
         Map<Long, Range<PartitionKey>> keyRange = Maps.newHashMap();
 
@@ -324,7 +323,6 @@ public class PartitionPruneRuleTest {
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
-        List<ColumnId> partitionColumns = Lists.newArrayList(ColumnId.create("province"));
 
         new Expectations() {
             {
@@ -406,7 +404,6 @@ public class PartitionPruneRuleTest {
         literalExprValues.put(10001L, p1);
         literalExprValues.put(10002L, p2);
 
-        List<ColumnId> partitionColumns = Lists.newArrayList(ColumnId.create("province"));
 
         new Expectations() {
             {

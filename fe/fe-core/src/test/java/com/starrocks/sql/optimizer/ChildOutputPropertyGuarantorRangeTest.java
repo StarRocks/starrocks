@@ -40,8 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Covers:
  * <ul>
- * <li>Join-type allowlist (INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI) —
- *     RIGHT / FULL rejected.
+ * <li>Join-type allowlist accepts all equi-join families (INNER, LEFT/RIGHT
+ *     OUTER, LEFT/RIGHT SEMI, LEFT/RIGHT ANTI, FULL OUTER); CROSS and NULL-aware
+ *     left anti stay rejected.
  * <li>Position-preserving pairing accepts identity join keys.
  * <li>Position-preserving pairing rejects swapped-column joins.
  * <li>Partial shuffle coverage rejected.
@@ -92,13 +93,81 @@ class ChildOutputPropertyGuarantorRangeTest {
                 hint, joinType, left, right, leftShuffle, rightShuffle);
     }
 
+    /**
+     * Installs the "same group, stable, non-empty" expectations shared by every
+     * accepts-* test: colocate is not session-disabled, both tables are in the
+     * same stable colocate group. Group ids 100L/200L match {@link #buildSide}.
+     */
+    private static void expectStableSameGroup(ConnectContext connectContext,
+                                              SessionVariable sessionVariable,
+                                              GlobalStateMgr globalStateMgr,
+                                              ColocateTableIndex colocateTableIndex,
+                                              ColocateTableIndex.GroupId groupId) {
+        new Expectations() {
+            {
+                ConnectContext.get();
+                result = connectContext;
+                connectContext.getSessionVariable();
+                result = sessionVariable;
+                sessionVariable.isDisableColocateJoin();
+                result = false;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getColocateTableIndex();
+                result = colocateTableIndex;
+                colocateTableIndex.isSameGroup(100L, 200L);
+                result = true;
+                colocateTableIndex.getGroup(100L);
+                result = groupId;
+                colocateTableIndex.getGroup(200L);
+                result = groupId;
+                colocateTableIndex.isGroupUnstable(groupId);
+                result = false;
+            }
+        };
+    }
+
+    /**
+     * Asserts an identity-key join of {@code joinType} on a stable same-group
+     * range-colocate pair is accepted (colocate = (1,2), shuffle = (1,2)).
+     */
+    private void assertJoinTypeAccepted(TaskContext taskContext, ConnectContext connectContext,
+                                        SessionVariable sessionVariable, GlobalStateMgr globalStateMgr,
+                                        ColocateTableIndex colocateTableIndex, JoinOperator joinType) {
+        ColocateTableIndex.GroupId groupId = new ColocateTableIndex.GroupId(1L, 1L);
+        expectStableSameGroup(connectContext, sessionVariable, globalStateMgr, colocateTableIndex, groupId);
+        assertTrue(invokeGate(newGuarantor(taskContext), joinType,
+                buildSide(100L, 1, 2), buildSide(200L, 1, 2), cols(1, 2), cols(1, 2)));
+    }
+
     @Test
-    void rejectsRightOuterJoin(@Mocked TaskContext taskContext) {
-        // Join-type allowlist is the earliest gate; no ConnectContext access.
-        RangeDistributionSpec left = buildSide(100L, 1, 2);
-        RangeDistributionSpec right = buildSide(200L, 1, 2);
-        assertFalse(invokeGate(newGuarantor(taskContext), JoinOperator.RIGHT_OUTER_JOIN,
-                left, right, cols(1, 2), cols(1, 2)));
+    void acceptsRightOuterJoin(@Mocked TaskContext taskContext,
+                               @Mocked ConnectContext connectContext,
+                               @Mocked SessionVariable sessionVariable,
+                               @Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked ColocateTableIndex colocateTableIndex) {
+        assertJoinTypeAccepted(taskContext, connectContext, sessionVariable, globalStateMgr,
+                colocateTableIndex, JoinOperator.RIGHT_OUTER_JOIN);
+    }
+
+    @Test
+    void acceptsRightSemiJoin(@Mocked TaskContext taskContext,
+                              @Mocked ConnectContext connectContext,
+                              @Mocked SessionVariable sessionVariable,
+                              @Mocked GlobalStateMgr globalStateMgr,
+                              @Mocked ColocateTableIndex colocateTableIndex) {
+        assertJoinTypeAccepted(taskContext, connectContext, sessionVariable, globalStateMgr,
+                colocateTableIndex, JoinOperator.RIGHT_SEMI_JOIN);
+    }
+
+    @Test
+    void acceptsRightAntiJoin(@Mocked TaskContext taskContext,
+                              @Mocked ConnectContext connectContext,
+                              @Mocked SessionVariable sessionVariable,
+                              @Mocked GlobalStateMgr globalStateMgr,
+                              @Mocked ColocateTableIndex colocateTableIndex) {
+        assertJoinTypeAccepted(taskContext, connectContext, sessionVariable, globalStateMgr,
+                colocateTableIndex, JoinOperator.RIGHT_ANTI_JOIN);
     }
 
     @Test
@@ -131,11 +200,33 @@ class ChildOutputPropertyGuarantorRangeTest {
     }
 
     @Test
-    void rejectsFullOuterJoin(@Mocked TaskContext taskContext) {
-        // Join-type allowlist is the earliest gate; no ConnectContext access.
+    void acceptsFullOuterJoin(@Mocked TaskContext taskContext,
+                              @Mocked ConnectContext connectContext,
+                              @Mocked SessionVariable sessionVariable,
+                              @Mocked GlobalStateMgr globalStateMgr,
+                              @Mocked ColocateTableIndex colocateTableIndex) {
+        assertJoinTypeAccepted(taskContext, connectContext, sessionVariable, globalStateMgr,
+                colocateTableIndex, JoinOperator.FULL_OUTER_JOIN);
+    }
+
+    @Test
+    void rejectsCrossJoin(@Mocked TaskContext taskContext) {
+        // CROSS join stays rejected by the allowlist (earliest gate after hint;
+        // no ConnectContext access). It has no covering equijoin key anyway.
         RangeDistributionSpec left = buildSide(100L, 1, 2);
         RangeDistributionSpec right = buildSide(200L, 1, 2);
-        assertFalse(invokeGate(newGuarantor(taskContext), JoinOperator.FULL_OUTER_JOIN,
+        assertFalse(invokeGate(newGuarantor(taskContext), JoinOperator.CROSS_JOIN,
+                left, right, cols(1, 2), cols(1, 2)));
+    }
+
+    @Test
+    void rejectsNullAwareLeftAntiJoin(@Mocked TaskContext taskContext) {
+        // NULL-aware left anti (NOT IN with nullable) needs cross-bucket NULL
+        // knowledge, which bucket-local colocate execution cannot provide, so it
+        // stays rejected by the allowlist.
+        RangeDistributionSpec left = buildSide(100L, 1, 2);
+        RangeDistributionSpec right = buildSide(200L, 1, 2);
+        assertFalse(invokeGate(newGuarantor(taskContext), JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
                 left, right, cols(1, 2), cols(1, 2)));
     }
 

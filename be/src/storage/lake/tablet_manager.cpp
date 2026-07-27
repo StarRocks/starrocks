@@ -33,6 +33,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "io/io_profiler.h"
 #include "runtime/time_guard.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
@@ -55,11 +56,11 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
@@ -292,6 +293,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
     auto compession_level = req.__isset.compression_level ? req.compression_level : -1;
     tablet_metadata_pb->mutable_schema()->set_compression_level(compession_level);
+    // Shared-data primary-key tablets only support the cloud-native persistent index. Normalize
+    // here too (not just on load) so a create request never persists LOCAL/in-memory flags that
+    // downstream cloud-native code paths would then read as stale.
+    force_cloud_native_pk_persistent_index(tablet_metadata_pb.get());
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
@@ -416,6 +421,9 @@ StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet
             }
         }
     }
+    // Shared-data primary-key tablets only support the cloud-native persistent index; keep the
+    // initial metadata consistent with that invariant regardless of what the FE sent.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     // flat json config
     if (meta.__isset.flat_json_config) {
@@ -476,15 +484,38 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
+    // NOTE: the put_tablet_metadata_us total is already recorded by the caller's scope in
+    // MetaFileBuilder::finalize(); do not re-open it here or the counter would double-count.
     auto t0 = butil::gettimeofday_us();
 
     // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
     // segment_metas (so a BE rolled back to a pre-feature version can still read this metadata),
     // without mutating the shared, immutable metadata object.
     auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
-    RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    {
+        // Deep-copy + legacy-array normalization is pure CPU; time it apart from the remote write.
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_normalize_us");
+        RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    }
 
-    RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    // Record the serialized payload size so a slow publish can be attributed to metadata bloat
+    // (driven by rowset / delvec-entry count) rather than object-store write latency.
+    TRACE_COUNTER_INCREMENT("tablet_meta_bytes", static_cast<int64_t>(serializable_metadata->ByteSizeLong()));
+
+    // Snapshot the thread-local IO counters around the object-store write so the real network
+    // write+sync time is separated from the protobuf serialize CPU inside save_lake_protobuf.
+    // The fs writers record add_write/add_sync into TLS unconditionally, so meta_put_write_ns is
+    // populated even when the global IO profiler is not running.
+    IOProfiler::IOStat io_before;
+    IOProfiler::take_tls_io_snapshot(&io_before);
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_save_us");
+        RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    }
+    const auto io_delta = IOProfiler::calculate_scoped_tls_io(io_before);
+    TRACE_COUNTER_INCREMENT("meta_put_write_ns", static_cast<int64_t>(io_delta.write_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_sync_ns", static_cast<int64_t>(io_delta.sync_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_write_bytes", static_cast<int64_t>(io_delta.write_bytes));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
@@ -750,9 +781,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, const CacheOptions& cache_opts,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-    if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
-        TRACE("got cached tablet metadata");
-        return ptr;
+    if (!cache_opts.skip_meta_cache) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+            TRACE("got cached tablet metadata");
+            return ptr;
+        }
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
@@ -926,8 +959,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
                                                                       int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
     auto tablet_path = tablet_metadata_location(tablet_id, version);
-    if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
-        return ptr;
+    if (!cache_opts.skip_meta_cache) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
+            return ptr;
+        }
     }
     if (version == kInitialVersion) {
         return Status::NotFound("Not found expected tablet metadata");
@@ -1020,6 +1055,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         auto& item = (*metadata->mutable_historical_schemas())[schema_id->second];
         item.CopyFrom(schema_it->second);
     }
+
+    // The schema was stripped from the bundle and only restored above, so the earlier
+    // normalize_tablet_metadata_after_load() could not tell this was a primary-key tablet.
+    // Re-apply the cloud-native persistent index normalization now that keys_type is known.
+    force_cloud_native_pk_persistent_index(metadata.get());
 
     for (auto& [_, schema_id] : metadata->rowset_to_schema()) {
         schema_it = bundle_metadata->schemas().find(schema_id);
@@ -1157,7 +1197,9 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t versi
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
+DEFINE_FAIL_POINT(put_txn_log_fail);
 Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
+    FAIL_POINT_TRIGGER_RETURN(put_txn_log_fail, Status::InternalError("put_txn_log_fail"));
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }

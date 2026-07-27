@@ -18,12 +18,12 @@
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/column_mapping.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_mapping.h"
 
 namespace starrocks {
 

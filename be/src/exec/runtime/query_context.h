@@ -23,12 +23,12 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "compute_env/query/connector_scan_mem_share_arbitrator.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
-#include "exec/pipeline/primitives/query_lifecycle.h"
-#include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/fragment_lifecycle.h"
+#include "exec_primitive/pipeline/primitives/query_lifecycle.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"
@@ -140,14 +140,13 @@ public:
     void incr_transmitted_bytes(int64_t transmitted_bytes) { _total_transmitted_bytes += transmitted_bytes; }
 
     void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
-        _total_read_local_cnt += read_local_cnt;
-        _total_read_remote_cnt += read_remote_cnt;
+        _query_runtime_state.incr_read_stats(read_local_cnt, read_remote_cnt);
     }
 
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
-    int64_t get_read_local_cnt() { return _total_read_local_cnt; }
-    int64_t get_read_remote_cnt() { return _total_read_remote_cnt; }
+    int64_t get_read_local_cnt() const { return _query_runtime_state.get_read_local_cnt(); }
+    int64_t get_read_remote_cnt() const { return _query_runtime_state.get_read_remote_cnt(); }
     int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
 
     void set_scan_limit(int64_t scan_limit) { _scan_limit = scan_limit; }
@@ -207,8 +206,6 @@ private:
     std::once_flag _init_query_once;
     std::once_flag _init_spill_manager_once;
     std::atomic<int64_t> _total_spill_bytes = 0;
-    std::atomic<int64_t> _total_read_local_cnt = 0;
-    std::atomic<int64_t> _total_read_remote_cnt = 0;
     std::atomic<int64_t> _total_transmitted_bytes = 0;
     std::atomic_bool _audit_statistics_reported = false;
 

@@ -26,6 +26,8 @@
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/schema_scanner_factory.h"
+#include "exec/schema_scanner_factory_adapter.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
@@ -45,7 +47,35 @@ public:
                                        int, int64_t) override {}
 };
 
+class FakeSchemaScannerFactory final : public SchemaScannerFactory {
+public:
+    explicit FakeSchemaScannerFactory(bool* destroyed) : _destroyed(destroyed) {}
+    ~FakeSchemaScannerFactory() override { *_destroyed = true; }
+
+    std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type) const override { return nullptr; }
+
+private:
+    bool* _destroyed;
+};
+
 } // namespace
+
+TEST(ExecEnvTest, owns_schema_scanner_factory) {
+    bool destroyed = false;
+    auto factory = std::make_unique<FakeSchemaScannerFactory>(&destroyed);
+    auto* expected = factory.get();
+    ExecEnv env(std::move(factory));
+
+    EXPECT_EQ(expected, env.schema_scanner_factory());
+    EXPECT_EQ(expected, resolve_schema_scanner_factory(&env));
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(nullptr));
+    EXPECT_FALSE(destroyed);
+
+    env.destroy();
+    EXPECT_TRUE(destroyed);
+    EXPECT_EQ(nullptr, env.schema_scanner_factory());
+    EXPECT_EQ(nullptr, resolve_schema_scanner_factory(&env));
+}
 
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
@@ -62,6 +92,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
     EXPECT_EQ(env.compute_env(), nullptr);
@@ -128,6 +159,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor,
+              env.compute_env()->load_spill_block_merge_executor());
     EXPECT_EQ(env.runtime_services().runtime_filter_sender,
               static_cast<RuntimeFilterSender*>(&runtime_filter_services));
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle,
@@ -157,6 +190,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
 
     env._query_context_mgr = nullptr;
     compute_env.destroy();

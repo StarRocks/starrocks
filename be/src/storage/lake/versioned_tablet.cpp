@@ -19,8 +19,8 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks::lake {
 

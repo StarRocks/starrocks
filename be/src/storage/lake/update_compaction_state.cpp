@@ -17,14 +17,15 @@
 #include "base/debug/trace.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -80,9 +81,6 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = _segment_iters[segment_id].get();
-    if (itr == nullptr) {
-        return Status::OK();
-    }
     auto& dest = pk_cols[segment_id];
     auto col = pk_column->clone();
     if (itr != nullptr) {
@@ -99,6 +97,16 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
             }
         }
         itr->close();
+    } else {
+        // A null iterator only appears for a physically-lost segment that get_each_segment_iterator
+        // dropped under experimental_lake_ignore_lost_segment; with the flag off it is an unexpected bug,
+        // so fail loudly. When tolerated, leave the encoded PK column empty (it contributes no rows to the
+        // index) instead of leaving pk_cols[segment_id] null, which the compaction-publish caller
+        // dereferences (pk_col->size() / index.try_replace(*pk_col, ...)).
+        RETURN_ERROR_IF_FALSE(config::experimental_lake_ignore_lost_segment,
+                              strings::Substitute("unexpected null segment iterator at position $0 during "
+                                                  "compaction state collection",
+                                                  segment_id));
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();

@@ -338,12 +338,10 @@ public class CTASAnalyzerTest {
 
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
-        CreateTableAsSelectStmt createTableStmt2 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
 
         String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
-        CreateTableAsSelectStmt createTableStmt3 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
     }
 
     @Test
@@ -397,8 +395,7 @@ public class CTASAnalyzerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create table table_01 PARTITION BY date_trunc('day', k1) as " +
                 "select k1, k2, k3 from  duplicate_table_with_null;";
-        CreateTableAsSelectStmt createTableStmt =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
@@ -536,5 +533,34 @@ public class CTASAnalyzerTest {
         } finally {
             ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }
+    }
+
+    @Test
+    public void testCTASParsesEngineClause() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_with_engine engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithoutEngineClauseParsesEmptyEngine() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_without_engine as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithExplicitOlapEngineAnalyzesSuccessfully() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_explicit_olap engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
     }
 }

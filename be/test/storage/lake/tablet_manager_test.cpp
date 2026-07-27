@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "platform/store_path.h"
@@ -38,7 +39,6 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -1134,6 +1134,70 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {false, true});
     EXPECT_TRUE(res.ok());
     EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
+}
+
+// skip_meta_cache=true must distinguish "durably persisted" from "only in the
+// metacache": a version whose metadata was cached (e.g. during an aggregate
+// publish) but never durably written reads as NotFound.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+
+    // Cache-only: present in the metacache, no durable file.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, metadata);
+
+    // A cache-hitting read sees it...
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    EXPECT_TRUE(res.ok());
+
+    // ...but a skip_meta_cache read reports NotFound.
+    lake::CacheOptions skip_cache_opts{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true};
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+
+    // Same contract on the single-tablet (bundle) read path.
+    res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// With a durable copy present, skip_meta_cache reads it from storage (not the
+// cached copy) and, with fill_meta_cache=true, refreshes the cache with it.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_reads_durable) {
+    constexpr int64_t kDurableCommitTime = 100;
+    constexpr int64_t kStaleCommitTime = 999999;
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    metadata->set_commit_time(kDurableCommitTime);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    // Overwrite the cache entry with a deliberately-different stale copy.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    auto stale = std::make_shared<TabletMetadata>(*metadata);
+    stale->set_commit_time(kStaleCommitTime);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, stale);
+
+    // A cache-hitting read returns the stale copy.
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kStaleCommitTime, res.value()->commit_time());
+
+    // skip_meta_cache returns the durable copy...
+    res = _tablet_manager->get_tablet_metadata(
+            tablet_id, 2,
+            lake::CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kDurableCommitTime, res.value()->commit_time());
+
+    // ...and fill_meta_cache=true refreshed the cache with it.
+    auto cached = _tablet_manager->metacache()->lookup_tablet_metadata(path);
+    ASSERT_TRUE(cached != nullptr);
+    EXPECT_EQ(kDurableCommitTime, cached->commit_time());
 }
 
 TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {

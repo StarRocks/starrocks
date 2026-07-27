@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -118,6 +120,15 @@ public class StatisticsCollectJobFactory {
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
+
+            if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+                columnNames = columnNames.stream()
+                        .filter(name -> {
+                            Column col = table.getColumn(name);
+                            return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
+                        })
+                        .collect(Collectors.toList());
+            }
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
         // for compatibility, if columnTypes is null, we will get column types from table
@@ -328,9 +339,33 @@ public class StatisticsCollectJobFactory {
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
 
+        boolean userSpecifiedColumns = CollectionUtils.isNotEmpty(columnNames);
         if (columnNames == null || columnNames.isEmpty()) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
         }
+
+        // Use predicate columns if suitable: only when the user didn't pin down columns explicitly
+        // and the table is wide enough that collecting everything is wasteful. Falls back to the
+        // full column list when no predicate columns are known yet (e.g. table never queried).
+        // Also gated on the collection toggle itself: once disabled, operators must be able to force
+        // full-column collection immediately rather than waiting for stale rows to age out via TTL.
+        if (Config.enable_external_predicate_columns_collection && !userSpecifiedColumns
+                && Config.statistic_auto_collect_predicate_columns_threshold > 0
+                && columnNames.size() > Config.statistic_auto_collect_predicate_columns_threshold) {
+            List<ExternalColumnUsage> predicateColumns =
+                    PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table);
+            if (CollectionUtils.isNotEmpty(predicateColumns)) {
+                Set<String> predicateColumnNames = predicateColumns.stream()
+                        .map(ExternalColumnUsage::getColumnName)
+                        .collect(Collectors.toSet());
+                List<String> filtered =
+                        columnNames.stream().filter(predicateColumnNames::contains).collect(Collectors.toList());
+                if (!filtered.isEmpty()) {
+                    columnNames = filtered;
+                }
+            }
+        }
+
         List<String> needCollectStatsColumns;
         if (basicStatsMeta != null) {
             // check table row count

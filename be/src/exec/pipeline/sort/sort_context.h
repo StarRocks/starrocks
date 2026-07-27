@@ -27,10 +27,10 @@
 #include "compute_env/sorting/sort_cursor.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 

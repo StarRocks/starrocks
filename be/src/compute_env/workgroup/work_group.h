@@ -27,8 +27,8 @@
 #include "base/types/int128.h"
 #include "common/statusor.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "gen_cpp/WorkGroup_types.h"
 #include "runtime/mem_tracker.h"
 

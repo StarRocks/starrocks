@@ -17,6 +17,7 @@
 #include <cstdio>
 
 #include "common/configbase.h"
+#include "common/system/cpu_info.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "types/time_types.h"
 
@@ -32,6 +33,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     starrocks::date::init_date_cache();
+    starrocks::CpuInfo::init();
 
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

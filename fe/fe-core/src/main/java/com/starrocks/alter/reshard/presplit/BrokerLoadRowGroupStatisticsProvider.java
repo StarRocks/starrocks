@@ -50,6 +50,13 @@ import java.util.List;
  * FE-local access cannot reach. Routing footer reads through a
  * broker-backed seekable input is a deliberate follow-up.
  *
+ * <p>Non-identity file groups (per-group {@code WHERE}, {@code SET}/explicit
+ * column list, {@code columns_from_path}, negative-load, or legacy hadoop
+ * functions) map or filter the sort key, so the raw footer column would diverge
+ * from the loaded value; they are rejected before any footer read (reusing the
+ * data tier's {@code rejectNonIdentityFileGroups} guard) and fall back to data
+ * tier, which skips pre-split for the same shapes.
+ *
  * <p>Hadoop-side wiring (configuration build, broker → Hadoop file-status
  * conversion) is shared with the INSERT-from-FILES provider via
  * {@link PreSplitHadoopAccess}.
@@ -63,10 +70,18 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
         rejectIfBrokerBacked(brokerDesc);
         List<BrokerFileGroup> fileGroups = context.fileGroups();
         List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
-        // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
-        // before this provider is invoked, so a single-element sort key is the
-        // contract by the time we get here.
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
+
+        // A non-identity file group (per-group WHERE / SET / columns_from_path / negative-load / hadoop
+        // functions) maps or filters the sort key, so the raw footer column diverges from the value the
+        // load actually inserts and footer-derived boundaries would be skewed. Reuse the data tier's
+        // identity guard as the single source of truth; on rejection defer to the data tier, which
+        // rejects the same shapes and skips pre-split.
+        try {
+            BrokerLoadSampleSubqueryExecutor.rejectNonIdentityFileGroups(fileGroups);
+        } catch (StarRocksException nonIdentity) {
+            throw new MetaTierUnavailableException(nonIdentity.getMessage());
+        }
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
 
@@ -86,7 +101,7 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
                         Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
                 FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
+                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
             }
         }
         return aggregated;

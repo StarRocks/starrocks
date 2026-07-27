@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/cache_options.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
@@ -30,23 +31,21 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
+#include "formats/scan_context.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class RandomAccessFile;
 struct FormatScannerStats;
-struct HdfsScannerContext;
 class ExprContext;
 class TIcebergSchemaField;
-class THdfsScanRange;
 
 namespace parquet {
 class ColumnMaterializer;
@@ -86,7 +85,7 @@ struct GroupReaderParam {
     // Always non-null when used from FileReader; may be null in unit tests.
     // Non-const because unit tests need to populate the context fields after
     // construction; GroupReader treats it as read-only by convention.
-    HdfsScannerContext* scanner_ctx = nullptr;
+    FormatScanContext* scan_ctx = nullptr;
 
     // conjunct_ctxs that column is materialized in group reader
     // Mutable per-group-reader shallow copy of the scanner context's by_slot map;
@@ -116,7 +115,6 @@ struct GroupReaderParam {
     // Kept directly in GroupReaderParam for test-compatibility; also used by
     // _get_extended_bigint_value() to read extended_columns from the scan range.
     int32_t scan_range_id = -1;
-    const THdfsScanRange* scan_range = nullptr;
 };
 
 class GroupReader {
@@ -125,8 +123,6 @@ class GroupReader {
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
-    GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
-                int64_t row_group_first_row, int64_t row_group_first_row_id);
     ~GroupReader();
 
     Status init();
@@ -199,7 +195,6 @@ private:
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
-    int64_t _row_group_first_row_id = 0;
     SkipRowsContextPtr _skip_rows_ctx;
 
     // column readers for column chunk in row group

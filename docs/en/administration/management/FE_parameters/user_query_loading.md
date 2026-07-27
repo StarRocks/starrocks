@@ -100,6 +100,33 @@ This topic introduces the following types of FE configurations:
 - Description: The estimated average row size in bytes used by the optimizer to estimate row counts for external file tables (FILES() and ENGINE=file tables) when the storage format is unknown or the column schema is not available. The row count is estimated as `total_file_bytes / connector_row_size_estimate_bytes`. A smaller value produces a higher row count estimate and may affect join ordering decisions.
 - Introduced in: v3.4
 
+### `connector_table_analyze_scan_bytes_cap`
+
+- Default: 2147483648 (2 GB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The primary per-scan byte budget for external-table statistics collection (Iceberg). Each per-(partition, column) statistics scan accumulates the byte size of the splits it opens and stops early once this budget is reached (a soft cap: the last split may overshoot), so an oversized single partition or unpartitioned table is collected as a bounded, degraded sample instead of failing or timing out. A value of `0` or less means this dimension is unlimited. Calibrate against the number of columns collected, because a partition runs one independent scan per column. Set this and `connector_table_analyze_scan_files_cap` and `connector_table_analyze_scan_rows_cap` all to `0` or less to disable bounded-cost collection entirely and fall back to full scans. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")`.
+- Introduced in: v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- Default: 1000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The secondary per-scan file-count budget for external-table statistics collection (Iceberg). A statistics scan stops early once it has opened this many files, which caps the cost of a partition made up of a very large number of small files. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")`.
+- Introduced in: v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- Default: 10000000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The auxiliary per-scan estimated-row budget for external-table statistics collection (Iceberg). A statistics scan stops early once the estimated number of rows it has scanned reaches this budget. Because per-split row counts can only be estimated (the record count is recorded per file, not per split), this is an auxiliary soft budget rather than the primary control. The default aligns with `connector_table_query_trigger_analyze_small_table_rows`. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")`.
+- Introduced in: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - Default: 12 * 3600
@@ -202,7 +229,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `enable_active_materialized_view_schema_strict_check`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -225,7 +252,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable automatic collection for the NDV information of the ARRAY type.
-- Introduced in: v4.0
+- Introduced in: v4.1
 
 ### `enable_backup_materialized_view`
 
@@ -288,7 +315,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable manual collection for the NDV information of the ARRAY type.
-- Introduced in: v4.0
+- Introduced in: v4.1
 
 ### `enable_materialized_view`
 
@@ -360,6 +387,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
+- Introduced in: -
+
+### `push_down_non_grouped_aggregate_below_union`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to push down non-grouped aggregations below Union in the physical plan.
 - Introduced in: -
 
 ### `enable_query_queue_v2`
@@ -448,6 +484,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Timeout to synchronously wait for stats (when `enable_sync_statistics_load` is enabled). When the stats are not available during this time, the query will proceed without the stats, which may lead to suboptimal plans. Set this value to a reasonable time based on your cluster's performance and workload characteristics.
+- Introduced in: -
+
+### `sync_statistics_load_per_query_budget_ms`
+
+- Default: -1
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Total per-query budget for synchronously waiting for statistics when `enable_sync_statistics_load` is enabled. `-1` uses `sync_statistics_load_timeout_ms` as the total budget. `0` disables synchronous waiting for statistics. A positive value sets an explicit total budget. Each individual statistics wait is still capped by `sync_statistics_load_timeout_ms`, and when the budget is exhausted, the query proceeds without unavailable statistics.
 - Introduced in: -
 
 
@@ -633,18 +678,18 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `max_scalar_operator_flat_children`
 
-- Default：10000
-- Type：Int
-- Unit：-
+- Default: 10000
+- Type: Int
+- Unit: -
 - Is mutable: Yes
-- Description：The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
+- Description: The maximum number of flat children for ScalarOperator. You can set this limit to prevent the optimizer from using too much memory.
 - Introduced in: -
 
 ### `max_scalar_operator_optimize_depth`
 
-- Default：256
-- Type：Int
-- Unit：-
+- Default: 256
+- Type: Int
+- Unit: -
 - Is mutable: Yes
 - Description: The maximum depth that ScalarOperator optimization can be applied.
 - Introduced in: -
@@ -682,11 +727,11 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `query_queue_slots_estimator_strategy`
 
-- Default: MAX
+- Default: PBE
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: Selects the slot estimation strategy used for queue-based queries when `enable_query_queue_v2` is true. Valid values: MBE (memory-based), PBE (parallelism-based), MAX (take max of MBE and PBE) and MIN (take min of MBE and PBE). MBE estimates slots from predicted memory or plan costs divided by the per-slot memory target and is capped by `totalSlots`. PBE derives slots from fragment parallelism (scan range counts or cardinality / rows-per-slot) and a CPU-cost based calculation (using CPU costs per slot), then bounds the result within [numSlots/2, numSlots]. MAX and MIN combine MBE and PBE by taking their maximum or minimum respectively. If the configured value is invalid, the default (`MAX`) is used.
+- Description: Selects the slot estimation strategy used for queue-based queries when `enable_query_queue_v2` is true. Valid values: `PBE` (parallelism-based, the default), `MBE` (memory-cost-based), and `CBE` (CPU-cost-based). PBE estimates a query's slots from scan parallelism, capped by the worker count: for OLAP tables it uses the number of scan ranges left after pruning, so only very small queries fall below the worker count; a connector/external scan is treated as a full-parallelism scan (the worker count) rather than a single-slot query. MBE estimates slots from the query's memory cost divided by `query_queue_v2_mem_bytes_per_slot`. CBE estimates slots from the plan CPU cost divided by `query_queue_v2_cpu_costs_per_slot`. MBE and CBE per-query slots are additionally capped by `number_of_workers * max(1, pipeline_dop / 2)`. The legacy values `MAX` and `MIN` are still accepted for forward compatibility and are treated as the default estimator; any other value is rejected by configuration validation.
 - Introduced in: v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -695,7 +740,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls how many logical concurrency "layers" are used when computing the system's total query slots. In shared-nothing mode the total slots = `query_queue_v2_concurrency_level` * number_of_BEs * cores_per_BE (derived from BackendResourceStat). In multi-warehouse mode the effective concurrency is scaled down to max(1, `query_queue_v2_concurrency_level` / 4). If the configured value is non-positive it is treated as `4`. Changing this value increases or decreases totalSlots (and therefore concurrent query capacity) and affects per-slot resources: memBytesPerSlot is derived by dividing per-worker memory by (cores_per_worker * concurrency), and CPU accounting uses `query_queue_v2_cpu_costs_per_slot`. Set it proportional to cluster size; very large values may reduce per-slot memory and cause resource fragmentation. 
+- Description: Interpreted as a capacity level relative to the default level `4`. For the default (PBE) and CPU-cost-based (CBE) estimators, the system's total query slots are computed as `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)` (derived from BackendResourceStat). For the memory-cost-based estimator (MBE), the total slots are instead derived from the warehouse memory budget. If the configured value is non-positive it is treated as `4`. total_slots is clamped to at least `number_of_workers`. Increasing this value raises totalSlots (and therefore concurrent query capacity); at the default `4` the total capacity equals `number_of_workers * cores_per_worker`. Set it proportional to the concurrency you want for the cluster.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -704,8 +749,17 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: planner CPU cost units
 - Is mutable: Yes
-- Description: Per-slot CPU cost threshold used to estimate how many slots a query needs from its planner CPU cost. The scheduler computes slots as integer(`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) and then clamps the result to the range [1, totalSlots] (totalSlots is derived from the query queue V2 `V2` parameters). The V2 code normalizes non-positive settings to 1 (Math.max(1, value)), so a non-positive value effectively becomes `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. Tune together with `query_queue_v2_num_rows_per_slot` and concurrency settings to control parallelism vs. resource granularity.
+- Description: Per-slot CPU cost threshold used by the CPU-cost-based estimator (CBE) to estimate how many slots a query needs from its plan CPU cost. The scheduler computes slots as `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` and clamps the result to the range `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]`. A non-positive value is normalized to `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Per-slot memory target used by the memory-cost-based estimator (MBE). When `query_queue_slots_estimator_strategy` is `MBE`, the total slots are derived from the warehouse memory budget, and a query's slots are estimated from its total memory cost divided by this value, capped by `number_of_workers * max(1, pipeline_dop / 2)`. If it is non-positive, Query Queue V2 uses the average worker memory per core.
+- Introduced in: -
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -713,7 +767,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: The target number of source-row records assigned to a single scheduling slot when estimating per-query slot count. StarRocks computes `estimated_slots` = (cardinality of the Source Node) / `query_queue_v2_num_rows_per_slot`, then clamps the result to the range [1, totalSlots] and enforces a minimum of 1 if the computed value is non-positive. totalSlots is derived from available resources (roughly DOP * `query_queue_v2_concurrency_level` * number_of_workers/BE) and therefore depends on cluster/core counts. Increase this value to reduce slot count (each slot handles more rows) and lower scheduling overhead; decrease it to increase parallelism (more, smaller slots), up to the resource limit.
+- Description: Retained for backward compatibility with existing Query Queue V2 serialized and debug output. It is no longer used by the PBE, MBE, or CBE slot estimators.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
@@ -736,7 +790,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `slow_query_analyze_threshold`
 
-- Default: 5
+- Default: 5000
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -806,9 +860,18 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The size of the thread-pool which will be used to refresh statistic caches.
 - Introduced in: -
 
+### `enable_statistic_cache_metrics`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable statistics recording on the statistics caches held by `CachedStatisticStorage` (column, table, partition, histogram, connector, and multi-column statistics). 
+- Introduced in: -
+
 ### `statistic_collect_interval_sec`
 
-- Default: 5 * 60
+- Default: 10 * 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -934,7 +997,25 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable the File Bundling optimization for the cloud-native table. When this feature is enabled (set to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system. You can also control this behavior on the table level using the CREATE TABLE property `file_bundling`. For detailed instructions, see CREATE TABLE.
-- Introduced in: v4.0
+- Introduced in: v4.1
+
+### `enable_pipeline_routine_load`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether Routine Load tasks execute on the pipeline engine. When enabled, each task runs in-process on its assigned BE (which consumes data from Kafka/Pulsar) instead of on the legacy non-pipeline engine. When set to `false` (default), Routine Load uses the legacy execution path, so the behavior is identical to before. Enable this only after **all BE nodes have been upgraded** to a version that supports pipeline load; enabling it while some BEs still run an older version can cause a load to silently commit zero rows (the older BE ignores the pipeline scan ranges).
+- Introduced in: -
+
+### `enable_pipeline_stream_load`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the classic synchronous Stream Load executes on the pipeline engine instead of on the legacy non-pipeline engine. When set to `false` (default), Stream Load uses the legacy execution path, so the behavior is identical to before. (For Routine Load, use `enable_pipeline_routine_load`.) Enable this only after **all BE nodes have been upgraded** to a version that supports pipeline load; enabling it while some BEs still run an older version can cause a load to silently commit zero rows (the older BE ignores the pipeline scan ranges).
+- Introduced in: -
 
 ### `enable_routine_load_lag_metrics`
 

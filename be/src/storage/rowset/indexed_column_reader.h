@@ -43,12 +43,12 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/parsed_page.h"
 #include "storage/types.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

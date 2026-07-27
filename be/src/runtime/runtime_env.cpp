@@ -20,16 +20,18 @@
 #include "base/string/parse_util.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_metrics_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/statusor.h"
 #include "common/system/mem_info.h"
 #include "platform/python/env.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/diagnose_daemon.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "runtime/process_memory_metrics.h"
 #include "types/hll.h"
 
 namespace starrocks {
@@ -42,6 +44,10 @@ RuntimeEnv::~RuntimeEnv() {
 
 int64_t RuntimeEnv::process_mem_limit() const {
     return _process_mem_tracker->limit();
+}
+
+ProcessMemoryMetrics* RuntimeEnv::process_memory_metrics() const {
+    return ProcessMemoryMetrics::instance();
 }
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -117,6 +123,10 @@ MemTracker* process_mem_tracker_provider() {
 
 bool RuntimeEnv::_is_init = false;
 
+JavaEnv* JavaEnv::GetInstance() {
+    return RuntimeEnv::GetInstance()->java_env();
+}
+
 bool RuntimeEnv::is_init() {
     return _is_init;
 }
@@ -142,14 +152,17 @@ void RuntimeEnv::stop() {
         _diagnose_daemon->stop();
         _diagnose_daemon.reset();
     }
+    _java_env.shutdown();
     _thread_pools.shutdown();
+    _java_env.destroy();
     _thread_pools.destroy();
     _is_init = false;
     _reset_tracker();
 }
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
-    return _thread_pools.init_execution_thread_pools(metrics);
+    RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
+    return _java_env.init(metrics, config::enable_jvm_metrics);
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {
