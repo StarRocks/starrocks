@@ -26,15 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
->>>>>>> 4ba3e45e2e ([BugFix] Fix nullsFraction clamp in LargeOrCalculatingVisitor (#75864))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -595,7 +588,7 @@ public class PredicateStatisticsCalculatorTest {
     @Test
     public void testLargeOrNullsFractionIsAveragedNotFloored() {
         // GIVEN a column with no nulls
-        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var aColumn = new ColumnRefOperator(0, Type.VARCHAR, "a", true);
         final var statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(aColumn, ColumnStatistic.builder()
