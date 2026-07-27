@@ -187,6 +187,25 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     }
 }
 
+Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                                    uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                                    const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    // Only the cloud-native persistent index supports ingesting a tombstone sstable; callers gate on
+    // use_cloud_native_pk_index() and on a pre-built del sstable being present before choosing this path.
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");
+    }
+    Buffer<Slice> keys;
+    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+    ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    RETURN_IF_ERROR(lake_persistent_index->bulk_erase(pks.size(), vkeys,
+                                                      reinterpret_cast<IndexValue*>(old_values.data()), del_rssid,
+                                                      del_sst_meta, del_sst_range, version));
+    old_values_to_deletes(old_values, deletes);
+    return Status::OK();
+}
+
 int32_t LakePrimaryIndex::current_fileset_index() const {
     if (_persistent_index == nullptr) {
         return -1;

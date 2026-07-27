@@ -901,6 +901,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
+    // Pre-built tombstone sstables for the del files (eager build only), parallel to dels_meta.
+    for (const auto& del_sst : _tablet_writer->del_ssts()) {
+        to_file_meta_pb(del_sst, op_write->add_del_ssts());
+    }
+    for (auto& del_sst_range : _tablet_writer->del_sst_ranges()) {
+        op_write->add_del_sst_ranges()->CopyFrom(del_sst_range);
+    }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);

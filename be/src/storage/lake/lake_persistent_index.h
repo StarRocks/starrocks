@@ -78,6 +78,15 @@ public:
         return Status::NotSupported("LakePersistentIndex::erase not supported");
     }
 
+    // Apply a large delete by ingesting the tombstone sstable |del_sst_meta| that was pre-built at import
+    // time (PkTabletWriter::flush_del_file), instead of inserting every key into the memtable. Flushes the
+    // memtable first (so the ingested sstable becomes the newest layer), reverse-looks-up each key's
+    // rss_rowid into |old_values| for the delete vector, then ingests the sstable stamped with |del_rssid|
+    // and |version| (the sstable was written with entry version 0). Cloud-native only.
+    Status bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
+                      const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
+                      int64_t version);
+
     // batch insert delete operations, used when rebuild index.
     // |n|: size of key/value array
     // |keys|: key array as raw buffer

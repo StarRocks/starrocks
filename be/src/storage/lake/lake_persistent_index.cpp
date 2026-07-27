@@ -14,6 +14,8 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <algorithm>
+#include <numeric>
 #include <unordered_map>
 
 #include "base/debug/trace.h"
@@ -24,6 +26,7 @@
 #include "column/serde/column_array_serde.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
 #include "platform/key_cache.h"
@@ -557,6 +560,102 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // Flush only after every reverse lookup has finished: flush_memtable may merge a flushed memtable
     // into _sstable_filesets, which the concurrent readers above must not race with.
     RETURN_IF_ERROR(flush_memtable());
+    return Status::OK();
+}
+
+Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
+                                       const FileMetaPB& del_sst_meta,
+                                       const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    if (n == 0) {
+        return Status::OK();
+    }
+    TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_us");
+    // 1. Flush the active + inactive memtables so every live value sits in an sstable. The tombstone
+    //    sstable ingested below carries max_rss_rowid = del_rssid<<32|UINT32_MAX, and del_rssid uses this
+    //    publish's freshly-allocated (largest) rowset id, so it becomes the newest layer and correctly
+    //    shadows those sstables. Idempotent: a no-op once the memtable is already empty, so calling this
+    //    once per del file within the same pure-delete publish only flushes on the first call.
+    RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+
+    // 2. Reverse-lookup each key's current rss_rowid from the sstables (memtables are now empty) into
+    //    old_values so the caller can build the delete vector. Read-only, so parallelise it across
+    //    contiguous key-index subsets. Each subset builds its own small KeyIndexSet (avoiding one giant
+    //    not_founds set) and writes disjoint positions of old_values -- only the shared status is locked.
+    const size_t chunk = config::pk_index_parallel_execution_min_rows > 0
+                                 ? static_cast<size_t>(config::pk_index_parallel_execution_min_rows)
+                                 : 16384;
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution && n > chunk &&
+        (!_sstable_filesets.empty() || !_inactive_memtables.empty())) {
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    std::mutex mutex;
+    Status status;
+    auto lookup_range = [this, keys, old_values, n, &mutex, &status](size_t s, size_t e) {
+        KeyIndexSet key_indexes;
+        for (size_t i = s; i < e; ++i) {
+            key_indexes.insert(i);
+        }
+        auto st = get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1);
+        if (st.ok()) {
+            st = get_from_sstables(n, keys, old_values, &key_indexes, -1);
+        }
+        if (!st.ok()) {
+            std::lock_guard<std::mutex> l(mutex);
+            status.update(st);
+        }
+    };
+    if (token == nullptr) {
+        for (size_t s = 0; s < n; s += chunk) {
+            lookup_range(s, std::min(s + chunk, n));
+            RETURN_IF_ERROR(status);
+        }
+    } else {
+        TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_lookup_wait_us");
+        for (size_t s = 0; s < n; s += chunk) {
+            size_t e = std::min(s + chunk, n);
+            auto func = [&lookup_range, s, e]() { lookup_range(s, e); };
+            auto submit_st = token->submit_func(func);
+            if (!submit_st.ok()) {
+                func();
+            }
+        }
+        token->wait();
+        RETURN_IF_ERROR(status);
+    }
+
+    // 3. Ingest the tombstone sstable that was pre-built at import time (see PkTabletWriter::flush_del_file),
+    //    instead of building one here -- this removes the per-key sstable-build cost from the publish
+    //    critical path. The sstable was written with entry version 0; stamp the publish version at read
+    //    time via shared_version (PersistentIndexSstable::multi_get projects it onto tombstones while
+    //    preserving the rssid/rowid sentinel). shared_version>0 requires shared_rssid, which tombstones
+    //    ignore. max_rss_rowid = del_rssid<<32|UINT32_MAX (delete-row sentinel; del_rssid uses this
+    //    publish's largest rowset id) makes the tombstone sstable the newest fileset layer so it shadows
+    //    the existing rows -- ordering identical to a memtable-flushed tombstone.
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    RandomAccessFileOptions ropts;
+    if (!del_sst_meta.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(ropts.encryption_info,
+                         KeyCache::instance().unwrap_encryption_meta(del_sst_meta.encryption_meta()));
+    }
+    auto location = _tablet_mgr->sst_location(_tablet_id, del_sst_meta.name());
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(ropts, location));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(del_sst_meta.name());
+    sstable_pb.set_filesize(del_sst_meta.size());
+    sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(del_rssid) << 32) | static_cast<uint64_t>(UINT32_MAX));
+    sstable_pb.set_encryption_meta(del_sst_meta.encryption_meta());
+    sstable_pb.set_shared_version(version);
+    sstable_pb.set_shared_rssid(del_rssid);
+    sstable_pb.mutable_range()->CopyFrom(del_sst_range);
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    TRACE_COUNTER_INCREMENT("bulk_erase_keys", n);
     return Status::OK();
 }
 

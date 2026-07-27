@@ -95,6 +95,14 @@ public:
     // (cloud native index only).
     Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
 
+    // Same as erase(), but applies the delete by ingesting the tombstone sstable |del_sst_meta| that was
+    // pre-built at import time, instead of writing every key into the memtable. |pks| still supplies the
+    // keys reverse-looked-up to build the delete vector. Intended for large deletes on tables with eager
+    // PK-index build. Cloud-native index only.
+    Status bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid,
+                      const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
+                      int64_t version);
+
     int32_t current_fileset_index() const;
 
     StatusOr<AsyncCompactCBPtr> early_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr,

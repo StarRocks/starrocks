@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
@@ -30,6 +32,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -399,6 +402,108 @@ TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
         }
     }
     ASSERT_EQ(found, kTotal); // every key was resolved through the sstable reverse lookup
+}
+
+// bulk_erase (ingest a pre-built tombstone sstable, bypassing the memtable) must be observationally
+// identical to the memtable erase(): same reverse-looked-up old_values (delvec inputs) AND the deleted
+// keys must read back as tombstones while the untouched keys keep their values.
+TEST_F(LakePersistentIndexTest, test_bulk_erase_matches_memtable) {
+    auto saved_l0 = config::l0_max_mem_usage;
+    auto saved_min_rows = config::pk_index_parallel_execution_min_rows;
+    config::l0_max_mem_usage = 10;                       // force flushes -> keys live in sstables
+    config::pk_index_parallel_execution_min_rows = 1000; // small -> exercise the parallel reverse-lookup
+    DeferOp restore([&]() {
+        config::l0_max_mem_usage = saved_l0;
+        config::pk_index_parallel_execution_min_rows = saved_min_rows;
+    });
+
+    using Key = uint64_t;
+    const int N = 20000; // total keys
+    const int M = 16000; // keys to delete (0..M-1); keep M..N-1
+    const uint32_t del_rssid = 100;
+
+    std::vector<Key> keys(N);
+    std::vector<Slice> key_slices(N);
+    for (int i = 0; i < N; ++i) {
+        keys[i] = i;
+        key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    // Build a fresh index with all N keys flushed into sstables (active memtable empty). Value = key+1
+    // so every key has a distinct, non-null rss_rowid the reverse lookup must recover.
+    auto build_index = [&]() {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+        CHECK_OK(index->init(_tablet_metadata));
+        const int batches = 4, per = N / 4;
+        for (int b = 0; b < batches; ++b) {
+            std::vector<Slice> bks(per);
+            std::vector<IndexValue> bv(per);
+            for (int j = 0; j < per; ++j) {
+                int gid = b * per + j;
+                bks[j] = key_slices[gid];
+                bv[j] = IndexValue((uint64_t)(gid + 1));
+            }
+            index->prepare(EditVersion(b + 1, 0), 0);
+            std::vector<IndexValue> old(per);
+            CHECK_OK(index->upsert(per, bks.data(), bv.data(), old.data()));
+            CHECK_OK(index->flush_memtable(true));
+            CHECK_OK(index->sync_flush_all_memtables(10000000));
+        }
+        index->prepare(EditVersion(batches + 1, 0), 0); // version stamped on the delete tombstones
+        return index;
+    };
+
+    // Path A: memtable erase.
+    auto idx_a = build_index();
+    std::vector<IndexValue> ov_a(M, IndexValue(NullIndexValue));
+    ASSERT_OK(idx_a->erase(M, key_slices.data(), ov_a.data(), del_rssid));
+
+    // Path B: bulk_erase -- pre-build a tombstone sstable from the delete keys (exactly as the writer does
+    // at import time), then apply the delete by ingesting it. TableBuilder requires bytewise-ascending
+    // keys, so sort a copy for the sstable; the reverse-lookup takes the original key order (independent).
+    std::vector<Slice> sorted_del(key_slices.begin(), key_slices.begin() + M);
+    std::sort(sorted_del.begin(), sorted_del.end(), [](const Slice& a, const Slice& b) { return a.compare(b) < 0; });
+    const std::string del_sst_name = "test_bulk_erase_tombstone.sst";
+    ASSIGN_OR_ABORT(auto del_sst_wf,
+                    fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), del_sst_name)));
+    uint64_t del_sst_filesize = 0;
+    PersistentIndexSstableRangePB del_sst_range;
+    ASSERT_OK(PersistentIndexSstable::build_tombstone_sstable(sorted_del.data(), M, /*version=*/0, del_sst_wf.get(),
+                                                              &del_sst_filesize, &del_sst_range));
+    ASSERT_OK(del_sst_wf->close());
+    FileMetaPB del_sst_meta;
+    del_sst_meta.set_name(del_sst_name);
+    del_sst_meta.set_size(del_sst_filesize);
+
+    auto idx_b = build_index();
+    std::vector<IndexValue> ov_b(M, IndexValue(NullIndexValue));
+    ASSERT_OK(idx_b->bulk_erase(M, key_slices.data(), ov_b.data(), del_rssid, del_sst_meta, del_sst_range,
+                                /*version=*/5));
+
+    // 1. Reverse-looked-up old values must match bit-for-bit and recover the inserted value (key+1).
+    for (int i = 0; i < M; ++i) {
+        ASSERT_EQ(ov_a[i].get_value(), ov_b[i].get_value()) << "old_value mismatch at " << i;
+        ASSERT_EQ(ov_a[i].get_value(), (uint64_t)(i + 1)) << "old_value wrong at " << i;
+    }
+
+    // 2. Deleted keys must read back as tombstones on both paths.
+    std::vector<IndexValue> get_a(M), get_b(M);
+    ASSERT_OK(idx_a->get(M, key_slices.data(), get_a.data()));
+    ASSERT_OK(idx_b->get(M, key_slices.data(), get_b.data()));
+    for (int i = 0; i < M; ++i) {
+        ASSERT_EQ(NullIndexValue, get_a[i].get_value()) << "memtable path: key " << i << " not deleted";
+        ASSERT_EQ(NullIndexValue, get_b[i].get_value()) << "sst path: key " << i << " not deleted";
+    }
+
+    // 3. Untouched keys (M..N-1) must keep their values on both paths.
+    const int R = N - M;
+    std::vector<IndexValue> keep_a(R), keep_b(R);
+    ASSERT_OK(idx_a->get(R, key_slices.data() + M, keep_a.data()));
+    ASSERT_OK(idx_b->get(R, key_slices.data() + M, keep_b.data()));
+    for (int i = 0; i < R; ++i) {
+        ASSERT_EQ(keep_a[i].get_value(), (uint64_t)(M + i + 1)) << "memtable path: kept key wrong at " << i;
+        ASSERT_EQ(keep_b[i].get_value(), (uint64_t)(M + i + 1)) << "sst path: kept key wrong at " << i;
+    }
 }
 
 TEST_F(LakePersistentIndexTest, test_replace) {

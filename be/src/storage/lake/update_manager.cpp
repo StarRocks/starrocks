@@ -448,13 +448,29 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Plan how del files interleave with segments (see DelInterleavePlan / build_del_interleave_plan).
     DelInterleavePlan del_plan =
             build_del_interleave_plan(op_write, rowset_id, assigned_global_segments, max_segment_id, del_rebuild_rssid);
+    // The writer pre-builds a tombstone sstable for each sufficiently large del file (see
+    // PkTabletWriter::flush_del_file). del_ssts is parallel to dels_meta (index by del_id); an entry with
+    // an empty name means that del file has no pre-built sstable. When a del file has one, apply the delete
+    // by ingesting it instead of inserting every deleted key into the persistent-index memtable -- the
+    // per-key insert otherwise dominates a large delete's publish. Otherwise (small del file, cloud-native
+    // index disabled, or a pre-upgrade writer with no del_ssts) fall back to the memtable erase path. The
+    // deleted keys' rss_rowid is still reverse-looked-up from the existing index to build the delete vector.
+    const bool del_ssts_aligned = use_cloud_native_pk_index(*metadata) &&
+                                  op_write.del_ssts_size() == op_write.dels_meta_size() &&
+                                  op_write.del_sst_ranges_size() == op_write.dels_meta_size();
     // Apply one del file's erase into the index with its own rssid, recording shadowed rows in
     // `new_deletes`. Called at the interleave point (right after the segment it follows) so the
     // upsert/delete order within this transaction is preserved.
     auto apply_one_del = [&](uint32_t del_id) -> Status {
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_plan.del_rssids[del_id]));
+        if (del_ssts_aligned && !op_write.del_ssts(del_id).name().empty()) {
+            RETURN_IF_ERROR(index.bulk_erase(metadata, *state.deletes(del_id), &new_deletes,
+                                             del_plan.del_rssids[del_id], op_write.del_ssts(del_id),
+                                             op_write.del_sst_ranges(del_id), metadata->version()));
+        } else {
+            RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_plan.del_rssids[del_id]));
+        }
         _index_cache.update_object_size(index_entry, index.memory_usage());
         state.release_delete(del_id);
         del_plan.del_applied[del_id] = true;
@@ -616,7 +632,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                          current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
-    }     // end batch loop
+    } // end batch loop
     if (async_compact_cb) {
         TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
         RETURN_IF_ERROR(async_compact_cb->wait_for());
