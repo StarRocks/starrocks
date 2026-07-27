@@ -18,26 +18,12 @@ DROP STORAGE VOLUME builtin_storage_volume;
 CREATE TABLE db_bound_${uuid0}.t1 (k1 INT, v1 VARCHAR(10)) DISTRIBUTED BY HASH(k1) BUCKETS 1;
 -- result:
 -- !result
+CLEANUP {
 SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
--- result:
--- !result
-DROP TABLE db_bound_${uuid0}.t1 FORCE;
--- result:
--- !result
+DROP TABLE IF EXISTS db_bound_${uuid0}.t1 FORCE;
 ALTER DATABASE db_bound_${uuid0} SET("storage_volume" = "builtin_storage_volume");
--- result:
--- !result
-DROP DATABASE db_bound_${uuid0} FORCE;
--- result:
--- !result
-DROP DATABASE db_builtin_${uuid0} FORCE;
--- result:
--- !result
+DROP DATABASE IF EXISTS db_bound_${uuid0} FORCE;
+DROP DATABASE IF EXISTS db_builtin_${uuid0} FORCE;
 shell: sleep 10
--- result:
-0
-
--- !result
-DROP STORAGE VOLUME sv_${uuid0};
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS sv_${uuid0};
+} END CLEANUP

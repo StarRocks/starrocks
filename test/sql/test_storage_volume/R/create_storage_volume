@@ -30,9 +30,11 @@ DROP STORAGE VOLUME IF EXISTS storage_volume_create;
 SHOW STORAGE VOLUMES like 'storage_volume_create';
 -- result:
 -- !result
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_create;
+} END CLEANUP
+
 -- name: test_create_s3_storage_volume_with_partitioned_prefix @cloud @sequential
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="false");
 -- result:
@@ -55,6 +57,7 @@ E: (1064, "Invalid property value 'aa' for property 'aws.s3.num_partitioned_pref
 DROP STORAGE VOLUME IF EXISTS storage_volume_partioned_prefix_success;
 -- result:
 -- !result
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_partioned_prefix_success;
+} END CLEANUP

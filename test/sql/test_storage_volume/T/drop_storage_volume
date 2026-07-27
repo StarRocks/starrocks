@@ -6,4 +6,7 @@ DROP STORAGE VOLUME storage_volume_drop_1;
 DROP STORAGE VOLUME IF EXISTS storage_volume_drop_1;
 DROP STORAGE VOLUME storage_volume_drop;
 SHOW STORAGE VOLUMES like 'storage_volume_drop';
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
+DROP STORAGE VOLUME IF EXISTS storage_volume_drop;
+} END CLEANUP

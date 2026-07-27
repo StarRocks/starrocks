@@ -18,4 +18,9 @@ SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 DESC STORAGE VOLUME 'storage_volume_default_1';
 SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_2;
+CLEANUP {
+SET builtin_storage_volume AS DEFAULT STORAGE VOLUME;
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
+DROP STORAGE VOLUME IF EXISTS storage_volume_default_2;
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
+} END CLEANUP

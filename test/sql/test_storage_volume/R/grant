@@ -21,6 +21,8 @@ drop storage volume storage_volume_grant;
 drop user rose;
 -- result:
 -- !result
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_grant;
+DROP USER IF EXISTS rose;
+} END CLEANUP

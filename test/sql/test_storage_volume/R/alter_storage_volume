@@ -26,9 +26,12 @@ E: (1064, 'Getting analyzing error. Detail message: Unknown storage volume: stor
 SHOW STORAGE VOLUMES LIKE 'storage_volume_alter';
 -- result:
 -- !result
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_alter;
+} END CLEANUP
+
+
 -- name: test_alter_storage_volume_immutable_properties @cloud @sequential
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="false");
 -- result:
@@ -47,9 +50,12 @@ E: (1064, "Storage volume property 'aws.s3.num_partitioned_prefix' is immutable!
 DROP STORAGE VOLUME IF EXISTS storage_volume_immutable;
 -- result:
 -- !result
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
--- result:
--- !result
+DROP STORAGE VOLUME IF EXISTS storage_volume_immutable;
+} END CLEANUP
+
+
 -- name: test_alter_storage_volume_if_not_exists @cloud
 ALTER STORAGE VOLUME IF EXISTS storage_volume_not_exists SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
 -- result:

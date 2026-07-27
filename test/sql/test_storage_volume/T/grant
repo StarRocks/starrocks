@@ -6,4 +6,8 @@ GRANT USAGE on storage volume storage_volume_grant to user rose;
 show grants for user rose;
 drop storage volume storage_volume_grant;
 drop user rose;
+CLEANUP {
 ADMIN SET FRONTEND CONFIG("enable_storage_volume_access_check"="true");
+DROP STORAGE VOLUME IF EXISTS storage_volume_grant;
+DROP USER IF EXISTS rose;
+} END CLEANUP
