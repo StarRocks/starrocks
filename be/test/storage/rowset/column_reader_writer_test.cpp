@@ -1119,4 +1119,92 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
     EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
+// E4 column-level shared dictionary: write a PLAIN ZSTD varchar column with
+// use_shared_dict, then verify (1) the shared-dict page was persisted and
+// (2) every value roundtrips (exercises DDict load on read, the page-0 dict
+// frame, subsequent dict pages, and any no-dict frames under I5).
+TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    const std::string fname = strings::Substitute("$0/test_e4_shared_dict_roundtrip.data", TEST_DIR);
+
+    const int N = 3000;
+    // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
+    // so the shared dict is effective and values span multiple data pages.
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        strs[i] = strings::Substitute(
+                R"({"role":"assistant","parts":[{"type":"text","content":"hello world message number $0 with )"
+                R"(shared scaffolding that repeats across rows"}]})",
+                i % 200);
+        slices.emplace_back(strs[i]);
+    }
+
+    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_VARCHAR);
+        writer_opts.meta->set_length(1024 * 1024);
+        writer_opts.meta->set_encoding(PLAIN_ENCODING);
+        writer_opts.meta->set_compression(starrocks::ZSTD); // E4 requires ZSTD
+        writer_opts.meta->set_is_nullable(true);
+        writer_opts.use_shared_dict = true; // enable E4
+
+        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*col).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // (1) the shared-dict page must have been persisted.
+    ASSERT_TRUE(meta.has_shared_dict_page());
+    ASSERT_GT(meta.shared_dict_page().size(), 0u);
+
+    // (2) read back and verify every value roundtrips.
+    {
+        auto segment = create_dummy_segment(fs, fname);
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        iter_opts.use_page_cache = true;
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->seek_to_first());
+
+        MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+        dst->reserve(N);
+        size_t total = 0;
+        while (total < static_cast<size_t>(N)) {
+            size_t rows = static_cast<size_t>(N) - total;
+            ASSERT_OK(iter->next_batch(&rows, dst.get()));
+            if (rows == 0) break;
+            total += rows;
+        }
+        ASSERT_EQ(static_cast<size_t>(N), dst->size());
+
+        TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " row " << i;
+        }
+    }
+}
+
 } // namespace starrocks

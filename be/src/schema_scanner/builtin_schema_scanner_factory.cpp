@@ -25,6 +25,7 @@
 #include "schema_scanner/schema_be_metrics_scanner.h"
 #include "schema_scanner/schema_be_tablet_write_log_scanner.h"
 #include "schema_scanner/schema_be_tablets_scanner.h"
+#include "schema_scanner/schema_column_dict_stats_scanner.h"
 #include "schema_scanner/schema_be_threads_scanner.h"
 #include "schema_scanner/schema_be_txns_scanner.h"
 #include "schema_scanner/schema_charsets_scanner.h"
@@ -123,6 +124,8 @@ std::unique_ptr<SchemaScanner> BuiltinSchemaScannerFactory::create(TSchemaTableT
         return std::make_unique<SchemaVariablesScanner>(TVarType::VERBOSE);
     case TSchemaTableType::SCH_BE_TABLETS:
         return std::make_unique<SchemaBeTabletsScanner>();
+    case TSchemaTableType::SCH_COLUMN_DICT_STATS:
+        return std::make_unique<SchemaColumnDictStatsScanner>();
     case TSchemaTableType::SCH_BE_METRICS:
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_FE_METRICS:

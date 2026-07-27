@@ -141,6 +141,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // E4: shared dict info
+    @SerializedName(value = "hasSharedDictChange")
+    private boolean hasSharedDictChange;
+    @SerializedName(value = "sharedDictColumns")
+    private Set<ColumnId> sharedDictColumns = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -231,6 +237,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
+    }
+
+    void setSharedDictInfo(boolean hasSharedDictChange, Set<ColumnId> sharedDictColumns) {
+        this.hasSharedDictChange = hasSharedDictChange;
+        this.sharedDictColumns = sharedDictColumns;
     }
 
     void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -441,6 +452,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setSharedDictColumnNames(sharedDictColumns)
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
                             .setSchemaHash(0)
@@ -1043,6 +1055,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
+            this.hasSharedDictChange = other.hasSharedDictChange;
+            this.sharedDictColumns = other.sharedDictColumns;
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
@@ -1214,6 +1228,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // update bloom filter
         if (hasBfChange) {
             table.setBloomFilterInfo(bfColumns, bfFpp);
+        }
+        // E4: update shared dict columns
+        if (hasSharedDictChange) {
+            table.setSharedDictColumns(sharedDictColumns);
         }
         // update index
         if (indexChange) {
