@@ -544,7 +544,8 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     if (tablet->updates() == nullptr) {
         RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     } else {
-        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
+        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request,
+                                                     tablet->tablet_schema()));
     }
 
     return Status::OK();
@@ -636,7 +637,10 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
 
 Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
                                                            std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
-                                                           const TReplicateSnapshotRequest& request) {
+                                                           const TReplicateSnapshotRequest& request,
+                                                           const TabletSchemaCSPtr& tablet_schema) {
+    RETURN_IF_ERROR(SnapshotManager::instance()->restore_inverted_index_directories(tablet_snapshot_path));
+
     std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
     ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
 
@@ -664,7 +668,8 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
         }
     }
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path, tablet_schema));
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
@@ -860,24 +865,45 @@ Status ReplicationTxnManager::publish_snapshot_for_primary(Tablet* tablet, const
 
     auto fs = FileSystem::Default();
     std::set<std::string> tablet_files;
+    std::set<std::string> tablet_index_dirs;
+    auto cleanup_published_files = [&]() {
+        for (const auto& filename : tablet_files) {
+            auto st = fs->delete_file(filename);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Failed to remove tablet file " << filename << ": " << st;
+        }
+        for (const auto& index_dir : tablet_index_dirs) {
+            auto st = starrocks::fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Failed to remove tablet index directory " << index_dir << ": " << st;
+        }
+    };
+
     for (const std::string& filename : clone_files) {
         std::string from = snapshot_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
-        tablet_files.insert(to);
-        RETURN_IF_ERROR(fs->link_file(from, to));
+        auto st = fs->link_file(from, to);
+        if (!st.ok()) {
+            cleanup_published_files();
+            return st;
+        }
+        tablet_files.insert(std::move(to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << snapshot_dir << " to " << tablet_dir;
+
+    auto link_index_st = SnapshotManager::instance()->link_inverted_index_directories(
+            snapshot_meta, tablet->tablet_schema(), snapshot_dir, tablet_dir, &tablet_index_dirs);
+    if (!link_index_st.ok()) {
+        cleanup_published_files();
+        return link_index_st;
+    }
+    LOG(INFO) << "Linked " << tablet_index_dirs.size() << " inverted index directories from " << snapshot_dir << " to "
+              << tablet_dir;
 
     Status status = tablet->updates()->load_snapshot(snapshot_meta, false, true);
     if (!status.ok()) {
         LOG(WARNING) << "Failed to load snapshot of tablet " << tablet->tablet_id() << " from " << snapshot_dir;
-        Status clear_st;
-        for (const std::string& filename : tablet_files) {
-            clear_st = fs::delete_file(filename);
-            if (!clear_st.ok()) {
-                LOG(WARNING) << "Failed to remove tablet file: " << filename << ", status: " << clear_st;
-            }
-        }
+        cleanup_published_files();
     } else {
         int64_t expired_stale_sweep_endtime = UnixSeconds() - config::tablet_rowset_stale_sweep_time_sec;
         tablet->updates()->remove_expired_versions(expired_stale_sweep_endtime);
