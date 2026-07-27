@@ -1012,7 +1012,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
 }
 
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?

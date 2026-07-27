@@ -149,8 +149,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-        FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_fragment_thread_local_call_failed);
-        RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
     return Status::OK();
@@ -161,8 +159,6 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
     // _fn_context_index >= 0 means this function call has call opened
     if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
-
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
