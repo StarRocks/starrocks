@@ -1298,5 +1298,183 @@ TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
     EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
 }
 
+// Regression: non-PK LAKE replication (full snapshot with tablet_metadata) archives superseded old
+// rowsets into compaction_inputs via the Add path — delete_predicate must be dropped there too.
+TEST(TxnLogApplierCompactionTest, NonPKLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40060);
+    auto meta = build_non_pk_metadata(40060);
+    meta->set_next_rowset_id(10);
+    // Existing (soon-to-be-superseded) rowsets carrying delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40060);
+    log->set_txn_id(300);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(300);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot -> else branch
+    // Lake replication: provide tablet_metadata with NEW rowset ids, so the old ids (1,2) are archived.
+    auto* tm = op_rep->mutable_tablet_metadata();
+    tm->set_id(40060);
+    tm->set_next_rowset_id(20);
+    auto* nr = tm->add_rowsets();
+    nr->set_id(15);
+    nr->set_num_rows(30);
+    nr->add_segment_metas()->set_filename("new0.dat");
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // The superseded old rowsets are archived into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: non-PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded
+// old rowsets into compaction_inputs — delete_predicate must be dropped across the Swap too.
+TEST(TxnLogApplierCompactionTest, NonPKNonLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40061);
+    auto meta = build_non_pk_metadata(40061);
+    meta->set_next_rowset_id(10);
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40061);
+    log->set_txn_id(301);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(301);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot, no tablet_metadata -> non-lake Swap path
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // All superseded old rowsets are swapped into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: PK LAKE replication (full snapshot with tablet_metadata) archives superseded old rowsets
+// into compaction_inputs via the Add path — delete_predicate must be dropped there too.
+TEST(TxnLogApplierCompactionTest, PKLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40070);
+    auto meta = build_pk_metadata(40070);
+    meta->set_next_rowset_id(10);
+    // Existing (soon-to-be-superseded) rowsets carrying delete_predicate.
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40070);
+    log->set_txn_id(400);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(400);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot -> else branch
+    // Lake replication: provide tablet_metadata with NEW rowset ids, so the old ids (1,2) are archived.
+    auto* tm = op_rep->mutable_tablet_metadata();
+    tm->set_id(40070);
+    tm->set_next_rowset_id(20);
+    auto* nr = tm->add_rowsets();
+    nr->set_id(15);
+    nr->set_num_rows(30);
+    nr->add_segment_metas()->set_filename("new0.dat");
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // The superseded old rowsets are archived into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+// Regression: PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded old
+// rowsets into compaction_inputs — delete_predicate must be dropped across the Swap too.
+TEST(TxnLogApplierCompactionTest, PKNonLakeReplicationDropsDeletePredicate) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40071);
+    auto meta = build_pk_metadata(40071);
+    meta->set_next_rowset_id(10);
+    auto* r0 = meta->add_rowsets();
+    r0->set_id(1);
+    r0->set_num_rows(10);
+    r0->add_segment_metas()->set_filename("old0.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = meta->add_rowsets();
+    r1->set_id(2);
+    r1->set_num_rows(20);
+    r1->add_segment_metas()->set_filename("old1.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+    ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(40071);
+    log->set_txn_id(401);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(401);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false); // full snapshot, no tablet_metadata -> non-lake Swap path
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+
+    // All superseded old rowsets are swapped into compaction_inputs without their delete_predicate.
+    ASSERT_EQ(2, meta->compaction_inputs_size());
+    EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
 } // namespace lake
 } // namespace starrocks
