@@ -21,7 +21,6 @@ ADD_BE_LIB(ColumnCore
         struct_column.cpp
         raw_buffer.cpp
         column.cpp
-        column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
         type_converter.cpp
