@@ -152,6 +152,7 @@ import com.starrocks.epack.load.pipe.PipeManagerEPack;
 import com.starrocks.epack.load.routineload.RoutineLoadMgrEPack;
 import com.starrocks.epack.load.streamload.StreamLoadMgrEPack;
 import com.starrocks.epack.persist.EditLogEPack;
+import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
 import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
@@ -2823,7 +2824,7 @@ public class GlobalStateMgr {
         }
 
         if (opCode != OperationType.OP_INVALID
-                && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+                && OperationTypeEPack.IGNORABLE_OPERATIONS.contains(opCode)) {
             if (Config.metadata_journal_ignore_replay_failure) {
                 LOG.warn("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
