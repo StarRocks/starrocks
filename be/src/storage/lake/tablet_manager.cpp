@@ -33,6 +33,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "io/io_profiler.h"
 #include "runtime/time_guard.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
@@ -483,15 +484,38 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
+    // NOTE: the put_tablet_metadata_us total is already recorded by the caller's scope in
+    // MetaFileBuilder::finalize(); do not re-open it here or the counter would double-count.
     auto t0 = butil::gettimeofday_us();
 
     // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
     // segment_metas (so a BE rolled back to a pre-feature version can still read this metadata),
     // without mutating the shared, immutable metadata object.
     auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
-    RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    {
+        // Deep-copy + legacy-array normalization is pure CPU; time it apart from the remote write.
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_normalize_us");
+        RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    }
 
-    RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    // Record the serialized payload size so a slow publish can be attributed to metadata bloat
+    // (driven by rowset / delvec-entry count) rather than object-store write latency.
+    TRACE_COUNTER_INCREMENT("tablet_meta_bytes", static_cast<int64_t>(serializable_metadata->ByteSizeLong()));
+
+    // Snapshot the thread-local IO counters around the object-store write so the real network
+    // write+sync time is separated from the protobuf serialize CPU inside save_lake_protobuf.
+    // The fs writers record add_write/add_sync into TLS unconditionally, so meta_put_write_ns is
+    // populated even when the global IO profiler is not running.
+    IOProfiler::IOStat io_before;
+    IOProfiler::take_tls_io_snapshot(&io_before);
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_save_us");
+        RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    }
+    const auto io_delta = IOProfiler::calculate_scoped_tls_io(io_before);
+    TRACE_COUNTER_INCREMENT("meta_put_write_ns", static_cast<int64_t>(io_delta.write_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_sync_ns", static_cast<int64_t>(io_delta.sync_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_write_bytes", static_cast<int64_t>(io_delta.write_bytes));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
