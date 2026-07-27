@@ -223,7 +223,6 @@ protected:
     std::vector<ExecNode*> _children;
     RowDescriptor _row_descriptor;
 
-
     // debug-only: if _debug_action is not INVALID, node will perform action in
     // _debug_phase
     TExecNodePhase::type _debug_phase{TExecNodePhase::INVALID};
