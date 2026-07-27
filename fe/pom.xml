@@ -1498,6 +1498,7 @@ under the License.
                 <artifactId>fluss-flink-common</artifactId>
                 <version>${fluss.version}</version>
             </dependency>
+            <!-- Required by fluss-flink-common, which declares flink-core with provided scope. -->
             <dependency>
                 <groupId>org.apache.flink</groupId>
                 <artifactId>flink-core</artifactId>

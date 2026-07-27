@@ -82,9 +82,6 @@ public class FlussScanNode extends ScanNode {
 
     private void setupCloudCredential() {
         String catalog = flussTable.getCatalogName();
-        if (catalog == null) {
-            return;
-        }
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
