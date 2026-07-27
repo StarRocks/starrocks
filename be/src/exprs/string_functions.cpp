@@ -3435,8 +3435,20 @@ Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern,
     return Status::OK();
 }
 
+// Return the current worker thread's compiled RE2 for the (constant) pattern in `state`,
+// compiling it on first use per (FunctionContext, worker). Each worker matches on its own RE2
+// instance to avoid contention on RE2's internal DFA cache_mutex. Called once per chunk.
+static re2::RE2* get_thread_local_regex(FunctionContext* context, StringFunctionsState* state) {
+    auto* ts = context->get_or_create_thread_state<StringRe2ThreadState>([&]() {
+        auto s = std::make_unique<StringRe2ThreadState>();
+        s->re2 = std::make_unique<re2::RE2>(state->pattern, *state->options);
+        return s;
+    });
+    return ts->re2.get();
+}
+
 Status StringFunctions::regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
 
@@ -3470,7 +3482,7 @@ Status StringFunctions::regexp_extract_prepare(FunctionContext* context, Functio
 }
 
 Status StringFunctions::regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
 
@@ -3523,9 +3535,9 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
 }
 
 Status StringFunctions::regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* state =
-                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -3622,10 +3634,10 @@ static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
-        re2::RE2* const_re = state->get_or_prepare_regex();
+        re2::RE2* const_re = get_thread_local_regex(context, state);
         return regexp_extract_const(const_re, columns);
     }
 
@@ -3835,10 +3847,10 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
-        re2::RE2* const_re = state->get_or_prepare_regex();
+        re2::RE2* const_re = get_thread_local_regex(context, state);
         if (columns[2]->is_constant()) {
             return regexp_extract_all_const(const_re, columns);
         } else {
@@ -4179,7 +4191,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunction
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
         if (state->use_hyperscan) {
@@ -4189,7 +4201,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
                 return regexp_replace_use_hyperscan(state, columns);
             }
         } else {
-            re2::RE2* const_re = state->get_or_prepare_regex();
+            re2::RE2* const_re = get_thread_local_regex(context, state);
             if (state->opt_const_rpl.has_value()) {
                 if (state->global_mode) {
                     return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, state->opt_const_rpl.value());
@@ -4387,11 +4399,11 @@ static StatusOr<ColumnPtr> regexp_split_general(FunctionContext* context, re2::R
 
 StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state->const_pattern) {
         re2::RE2* const_re = nullptr;
         if (!state->pattern.empty()) {
-            const_re = state->regex.get();
+            const_re = get_thread_local_regex(context, state);
         }
         if (columns.size() > 2) {
             if (columns[2]->is_constant()) {
@@ -4556,7 +4568,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, cons
 
     if (state != nullptr && state->const_pattern && state->regex != nullptr) {
         // Const col
-        return regexp_count_const_pattern(state->get_or_prepare_regex(), columns);
+        return regexp_count_const_pattern(get_thread_local_regex(context, state), columns);
     } else {
         // Multi
         re2::RE2::Options options;
@@ -4758,7 +4770,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_position(FunctionContext* context, c
 
     if (state && state->const_pattern && state->regex) {
         // Const col
-        return regexp_position_const_pattern(state->get_or_prepare_regex(), columns);
+        return regexp_position_const_pattern(get_thread_local_regex(context, state), columns);
     } else {
         re2::RE2::Options options;
         options.set_log_errors(false);
