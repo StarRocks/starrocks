@@ -74,7 +74,7 @@ public class FailPointExecutor {
      * When {@code backends} is null/empty, all alive backends and compute nodes are returned.
      * Otherwise each {@code host:bePort} is resolved via {@link SystemInfoService#getBackendOrComputeNodeWithBePort}.
      */
-    static List<ComputeNode> resolveNodes(SystemInfoService clusterInfoService, List<String> backends)
+    public static List<ComputeNode> resolveNodes(SystemInfoService clusterInfoService, List<String> backends)
             throws DdlException {
         if (backends == null || backends.isEmpty()) {
             List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream()
