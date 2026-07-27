@@ -82,10 +82,12 @@ public class FlussTable extends Table {
     }
 
     public Configuration buildRuntimeConf() {
-        Configuration runtimeConf = catalogConf == null ? new Configuration() :
-                Configuration.fromMap(catalogConf.toMap());
+        Configuration runtimeConf = new Configuration();
         for (Map.Entry<String, String> entry : getProperties().entrySet()) {
             runtimeConf.setString(entry.getKey(), entry.getValue());
+        }
+        if (catalogConf != null) {
+            runtimeConf.addAll(catalogConf);
         }
         return runtimeConf;
     }

@@ -77,7 +77,7 @@ public class FlussTableTest {
         Map<String, String> runtimeConfMap = runtimeConf.toMap();
         Assertions.assertEquals("catalog-host:9123", runtimeConfMap.get(BOOTSTRAP_SERVERS));
         Assertions.assertEquals("sr-fe", runtimeConfMap.get(FLUSS_CLIENT_ID));
-        Assertions.assertEquals("oss://table-warehouse", runtimeConfMap.get(LAKE_WAREHOUSE));
+        Assertions.assertEquals("oss://catalog-warehouse", runtimeConfMap.get(LAKE_WAREHOUSE));
         Assertions.assertEquals("filesystem", runtimeConfMap.get(LAKE_METASTORE));
         Assertions.assertEquals("table-value", runtimeConfMap.get(TABLE_LOCAL_OPTION));
         Assertions.assertEquals("catalog-value", runtimeConfMap.get("catalog.only"));
@@ -124,7 +124,7 @@ public class FlussTableTest {
         Map<String, String> runtimeConfMap = runtimeConf.toMap();
         Assertions.assertEquals("catalog-host:9123", runtimeConfMap.get(BOOTSTRAP_SERVERS));
         Assertions.assertEquals("sr-fe", runtimeConfMap.get(FLUSS_CLIENT_ID));
-        Assertions.assertEquals("oss://table-warehouse", runtimeConfMap.get(LAKE_WAREHOUSE));
+        Assertions.assertEquals("oss://catalog-warehouse", runtimeConfMap.get(LAKE_WAREHOUSE));
         Assertions.assertEquals("filesystem", runtimeConfMap.get(LAKE_METASTORE));
         Assertions.assertEquals("table-value", runtimeConfMap.get(TABLE_LOCAL_OPTION));
     }

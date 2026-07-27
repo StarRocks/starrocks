@@ -244,6 +244,18 @@ public class FlussMetadataTest {
         Assertions.assertTrue(exception.getMessage().contains("No readable Fluss lake snapshot exists"));
     }
 
+    @Test
+    public void testGetRemoteFilesUnsupportedTable() {
+        FlussTable table = flussTable(tableInfo(false, false, false), "");
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getRemoteFiles(table, GetRemoteFilesParams.newBuilder().build()));
+        Assertions.assertEquals(
+                "Fluss table fluss0.db1.orders is not supported. StarRocks only supports reading Fluss tables with " +
+                        "'table.datalake.enabled' = 'true' and 'table.datalake.format' = 'paimon'",
+                exception.getMessage());
+    }
+
     private void mockLakeSourceAsNull() {
         new MockUp<LakeSourceUtils>() {
             @Mock
@@ -314,6 +326,10 @@ public class FlussMetadataTest {
     }
 
     private static TableInfo tableInfo(boolean partitioned, boolean primaryKey) {
+        return tableInfo(partitioned, primaryKey, true);
+    }
+
+    private static TableInfo tableInfo(boolean partitioned, boolean primaryKey, boolean dataLakeEnabled) {
         Schema.Builder schemaBuilder = Schema.newBuilder()
                 .column("id", DataTypes.INT())
                 .column("name", DataTypes.STRING())
@@ -327,6 +343,8 @@ public class FlussMetadataTest {
                 .schema(schema)
                 .distributedBy(3, "id")
                 .comment("test fluss table")
+                .property("table.datalake.enabled", Boolean.toString(dataLakeEnabled))
+                .property("table.datalake.format", "paimon")
                 .property("table.datalake.paimon.warehouse", "oss://warehouse");
         if (partitioned) {
             descriptorBuilder.partitionedBy("dt", "region");

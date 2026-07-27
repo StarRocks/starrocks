@@ -47,11 +47,13 @@ import org.apache.fluss.client.initializer.BucketOffsetsRetrieverImpl;
 import org.apache.fluss.client.initializer.LatestOffsetsInitializer;
 import org.apache.fluss.client.initializer.OffsetsInitializer;
 import org.apache.fluss.config.Configuration;
+import org.apache.fluss.config.TableConfig;
 import org.apache.fluss.flink.lake.LakeSplitGenerator;
 import org.apache.fluss.flink.source.split.LogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitBase;
 import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.source.LakeSplit;
+import org.apache.fluss.metadata.DataLakeFormat;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
@@ -283,6 +285,16 @@ public class FlussMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         FlussTable flussTable = (FlussTable) table;
+        TableInfo tableInfo = flussTable.getTableInfo();
+        TableConfig tableConfig = tableInfo.getTableConfig();
+        if (!tableConfig.isDataLakeEnabled()
+                || tableConfig.getDataLakeFormat().orElse(null) != DataLakeFormat.PAIMON) {
+            throw new StarRocksConnectorException(
+                    "Fluss table %s.%s.%s is not supported. StarRocks only supports reading Fluss tables with " +
+                            "'table.datalake.enabled' = 'true' and 'table.datalake.format' = 'paimon'",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
+        }
+
         List<PartitionKey> selectedPartitionKeys = params.getPartitionKeys();
         if (!flussTable.isUnPartitioned()) {
             Objects.requireNonNull(selectedPartitionKeys,
@@ -296,7 +308,6 @@ public class FlussMetadata implements ConnectorMetadata {
         }
 
         TablePath identifier = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
-        TableInfo tableInfo = flussTable.getTableInfo();
 
         OffsetsInitializer.BucketOffsetsRetriever bucketOffsetsRetriever =
                 new BucketOffsetsRetrieverImpl(admin, identifier);
