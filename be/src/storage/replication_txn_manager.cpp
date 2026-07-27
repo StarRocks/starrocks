@@ -705,6 +705,20 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
     tablet->obtain_header_wrlock();
     DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
 
+    std::set<std::string> linked_index_dirs;
+    auto cleanup_unpublished_files = CancelableDefer([&]() {
+        for (const auto& linked_file : linked_success_files) {
+            auto st = FileSystem::Default()->delete_file(linked_file);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Failed to remove tablet file " << linked_file << ": " << st;
+        }
+        for (const auto& index_dir : linked_index_dirs) {
+            auto st = fs::remove_all(index_dir);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "Failed to remove tablet index directory " << index_dir << ": " << st;
+        }
+    });
+
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", snapshot_dir, tablet->tablet_id());
@@ -768,6 +782,16 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         }
         LOG(INFO) << "Linked " << clone_files.size() << " files from " << snapshot_dir << " to " << tablet_dir;
 
+        const auto& rowset_metas =
+                incremental_snapshot ? cloned_tablet_meta.all_inc_rs_metas() : cloned_tablet_meta.all_rs_metas();
+        res = SnapshotManager::instance()->link_inverted_index_directories(
+                rowset_metas, tablet->tablet_schema(), snapshot_dir, tablet_dir, &linked_index_dirs);
+        if (!res.ok()) {
+            break;
+        }
+        LOG(INFO) << "Linked " << linked_index_dirs.size() << " inverted index directories from " << snapshot_dir
+                  << " to " << tablet_dir;
+
         std::vector<RowsetMetaSharedPtr> rs_to_clone;
         if (incremental_snapshot) {
             res = publish_incremental_meta(tablet, cloned_tablet_meta, snapshot_version);
@@ -778,6 +802,7 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
         if (!res.ok()) {
             break;
         }
+        cleanup_unpublished_files.cancel();
 
         // if full clone success, need to update cumulative layer point
         if (!incremental_snapshot) {
@@ -826,11 +851,6 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
             }
         }
     } while (false);
-
-    // clear linked files if errors happen
-    if (!res.ok()) {
-        (void)fs::remove(linked_success_files);
-    }
 
     return res;
 }

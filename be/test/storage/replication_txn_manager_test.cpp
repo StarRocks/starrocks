@@ -482,9 +482,6 @@ TEST_P(ReplicationTxnManagerTest, test_run_normal) {
 
 #ifndef __APPLE__
 TEST_P(ReplicationTxnManagerTest, test_run_normal_with_gin_index) {
-    if (GetParam() != TKeysType::type::PRIMARY_KEYS) {
-        GTEST_SKIP() << "Non-primary GIN replication is covered by the follow-up fix";
-    }
     ASSERT_NO_FATAL_FAILURE(recreate_tablets_with_gin());
 
     TRemoteSnapshotRequest remote_snapshot_request;
