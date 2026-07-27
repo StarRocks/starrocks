@@ -1043,6 +1043,11 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 
     // 3. write to delvec file
     if (_buf.size() > 0) {
+        // Trace the delvec object write on its own so a slow publish can be attributed to the
+        // right remote PUT (delvec vs tablet metadata). delvec_file_bytes is the concatenated
+        // size of every segment delvec rewritten by this txn.
+        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_write_us");
+        TRACE_COUNTER_INCREMENT("delvec_file_bytes", static_cast<int64_t>(_buf.size()));
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
