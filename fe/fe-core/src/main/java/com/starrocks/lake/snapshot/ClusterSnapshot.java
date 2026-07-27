@@ -20,6 +20,8 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotsItem;
 
+import java.util.List;
+
 public class ClusterSnapshot {
     public enum ClusterSnapshotType {
         AUTOMATED, MANUAL, INCREMENTAL, AUTO_FULL
@@ -43,6 +45,11 @@ public class ClusterSnapshot {
     private long starMgrJournalId;
     @SerializedName(value = "clusterSnapshotInfo")
     private ClusterSnapshotInfo clusterSnapshotInfo;
+    // Basic identity of the source cluster's storage volumes, captured at the snapshot's consistent
+    // checkpoint point so cross-cluster restore tooling can rebuild cluster_snapshot.yaml even when
+    // the source cluster is unreachable. Serialized into snapshot_meta.json under "storageVolumes".
+    @SerializedName(value = "storageVolumes")
+    private List<StorageVolumeMetaInfo> storageVolumeMetaInfos;
 
     public ClusterSnapshot() {
     }
@@ -69,6 +76,7 @@ public class ClusterSnapshot {
         this.feJournalId = snapshot.feJournalId;
         this.starMgrJournalId = snapshot.starMgrJournalId;
         this.clusterSnapshotInfo = snapshot.clusterSnapshotInfo;
+        this.storageVolumeMetaInfos = snapshot.storageVolumeMetaInfos;
     }
 
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
@@ -118,6 +126,14 @@ public class ClusterSnapshot {
 
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
         this.clusterSnapshotInfo = clusterSnapshotInfo;
+    }
+
+    public List<StorageVolumeMetaInfo> getStorageVolumeMetaInfos() {
+        return storageVolumeMetaInfos;
+    }
+
+    public void setStorageVolumeMetaInfos(List<StorageVolumeMetaInfo> storageVolumeMetaInfos) {
+        this.storageVolumeMetaInfos = storageVolumeMetaInfos;
     }
 
     public ClusterSnapshot copyForPersist() {

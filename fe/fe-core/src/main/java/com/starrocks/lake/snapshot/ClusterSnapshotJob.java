@@ -221,6 +221,11 @@ public class ClusterSnapshotJob implements Writable {
                 "Successful capture consistent journal id, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                 consistentIds.first, consistentIds.second);
 
+        // Capture the storage volume inventory at the consistent checkpoint point (rather than later
+        // at upload time) so it matches the image being snapshotted as closely as possible, and
+        // persist it with the SNAPSHOTING state change so it survives FE restart/replay.
+        snapshot.setStorageVolumeMetaInfos(ClusterSnapshotUtils.collectStorageVolumeMetaInfos());
+
         persistStateChange(ClusterSnapshotJobState.SNAPSHOTING);
     }
 
