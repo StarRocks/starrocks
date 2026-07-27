@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "シリアライズされた DataSketches HyperLogLog (HLL) スケッチから近似重複除去カウントを推定します。"
+---
+
 # ds_hll_estimate
 
 シリアライズされた HyperLogLog スケッチから近似重複除去カウントを推定します。この関数は DataSketches HLL 近似重複除去カウント関数ファミリーの一部です。

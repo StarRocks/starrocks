@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "从序列化的 DataSketches HyperLogLog (HLL) 草图估算近似去重计数。"
+---
+
 # ds_hll_estimate
 
 从序列化的 HyperLogLog 草图估算近似去重计数。此函数是 DataSketches HLL 近似去重计数函数族的一部分。

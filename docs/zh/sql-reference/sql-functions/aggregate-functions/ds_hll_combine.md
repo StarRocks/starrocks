@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "将多个序列化的 DataSketches HyperLogLog (HLL) 草图合并为单个序列化草图，用于近似去重计数。"
+---
+
 # ds_hll_combine
 
 将多个序列化的 HyperLogLog 草图合并为单个序列化草图。此函数是 DataSketches HLL 近似去重计数函数族的一部分。
