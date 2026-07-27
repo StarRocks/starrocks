@@ -1806,6 +1806,17 @@ public class ExecExprTest {
         ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
                 new ArrayList<>(List.of(left, right)));
         assertTrue(add.isSelfMonotonic());
+
+        for (ArithmeticExpr.Operator op :
+                List.of(ArithmeticExpr.Operator.DIVIDE, ArithmeticExpr.Operator.INT_DIVIDE)) {
+            ExecArithmetic divideByConstant = new ExecArithmetic(IntegerType.INT, op,
+                    new ArrayList<>(List.of(left, right)));
+            assertTrue(divideByConstant.isSelfMonotonic());
+
+            ExecArithmetic divideByColumn = new ExecArithmetic(IntegerType.INT, op,
+                    new ArrayList<>(List.of(right, left)));
+            assertFalse(divideByColumn.isSelfMonotonic());
+        }
     }
 
     @Test

@@ -283,6 +283,16 @@ public class ConfigBase {
                                     + confVal);
                 }
                 break;
+            case "query_queue_slots_estimator_strategy":
+                if (!confVal.equalsIgnoreCase("PBE")
+                        && !confVal.equalsIgnoreCase("MBE")
+                        && !confVal.equalsIgnoreCase("CBE")
+                        && !confVal.equalsIgnoreCase("MAX")
+                        && !confVal.equalsIgnoreCase("MIN")) {
+                    throw new InvalidConfException("'query_queue_slots_estimator_strategy' must be one of PBE, "
+                            + "MBE, CBE, MAX, or MIN. Current value: " + confVal);
+                }
+                break;
             case "http_request_security_level":
                 int securityLevel = Integer.parseInt(confVal);
                 if (securityLevel < 1 || securityLevel > 4) {
@@ -333,10 +343,19 @@ public class ConfigBase {
         }
     }
 
-    public static void setConfigField(Field f, String confVal) throws Exception {
+    private static class ParsedConfigValue {
+        private final String confVal;
+        private final Object parsedValue;
+
+        private ParsedConfigValue(String confVal, Object parsedValue) {
+            this.confVal = confVal;
+            this.parsedValue = parsedValue;
+        }
+    }
+
+    private static ParsedConfigValue parseAndValidateConfigField(Field f, String confVal) throws Exception {
         confVal = confVal.trim();
         boolean isEmpty = confVal.isEmpty();
-
         String[] sa = confVal.split(",");
         for (int i = 0; i < sa.length; i++) {
             sa[i] = sa[i].trim();
@@ -344,71 +363,89 @@ public class ConfigBase {
 
         validateConfValue(f, sa, confVal);
 
-        // set config field
+        Object parsedValue;
         switch (f.getType().getSimpleName()) {
             case "short":
-                f.setShort(null, Short.parseShort(confVal));
+                parsedValue = Short.parseShort(confVal);
                 break;
             case "int":
-                f.setInt(null, Integer.parseInt(confVal));
+                parsedValue = Integer.parseInt(confVal);
                 break;
             case "long":
-                f.setLong(null, Long.parseLong(confVal));
+                parsedValue = Long.parseLong(confVal);
                 break;
             case "double":
-                f.setDouble(null, Double.parseDouble(confVal));
+                parsedValue = Double.parseDouble(confVal);
                 break;
             case "boolean":
-                f.setBoolean(null, Boolean.parseBoolean(confVal));
+                parsedValue = Boolean.parseBoolean(confVal);
                 break;
             case "String":
-                f.set(null, confVal);
+                parsedValue = confVal;
                 break;
             case "short[]":
                 short[] sha = isEmpty ? new short[0] : new short[sa.length];
                 for (int i = 0; i < sha.length; i++) {
                     sha[i] = Short.parseShort(sa[i]);
                 }
-                f.set(null, sha);
+                parsedValue = sha;
                 break;
             case "int[]":
                 int[] ia = isEmpty ? new int[0] : new int[sa.length];
                 for (int i = 0; i < ia.length; i++) {
                     ia[i] = Integer.parseInt(sa[i]);
                 }
-                f.set(null, ia);
+                parsedValue = ia;
                 break;
             case "long[]":
                 long[] la = isEmpty ? new long[0] : new long[sa.length];
                 for (int i = 0; i < la.length; i++) {
                     la[i] = Long.parseLong(sa[i]);
                 }
-                f.set(null, la);
+                parsedValue = la;
                 break;
             case "double[]":
                 double[] da = isEmpty ? new double[0] : new double[sa.length];
                 for (int i = 0; i < da.length; i++) {
                     da[i] = Double.parseDouble(sa[i]);
                 }
-                f.set(null, da);
+                parsedValue = da;
                 break;
             case "boolean[]":
                 boolean[] ba = isEmpty ? new boolean[0] : new boolean[sa.length];
                 for (int i = 0; i < ba.length; i++) {
                     ba[i] = Boolean.parseBoolean(sa[i]);
                 }
-                f.set(null, ba);
+                parsedValue = ba;
                 break;
             case "String[]":
-                f.set(null, isEmpty ? new String[0] : sa);
+                parsedValue = isEmpty ? new String[0] : sa;
                 break;
             default:
                 throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
         }
+        return new ParsedConfigValue(confVal, parsedValue);
+    }
+
+    public static void setConfigField(Field f, String confVal) throws Exception {
+        ParsedConfigValue parsedConfigValue = parseAndValidateConfigField(f, confVal);
+        f.set(null, parsedConfigValue.parsedValue);
     }
 
     public static synchronized void setMutableConfig(String key, String value,
                                                      boolean isPersisted, String userIdentity) throws InvalidConfException {
+        Field field = allMutableConfigs.get(key);
+        if (field == null) {
+            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
+        }
+
+        ParsedConfigValue parsedConfigValue;
+        try {
+            parsedConfigValue = parseAndValidateConfigField(field, value);
+        } catch (Exception e) {
+            throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
+        }
+
         if (isPersisted) {
             if (!ConfigBase.isIsPersisted()) {
                 String errMsg = "set persisted config failed, because current running mode is not persisted";
@@ -417,19 +454,14 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, value, userIdentity);
+                appendPersistedProperties(key, parsedConfigValue.confVal, userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
         }
 
-        Field field = allMutableConfigs.get(key);
-        if (field == null) {
-            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
-        }
-
         try {
-            ConfigBase.setConfigField(field, value);
+            field.set(null, parsedConfigValue.parsedValue);
         } catch (Exception e) {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }

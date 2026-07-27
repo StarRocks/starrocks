@@ -726,11 +726,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- 默认值: MAX
+- 默认值: PBE
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：MBE（基于内存）、PBE（基于并行度）、MAX（取 MBE 和 PBE 的最大值）和 MIN（取 MBE 和 PBE 的最小值）。MBE 根据预测内存或计划成本除以每个槽位内存目标来估算槽位，并受 `totalSlots` 限制。PBE 根据片段并行度（扫描范围计数或基数/每槽位行数）和基于 CPU 成本的计算（使用每槽位 CPU 成本）推导出槽位，然后将结果限制在 [numSlots/2, numSlots] 范围内。MAX 和 MIN 通过取其最大值或最小值来组合 MBE 和 PBE。如果配置值无效，则使用默认值 (`MAX`)。
+- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：`PBE`（基于并行度，默认值）、`MBE`（基于内存成本）和 `CBE`（基于 CPU 成本）。PBE 根据扫描并行度估算查询槽位（受 worker 数量上限）：OLAP 表使用剪枝后剩余的扫描范围数，因此只有极小的查询才会低于 worker 数；connector/外表扫描按满并行度（worker 数）处理，而不是当作单槽位查询。MBE 根据查询的内存成本除以 `query_queue_v2_mem_bytes_per_slot` 估算槽位。CBE 根据计划 CPU 成本除以 `query_queue_v2_cpu_costs_per_slot` 估算槽位。MBE 和 CBE 的单查询槽位还会被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。为向后兼容，旧值 `MAX` 和 `MIN` 仍被接受，并按默认估算器处理；其他值会被配置校验拒绝。
 - 引入版本: v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -739,7 +739,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制计算系统总查询槽位时使用的逻辑并发“层数”。在 shared-nothing 模式下，总槽位 = `query_queue_v2_concurrency_level` * BE 数量 * 每个 BE 的核心数（来自 BackendResourceStat）。在多仓库模式下，有效并发会缩减为 max(1, `query_queue_v2_concurrency_level` / 4)。如果配置值为非正数，则视为 `4`。更改此值会增加或减少 totalSlots（以及因此的并发查询容量），并影响每个槽位的资源：memBytesPerSlot 通过将每个 worker 内存除以（每个 worker 的核心数 * 并发）得出，并且 CPU 记账使用 `query_queue_v2_cpu_costs_per_slot`。将其设置为与集群大小成比例；非常大的值可能会减少每个槽位的内存并导致资源碎片。
+- 描述: 作为相对于默认层级 `4` 的容量层级来解释。对于默认（PBE）和基于 CPU 成本（CBE）的估算器，系统总查询槽位计算为 `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)`（来自 BackendResourceStat）。对于基于内存成本（MBE）的估算器，总槽位改为根据仓库内存预算推导。如果配置值为非正数，则视为 `4`。totalSlots 会被下限约束为至少 `number_of_workers`。增大此值会提高 totalSlots（以及并发查询容量）；在默认值 `4` 时，总容量等于 `number_of_workers * cores_per_worker`。请按集群所需并发度成比例设置。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -748,8 +748,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 规划器 CPU 成本单位
 - 是否可变: Yes
-- 描述: 每个槽位的 CPU 成本阈值，用于根据查询的规划器 CPU 成本估算查询所需的槽位数量。调度器计算槽位为整数（`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`），然后将结果限制在 [1, totalSlots] 范围内（totalSlots 来自查询队列 V2 `V2` 参数）。V2 代码将非正值规范化为 1 (Math.max(1, value))，因此非正值实际上变为 `1`。增加此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减少此值会增加每个查询的槽位。与 `query_queue_v2_num_rows_per_slot` 和并发设置一起调整，以控制并行度与资源粒度。
+- 描述: 基于 CPU 成本的估算器（CBE）使用的每槽位 CPU 成本阈值，用于根据查询的计划 CPU 成本估算所需槽位数量。调度器计算槽位为 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)`，然后将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。非正值会被规范化为 `1`。增大此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减小此值会增加每个查询的槽位。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 基于内存成本的估算器（MBE）使用的每槽位内存目标。当 `query_queue_slots_estimator_strategy` 为 `MBE` 时，总槽位根据仓库内存预算推导，单个查询的槽位根据其总内存成本除以该值估算，并被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。如果为非正数，Query Queue V2 使用每核平均 worker 内存。
+- 引入版本: -
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -757,7 +766,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 行
 - 是否可变: Yes
-- 描述: 当估算每个查询的槽位计数时，分配给单个调度槽位的目标源行记录数。StarRocks 计算 `estimated_slots` = (源节点的基数) / `query_queue_v2_num_rows_per_slot`，然后将结果限制在 [1, totalSlots] 范围内，如果计算值为非正数，则强制最小值为 1。totalSlots 来自可用资源（大致为 DOP * `query_queue_v2_concurrency_level` * worker/BE 数量），因此取决于集群/核心计数。增加此值以减少槽位计数（每个槽位处理更多行）并降低调度开销；减少此值以增加并行度（更多、更小的槽位），直至达到资源限制。
+- 描述: 为向后兼容 Query Queue V2 现有的序列化 / 调试输出而保留。PBE、MBE、CBE 槽位估算器均不再使用它。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`

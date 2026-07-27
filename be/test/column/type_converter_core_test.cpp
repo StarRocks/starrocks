@@ -87,6 +87,39 @@ TEST(TypeConverterCoreTest, NullableVarcharToInt) {
     EXPECT_TRUE(dst->get(1).is_null());
 }
 
+// Regression test for the schema-change crash: converting an unparseable or out-of-range
+// string to a NON-NULLABLE integer column must return an error, not append a null Datum to
+// the non-nullable column. The latter previously threw std::bad_variant_access (std::get:
+// wrong index for variant), which the alter_tablet threadpool caught and retried forever,
+// leaving the schema change stuck in RUNNING.
+TEST(TypeConverterCoreTest, VarcharToNonNullableIntInvalidValueFails) {
+    TypeConverterTestAllocator allocator_holder;
+    TypeInfoAllocator allocator = allocator_holder.make_allocator();
+
+    auto src_type = get_type_info(TYPE_VARCHAR);
+    auto dst_type = get_type_info(TYPE_INT);
+    const TypeConverter* converter = get_type_converter(TYPE_VARCHAR, TYPE_INT);
+    ASSERT_NE(nullptr, converter);
+
+    // Unparseable value -> would convert to NULL; the non-nullable target must reject it.
+    {
+        auto src = BinaryColumn::create();
+        src->append(Slice("abc"));
+        auto dst = Int32Column::create(); // non-nullable
+        ASSERT_FALSE(dst->is_nullable());
+        auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
+        EXPECT_FALSE(status.ok()) << "expected a clean error, not std::bad_variant_access";
+    }
+    // Out-of-range value -> would convert to NULL; same expectation.
+    {
+        auto src = BinaryColumn::create();
+        src->append(Slice("99999999999999"));
+        auto dst = Int32Column::create(); // non-nullable
+        auto status = converter->convert_column(src_type.get(), *src, dst_type.get(), dst.get(), &allocator);
+        EXPECT_FALSE(status.ok());
+    }
+}
+
 TEST(TypeConverterCoreTest, VarcharJsonRoundTrip) {
     TypeConverterTestAllocator allocator_holder;
     TypeInfoAllocator allocator = allocator_holder.make_allocator();

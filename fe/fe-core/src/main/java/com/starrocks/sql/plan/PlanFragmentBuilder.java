@@ -1788,8 +1788,17 @@ public class PlanFragmentBuilder {
 
             // Iceberg table scan slots are always nullable because the source data
             // is not governed by StarRocks NOT NULL constraints and may contain nulls.
+            // Widen both the slot descriptors AND the shared column refs. Downstream
+            // fragment building rebuilds tuples from ColumnRefOperator.isNullable()
+            // (e.g. the UNNEST outer columns in visitPhysicalTableFunction); if a ref
+            // for a required (NOT NULL) Iceberg column still reports not-null while the
+            // runtime column produced by the scan is nullable, the aggregator group-by
+            // nullability check rejects it with "error nullablel column".
             for (SlotDescriptor slotDescriptor : tupleDescriptor.getSlots()) {
                 slotDescriptor.setIsNullable(true);
+            }
+            for (ColumnRefOperator columnRefOperator : node.getColRefToColumnMetaMap().keySet()) {
+                columnRefOperator.setNullable(true);
             }
 
             // partition id generator
@@ -3939,7 +3948,19 @@ public class PlanFragmentBuilder {
                         context.getDescTbl().addSlotDescriptor(udtfOutputTuple, new SlotId(columnRefOperator.getId()));
                 slotDesc.setType(columnRefOperator.getType());
                 slotDesc.setIsMaterialized(true);
-                slotDesc.setIsNullable(columnRefOperator.isNullable());
+                // Outer (pass-through) columns are materialized by the child, whose slot reflects
+                // the true runtime nullability. That can be wider than the logical colRef -- e.g. a
+                // required (NOT NULL) Iceberg column, or an expression derived from one, whose runtime
+                // column is nullable. Prefer the child slot so we never declare a NOT NULL outer slot
+                // over a nullable runtime column (which the aggregator rejects with the group-by
+                // "error nullablel column" check). This only widens; fn-result columns have no child
+                // SlotRef in the map yet, so they keep the colRef nullability.
+                boolean nullable = columnRefOperator.isNullable();
+                Expr childOutputExpr = context.getColRefToExpr().get(columnRefOperator);
+                if (childOutputExpr instanceof SlotRef) {
+                    nullable |= ((SlotRef) childOutputExpr).getDesc().getIsNullable();
+                }
+                slotDesc.setIsNullable(nullable);
 
                 context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
             }

@@ -277,6 +277,28 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
+        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+
+        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
+                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
+                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
+
+        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
+                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
+        Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
+        Assertions.assertFalse(sql.contains("histogram("), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
+        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
+    }
+
+    @Test
     public void testEscapeFullSQL() throws Exception {
         Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

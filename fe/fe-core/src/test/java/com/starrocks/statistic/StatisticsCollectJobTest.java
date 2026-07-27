@@ -588,22 +588,45 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        // buildCollectMcvOnly produces MCV-only SQL (no bucket aggregate). This is the SQL collect() substitutes
-        // for char-family columns (see the testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode
-        // end-to-end test).
+        // buildCollectDefaultBucket produces a placeholder-bucket SQL (no histogram() aggregate, no sort): the
+        // bucket carries count(non-null, non-MCV rows) scaled to full-table, so getTotalRows() reflects the real
+        // cardinality. This is the SQL collect() substitutes for char-family columns (see the
+        // testHistogramCollectSkipsBucketQueryForStringColumnsInHllMode end-to-end test).
         Map<String, String> stringMcv = new HashMap<>();
         stringMcv.put("1", "10");
         stringMcv.put("2", "20");
-        String mcvOnlySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMcvOnly",
-                db, olapTable, stringMcv, "v2");
-        String mcvOnlyNormalized = normalize.apply(mcvOnlySql);
+        String defaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectDefaultBucket",
+                db, olapTable, 0.1, stringMcv, "v2");
+        String defaultBucketNormalized = normalize.apply(defaultBucketSql);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
-                        "'test.t0_stats', NULL, '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW()",
-                t0StatsTableId, dbid)), mcvOnlyNormalized);
-        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram_hll_ndv"));
-        Assertions.assertFalse(mcvOnlyNormalized.contains("histogram("));
-        Assertions.assertFalse(mcvOnlyNormalized.contains("order by"));
+                        "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
+                        "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
+                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` SAMPLE('percent'='10')",
+                t0StatsTableId, dbid)), defaultBucketNormalized);
+        Assertions.assertFalse(defaultBucketNormalized.contains("histogram_hll_ndv"));
+        Assertions.assertFalse(defaultBucketNormalized.contains("histogram("));
+        Assertions.assertFalse(defaultBucketNormalized.contains("order by"));
+        Assertions.assertFalse(defaultBucketNormalized.contains("is not null"));
+
+        // When enable_use_table_sample_collect_statistics is off, buildCollectDefaultBucket must fall back to a
+        // row-level rand() bernoulli filter instead of the SAMPLE clause, matching buildCollectHistogram.
+        boolean originalSampleForDefaultBucket = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = false;
+            String randDefaultBucketSql = Deencapsulation.invoke(histogramStatisticsCollectJob,
+                    "buildCollectDefaultBucket", db, olapTable, 0.1, stringMcv, "v2");
+            String randDefaultBucketNormalized = normalize.apply(randDefaultBucketSql);
+            Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                            "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
+                            "'test.t0_stats', concat('[[\"Infinity\",\"Infinity\",', cast(cast(greatest(0, count(`v2`) / " +
+                            "cast(0.1 as double) - 30) as bigint) as varchar), ',0]]'), " +
+                            "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats` WHERE rand() <= 0.1",
+                    t0StatsTableId, dbid)), randDefaultBucketNormalized);
+            Assertions.assertFalse(randDefaultBucketNormalized.contains("sample("));
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalSampleForDefaultBucket;
+        }
 
         // buildCollectHistogram always builds the full bucket SQL - the skip decision lives in collect(), not here,
         // so it emits histogram() even for a char-family column.
