@@ -1395,8 +1395,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
 TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_replicated_and_stale_dropped) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Give the TARGET tablet (data_version 1) a pre-existing (stale) idg_meta entry keyed by an
@@ -1527,8 +1527,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_replicated_and_stale_drop
 TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_skipped_on_divergent_column_ids) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Source tablet metadata (version 2) with one rowset + segment and a source IDG entry.
@@ -1611,8 +1611,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_replicated_encrypted) {
 
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     const std::string src_idx = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000aa.idx";
