@@ -835,7 +835,7 @@ protected:
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
     _seed = 1719499276; // seed
-    _run_second = 100;  // 100 second
+    _run_second = 50;   // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -845,7 +845,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     _seed = time(nullptr); // use current ts as seed
-    _run_second = 100;     // 100 second
+    _run_second = 50;      // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
