@@ -502,6 +502,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制序列化的 chunk 大小超过压缩 codec 允许的最大输入大小时的行为。设置为 `true`（默认）时，StarRocks 记录一条警告日志并跳过压缩，以未压缩形式发送数据。设置为 `false` 时，StarRocks 返回 `InternalError` 并中止 RPC。
 - 引入版本：-
 
+### enable_threadpool_catch_task_exception
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：ThreadPool 的工作线程是否吞掉任务抛出的异常并继续执行下一个任务。设置为 `false`（默认）时，任务体外层没有 catch 语句，任务抛出的异常找不到处理者，会在抛出点终止 BE 进程。设置为 `true` 时，异常以 ERROR 级别记入日志，工作线程继续执行下一个任务，进程得以存活。注意工作线程存活并不意味着任务是异常安全的：如果任务通过 `DeferOp` 或析构函数发出完成信号，而记录结果的语句被跳过，等待方会把该任务读作成功，因为未赋值的 `Status` 读出来就是 OK。此时故障不会报错，而是产生错误的结果。仅在需要缓解崩溃循环时将该项设置为 `true`，并预期相关故障会变为静默。
+- 引入版本：v4.2.0
+
 ### ssl_private_key_path
 
 - 默认值：空字符串
