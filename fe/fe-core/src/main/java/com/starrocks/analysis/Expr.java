@@ -233,7 +233,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         id = other.id;
         isAuxExpr = other.isAuxExpr;
         type = other.type;
-        originType = other.type;
+        originType = other.originType;
         isAnalyzed = other.isAnalyzed;
         selectivity = other.selectivity;
         numDistinctValues = other.numDistinctValues;
