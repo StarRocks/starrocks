@@ -18,6 +18,8 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;
@@ -122,25 +124,108 @@ public class OptimizeClause extends AlterTableClause {
     }
 
     @Override
-    public String toString() {
+    public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
+
+        if (partitionNames != null && !partitionNames.getPartitionNames().isEmpty()) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionNames.toString());
         }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
+
         if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(keysDesc.getKeysType().toSql());
+            List<String> keyColumns = keysDesc.getKeysColumnNames();
+            if (keyColumns != null && !keyColumns.isEmpty()) {
+                sb.append("(");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(keyColumns.get(i)));
+                }
+                sb.append(")");
+            }
         }
+
+        if (partitionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionDesc);
+        }
+
         if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("ORDER BY (");
+            for (int i = 0; i < sortKeys.size(); i++) {
+                if (i != 0) {
+                    sb.append(", ");
+                }
+                sb.append(SqlUtils.getIdentSql(sortKeys.get(i)));
+            }
+            sb.append(")");
         }
+
+        if (distributionDesc != null) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            if (distributionDesc instanceof HashDistributionDesc) {
+                HashDistributionDesc hashDesc = (HashDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY HASH(");
+                List<String> distCols = hashDesc.getDistributionColumnNames();
+                for (int i = 0; i < distCols.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(distCols.get(i)));
+                }
+                sb.append(")");
+                if (hashDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(hashDesc.getBuckets());
+                }
+            } else if (distributionDesc instanceof RandomDistributionDesc) {
+                RandomDistributionDesc randomDesc = (RandomDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY RANDOM");
+                if (randomDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(randomDesc.getBuckets());
+                }
+            } else {
+                sb.append(distributionDesc);
+            }
+        }
+
         if (range != null) {
-            sb.append(range.toString());
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("BETWEEN ");
+            if (range.getStart() != null) {
+                sb.append(toSqlStringLiteral(range.getStart())).append(" ");
+            }
+            sb.append("AND");
+            if (range.getEnd() != null) {
+                sb.append(" ").append(toSqlStringLiteral(range.getEnd()));
+            }
         }
+
         return sb.toString();
+    }
+
+    private static String toSqlStringLiteral(StringLiteral literal) {
+        return "'" + SqlUtils.escapeSqlString(literal.getStringValue()) + "'";
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 
     @Override
