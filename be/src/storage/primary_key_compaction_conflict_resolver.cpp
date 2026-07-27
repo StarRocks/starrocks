@@ -14,13 +14,9 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
-<<<<<<< HEAD
-#include "common/config.h"
-=======
 #include <fmt/format.h>
 
-#include "common/config_primary_key_fwd.h"
->>>>>>> f703211b73d... [Enhancement] Skip opening output segment footers in compaction publish conflict resolution (backport #76657) (#76779)
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
