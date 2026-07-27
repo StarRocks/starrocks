@@ -215,7 +215,10 @@ enum TSchemaTableType {
 
     SCH_BE_TABLET_WRITE_LOG,
 
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS,
+
+    // E4: column-level shared ZSTD dictionary observability
+    SCH_COLUMN_DICT_STATS
 }
 
 enum THdfsCompression {
