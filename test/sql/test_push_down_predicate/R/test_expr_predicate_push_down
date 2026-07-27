@@ -58,3 +58,41 @@ set sql_mode = 'ALLOW_THROW_EXCEPTION';
 select * from test003 where CAST(user_id AS INT) ;
 -- result:
 -- !result
+
+-- name: test_division_monotonicity
+CREATE TABLE division_monotonicity_${uuid0} (
+    id INT,
+    c BIGINT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO division_monotonicity_${uuid0} VALUES
+    (1, -10),
+    (2, 1),
+    (3, 2),
+    (4, 10);
+-- result:
+-- !result
+INSERT INTO division_monotonicity_${uuid0} VALUES (5, 100);
+-- result:
+-- !result
+SELECT id, c, 10 DIV c AS quotient
+FROM division_monotonicity_${uuid0}
+WHERE 10 DIV c > 5
+ORDER BY id;
+-- result:
+2\t1\t10
+-- !result
+SELECT id, c, c DIV 10 AS quotient
+FROM division_monotonicity_${uuid0}
+WHERE c DIV 10 > 5
+ORDER BY id;
+-- result:
+5\t100\t10
+-- !result
+DROP TABLE division_monotonicity_${uuid0};
+-- result:
+-- !result
