@@ -61,6 +61,7 @@ ADD_BE_LIB(Base
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/filter.cpp
   simd/rle_simd.cpp
   simd/delta_decode.cpp
   stats/ndv_estimator.cpp
