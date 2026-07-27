@@ -59,6 +59,11 @@ public class MvUdfPlanCacheTest extends MVTestBase {
         // dedicated MV whose refresh task is dropped in the task-missing test, leaving the shared MVs untouched
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW udf_missing_task_mv "
                 + "REFRESH ASYNC AS SELECT udf_upper(col1) AS result FROM example_table");
+        // dedicated MVs whose refresh-task creator fields are rewritten in the creator-resolution tests
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW udf_string_creator_mv "
+                + "REFRESH ASYNC AS SELECT udf_upper(col1) AS result FROM example_table");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW udf_null_creator_mv "
+                + "REFRESH ASYNC AS SELECT udf_upper(col1) AS result FROM example_table");
     }
 
     @Test
@@ -180,6 +185,57 @@ public class MvUdfPlanCacheTest extends MVTestBase {
         } finally {
             connectContext.setCurrentUserIdentity(savedIdentity);
             connectContext.setQualifiedUser(savedQualifiedUser);
+        }
+    }
+
+    @Test
+    public void testPlanBuildResolvesCreatorFromCreateUserAndFallsBackWhenRolesUnresolvable() {
+        MaterializedView mv = getMv("udf_string_creator_mv");
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        Assertions.assertNotNull(task, "precondition: refresh task should exist");
+        task.setUserIdentity(null);
+        task.setCreateUser("ghost_user");
+
+        connectContext.setThreadLocalInfo();
+        UserIdentity savedIdentity = connectContext.getCurrentUserIdentity();
+        boolean savedCreatorAuth = Config.mv_use_creator_based_authorization;
+        try {
+            Config.mv_use_creator_based_authorization = true;
+            connectContext.setCurrentUserIdentity(null);
+
+            List<MvPlanContext> plans = MvPlanContextBuilder.getPlanContext(mv, false);
+
+            Assertions.assertNotNull(plans,
+                    "getPlanContext must return a list even when the creator's roles cannot be resolved");
+        } finally {
+            Config.mv_use_creator_based_authorization = savedCreatorAuth;
+            connectContext.setCurrentUserIdentity(savedIdentity);
+        }
+    }
+
+    @Test
+    public void testPlanBuildFallsBackToRootWhenTaskRecordsNoCreator() {
+        MaterializedView mv = getMv("udf_null_creator_mv");
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        Assertions.assertNotNull(task, "precondition: refresh task should exist");
+        task.setUserIdentity(null);
+        task.setCreateUser(null);
+
+        connectContext.setThreadLocalInfo();
+        UserIdentity savedIdentity = connectContext.getCurrentUserIdentity();
+        boolean savedCreatorAuth = Config.mv_use_creator_based_authorization;
+        try {
+            Config.mv_use_creator_based_authorization = true;
+            connectContext.setCurrentUserIdentity(null);
+
+            List<MvPlanContext> plans = MvPlanContextBuilder.getPlanContext(mv, true);
+
+            Assertions.assertFalse(plans.isEmpty(),
+                    "UDF MV must build via the ROOT fallback when the task records no creator");
+            Assertions.assertTrue(plans.get(0).isValidMvPlan());
+        } finally {
+            Config.mv_use_creator_based_authorization = savedCreatorAuth;
+            connectContext.setCurrentUserIdentity(savedIdentity);
         }
     }
 }
