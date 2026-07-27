@@ -1293,13 +1293,6 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!colNameSet.add(colName)) {
                 throw new DdlException("Duplicated column[" + colName + "]");
             }
-            // The new sort key columns are encoded on the BE via an order-preserving KeyCoder; a type
-            // without one (JSON/complex/floating-point/metric/variant/TIME) would crash the BE
-            // short-key encoder on rewrite, so reject ALTER TABLE ... ORDER BY here.
-            if (!oneCol.get().getType().canBeSortKey()) {
-                throw new DdlException("Sort key column[" + colName + "] type not supported: "
-                        + oneCol.get().getType().toSql());
-            }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
             if (useSortKeyUniqueId && oneCol.get().getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
@@ -1319,7 +1312,16 @@ public class SchemaChangeHandler extends AlterHandler {
             columnId++;
         }
         if (olapTable.getKeysType() == KeysType.DUP_KEYS) {
-            // duplicate table has no limit in sort key columns
+            // A duplicate table's sort key has no key-order limit, but each column is still short-key
+            // encoded on the BE, so its type must have a key coder (JSON/complex/floating-point/
+            // metric/variant/TIME do not) -- otherwise the BE crashes on rewrite.
+            for (int sortKeyIdx : sortKeyIdxes) {
+                Column col = targetIndexSchema.get(sortKeyIdx);
+                if (!col.getType().canBeSortKey()) {
+                    throw new DdlException("Sort key column[" + col.getName() + "] type not supported: "
+                            + col.getType().toSql());
+                }
+            }
         } else if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
             // sort key column of primary key table has type limitation
             for (int sortKeyIdx : sortKeyIdxes) {
