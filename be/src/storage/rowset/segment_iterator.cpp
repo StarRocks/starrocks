@@ -2300,20 +2300,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         ColumnId cid = pair.first;
         ColumnUID ucid = cid_2_ucid[cid];
 
-<<<<<<< HEAD
         if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
-            _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
-=======
-        IndexReadOptions index_opts;
-        index_opts.use_page_cache =
-                !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache;
-        index_opts.lake_io_opts = _opts.lake_io_opts;
-        index_opts.read_file = _column_files[cid].get();
-        index_opts.stats = _opts.stats;
-        index_opts.segment_rows = num_rows();
-
-        if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
             // Column-mode partial update rewrites a column into a delta column group
             // (.cols) file and leaves the base segment untouched, so the base segment's
             // inverted index still reflects pre-update values. Mirror _apply_bitmap_index:
@@ -2340,10 +2327,8 @@ Status SegmentIterator::_init_inverted_index_iterators() {
                     }
                 }
             }
-            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(
-                    ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
-            _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
->>>>>>> 6c7ca6a961 ([BugFix] Serve GIN inverted index from DCG segment after column-mode partial update (#76271))
+            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
+            _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
         }
     }
     return Status::OK();

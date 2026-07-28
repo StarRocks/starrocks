@@ -23,6 +23,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/empty_iterator.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
@@ -36,17 +37,10 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
-<<<<<<< HEAD
+#include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
-=======
-#include "storage/types.h"
-#include "storage/update_manager.h"
-#include "storage_primitive/column_predicate_factory.h"
-#include "storage_primitive/empty_iterator.h"
-#include "storage_primitive/union_iterator.h"
->>>>>>> 6c7ca6a961 ([BugFix] Serve GIN inverted index from DCG segment after column-mode partial update (#76271))
 
 namespace starrocks {
 
@@ -287,13 +281,13 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
-        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
-        auto cols = chunk->columns();
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
-            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[0]->append_datum(Datum(key));
+            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
             std::string v = str_func(key);
-            cols[2]->as_mutable_ptr()->append_datum(Datum(Slice(v)));
+            cols[2]->append_datum(Datum(Slice(v)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         return *writer->build();
@@ -324,11 +318,12 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
-        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(key));
+            cols[0]->append_datum(Datum(key));
             std::string v = str_func(key);
-            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(Slice(v)));
+            cols[1]->append_datum(Datum(Slice(v)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
@@ -1823,7 +1818,7 @@ static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, i
         if (value_pos < 0) {
             return Status::InternalError("value column not present in scan output schema");
         }
-        auto chunk = ChunkFactory::new_chunk(out_schema, 100);
+        auto chunk = ChunkHelper::new_chunk(out_schema, 100);
         while (true) {
             chunk->reset();
             auto st = iter->get_next(chunk.get());
