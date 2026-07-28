@@ -491,6 +491,17 @@ public class AnalyzeStmtAnalyzer {
                         p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
+
+                String histStatScope = properties.computeIfAbsent(StatsConstants.HISTOGRAM_STATS_SCOPE,
+                        p -> StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
+                if (!histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_MCV)
+                        && !histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS)
+                        && !histStatScope.equalsIgnoreCase(StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH)) {
+                    throw new SemanticException("Property '%s' must be one of '%s', '%s', '%s'",
+                            StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_MCV,
+                            StatsConstants.HISTOGRAM_STATS_SCOPE_BUCKETS, StatsConstants.HISTOGRAM_STATS_SCOPE_BOTH);
+                }
+
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
                         p -> String.valueOf(Config.histogram_collect_bucket_ndv_mode));
 
