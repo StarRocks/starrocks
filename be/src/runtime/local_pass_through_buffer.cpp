@@ -68,7 +68,11 @@ public:
         std::unique_lock lock(_mutex);
         if (_physical_bytes > 0) {
             CurrentThread::current().mem_consume(_physical_bytes);
+<<<<<<< HEAD:be/src/runtime/local_pass_through_buffer.cpp
             GlobalEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+=======
+            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+>>>>>>> bd22b63 ([BugFix] Stop pass-through exchange from appending after the receiver is cancelled (#76603)):be/src/compute_env/data_stream/local_pass_through_buffer.cpp
             _total_bytes -= _physical_bytes;
             _physical_bytes = 0;
         }
