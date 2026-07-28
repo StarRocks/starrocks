@@ -110,26 +110,6 @@ public:
 
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
-    // Used by sub nodes to get big chunk.
-    // specific_get_next is the subclass's implementation to get datas.
-    static Status get_next_big_chunk(RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
-                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
-
-    // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
-    // Clears all internal state, returning this node to the state it was in after calling
-    // Prepare() and before calling Open(). This function must not clear memory
-    // still owned by this node that is backing rows returned in GetNext().
-    // Prepare() and Open() must have already been called before calling Reset().
-    // GetNext() may have optionally been called (not necessarily until eos).
-    // Close() must not have been called.
-    // Reset() is not idempotent. Calling it multiple times in a row without a preceding
-    // call to Open() is invalid.
-    // If overridden in a subclass, must call superclass's Reset() at the end. The default
-    // implementation calls Reset() on children.
-    // Note that this function may be called many times (proportional to the input data),
-    // so should be fast.
-    virtual Status reset(RuntimeState* state);
-
     // This should be called before close() and after get_next(), it is responsible for
     // collecting statistics sent with row batch, it can't be called when prepare() returns
     // error.
@@ -163,7 +143,6 @@ public:
     // Returns a string representation in DFS order of the plan rooted at this.
     std::string debug_string() const;
 
-    virtual void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs);
     virtual void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector);
     void push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector);
 
@@ -243,9 +222,6 @@ protected:
 
     std::vector<ExecNode*> _children;
     RowDescriptor _row_descriptor;
-
-    /// Resource information sent from the frontend.
-    const TBackendResourceProfile _resource_profile;
 
     // debug-only: if _debug_action is not INVALID, node will perform action in
     // _debug_phase

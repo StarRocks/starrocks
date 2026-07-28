@@ -249,17 +249,6 @@ public:
     // Return descriptors for all tuples in this row, in order of appearance.
     const std::vector<TupleDescriptor*>& tuple_descriptors() const { return _tuple_desc_map; }
 
-    // Populate row_tuple_ids with our ids.
-    void to_thrift(std::vector<TTupleId>* row_tuple_ids);
-    void to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids);
-
-    // Return true if the tuple ids of this descriptor are a prefix
-    // of the tuple ids of other_desc.
-    bool is_prefix_of(const RowDescriptor& other_desc) const;
-
-    // Return true if the tuple ids of this descriptor match tuple ids of other desc.
-    bool equals(const RowDescriptor& other_desc) const;
-
     std::string debug_string() const;
 
 private:

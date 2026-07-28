@@ -199,51 +199,6 @@ int RowDescriptor::get_tuple_idx(TupleId id) const {
     return _tuple_idx_map[id];
 }
 
-void RowDescriptor::to_thrift(std::vector<TTupleId>* row_tuple_ids) {
-    row_tuple_ids->clear();
-
-    for (auto& i : _tuple_desc_map) {
-        row_tuple_ids->push_back(i->id());
-    }
-}
-
-void RowDescriptor::to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids) {
-    row_tuple_ids->Clear();
-    for (auto desc : _tuple_desc_map) {
-        row_tuple_ids->Add(desc->id());
-    }
-}
-
-bool RowDescriptor::is_prefix_of(const RowDescriptor& other_desc) const {
-    if (_tuple_desc_map.size() > other_desc._tuple_desc_map.size()) {
-        return false;
-    }
-
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        // pointer comparison okay, descriptors are unique
-        if (_tuple_desc_map[i] != other_desc._tuple_desc_map[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool RowDescriptor::equals(const RowDescriptor& other_desc) const {
-    if (_tuple_desc_map.size() != other_desc._tuple_desc_map.size()) {
-        return false;
-    }
-
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        // pointer comparison okay, descriptors are unique
-        if (_tuple_desc_map[i] != other_desc._tuple_desc_map[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 std::string RowDescriptor::debug_string() const {
     std::stringstream ss;
 
