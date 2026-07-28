@@ -46,6 +46,7 @@
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -177,6 +178,16 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.segment_file_mark.rowset_path_prefix.empty()) {
+            // Writers that produce auxiliary segments without a segment file mark (e.g. the
+            // column-mode partial update .cols writer) cannot derive a valid standalone index
+            // path: the path built below would be malformed and readers never look it up.
+            // On this branch an inverted index is always a standalone (CLucene) index (there
+            // is no footer-inlined/builtin implementation), so skip its generation here
+            // instead of writing it to a bogus location; readers fall back to evaluating
+            // predicates on the data.
+            opts.need_inverted_index = false;
+        }
         if (opts.need_inverted_index) {
             opts.standalone_index_file_paths.emplace(
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
