@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -34,6 +35,7 @@ import com.starrocks.statistic.sample.PrimitiveTypeColumnStats;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -52,6 +54,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class StatisticsSQLTest extends PlanTestBase {
@@ -289,25 +292,100 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
-    public void testExternalHistogramSkipsBucketQueryForStringColumns() throws Exception {
+    public void testExternalHistogramMcvScopeUsesSingleSampledBucket() throws Exception {
         Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable(connectContext, "hive0", "tpch", "region");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
 
-        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
-                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+        ExternalHistogramStatisticsCollectJob job = newMcvScopeRegionJob(db, region);
 
-        String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
-                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
+        String sql = Deencapsulation.invoke(job, "buildCollectSingleBucket",
+                db, region, ImmutableMap.of("1", "10"), "r_regionkey",
+                Optional.of(Pair.create("0", "4")));
 
-        Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
-                "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
+        Assertions.assertTrue(sql.contains("concat('[[\"0\",\"4\",', " +
+                "cast(greatest(0, count(`r_regionkey`) - 10) as varchar), ',0]]')"), sql);
+        Assertions.assertTrue(sql.contains("'[[\"1\",\"10\"]]'"), sql);
         Assertions.assertTrue(sql.contains("FROM `hive0`.`tpch`.`region`"), sql);
         Assertions.assertFalse(sql.contains("histogram("), sql);
         Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("is not null"), sql);
-        Assertions.assertFalse(sql.toLowerCase().contains("sample("), sql);
+
+        starRocksAssert.useDatabase("_statistics_");
+        String plan = getFragmentPlan(sql.substring(sql.indexOf("SELECT")));
+        assertCContains(plan, "TABLE: region");
+    }
+
+    @Test
+    public void testExternalHistogramSampleMinMaxSQL() throws Exception {
+        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+
+        ExternalHistogramStatisticsCollectJob job = newMcvScopeRegionJob(db, region);
+
+        String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
+                db, region, "r_regionkey", IntegerType.INT, 0.1);
+
+        Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
+        Assertions.assertTrue(sql.contains("cast(IFNULL(MAX(`column_key`), '') as varchar)"), sql);
+        Assertions.assertTrue(sql.contains("where rand() <= 0.1 and `r_regionkey` is not null"), sql);
+        // ORDER BY would bias MAX towards the smallest sampled rows, and the bucket aggregate is what we are avoiding.
+        Assertions.assertFalse(sql.toLowerCase().contains("order by"), sql);
+        Assertions.assertFalse(sql.contains("histogram("), sql);
+
+        starRocksAssert.useDatabase("_statistics_");
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "TABLE: region");
+        Assertions.assertTrue(plan.contains("min(") && plan.contains("max("), plan);
+    }
+
+    @Test
+    public void testExternalHistogramSampleMinMaxSQLForDateColumn() throws Exception {
+        Table orders = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "orders");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+
+        ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
+                "hive0", db, orders, Lists.newArrayList("o_orderdate"), Lists.<Type>newArrayList(DateType.DATE),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_MCV));
+
+        String sql = Deencapsulation.invoke(job, "buildSampleMinMax",
+                db, orders, "o_orderdate", DateType.DATE, 0.1);
+
+        Assertions.assertTrue(sql.contains("cast(IFNULL(MIN(`column_key`), '') as varchar)"), sql);
+
+        // IFNULL mixes DATE with a VARCHAR literal, so the real check is that this still analyzes and plans.
+        starRocksAssert.useDatabase("_statistics_");
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "TABLE: orders");
+        Assertions.assertTrue(plan.contains("min(") && plan.contains("max("), plan);
+    }
+
+    @Test
+    public void testExternalHistogramSampleMinMaxSkipsUnparseableTypes() throws Exception {
+        Table region = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+
+        ExternalHistogramStatisticsCollectJob job = newMcvScopeRegionJob(db, region);
+
+        // Char-family and boolean bounds cannot be read back (Double.parseDouble on "AFRICA" / "TRUE" throws), so
+        // sampleColumnMinMax refuses them before it even runs the MIN/MAX query - which is why the bucket builder
+        // no longer re-checks.
+        for (Type unparseable : Lists.<Type>newArrayList(VarcharType.VARCHAR, BooleanType.BOOLEAN)) {
+            Optional<Pair<String, String>> bounds = Deencapsulation.invoke(job, "sampleColumnMinMax",
+                    connectContext, new StatisticExecutor(), "r_name", unparseable, 0.1);
+
+            Assertions.assertTrue(bounds.isEmpty());
+        }
+    }
+
+    private static ExternalHistogramStatisticsCollectJob newMcvScopeRegionJob(Database db, Table region) {
+        return new ExternalHistogramStatisticsCollectJob(
+                "hive0", db, region, Lists.newArrayList("r_regionkey"), Lists.<Type>newArrayList(IntegerType.INT),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.HISTOGRAM_STATS_SCOPE, StatsConstants.HISTOGRAM_STATS_SCOPE_MCV));
     }
 
     @Test
