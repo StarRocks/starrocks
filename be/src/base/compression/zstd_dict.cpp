@@ -19,9 +19,9 @@
 // <zstd.h> include is first pulled into this translation unit. Keep this define
 // and the direct <zstd.h> include above every other include.
 #define ZSTD_STATIC_LINKING_ONLY
-#include <zstd.h>
-
 #include "base/compression/zstd_dict.h"
+
+#include <zstd.h>
 
 namespace starrocks::compression {
 

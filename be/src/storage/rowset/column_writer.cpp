@@ -699,10 +699,10 @@ Status ScalarColumnWriter::finish_current_page() {
         DCHECK(_first_rowid != 0 || _curr_page_format == 2);
         size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.shared_dict_sample_bytes);
         _shared_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
-        int level = (_opts.meta != nullptr && _opts.meta->has_compression_level() &&
-                     _opts.meta->compression_level() > 0)
-                            ? _opts.meta->compression_level()
-                            : -1;
+        int level =
+                (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
+                        ? _opts.meta->compression_level()
+                        : -1;
         auto cdict_or = compression::ZstdCDict::create(Slice(_shared_dict_sample), level);
         if (cdict_or.ok()) {
             _shared_cdict = std::move(cdict_or.value());

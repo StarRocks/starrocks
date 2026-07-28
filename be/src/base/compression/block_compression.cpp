@@ -803,8 +803,8 @@ private:
             ret = ZSTD_CCtx_refCDict(ctx, cdict->dict());
             if (ZSTD_isError(ret)) {
                 context->compression_fail = true;
-                return Status::InternalError(strings::Substitute("ZSTD refCDict failed: $0",
-                                                                 ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+                return Status::InternalError(
+                        strings::Substitute("ZSTD refCDict failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
             }
         } else if (_level != -1) {
             if (_level < 1 || _level > 22) {
@@ -922,8 +922,8 @@ private:
             size_t const r = ZSTD_DCtx_refDDict(ctx, ddict->dict());
             if (ZSTD_isError(r)) {
                 context->decompression_fail = true;
-                return Status::InternalError(strings::Substitute("ZSTD refDDict failed: $0",
-                                                                 ZSTD_getErrorString(ZSTD_getErrorCode(r))));
+                return Status::InternalError(
+                        strings::Substitute("ZSTD refDDict failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(r))));
             }
         }
 
