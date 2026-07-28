@@ -64,6 +64,19 @@ namespace starrocks::lake {
 // P3: counter of publishes rejected by the memory gate (per-tablet reservation or process backstop).
 bvar::Adder<int64_t> g_lake_publish_mem_rejected("lake_publish_mem_rejected");
 
+// P3: the transient publish footprint (working copy + normalize + serialize) is ~k x the base
+// metadata size. Clamp k to a sane range so a bad mutable config cannot silently disable the gate
+// (k<=0 -> estimate 0, fail-open); saturate the product so an absurd k fails CLOSED (reject/retry), never
+// overflows negative. Shared by the main publish path and the empty-txnlog/reshard version-bump path.
+static int64_t compute_lake_publish_estimate(int64_t base_metadata_size) {
+    int32_t k = std::max(1, std::min(64, config::lake_publish_metadata_estimate_multiplier));
+    int64_t estimate;
+    if (__builtin_mul_overflow(int64_t(k), base_metadata_size, &estimate)) {
+        estimate = INT64_MAX;
+    }
+    return estimate;
+}
+
 bool acquire_publish_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
@@ -279,9 +292,10 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata, int64_t fe_built_version) {
-    // P3: coarse process-memory backstop, placed before EVERY branch (including the early
-    // empty-txnlog/reshard path below, which returns before acquire_publish_tablet). Gated on a dedicated
-    // mutable knob (0 disables it); uses the "urgent" level so it only trips near genuine OOM.
+    // P3: coarse process-memory backstop, placed before EVERY branch. Both the early
+    // empty-txnlog/reshard version-bump path below and the main path additionally take the per-tracker
+    // reservation before copying metadata; this backstop is the last-resort net on top of that. Gated on a
+    // dedicated mutable knob (0 disables it); uses the "urgent" level so it only trips near genuine OOM.
     {
         int32_t urgent_pct = std::max(0, std::min(100, config::lake_publish_process_memory_urgent_pct));
         if (urgent_pct > 0 && RuntimeEnv::GetInstance()->process_mem_tracker()->limit_exceeded_by_ratio(urgent_pct)) {
@@ -297,6 +311,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         DCHECK_EQ(new_version, base_version + 1);
         ASSIGN_OR_RETURN(auto metadata,
                          tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version));
+
+        // P3: this version-bump path still deep-copies and serializes the full base metadata just
+        // like the main path, so gate it through the same per-tracker reservation. The coarse process backstop
+        // at function entry alone does not bound the sum of concurrent copies below the urgent threshold.
+        int64_t empty_publish_estimate = compute_lake_publish_estimate(metadata->SpaceUsedLong());
+        PublishMemReservation empty_publish_resv(RuntimeEnv::GetInstance()->lake_publish_mem_tracker(),
+                                                 empty_publish_estimate, g_lake_publish_oversized_inflight);
+        if (!empty_publish_resv.admitted()) {
+            g_lake_publish_mem_rejected << 1;
+            return Status::ResourceBusy("publish throttled: lake publish memory limit");
+        }
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
@@ -411,14 +436,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // Race-free oversized handling (bounded to concurrency 1, without charging the shared tracker) lives in
     // the RAII class. base_metadata->SpaceUsedLong() here is dominated by the deep copy the apply path performs
     // shortly after, so it adds no new latency class to the hot path.
-    // Clamp k to a sane range so a bad mutable config cannot silently disable the gate (k<=0 -> estimate 0,
-    // fail-open); saturate the product so an absurd k fails CLOSED (reject/retry), never overflows negative.
-    int32_t lake_publish_k = std::max(1, std::min(64, config::lake_publish_metadata_estimate_multiplier));
-    int64_t lake_publish_estimate;
-    if (__builtin_mul_overflow(int64_t(lake_publish_k), int64_t(base_metadata->SpaceUsedLong()),
-                               &lake_publish_estimate)) {
-        lake_publish_estimate = INT64_MAX;
-    }
+    int64_t lake_publish_estimate = compute_lake_publish_estimate(base_metadata->SpaceUsedLong());
     PublishMemReservation lake_publish_resv(RuntimeEnv::GetInstance()->lake_publish_mem_tracker(),
                                             lake_publish_estimate, g_lake_publish_oversized_inflight);
     if (!lake_publish_resv.admitted()) {
