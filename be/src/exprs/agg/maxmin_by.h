@@ -67,8 +67,11 @@ struct MinByAggregateData<LT, not_filter_nulls, AggregateComplexLTGuard<LT>> {
 template <LogicalType LT, typename State, typename = guard::Guard>
 struct MaxByElement {
     using T = RunTimeCppType<LT>;
+    static bool should_update(const State& state, const T& right) { return right > state.value; }
+    static bool should_replace(const T& current, const T& right) { return right > current; }
+
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (right > state.value) {
+        if (should_update(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -110,9 +113,11 @@ struct MaxByElement {
 template <LogicalType LT, typename State>
 struct MaxByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
+    static bool should_update(const State& state, const T& right) { return *right >= state.value; }
+    static bool should_replace(const T& current, const T& right) { return *right >= *current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (*right >= state.value) {
+        if (should_update(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -154,8 +159,11 @@ struct MaxByElement<LT, State, JsonGuard<LT>> {
 template <LogicalType LT, typename State, typename = guard::Guard>
 struct MinByElement {
     using T = RunTimeCppType<LT>;
+    static bool should_update(const State& state, const T& right) { return right <= state.value; }
+    static bool should_replace(const T& current, const T& right) { return right <= current; }
+
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (right <= state.value) {
+        if (should_update(state, right)) {
             auto is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -197,9 +205,11 @@ struct MinByElement {
 template <LogicalType LT, typename State>
 struct MinByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
+    static bool should_update(const State& state, const T& right) { return *right <= state.value; }
+    static bool should_replace(const T& current, const T& right) { return *right <= *current; }
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (*right <= state.value) {
+        if (should_update(state, right)) {
             auto is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -274,8 +284,13 @@ struct MinByAggregateData<LT, not_filter_nulls, StringLTGuard<LT>> {
 
 template <LogicalType LT, typename State>
 struct MaxByElement<LT, State, StringLTGuard<LT>> {
+    static bool should_update(const State& state, const Slice& right) {
+        return !state.has_value() || state.slice_max().compare(right) < 0;
+    }
+    static bool should_replace(const Slice& current, const Slice& right) { return current.compare(right) < 0; }
+
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
-        if (!state.has_value() || state.slice_max().compare(right) < 0) {
+        if (should_update(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -322,8 +337,13 @@ struct MaxByElement<LT, State, StringLTGuard<LT>> {
 
 template <LogicalType LT, typename State>
 struct MinByElement<LT, State, StringLTGuard<LT>> {
+    static bool should_update(const State& state, const Slice& right) {
+        return !state.has_value() || state.slice_min().compare(right) > 0;
+    }
+    static bool should_replace(const Slice& current, const Slice& right) { return current.compare(right) > 0; }
+
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
-        if (!state.has_value() || state.slice_min().compare(right) > 0) {
+        if (should_update(state, right)) {
             bool is_null = col->only_null() || col->is_null(row_num);
             if (is_null) {
                 if constexpr (State::not_filter_nulls_flag) {
@@ -394,12 +414,15 @@ public:
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        update_batch_single_state_range(columns, state, 0, chunk_size);
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        for (size_t i = frame_start; i < frame_end; ++i) {
-            update(ctx, columns, state, i);
-        }
+        update_batch_single_state_range(columns, state, frame_start, frame_end);
     }
 
     bool support_nullable_immediate_input() const override { return true; }
@@ -639,6 +662,55 @@ public:
     }
 
     std::string get_name() const override { return "maxmin_by"; }
+
+private:
+    void update_batch_single_state_range(const Column** columns, AggDataPtr __restrict state, size_t begin,
+                                         size_t end) const {
+        if (begin >= end || columns[1]->only_null()) {
+            return;
+        }
+        if constexpr (!State::not_filter_nulls_flag) {
+            if (columns[0]->only_null()) {
+                return;
+            }
+        }
+
+        auto& aggregate_state = this->data(state);
+        const auto* key_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[1]));
+        const auto key_data = key_column->immutable_data();
+        const bool is_constant_key = columns[1]->is_constant();
+
+        bool has_candidate = false;
+        size_t candidate_row = 0;
+        T candidate_key;
+        for (size_t i = begin; i < end; ++i) {
+            if (columns[1]->is_null(i)) {
+                continue;
+            }
+            if constexpr (!State::not_filter_nulls_flag) {
+                if (columns[0]->is_null(i)) {
+                    continue;
+                }
+            }
+
+            T key = key_data[is_constant_key ? 0 : i];
+            if (!has_candidate) {
+                if (!OP::should_update(aggregate_state, key)) {
+                    continue;
+                }
+                has_candidate = true;
+                candidate_row = i;
+                candidate_key = key;
+            } else if (OP::should_replace(candidate_key, key)) {
+                candidate_row = i;
+                candidate_key = key;
+            }
+        }
+
+        if (has_candidate) {
+            OP()(aggregate_state, const_cast<Column*>(columns[0]), candidate_row, candidate_key);
+        }
+    }
 };
 
 template <LogicalType LT, typename State, class OP>
@@ -658,12 +730,15 @@ public:
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        update_batch_single_state_range(columns, state, 0, chunk_size);
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        for (size_t i = frame_start; i < frame_end; ++i) {
-            update(ctx, columns, state, i);
-        }
+        update_batch_single_state_range(columns, state, frame_start, frame_end);
     }
 
     bool support_nullable_immediate_input() const override { return true; }
@@ -882,6 +957,51 @@ public:
     }
 
     std::string get_name() const override { return "maxmin_by"; }
+
+private:
+    void update_batch_single_state_range(const Column** columns, AggDataPtr __restrict state, size_t begin,
+                                         size_t end) const {
+        if (begin >= end || columns[1]->only_null()) {
+            return;
+        }
+        if constexpr (!State::not_filter_nulls_flag) {
+            if (columns[0]->only_null()) {
+                return;
+            }
+        }
+
+        auto& aggregate_state = this->data(state);
+        bool has_candidate = false;
+        size_t candidate_row = 0;
+        Slice candidate_key;
+        for (size_t i = begin; i < end; ++i) {
+            if (columns[1]->is_null(i)) {
+                continue;
+            }
+            if constexpr (!State::not_filter_nulls_flag) {
+                if (columns[0]->is_null(i)) {
+                    continue;
+                }
+            }
+
+            Slice key = GetContainer<LT>::get_data(columns[1], i);
+            if (!has_candidate) {
+                if (!OP::should_update(aggregate_state, key)) {
+                    continue;
+                }
+                has_candidate = true;
+                candidate_row = i;
+                candidate_key = key;
+            } else if (OP::should_replace(candidate_key, key)) {
+                candidate_row = i;
+                candidate_key = key;
+            }
+        }
+
+        if (has_candidate) {
+            OP()(aggregate_state, const_cast<Column*>(columns[0]), candidate_row, candidate_key);
+        }
+    }
 };
 
 } // namespace starrocks
