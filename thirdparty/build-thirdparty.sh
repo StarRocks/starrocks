@@ -1788,6 +1788,34 @@ build_benchgen() {
     ${CMAKE_CMD} --install build
 }
 
+# paimon-cpp
+# All third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
+# time from the URLs pinned in its third_party/versions.txt (network required).
+build_paimon_cpp() {
+    check_if_source_exist $PAIMON_CPP_SOURCE
+
+    cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DPAIMON_BUILD_STATIC=OFF \
+        -DPAIMON_ENABLE_ORC=ON \
+        -DPAIMON_ENABLE_AVRO=ON \
+        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUCENE=OFF \
+        -DPAIMON_ENABLE_TANTIVY=OFF \
+        -DPAIMON_ENABLE_JINDO=OFF \
+        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    restore_compile_flags
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags

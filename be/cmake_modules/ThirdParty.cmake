@@ -500,6 +500,22 @@ if (${WITH_TENANN} STREQUAL "ON")
     endif()
 endif()
 
+if (${WITH_PAIMON_CPP} STREQUAL "ON")
+    set(PAIMON_CPP_DIR "${THIRDPARTY_DIR}/paimon-cpp")
+    find_library(PAIMON_SHARED_LIBRARY NAMES paimon
+                 PATHS ${PAIMON_CPP_DIR}/lib ${PAIMON_CPP_DIR}/lib64 NO_DEFAULT_PATH)
+    if (NOT PAIMON_SHARED_LIBRARY)
+        message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}, "
+                            "run thirdparty/build-thirdparty.sh paimon_cpp first")
+    endif()
+    add_library(paimon SHARED IMPORTED GLOBAL)
+    set_target_properties(paimon PROPERTIES IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY})
+    # NOTE: not added to the global include path on purpose; only the targets
+    # that use paimon-cpp should include ${PAIMON_CPP_INCLUDE_DIR}.
+    set(PAIMON_CPP_INCLUDE_DIR "${PAIMON_CPP_DIR}/include")
+    message(STATUS "link paimon-cpp from ${PAIMON_SHARED_LIBRARY}")
+endif()
+
 set(BUNDLED_JAVA_HOME ${THIRDPARTY_DIR}/open_jdk)
 if (DEFINED ENV{JAVA_HOME} AND NOT "$ENV{JAVA_HOME}" STREQUAL "")
     set(JAVA_HOME_CANDIDATE "$ENV{JAVA_HOME}")
