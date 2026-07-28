@@ -41,6 +41,7 @@
 
 #include "base/coding.h"
 #include "base/compression/compression_context_pool_singletons.h"
+#include "common/config_compression_fwd.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
 #include "base/compression/zstd_dict.h"
@@ -1000,7 +1001,7 @@ private:
             output->size = 0;
         }
 
-        if (ddict != nullptr) {
+        if (ddict != nullptr && config::enable_shared_dict_ctx_cache) {
             // Dictionary path: use a thread-local context that already has this
             // dictionary loaded, so consecutive pages of a column do not each pay
             // to re-establish the dictionary session. See DictDCtxCache above.

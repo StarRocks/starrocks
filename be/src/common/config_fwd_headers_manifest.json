@@ -834,6 +834,7 @@
         "shared_dict_train_pages",
         "shared_dict_train_fragment_bytes",
         "shared_dict_max_size",
+        "enable_shared_dict_ctx_cache",
         "dictionary_encoding_ratio_for_non_string_column",
         "dictionary_speculate_min_chunk_size",
         "metadata_cache_memory_limit_percent",
@@ -988,6 +989,9 @@
         "lz4_acceleration",
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps"
+      ],
+      "fields": [
+        "enable_shared_dict_ctx_cache"
       ]
     }
   ]
