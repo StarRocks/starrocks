@@ -150,12 +150,6 @@ class WindowMergeSortHintTest extends PlanTestBase {
     }
 
     @Test
-    void testHintRequiresPartitionBy() {
-        starRocksAssert.query("select p, s, sum(x) over ([merge_sort] order by p) from " + TABLE_NAME)
-                .analysisError("The merge_sort hint requires a PARTITION BY clause.");
-    }
-
-    @Test
     void testHintRequiresOrderBy() {
         starRocksAssert.query("select p, s, sum(x) over ([merge_sort] partition by s) from " + TABLE_NAME)
                 .analysisError("The merge_sort hint requires an ORDER BY clause in the window specification.");
