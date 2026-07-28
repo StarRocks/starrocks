@@ -129,10 +129,21 @@ class TxnTerminalStateCache {
     }
 
     /**
-     * @return a snapshot of the currently cached records, for FE image serialization.
+     * @return a snapshot of the currently cached records, for FE image serialization. Returns the
+     * union of both indexes (deduplicated by txn id): the two LRUs evict independently, so a record
+     * frequently queried by label can outlive its byTxnId entry (and vice versa). Serializing only
+     * one index would silently drop such a record across a checkpoint and regress a label/id lookup
+     * from a terminal outcome back to UNKNOWN.
      */
     synchronized List<Record> snapshot() {
-        return new ArrayList<>(byTxnId.values());
+        Map<Long, Record> merged = new LinkedHashMap<>();
+        for (Record r : byTxnId.values()) {
+            merged.put(r.txnId, r);
+        }
+        for (Record r : byLabel.values()) {
+            merged.putIfAbsent(r.txnId, r);
+        }
+        return new ArrayList<>(merged.values());
     }
 
     /**

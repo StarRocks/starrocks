@@ -71,8 +71,10 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         TransactionResult result = null;
         switch (txnOperation) {
             case TXN_BEGIN:
-            case TXN_PREPARE:
             case TXN_LOAD:
+                break;
+            case TXN_PREPARE:
+                result = handlePrepareTransaction(db, label);
                 break;
             case TXN_COMMIT:
                 result = handleCommitTransaction(db, label, timeoutMillis);
@@ -85,6 +87,29 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         }
 
         return new ResultWrapper(result);
+    }
+
+    // A PREPARE of a live transaction is handled by redirecting to the BE (result stays null). But a
+    // PREPARE retry of a count-evicted transaction is routed here even for a bypass-write client
+    // (source_type is omitted on retry, and the cache cannot recover the original source type), and
+    // redirecting it through the now-expired coordinator cache would fail. When the full state is
+    // gone, answer idempotently from the terminal-state cache, exactly like a commit retry: a
+    // VISIBLE/COMMITTED outcome is success, ABORTED fails, and a truly unknown label is not found.
+    private TransactionResult handlePrepareTransaction(Database db, String label) throws StarRocksException {
+        long dbId = db.getId();
+        // Decide purely from getLabelStatus (do NOT call getLabelTransactionState here: the normal
+        // PREPARE redirect path relies on its own call to that method, and an extra one would disturb
+        // it). A terminal (VISIBLE/COMMITTED/ABORTED) status means the full state is gone but the
+        // outcome is cached -> answer the retry idempotently, exactly like a commit retry. PREPARED
+        // (live) or UNKNOWN (state lives on the coordinator BE) fall through to a null result -> BE
+        // redirect, preserving the ordinary stream-load PREPARE path.
+        TransactionStatus status =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label).getStatus();
+        if (status == TransactionStatus.VISIBLE || status == TransactionStatus.COMMITTED
+                || status == TransactionStatus.ABORTED) {
+            return commitEvictedTransactionByLabel(dbId, label);
+        }
+        return null;
     }
 
     private TransactionResult handleCommitTransaction(Database db,

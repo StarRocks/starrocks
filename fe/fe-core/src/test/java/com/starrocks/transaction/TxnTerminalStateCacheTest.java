@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TxnTerminalStateCacheTest {
     private final int savedCap = Config.transaction_terminal_state_cache_num;
@@ -133,6 +134,34 @@ public class TxnTerminalStateCacheTest {
         Config.label_keep_max_second = 10;
         dst2.restore(300L, "old", TransactionStatus.VISIBLE, null, now - 20_000L);
         assertEquals(0, dst2.size());
+    }
+
+    // snapshot() must include records retained only by the label LRU. The two indexes evict
+    // independently, so a label-queried record can outlive its byTxnId entry; serializing only
+    // byTxnId would drop it on checkpoint and regress getLabelState to UNKNOWN.
+    @Test
+    public void testSnapshotIncludesLabelOnlyRetainedRecord() {
+        Config.transaction_terminal_state_cache_num = 2; // small cap to force eviction
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+
+        cache.put(terminalTxn(1L, "A", TransactionStatus.VISIBLE, now));
+        cache.put(terminalTxn(2L, "B", TransactionStatus.VISIBLE, now));
+        cache.getByLabel("A");                                   // keep label A hot in byLabel
+        cache.put(terminalTxn(3L, "C", TransactionStatus.VISIBLE, now)); // evicts txn1 from byTxnId, label B from byLabel
+
+        // txn1 is gone from the id index but still resolvable by its (hot) label.
+        assertNull(cache.getByTxnId(1L));
+        assertNotNull(cache.getByLabel("A"));
+
+        // snapshot() (the image source) must still carry txn1 via the label index.
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        for (TxnTerminalStateCache.Record r : cache.snapshot()) {
+            ids.add(r.txnId);
+        }
+        assertTrue(ids.contains(1L), "snapshot must include the label-only-retained record (txn1)");
+        assertTrue(ids.contains(3L));
     }
 
     // Only final statuses are cached; a non-terminal state is ignored.
