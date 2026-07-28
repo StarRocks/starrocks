@@ -136,11 +136,11 @@ public class TxnTerminalStateCacheTest {
         assertEquals(0, dst2.size());
     }
 
-    // snapshot() must include records retained only by the label LRU. The two indexes evict
-    // independently, so a label-queried record can outlive its byTxnId entry; serializing only
-    // byTxnId would drop it on checkpoint and regress getLabelState to UNKNOWN.
+    // A label-queried record stays resident under the single capacity: getByLabel resolves through
+    // byTxnId, touching it, so a label-hot outcome survives eviction while an un-accessed one is
+    // dropped. It therefore remains in the snapshot, without a second Record index doubling retention.
     @Test
-    public void testSnapshotIncludesLabelOnlyRetainedRecord() {
+    public void testLabelHotRecordSurvivesEvictionAndInSnapshot() {
         Config.transaction_terminal_state_cache_num = 2; // small cap to force eviction
         Config.label_keep_max_second = 3600;
         TxnTerminalStateCache cache = new TxnTerminalStateCache();
@@ -148,20 +148,37 @@ public class TxnTerminalStateCacheTest {
 
         cache.put(terminalTxn(1L, "A", TransactionStatus.VISIBLE, now));
         cache.put(terminalTxn(2L, "B", TransactionStatus.VISIBLE, now));
-        cache.getByLabel("A");                                   // keep label A hot in byLabel
-        cache.put(terminalTxn(3L, "C", TransactionStatus.VISIBLE, now)); // evicts txn1 from byTxnId, label B from byLabel
+        cache.getByLabel("A");                                            // touch txn1 -> most recently used
+        cache.put(terminalTxn(3L, "C", TransactionStatus.VISIBLE, now));  // evicts the un-touched eldest (txn2)
 
-        // txn1 is gone from the id index but still resolvable by its (hot) label.
-        assertNull(cache.getByTxnId(1L));
+        assertNotNull(cache.getByTxnId(1L));   // label-hot record survived
         assertNotNull(cache.getByLabel("A"));
+        assertNull(cache.getByTxnId(2L));      // un-accessed record evicted
+        assertNull(cache.getByLabel("B"));     // its label pointer was pruned on eviction
 
-        // snapshot() (the image source) must still carry txn1 via the label index.
         java.util.Set<Long> ids = new java.util.HashSet<>();
         for (TxnTerminalStateCache.Record r : cache.snapshot()) {
             ids.add(r.txnId);
         }
-        assertTrue(ids.contains(1L), "snapshot must include the label-only-retained record (txn1)");
-        assertTrue(ids.contains(3L));
+        assertEquals(java.util.Set.of(1L, 3L), ids);
+    }
+
+    // Codex P2: total retention (and the snapshot) must not exceed the configured capacity. Inserting
+    // far more than the cap, with distinct labels, keeps at most `cap` records -- not ~2x from a second
+    // Record index.
+    @Test
+    public void testRetentionBoundedToConfiguredCapacity() {
+        int cap = 10;
+        Config.transaction_terminal_state_cache_num = cap;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        for (long i = 0; i < cap * 5; i++) {
+            cache.put(terminalTxn(i, "label_" + i, TransactionStatus.VISIBLE, now));
+            cache.getByLabel("label_" + i); // exercise the label path too
+        }
+        assertEquals(cap, cache.size());
+        assertTrue(cache.snapshot().size() <= cap, "snapshot must not exceed the configured cap");
     }
 
     // Only final statuses are cached; a non-terminal state is ignored.

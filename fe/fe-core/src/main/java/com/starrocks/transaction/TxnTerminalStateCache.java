@@ -17,6 +17,7 @@ package com.starrocks.transaction;
 import com.starrocks.common.Config;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,28 +64,34 @@ class TxnTerminalStateCache {
         }
     }
 
-    // Two independent access-order LRUs over the SAME Record objects: one keyed by transaction id,
-    // one keyed by label. Keeping them independent (rather than a byTxnId map plus a label->txnId
-    // pointer) avoids a drift bug: if a label is reused across two cached transactions, evicting the
-    // newer one from a shared pointer index could strand the older one, making getByLabel return
-    // nothing even though a record for that label is still cached. Each map self-evicts by capacity;
-    // a miss in either simply falls back to "not found", which is always safe.
+    // Single canonical access-order LRU of Records, capped at transaction_terminal_state_cache_num.
+    // This is the ONLY place Records live, so total retention (and the image snapshot) is bounded to
+    // exactly the configured maximum -- not doubled by a second Record index.
     private final LinkedHashMap<Long, Record> byTxnId;
-    private final LinkedHashMap<String, Record> byLabel;
+    // Secondary index only: label -> latest txn id (a pointer, not a second Record store). Pruned when
+    // its target is evicted from byTxnId, so it never dangles and adds no Record retention. getByLabel
+    // resolves through byTxnId (touching it), which keeps a label-hot record resident under the single
+    // cap -- so a frequently label-queried outcome can't be silently evicted while id-only ones stay.
+    private final Map<String, Long> labelToTxnId;
 
     TxnTerminalStateCache() {
+        labelToTxnId = new HashMap<>();
         byTxnId = new LinkedHashMap<Long, Record>(16, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<Long, Record> eldest) {
                 int capacity = Config.transaction_terminal_state_cache_num;
-                return capacity <= 0 || size() > capacity;
-            }
-        };
-        byLabel = new LinkedHashMap<String, Record>(16, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Record> eldest) {
-                int capacity = Config.transaction_terminal_state_cache_num;
-                return capacity <= 0 || size() > capacity;
+                boolean evict = capacity <= 0 || size() > capacity;
+                if (evict) {
+                    // Prune the label pointer iff it targets the record being evicted (a newer txn for
+                    // the same label keeps its own pointer). This keeps labelToTxnId free of dangling
+                    // entries and bounded by byTxnId.
+                    Record r = eldest.getValue();
+                    Long mapped = labelToTxnId.get(r.label);
+                    if (mapped != null && mapped == r.txnId) {
+                        labelToTxnId.remove(r.label);
+                    }
+                }
+                return evict;
             }
         };
     }
@@ -122,28 +129,20 @@ class TxnTerminalStateCache {
         Record r = new Record(txnId, label, status, reason, finishTime);
         byTxnId.put(txnId, r);
         // Largest txn id wins for a reused label, matching getLabelState()'s "largest id" semantics.
-        Record existing = byLabel.get(label);
-        if (existing == null || txnId >= existing.txnId) {
-            byLabel.put(label, r);
+        Long cur = labelToTxnId.get(label);
+        if (cur == null || txnId >= cur) {
+            labelToTxnId.put(label, txnId);
         }
     }
 
     /**
-     * @return a snapshot of the currently cached records, for FE image serialization. Returns the
-     * union of both indexes (deduplicated by txn id): the two LRUs evict independently, so a record
-     * frequently queried by label can outlive its byTxnId entry (and vice versa). Serializing only
-     * one index would silently drop such a record across a checkpoint and regress a label/id lookup
-     * from a terminal outcome back to UNKNOWN.
+     * @return a snapshot of the currently cached records, for FE image serialization. This is exactly
+     * byTxnId (the single Record store), so the snapshot is complete and bounded by the configured
+     * capacity -- there is no second Record index to union in, and label lookups resolve through
+     * byTxnId, so nothing is retained outside it.
      */
     synchronized List<Record> snapshot() {
-        Map<Long, Record> merged = new LinkedHashMap<>();
-        for (Record r : byTxnId.values()) {
-            merged.put(r.txnId, r);
-        }
-        for (Record r : byLabel.values()) {
-            merged.putIfAbsent(r.txnId, r);
-        }
-        return new ArrayList<>(merged.values());
+        return new ArrayList<>(byTxnId.values());
     }
 
     /**
@@ -155,10 +154,16 @@ class TxnTerminalStateCache {
     }
 
     /**
-     * @return the latest cached outcome for {@code label}, or null if absent or too old.
+     * @return the latest cached outcome for {@code label}, or null if absent or too old. Resolving
+     * through byTxnId.get touches the record in the LRU, so an actively label-queried outcome stays
+     * resident under the single capacity rather than aging out as if unused.
      */
     synchronized Record getByLabel(String label) {
-        Record r = byLabel.get(label);
+        Long txnId = labelToTxnId.get(label);
+        if (txnId == null) {
+            return null;
+        }
+        Record r = byTxnId.get(txnId);
         return valid(r) ? r : null;
     }
 
