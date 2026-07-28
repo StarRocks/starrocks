@@ -948,7 +948,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
         if (config::enable_load_segment_parallel) {
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset_idx, rowset]() {
+                    [&, rowset]() {
 #ifdef BE_TEST
                         Status injected_st;
                         TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
