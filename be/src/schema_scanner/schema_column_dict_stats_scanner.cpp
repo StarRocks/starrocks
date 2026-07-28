@@ -14,8 +14,8 @@
 
 #include "schema_scanner/schema_column_dict_stats_scanner.h"
 
-#include "common/system/master_info.h"
 #include "column/nullable_column.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
@@ -23,11 +23,11 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "schema_scanner/schema_helper.h"
-#include "storage/storage_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
