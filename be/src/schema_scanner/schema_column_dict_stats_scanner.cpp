@@ -14,7 +14,7 @@
 
 #include "schema_scanner/schema_column_dict_stats_scanner.h"
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "column/nullable_column.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -22,8 +22,8 @@
 #include "gen_cpp/types.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "schema_scanner/schema_helper.h"
+#include "storage/storage_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment.h"
@@ -187,7 +187,7 @@ Status SchemaColumnDictStatsScanner::start(RuntimeState* state) {
 
 #ifndef __APPLE__
     if (shared_data) {
-        auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto lake_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (lake_manager != nullptr) {
             std::unordered_map<int64_t, int64_t> partition_versions;
             int64_t table_id_offset = 0;
@@ -388,7 +388,7 @@ void SchemaColumnDictStatsScanner::_emit_schema_fallback_rows(const TabletSchema
 
 void SchemaColumnDictStatsScanner::_expand_lake_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
 #ifndef __APPLE__
-    auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto lake_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     if (lake_manager == nullptr) {
         return;
     }
