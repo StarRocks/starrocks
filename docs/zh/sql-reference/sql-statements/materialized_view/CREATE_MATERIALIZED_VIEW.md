@@ -817,7 +817,7 @@ PROPERTIES (
 -- 创建一个按 lo_custkey 排序的非分区物化视图
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC
 AS
 select
@@ -837,7 +837,7 @@ group by lo_orderkey, lo_custkey;
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1026,7 +1026,7 @@ AS SELECT * from t1;
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
