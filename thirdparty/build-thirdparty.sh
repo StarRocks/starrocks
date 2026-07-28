@@ -1746,6 +1746,15 @@ build_benchgen() {
 build_paimon_cpp() {
     check_if_source_exist $PAIMON_CPP_SOURCE
 
+    # build_arrow exports ARROW_*_URL to feed StarRocks' own Arrow build
+    # offline; paimon-cpp's bundled Arrow honors the same env vars, so they
+    # must not leak into this build (those tarballs do not match the
+    # versions pinned by paimon's bundled Arrow and fail its SHA256 check).
+    local arrow_url_var
+    for arrow_url_var in $(compgen -v | grep -E '^ARROW_[A-Z0-9_]+_URL$'); do
+        unset "${arrow_url_var}"
+    done
+
     cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
