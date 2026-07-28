@@ -77,6 +77,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
@@ -180,6 +181,117 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    // init() plans the sink during the load, before an explicit transaction (multi-statement stream
+    // load / BEGIN..COMMIT) is upserted into the DatabaseTransactionMgr. getTransactionState then
+    // returns null, so init() must fall back to the explicit transaction registry to observe the
+    // combined-txn-log decision; otherwise write_txn_log stays at the per-tablet default and publish
+    // (which expects combined logs) wedges.
+    @Test
+    public void testInitFallsBackToExplicitTxnStateForCombinedTxnLog(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // The explicit-txn fallback must NOT apply to INSERT_STREAMING (SQL BEGIN..COMMIT): that source
+    // emits per-load-id txn logs that publish reads via the load_ids branch (which takes precedence
+    // over combined_txn_log), so honoring the combined flag here would make BE skip those logs and
+    // drop data. write_txn_log must stay at the per-tablet/per-load-id default (false).
+    @Test
+    public void testInitDoesNotFallBackForInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test
