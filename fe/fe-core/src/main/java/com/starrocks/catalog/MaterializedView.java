@@ -266,12 +266,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.fileNumber = -1;
         }
 
-        // NOTE: stores the connector-native modified-time unit (e.g. Hive uses epoch seconds). Recorded
-        // values are compared per-partition against live PartitionInfo.getModifiedTime() from the same
-        // connector; their aggregate (refreshScheme.lastRefreshTime) additionally feeds the rollback
-        // guard in isStalenessSatisfied(), which intentionally compares raw — see that method. Do not
-        // compare them against wall-clock-millis baselines. Normalizing at this persistence boundary
-        // would need a compatibility plan for already-persisted values.
+        // Store the connector-native modified-time unit (OLAP/JDBC/Paimon millis, Hive epoch seconds,
+        // Iceberg micros). External change detection compares this exactly against the live raw modified
+        // time from the same connector, so it must not be lossily converted here (e.g. micros -> millis
+        // would truncate). The staleness rollback guard in isStalenessSatisfied() normalizes by magnitude
+        // at comparison time instead.
         public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
             return new BasePartitionInfo(-1, info.getVersion(), info.getModifiedTime());
         }
@@ -1256,21 +1255,26 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
         ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+        // The live max (maxBaseTableRefreshTimestamp()) is epoch millis by the maxPartitionRefreshTs()
+        // contract, but the recorded getLastRefreshTime() is kept in each base table's native unit
+        // (OLAP/JDBC/Paimon millis, Hive epoch seconds, Iceberg micros) so per-partition change detection
+        // can compare it exactly against the live raw modified time. Normalize both to epoch millis by
+        // magnitude here (comparison only; nothing is persisted).
+        long baseRefreshTimestampMillis =
+                TimeUtils.inferEpochUnit(baseTableRefreshTimestamp).toMillis(baseTableRefreshTimestamp);
+        long lastRefreshTime = getLastRefreshTime();
+        long lastRefreshTimeMillis = lastRefreshTime <= 0 ? lastRefreshTime
+                : TimeUtils.inferEpochUnit(lastRefreshTime).toMillis(lastRefreshTime);
         // A base table's refresh timestamp regressed below what the MV has absorbed (e.g. after an
         // Iceberg rollback_to_snapshot/rollback_to_timestamp, or after dropping the newest base
-        // partitions): treat as outdated rather than trusting the staleness window. Both operands are
-        // intentionally compared RAW. For OLAP tables both are epoch millis, so the comparison is
-        // exact. For Iceberg the recorded lastRefreshTime is in microseconds while the snapshot
-        // timestamp is in millis, so this guard fires permanently — preserving the previous
-        // conservative behavior of never applying staleness-based rewrite to Iceberg MVs. For
-        // Hive the recorded side is in seconds while the max refresh timestamp is normalized to
-        // millis, so this guard effectively never fires there and staleness relies on the confirmed
-        // baseline below. For JDBC both sides are epoch millis, so the comparison is exact.
-        if (baseTableRefreshTimestamp < getLastRefreshTime()) {
+        // partitions): treat as outdated rather than trusting the staleness window, otherwise the MV
+        // could serve rows removed from the base table. On a normal timeline the base timestamp is >=
+        // what the MV absorbed, so this guard fires only on a genuine regression, for every connector.
+        if (baseRefreshTimestampMillis < lastRefreshTimeMillis) {
             LOG.debug("MV is outdated because base tables' refresh timestamp {} regressed below MV's "
                             + "lastRefreshTime {}",
-                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
-                    DateUtils.formatTimeStampInMill(getLastRefreshTime(), currentTimeZoneId));
+                    DateUtils.formatTimeStampInMill(baseRefreshTimestampMillis, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(lastRefreshTimeMillis, currentTimeZoneId));
             return false;
         }
         long lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();

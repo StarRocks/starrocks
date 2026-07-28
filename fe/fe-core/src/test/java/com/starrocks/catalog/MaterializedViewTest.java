@@ -1919,4 +1919,62 @@ public class MaterializedViewTest extends StarRocksTestBase {
         mv.setMaxMVRewriteStaleness(0);
         Assertions.assertFalse(mv.isStalenessSatisfied());
     }
+
+    /**
+     * The rollback guard must fire on a genuine base-time regression even when the base records its
+     * modified time in a coarser unit than the live millis max: Hive uses epoch seconds, normalized by
+     * magnitude in the guard. Absorbed T+100s (epoch seconds) vs a live max that regressed to T (millis).
+     */
+    @Test
+    public void testIsStalenessSatisfiedRollbackGuardNormalizesHiveSeconds() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_050_000L);
+        scheme.setLastRefreshTime(1_700_000_100L); // epoch seconds == 1_700_000_100_000 ms (absorbed)
+        MaterializedView mv = new MaterializedView(1000, 100, "mv_guard_hive", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // epoch millis, earlier than absorbed -> regression
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /** Same as above but Iceberg records epoch micros; magnitude normalization must still detect it. */
+    @Test
+    public void testIsStalenessSatisfiedRollbackGuardNormalizesIcebergMicros() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_050_000L);
+        scheme.setLastRefreshTime(1_700_000_100_000_000L); // epoch micros == 1_700_000_100_000 ms (absorbed)
+        MaterializedView mv = new MaterializedView(1001, 101, "mv_guard_iceberg", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // millis, earlier -> regression
+            }
+        };
+        Assertions.assertFalse(mv.isStalenessSatisfied());
+    }
+
+    /** No regression (same instant, Hive seconds vs live millis): the guard must NOT fire; served. */
+    @Test
+    public void testIsStalenessSatisfiedHiveNoRegressionServed() {
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        scheme.setLastFreshnessConfirmedAt(1_700_000_000_000L);
+        scheme.setLastRefreshTime(1_700_000_000L); // epoch seconds == 1_700_000_000_000 ms (same instant)
+        MaterializedView mv = new MaterializedView(1002, 102, "mv_guard_hive_ok", columns,
+                KeysType.AGG_KEYS, null, null, scheme);
+        mv.setMaxMVRewriteStaleness(600);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public Optional<Long> maxBaseTableRefreshTimestamp() {
+                return Optional.of(1_700_000_000_000L); // millis, same instant -> no regression
+            }
+        };
+        Assertions.assertTrue(mv.isStalenessSatisfied());
+    }
 }
