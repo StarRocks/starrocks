@@ -1205,7 +1205,6 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
     }
 }
 
-
 // E4 "train" mode (ZDICT-lite): the first pages are buffered uncompressed while a
 // dictionary is trained from fragments spread across them, then flushed in order.
 // Pins that (1) a TRAINED dictionary page is emitted and flagged as such, and
