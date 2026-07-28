@@ -128,11 +128,14 @@ CONF_Int32(shared_dict_train_pages, "32");
 // training samples. Many small samples train a better dictionary than a few
 // large ones.
 CONF_Int32(shared_dict_train_fragment_bytes, "4096");
-// Maximum dictionary size. 112KB follows the zstd trainer convention (the CLI's
-// --train default is 110 KiB). Worth sweeping per workload: the dictionary is a
-// codebook of frequent substrings, so returns diminish quickly with size while
-// every byte costs read-side memory.
-CONF_Int32(shared_dict_max_size, "114688");
+// Maximum dictionary size. 64KB, not the 110KiB zstd-CLI convention: measured on
+// a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
+// 112KB and 256KB on EVERY column, because the dictionary is a codebook of
+// frequent substrings whose returns diminish fast while its own bytes are stored
+// once per (column, segment) -- on a 41MB column a 256KB dictionary costs 0.6% of
+// the total, enough to flip the ranking. Larger values are only worth trying for
+// very large single-column segments.
+CONF_Int32(shared_dict_max_size, "65536");
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
