@@ -394,6 +394,11 @@ Status ScalarColumnWriter::init() {
     RETURN_IF_ERROR(
             get_block_compression_codec(_opts.meta->compression(), &_compress_codec, _opts.meta->compression_level()));
 
+    // E4: resolve the shared-dictionary build mode once. "train" (ZDICT-lite)
+    // buffers the first pages to train a dictionary from spread samples;
+    // "sample" (default) takes the first eligible page verbatim.
+    _shared_dict_train_mode = _opts.use_shared_dict && config::shared_dict_build_mode == "train";
+
     if (!_opts.need_speculate_encoding) {
         auto st = set_encoding(_opts.meta->encoding());
         CHECK(st.ok()) << st;
@@ -507,6 +512,12 @@ Status ScalarColumnWriter::finish() {
 }
 
 Status ScalarColumnWriter::write_data() {
+    // E4 "train" mode: the column may have ended before enough pages accumulated;
+    // train with what we have (or give up) and flush the buffered pages, so the
+    // dict page below and the data pages are consistent.
+    if (_shared_dict_train_mode && !_shared_dict_train_done) {
+        RETURN_IF_ERROR(_finalize_shared_dict_training());
+    }
     // dict will be load before data,
     // so write column dict first
     if (_encoding_info->encoding() == DICT_ENCODING) {
@@ -551,6 +562,11 @@ Status ScalarColumnWriter::write_data() {
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wfile,
                                                         shared_dict_body, shared_dict_footer, &shared_dict_pp));
         shared_dict_pp.to_proto(_opts.meta->mutable_shared_dict_page());
+        if (_shared_dict_trained) {
+            // Tell the reader to load these bytes as a full dictionary. Only set
+            // when true so sample-mode columns stay byte-identical.
+            _opts.meta->set_shared_dict_trained(true);
+        }
         StorageMetrics::instance()->shared_dict_pages_written.increment(1);
         StorageMetrics::instance()->shared_dict_bytes.increment(shared_dict_pp.size);
     }
@@ -638,6 +654,101 @@ Status ScalarColumnWriter::_write_data_page(Page* page) {
     return Status::OK();
 }
 
+
+int ScalarColumnWriter::_effective_compression_level() const {
+    return (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
+                   ? _opts.meta->compression_level()
+                   : -1;
+}
+
+Status ScalarColumnWriter::_compress_and_push_page(std::vector<OwnedSlice> body, PageFooterPB footer) {
+    std::vector<Slice> slices;
+    slices.reserve(body.size());
+    for (auto& part : body) {
+        if (part.slice().size > 0) {
+            slices.emplace_back(part.slice());
+        }
+    }
+    const compression::ZstdCDict* cdict = _shared_dict_ready ? _shared_cdict.get() : nullptr;
+    faststring compressed_body;
+    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, slices,
+                                               &compressed_body, cdict));
+    auto page = std::make_unique<Page>();
+    page->footer = std::move(footer);
+    if (compressed_body.size() == 0) {
+        // Not worth compressing: keep the raw body (a legal page state).
+        page->data = std::move(body);
+    } else {
+        page->data.emplace_back(compressed_body.build());
+        if (cdict != nullptr) {
+            _cdict_used = true;
+        }
+    }
+    _push_back_page(page.release());
+    return Status::OK();
+}
+
+Status ScalarColumnWriter::_finalize_shared_dict_training() {
+    if (_shared_dict_train_done) {
+        return Status::OK();
+    }
+    // Set first: this must run exactly once, and _compress_and_push_page below
+    // must not re-enter the deferring branch.
+    _shared_dict_train_done = true;
+
+    // Build the training samples from the buffered pages: cut each page body's
+    // encoded values into fragments so the trainer sees many small samples
+    // spread across many rows (that is what makes the dictionary a codebook of
+    // frequent substrings rather than one contiguous chunk of data).
+    if (!_deferred_pages.empty()) {
+        const size_t fragment = std::max<size_t>(256, static_cast<size_t>(config::shared_dict_train_fragment_bytes));
+        std::string sample_buf;
+        std::vector<size_t> sample_sizes;
+        for (const auto& deferred : _deferred_pages) {
+            if (deferred.body.empty()) continue;
+            const Slice values = deferred.body[0].slice(); // encoded values, no nullmap
+            for (size_t off = 0; off < values.size; off += fragment) {
+                const size_t n = std::min(fragment, values.size - off);
+                sample_buf.append(values.data + off, n);
+                sample_sizes.push_back(n);
+            }
+        }
+        if (sample_buf.size() >= static_cast<size_t>(config::shared_dict_min_sample_bytes) && !sample_sizes.empty()) {
+            auto dict_or = compression::ZstdCDict::train(Slice(sample_buf), sample_sizes,
+                                                         static_cast<size_t>(config::shared_dict_max_size));
+            if (dict_or.ok()) {
+                auto cdict_or = compression::ZstdCDict::create(Slice(dict_or.value()), _effective_compression_level(),
+                                                               /*trained=*/true);
+                if (cdict_or.ok()) {
+                    _shared_dict_sample = std::move(dict_or.value());
+                    _shared_cdict = std::move(cdict_or.value());
+                    _shared_dict_ready = true;
+                    _shared_dict_trained = true;
+                } else {
+                    VLOG(2) << "shared dict: CDict build failed: " << cdict_or.status();
+                }
+            } else {
+                // Benign and expected when the samples are too few or too
+                // homogeneous for ZDICT.
+                VLOG(2) << "shared dict: training failed: " << dict_or.status();
+            }
+        }
+        if (!_shared_dict_ready) {
+            StorageMetrics::instance()->shared_dict_build_fallback.increment(1);
+        }
+    }
+
+    // Flush the buffered pages in order -- WITH the dictionary if we got one,
+    // plainly compressed otherwise. They must never be left raw, or the column
+    // would regress versus no feature at all.
+    for (auto& deferred : _deferred_pages) {
+        RETURN_IF_ERROR(_compress_and_push_page(std::move(deferred.body), std::move(deferred.footer)));
+    }
+    _deferred_pages.clear();
+    _deferred_pages.shrink_to_fit();
+    return Status::OK();
+}
+
 Status ScalarColumnWriter::finish_current_page() {
     if (_zone_map_index_builder != nullptr) {
         RETURN_IF_ERROR(_zone_map_index_builder->flush());
@@ -684,70 +795,87 @@ Status ScalarColumnWriter::finish_current_page() {
         // for page format v2 or above, use the encoding type of config::null_encoding
         data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
     }
-    // E4: lazily build the per-column shared dictionary from the first eligible
-    // page's encoded values, BEFORE compressing this page, so page 0 itself is
-    // dict-compressed. Best-effort: any failure just leaves the column without a
-    // shared dict; it never fails the flush.
-    if (_opts.use_shared_dict && !_shared_dict_ready && _compress_codec != nullptr &&
-        _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
-        _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
-        encoded_values->size() >= static_cast<size_t>(config::shared_dict_min_sample_bytes)) {
-        // The first data page of an E4 column must be format v2 so that even an
-        // all-null first page has non-empty encoded_values (null rows go into
-        // the page builder), guaranteeing no no-dict frame precedes the dict
-        // page. See design §5.3.3.
-        DCHECK(_first_rowid != 0 || _curr_page_format == 2);
-        size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.shared_dict_sample_bytes);
-        _shared_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
-        int level =
-                (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
-                        ? _opts.meta->compression_level()
-                        : -1;
-        auto cdict_or = compression::ZstdCDict::create(Slice(_shared_dict_sample), level);
-        if (cdict_or.ok()) {
-            _shared_cdict = std::move(cdict_or.value());
-            _shared_dict_ready = true;
-        } else {
-            _shared_dict_sample.clear(); // degrade: this column gets no shared dict
-            StorageMetrics::instance()->shared_dict_build_fallback.increment(1);
+    // E4 "train" mode (ZDICT-lite): hold the first pages UNCOMPRESSED so a
+    // dictionary can be trained from fragments spread across all of them, then
+    // compress them in order. This is why the mode costs buffering: page bytes
+    // must survive until the dictionary exists.
+    if (_shared_dict_train_mode && !_shared_dict_train_done) {
+        DeferredPage deferred;
+        deferred.footer = page->footer;
+        deferred.body.emplace_back(encoded_values->build());
+        if (nullmap.is_loaded() && nullmap.slice().size > 0) {
+            deferred.body.emplace_back(std::move(nullmap));
         }
-    }
-    const compression::ZstdCDict* cdict = _shared_dict_ready ? _shared_cdict.get() : nullptr;
-
-    // trying to compress page body
-    faststring compressed_body;
-    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
-                                               &compressed_body, cdict));
-    if (compressed_body.size() == 0) {
-        // page body is uncompressed
-        double space_saving =
-                1.0 - static_cast<double>(encoded_values->size()) / static_cast<double>(encoded_values->capacity());
-        // when the page is first compressed by bitshuffle, the compression effect of lz4 is not obvious.
-        // Then the compressed page (may be much larger then the actual size,
-        // e.g. the page is 6K, but the compressed page allocated is 256K),
-        // is swaped to the encoded_values for opt the memory allocation.
-        // In this scenario, the page is all 256K, bug actual data size is 6K.
-        // So, we should shrink the page to the right size.
-        if (space_saving >= _opts.compression_min_space_saving) {
-            encoded_values->shrink_to_fit();
+        _deferred_pages.emplace_back(std::move(deferred));
+        if (_deferred_pages.size() >= static_cast<size_t>(std::max(1, config::shared_dict_train_pages))) {
+            RETURN_IF_ERROR(_finalize_shared_dict_training());
         }
-
-        page->data.emplace_back(encoded_values->build());
-        page->data.emplace_back(std::move(nullmap));
-        // Move the ownership of the internal storage of |compressed_body| to |encoded_values|,
-        // in order to reduce the internal memory allocations/deallocations of |_page_builder|.
-        encoded_values->swap(compressed_body);
     } else {
-        // page body is compressed
-        page->data.emplace_back(compressed_body.build());
-        if (cdict != nullptr) {
-            // This page was actually compressed referencing the shared dict, so
-            // the dict page must be persisted (gate for write_data()).
-            _cdict_used = true;
+        // E4: lazily build the per-column shared dictionary from the first eligible
+        // page's encoded values, BEFORE compressing this page, so page 0 itself is
+        // dict-compressed. Best-effort: any failure just leaves the column without a
+        // shared dict; it never fails the flush.
+        if (_opts.use_shared_dict && !_shared_dict_ready && _compress_codec != nullptr &&
+            _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
+            _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
+            encoded_values->size() >= static_cast<size_t>(config::shared_dict_min_sample_bytes)) {
+            // The first data page of an E4 column must be format v2 so that even an
+            // all-null first page has non-empty encoded_values (null rows go into
+            // the page builder), guaranteeing no no-dict frame precedes the dict
+            // page. See design §5.3.3.
+            DCHECK(_first_rowid != 0 || _curr_page_format == 2);
+            size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.shared_dict_sample_bytes);
+            _shared_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
+            int level =
+                    (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
+                            ? _opts.meta->compression_level()
+                            : -1;
+            auto cdict_or = compression::ZstdCDict::create(Slice(_shared_dict_sample), level);
+            if (cdict_or.ok()) {
+                _shared_cdict = std::move(cdict_or.value());
+                _shared_dict_ready = true;
+            } else {
+                _shared_dict_sample.clear(); // degrade: this column gets no shared dict
+                StorageMetrics::instance()->shared_dict_build_fallback.increment(1);
+            }
         }
-    }
+        const compression::ZstdCDict* cdict = _shared_dict_ready ? _shared_cdict.get() : nullptr;
 
-    _push_back_page(page.release());
+        // trying to compress page body
+        faststring compressed_body;
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, cdict));
+        if (compressed_body.size() == 0) {
+            // page body is uncompressed
+            double space_saving =
+                    1.0 - static_cast<double>(encoded_values->size()) / static_cast<double>(encoded_values->capacity());
+            // when the page is first compressed by bitshuffle, the compression effect of lz4 is not obvious.
+            // Then the compressed page (may be much larger then the actual size,
+            // e.g. the page is 6K, but the compressed page allocated is 256K),
+            // is swaped to the encoded_values for opt the memory allocation.
+            // In this scenario, the page is all 256K, bug actual data size is 6K.
+            // So, we should shrink the page to the right size.
+            if (space_saving >= _opts.compression_min_space_saving) {
+                encoded_values->shrink_to_fit();
+            }
+
+            page->data.emplace_back(encoded_values->build());
+            page->data.emplace_back(std::move(nullmap));
+            // Move the ownership of the internal storage of |compressed_body| to |encoded_values|,
+            // in order to reduce the internal memory allocations/deallocations of |_page_builder|.
+            encoded_values->swap(compressed_body);
+        } else {
+            // page body is compressed
+            page->data.emplace_back(compressed_body.build());
+            if (cdict != nullptr) {
+                // This page was actually compressed referencing the shared dict, so
+                // the dict page must be persisted (gate for write_data()).
+                _cdict_used = true;
+            }
+        }
+
+        _push_back_page(page.release());
+    }
 
     if (is_nullable()) {
         size_t num_data = (_curr_page_format == 1) ? _page_builder->count() : _null_map_builder_v2->data_count();

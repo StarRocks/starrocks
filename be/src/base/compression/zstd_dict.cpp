@@ -20,6 +20,8 @@
 // include. Header layout follows compression_headers.h (flat on macOS/Homebrew,
 // subdirectories for the Linux thirdparty install).
 #define ZSTD_STATIC_LINKING_ONLY
+// ZDICT_trainFromBuffer_fastCover + ZDICT_fastCover_params_t are experimental too.
+#define ZDICT_STATIC_LINKING_ONLY
 
 #ifdef STARROCKS_MACOS_USE_FLAT_INCLUDES
 #include <zdict.h>
@@ -28,6 +30,8 @@
 #include <zstd/zdict.h>
 #include <zstd/zstd.h>
 #endif
+
+#include <cstring>
 
 #include "base/compression/zstd_dict.h"
 
@@ -70,13 +74,31 @@ StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vecto
     }
     std::string dict;
     dict.resize(max_dict_size);
-    size_t const written = ZDICT_trainFromBuffer(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
-                                                 static_cast<unsigned>(sample_sizes.size()));
+
+    // Use fastCover with EXPLICIT k/d instead of the stable
+    // ZDICT_trainFromBuffer, which redirects to the fastCover *optimizer*
+    // (d=8, steps=4). Measured on six synthetic datasets: the optimizer is
+    // 3-4x slower and can silently settle on a degenerate dictionary (20KB
+    // instead of the requested 112KB, ~11% worse compression); pinning k/d was
+    // never worse and much faster.
+    ZDICT_fastCover_params_t params;
+    memset(&params, 0, sizeof(params));
+    params.k = 200; // segment size
+    params.d = 8;   // dmer size
+    // f, accel, shrinkDict and zParams stay 0 == zstd defaults; steps/nbThreads/
+    // splitPoint only matter for the optimizer we are deliberately bypassing.
+    size_t written = ZDICT_trainFromBuffer_fastCover(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
+                                                    static_cast<unsigned>(sample_sizes.size()), params);
+    if (ZDICT_isError(written)) {
+        // Fall back to the stable entry point before giving up.
+        written = ZDICT_trainFromBuffer(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
+                                        static_cast<unsigned>(sample_sizes.size()));
+    }
     if (ZDICT_isError(written)) {
         // Common and benign: "src size is incorrect" / "Dictionary training
         // failed" when the samples are too few or too homogeneous. The caller
         // degrades to no shared dict.
-        return Status::InternalError(std::string("ZDICT_trainFromBuffer failed: ") + ZDICT_getErrorName(written));
+        return Status::InternalError(std::string("ZDICT training failed: ") + ZDICT_getErrorName(written));
     }
     dict.resize(written);
     return dict;

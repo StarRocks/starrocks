@@ -143,6 +143,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     // has_shared_dict() is false and the read path is unchanged).
     if (meta->has_shared_dict_page()) {
         _shared_dict_page_pointer = PagePointer(meta->shared_dict_page());
+        _shared_dict_trained = meta->shared_dict_trained();
     }
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -529,7 +530,7 @@ Status ColumnReader::_ensure_shared_ddict(const ColumnIteratorOptions& iter_opts
                             RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
                             // ZSTD copies the dictionary bytes internally, so the
                             // page handle may be released after create().
-                            auto ddict_or = compression::ZstdDDict::create(body);
+                            auto ddict_or = compression::ZstdDDict::create(body, _shared_dict_trained);
                             RETURN_IF_ERROR(ddict_or.status());
                             _shared_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
                             return Status::OK();
