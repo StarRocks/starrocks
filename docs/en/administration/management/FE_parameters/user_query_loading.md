@@ -716,6 +716,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
   Changing this item affects `BestMvSelector` behavior and can improve or broaden rewrite applicability depending on whether physical layout matters for plan correctness or performance.
 - Introduced in: -
 
+### `profile_wait_after_cancel_second`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a cancelled query keeps waiting for the fragment instances that have not reported yet. A cancelled query is going to fail, and this wait only exists so that the profile of the fragments that failed can still be collected. Once the grace period elapses, the coordinator stops waiting and fails the statement with the error that caused the cancel, instead of holding on until `query_timeout` or `insert_timeout` expires. Set it to `0` to stop waiting as soon as the query is cancelled.
+- Introduced in: v4.2
+
 ### `publish_version_interval_ms`
 
 - Default: 10

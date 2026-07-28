@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
@@ -226,6 +227,39 @@ public class JoinTest extends SchedulerTestBase {
         Map<String, String> stringLoadCounters = loadCounters.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
         Assertions.assertEquals(stringLoadCounters, scheduler.getLoadCounters());
+    }
+
+    @Test
+    public void testProfileWaitAfterCancelIsBounded() throws Exception {
+        String sql = "insert into lineitem select * from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+
+        int savedWait = Config.profile_wait_after_cancel_second;
+        boolean savedEnableProfile = connectContext.getSessionVariable().isEnableProfile();
+        try {
+            // With the profile enabled the cancel path deliberately keeps the latch held so it can still
+            // collect the profile of the fragments that failed.
+            connectContext.getSessionVariable().setEnableProfile(true);
+            Config.profile_wait_after_cancel_second = 3600;
+
+            // Not cancelled yet, so there is nothing to bound.
+            Assertions.assertFalse(scheduler.profileWaitAfterCancelExpired());
+
+            scheduler.cancel("Cancel by test");
+            // No instance reported, and the profile is enabled, so the wait is still on.
+            Assertions.assertFalse(scheduler.isDone());
+            Assertions.assertFalse(scheduler.profileWaitAfterCancelExpired());
+
+            // Once the grace period elapses the coordinator stops waiting and marks the query done, so the
+            // caller reports the error that caused the cancel instead of a timeout.
+            Config.profile_wait_after_cancel_second = 0;
+            Assertions.assertTrue(scheduler.profileWaitAfterCancelExpired());
+            Assertions.assertTrue(scheduler.isDone());
+            Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
+        } finally {
+            Config.profile_wait_after_cancel_second = savedWait;
+            connectContext.getSessionVariable().setEnableProfile(savedEnableProfile);
+        }
     }
 
     @Test

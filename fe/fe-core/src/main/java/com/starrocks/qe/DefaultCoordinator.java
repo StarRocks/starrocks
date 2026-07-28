@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -156,6 +157,13 @@ public class DefaultCoordinator extends Coordinator {
      * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
     private Status queryStatus = new Status();
+
+    /**
+     * When the query was cancelled, or -1 if it was not.
+     * <p> Bounds how long {@link #join} keeps waiting for instances that have not reported yet, see
+     * {@link Config#profile_wait_after_cancel_second}.
+     */
+    private volatile long cancelledAtMs = -1;
 
     private PQueryStatistics auditStatistics;
 
@@ -1138,6 +1146,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        if (!isInternalCancel(cancelReason) && cancelledAtMs < 0) {
+            cancelledAtMs = System.currentTimeMillis();
+        }
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         clearExternalResourcesAsync();
 
@@ -1484,6 +1495,10 @@ public class DefaultCoordinator extends Coordinator {
                 return true;
             }
 
+            if (profileWaitAfterCancelExpired()) {
+                return true;
+            }
+
             if (ThriftServer.getExecutor() != null
                     && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
@@ -1496,6 +1511,38 @@ public class DefaultCoordinator extends Coordinator {
             LOG.warn("failed to get profile within {} seconds", timeoutS);
         }
         return false;
+    }
+
+    /**
+     * Stop waiting for the still unreported instances once a cancelled query has been given its grace period.
+     * <p>
+     * An instance is only retired from the profile latch by a {@code done=true} report. If its worker stops
+     * finalizing while its heartbeat keeps answering, that report never arrives and neither
+     * {@link CoordinatorMonitor} nor {@link #checkBackendState} declares the worker dead, so the only thing
+     * left bounding the wait is the statement timeout - up to insert_timeout for DML. The query has already
+     * been cancelled at this point and is going to fail either way, so waiting longer only delays the error.
+     *
+     * @return true if the wait was ended here, in which case the query is marked done so the caller reports
+     *         the error that caused the cancel rather than a timeout.
+     */
+    @VisibleForTesting
+    public boolean profileWaitAfterCancelExpired() {
+        long cancelledAt = cancelledAtMs;
+        if (cancelledAt < 0) {
+            return false;
+        }
+        long waitedMs = System.currentTimeMillis() - cancelledAt;
+        if (waitedMs < Config.profile_wait_after_cancel_second * 1000L) {
+            return false;
+        }
+
+        List<String> unreported = queryProfile.getUnfinishedInstanceIds();
+        LOG.warn("query {} was cancelled {}ms ago and {} instance(s) still have not reported, " +
+                        "giving up on their profile: {}",
+                DebugUtil.printId(jobSpec.getQueryId()), waitedMs, unreported.size(), unreported);
+        // Release the latch so isDone() holds and the caller does not mistake this for a timeout.
+        queryProfile.finishAllInstances(Status.OK);
+        return true;
     }
 
     // build execution profile  from every BE's report
