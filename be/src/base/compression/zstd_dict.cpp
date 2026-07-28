@@ -94,8 +94,8 @@ StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, 
         return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
     }
     const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
-    ZSTD_DDict* d =
-            ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type, ZSTD_defaultCMem);
+    ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type,
+                                              ZSTD_defaultCMem);
     if (d == nullptr) {
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }
