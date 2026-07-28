@@ -302,7 +302,12 @@ public class StatisticExecutor {
     }
 
     public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
-        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, Lists.newArrayList(columnName));
+        return dropExternalHistogramRawColumns(statsConnectCtx, rawTableUUID, Lists.newArrayList(columnName));
+    }
+
+    public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
+                                                   List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
     }

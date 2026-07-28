@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.apache.commons.collections.CollectionUtils;
@@ -239,6 +240,11 @@ public abstract class StatisticsCollectJob {
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
             throws Exception {
+        collectStatisticSync(null, sql, context, analyzeStatus);
+    }
+
+    protected void collectStatisticSync(StatementBase parsedStmt, String sql, ConnectContext context,
+                                        AnalyzeStatus analyzeStatus) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {
@@ -252,8 +258,10 @@ public abstract class StatisticsCollectJob {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
             Stopwatch watch = Stopwatch.createStarted();
-            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
+            StatementBase statement = parsedStmt == null
+                    ? SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable())
+                    : parsedStmt;
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
 
             // set default session variables for stats context
             setDefaultSessionVariable(context);
@@ -280,6 +288,14 @@ public abstract class StatisticsCollectJob {
         } while (count < maxRetryTimes);
 
         throw new DdlException(context.getState().getErrorMessage());
+    }
+
+    protected List<TStatisticData> queryStatisticSync(
+            String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws DdlException {
+        checkCancelled(analyzeStatus);
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+        setDefaultSessionVariable(context);
+        return new StatisticExecutor().executeStatisticDQL(context, sql);
     }
 
     protected String getMinMaxFunction(Type columnType, String name, boolean isMax) {
