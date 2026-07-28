@@ -60,7 +60,7 @@ jobs:
           fi
 
   title-check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     needs: sync-checker
     if: >
       !startsWith(github.event.pull_request.title, 'Revert ')
@@ -153,7 +153,7 @@ jobs:
           exit 1
 
   backport-check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     needs: backport-check-subtask
     if: always() && needs.backport-check-subtask.result != 'skipped'
     steps:

@@ -24,7 +24,7 @@ jobs:
   meta-review:
     name: META REVIEW LABEL
     if: github.event.label.name == 'META-REVIEW'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       META_TEAM: meta-committer
@@ -54,7 +54,7 @@ jobs:
   proto-review:
     name: PROTO REVIEW LABEL
     if: github.event.label.name == 'PROTO-REVIEW'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PROTO_TEAM: proto-team
@@ -84,7 +84,7 @@ jobs:
   global-review:
     name: GLOBAL REVIEW LABEL
     if: github.event.label.name == 'GLOBAL-REVIEW'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       GLOBAL_TEAM: global-reviewer
@@ -113,7 +113,7 @@ jobs:
 
   force-check:
     if: github.event.label.name == 'force-check' && github.event.action == 'labeled'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       BRANCH: ${{ github.base_ref }}
