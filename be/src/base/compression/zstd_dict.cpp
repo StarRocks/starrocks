@@ -15,36 +15,71 @@
 // The advanced dictionary-construction API (ZSTD_createCDict_advanced,
 // ZSTD_createDDict_advanced, ZSTD_dct_rawContent, ZSTD_dlm_byCopy,
 // ZSTD_defaultCMem, ZSTD_getCParams) lives in the experimental section of
-// <zstd.h>, guarded by ZSTD_STATIC_LINKING_ONLY. It MUST be defined before the
-// <zstd.h> include is first pulled into this translation unit. Keep this define
-// and the direct <zstd.h> include above every other include.
+// <zstd.h>, guarded by ZSTD_STATIC_LINKING_ONLY. It MUST be defined before
+// zstd.h is first pulled into this translation unit, so keep it above every
+// include. Header layout follows compression_headers.h (flat on macOS/Homebrew,
+// subdirectories for the Linux thirdparty install).
 #define ZSTD_STATIC_LINKING_ONLY
-#include "base/compression/zstd_dict.h"
 
+#ifdef STARROCKS_MACOS_USE_FLAT_INCLUDES
+#include <zdict.h>
 #include <zstd.h>
+#else
+#include <zstd/zdict.h>
+#include <zstd/zstd.h>
+#endif
+
+#include "base/compression/zstd_dict.h"
 
 namespace starrocks::compression {
 
-StatusOr<std::unique_ptr<ZstdCDict>> ZstdCDict::create(const Slice& sample, int level) {
-    if (sample.size == 0) {
-        return Status::InvalidArgument("cannot build shared ZSTD dict from an empty sample");
+// ZDICT_DICTSIZE_MIN lives in zdict.h's static-linking-only section; keep our own
+// floor so this file does not depend on that block.
+static constexpr size_t kMinTrainedDictSize = 4096;
+
+StatusOr<std::unique_ptr<ZstdCDict>> ZstdCDict::create(const Slice& dict_bytes, int level, bool trained) {
+    if (dict_bytes.size == 0) {
+        return Status::InvalidArgument("cannot build shared ZSTD dict from empty bytes");
     }
     // level == -1 means "unset"; a CDict must bake a concrete level because the
     // per-page compress path skips ZSTD_c_compressionLevel once a CDict is
     // referenced (see block_compression.cpp _compress).
     const int effective_level = (level == -1) ? ZSTD_CLEVEL_DEFAULT : level;
-    // Build cParams from the level. estimatedSrcSize == 0 lets zstd pick window
-    // parameters sized to the (small) dictionary rather than a huge source.
-    ZSTD_compressionParameters cparams = ZSTD_getCParams(effective_level, /*estimatedSrcSize=*/0, sample.size);
-    // ZSTD_dct_rawContent: never parse the sample as a structured dictionary,
-    // even if its first bytes happen to equal ZSTD_MAGIC_DICTIONARY (the sample
-    // is user-controlled raw data and could be adversarially constructed).
-    ZSTD_CDict* d = ZSTD_createCDict_advanced(sample.data, sample.size, ZSTD_dlm_byCopy, ZSTD_dct_rawContent, cparams,
+    ZSTD_compressionParameters cparams = ZSTD_getCParams(effective_level, /*estimatedSrcSize=*/0, dict_bytes.size);
+    // A raw sample must never be parsed as a structured dictionary (it is
+    // user-controlled data and may begin with ZSTD_MAGIC_DICTIONARY). A trained
+    // dictionary, in contrast, MUST be parsed so its entropy tables are used.
+    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
+    ZSTD_CDict* d = ZSTD_createCDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type, cparams,
                                               ZSTD_defaultCMem);
     if (d == nullptr) {
         return Status::InternalError("ZSTD_createCDict_advanced returned null");
     }
     return std::unique_ptr<ZstdCDict>(new ZstdCDict(d));
+}
+
+StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vector<size_t>& sample_sizes,
+                                       size_t max_dict_size) {
+    if (sample_buf.size == 0 || sample_sizes.empty()) {
+        return Status::InvalidArgument("no samples to train a shared ZSTD dict from");
+    }
+    // ZDICT needs a meaningful amount of material; below this it reliably fails
+    // (and a tiny dictionary would not pay for itself anyway).
+    if (max_dict_size < kMinTrainedDictSize) {
+        return Status::InvalidArgument("shared dict max size too small to train");
+    }
+    std::string dict;
+    dict.resize(max_dict_size);
+    size_t const written = ZDICT_trainFromBuffer(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
+                                                 static_cast<unsigned>(sample_sizes.size()));
+    if (ZDICT_isError(written)) {
+        // Common and benign: "src size is incorrect" / "Dictionary training
+        // failed" when the samples are too few or too homogeneous. The caller
+        // degrades to no shared dict.
+        return Status::InternalError(std::string("ZDICT_trainFromBuffer failed: ") + ZDICT_getErrorName(written));
+    }
+    dict.resize(written);
+    return dict;
 }
 
 ZstdCDict::~ZstdCDict() {
@@ -54,12 +89,13 @@ ZstdCDict::~ZstdCDict() {
     }
 }
 
-StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& sample) {
-    if (sample.size == 0) {
-        return Status::InvalidArgument("cannot build shared ZSTD ddict from an empty sample");
+StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, bool trained) {
+    if (dict_bytes.size == 0) {
+        return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
     }
+    const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
     ZSTD_DDict* d =
-            ZSTD_createDDict_advanced(sample.data, sample.size, ZSTD_dlm_byCopy, ZSTD_dct_rawContent, ZSTD_defaultCMem);
+            ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type, ZSTD_defaultCMem);
     if (d == nullptr) {
         return Status::InternalError("ZSTD_createDDict_advanced returned null");
     }

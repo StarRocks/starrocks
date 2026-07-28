@@ -209,6 +209,13 @@ message ColumnMetaPB {
     // written with use_shared_dict; left unset (zero bytes) for every other
     // column, so non-E4 segments serialize byte-identically.
     optional PagePointerPB shared_dict_page = 35;
+    // E4: how to interpret the bytes in shared_dict_page.
+    //   unset/false -> raw content (a verbatim data sample); must be loaded with
+    //                  ZSTD_dct_rawContent so a sample that happens to begin with
+    //                  ZSTD_MAGIC_DICTIONARY is never misparsed.
+    //   true        -> a ZDICT-trained dictionary (has its own magic + entropy
+    //                  tables); must be loaded as a full dictionary.
+    optional bool shared_dict_trained = 36;
 }
 
 enum VectorIndexStorageTypePB {
