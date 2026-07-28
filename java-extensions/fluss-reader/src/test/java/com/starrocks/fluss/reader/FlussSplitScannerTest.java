@@ -14,6 +14,7 @@
 
 package com.starrocks.fluss.reader;
 
+import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.table.Table;
@@ -33,6 +34,7 @@ import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
 import org.apache.fluss.record.ChangeType;
+import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.GenericRow;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataTypes;
@@ -46,6 +48,7 @@ import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -61,7 +64,10 @@ public class FlussSplitScannerTest {
     public void testOpen() throws Exception {
         TableBucket bucket = new TableBucket(1, 0);
         LogScanner logScanner = mock(LogScanner.class);
-        InternalRow row = GenericRow.of(7, null);
+        InternalRow row = GenericRow.of(
+                7,
+                null,
+                GenericRow.of(42, BinaryString.fromString("hello")));
         when(logScanner.poll(any(Duration.class))).thenReturn(new ScanRecords(
                 Collections.singletonMap(
                         bucket,
@@ -77,6 +83,9 @@ public class FlussSplitScannerTest {
                         .schema(Schema.newBuilder()
                                 .column("id", DataTypes.INT())
                                 .column("name", DataTypes.STRING())
+                                .column("info", DataTypes.ROW(
+                                        DataTypes.FIELD("f1", DataTypes.INT()),
+                                        DataTypes.FIELD("f2", DataTypes.STRING())))
                                 .build())
                         .distributedBy(1)
                         .build(),
@@ -96,14 +105,23 @@ public class FlussSplitScannerTest {
         String catalogName = "test-catalog";
         String cacheKey = catalogName + ":" + Integer.toHexString(runtimeConf.hashCode());
         connectionCache().put(cacheKey, connection);
-        ColumnValue[] values = new ColumnValue[2];
+        ColumnType[][] capturedTypes = new ColumnType[1][];
+        ColumnValue[] values = new ColumnValue[3];
         FlussSplitScanner scanner = new FlussSplitScanner(
                 1,
                 params(
-                        "id,name",
+                        "id,name,info",
+                        "info.f2",
                         encodeSplit(new LogSplit(bucket, null, 0, 1)),
                         runtimeConf,
                         catalogName)) {
+            @Override
+            protected void initOffHeapTableWriter(
+                    ColumnType[] requiredTypes, String[] requiredFields, int fetchSize) {
+                capturedTypes[0] = requiredTypes;
+                super.initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
+            }
+
             @Override
             protected void appendData(int index, ColumnValue value) {
                 values[index] = value;
@@ -115,6 +133,8 @@ public class FlussSplitScannerTest {
             Assertions.assertEquals(1, scanner.getNext());
             Assertions.assertEquals(7, values[0].getInt());
             Assertions.assertNull(values[1]);
+            Assertions.assertEquals(List.of("f2"), capturedTypes[0][2].getChildNames());
+            Assertions.assertEquals(List.of(1), capturedTypes[0][2].getFieldIndex());
         } finally {
             scanner.close();
             connectionCache().remove(cacheKey);
@@ -168,9 +188,10 @@ public class FlussSplitScannerTest {
     }
 
     private static Map<String, String> params(
-            String requiredFields, String splitInfo, String runtimeConf, String catalogName) {
+            String requiredFields, String nestedFields, String splitInfo, String runtimeConf, String catalogName) {
         return Map.of(
                 "required_fields", requiredFields,
+                "nested_fields", nestedFields,
                 "split_info", splitInfo,
                 "predicate_info", "",
                 "runtime_conf", runtimeConf,

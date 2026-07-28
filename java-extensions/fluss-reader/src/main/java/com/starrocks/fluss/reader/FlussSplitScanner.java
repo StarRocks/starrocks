@@ -18,6 +18,7 @@ import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.ScannerHelper;
+import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
@@ -78,6 +79,7 @@ public class FlussSplitScanner extends ConnectorScanner {
     private final String tableName;
     private final String timeZone;
     private final String[] requiredFields;
+    private final String[] nestedFields;
     private final int fetchSize;
     private final ClassLoader classLoader;
 
@@ -92,6 +94,7 @@ public class FlussSplitScanner extends ConnectorScanner {
     public FlussSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
+        this.nestedFields = ScannerHelper.splitAndOmitEmptyStrings(params.getOrDefault("nested_fields", ""), ",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
         this.runtimeConf = params.get("runtime_conf");
@@ -130,6 +133,14 @@ public class FlussSplitScanner extends ConnectorScanner {
                 logicalTypes[i] = dataType;
                 requiredTypes[i] = new ColumnType(FlussTypeUtils.fromFlussType(dataType));
                 fieldGetters[i] = InternalRow.createFieldGetter(dataType, i);
+            }
+
+            SelectedFields selectedFields = new SelectedFields();
+            for (String nestedField : nestedFields) {
+                selectedFields.addNestedPath(nestedField);
+            }
+            for (int i = 0; i < requiredFields.length; i++) {
+                requiredTypes[i].pruneOnField(selectedFields, requiredFields[i]);
             }
 
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
