@@ -1124,8 +1124,6 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
 // frame, subsequent dict pages, and any no-dict frames under I5).
 TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
-    auto fs = std::make_shared<MemoryFileSystem>();
-    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
     const std::string fname = strings::Substitute("$0/test_e4_shared_dict_roundtrip.data", TEST_DIR);
 
     const int N = 3000;
@@ -1142,13 +1140,13 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
         slices.emplace_back(strs[i]);
     }
 
-    auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
     col->reserve(N);
     col->append_strings(slices);
 
     ColumnMetaPB meta;
     {
-        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
         ColumnWriterOptions writer_opts;
         writer_opts.page_format = 2;
         writer_opts.meta = &meta;
@@ -1177,10 +1175,10 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
 
     // (2) read back and verify every value roundtrips.
     {
-        auto segment = create_dummy_segment(fs, fname);
+        auto segment = create_dummy_segment(fname);
         ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
         ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+        ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
@@ -1189,7 +1187,7 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
         ASSERT_OK(iter->init(iter_opts));
         ASSERT_OK(iter->seek_to_first());
 
-        MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
         dst->reserve(N);
         size_t total = 0;
         while (total < static_cast<size_t>(N)) {
