@@ -76,7 +76,7 @@ HLL に使用されるストレージスペースは、ハッシュ値の異な�
 
     create table test_uv(
     dt date,
-    id int
+    id int,
     uv_set hll hll_union)
     distributed by hash(id);
 

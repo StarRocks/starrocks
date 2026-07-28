@@ -909,25 +909,25 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 1. = 記号を持つ非相関スカラー量子クエリ。たとえば、最高賃金の人物の情報を出力します。
 
     ```sql
-    SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
+    SELECT name FROM employees WHERE salary = (SELECT MAX(salary) FROM employees);
     ```
 
 2. `>`, `<` などの述語を持つ非相関スカラー量子クエリ。たとえば、平均以上の賃金を受け取る人々の情報を出力します。
 
     ```sql
-    SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
+    SELECT name FROM employees WHERE salary > (SELECT AVG(salary) FROM employees);
     ```
 
 3. 関連するスカラー量子クエリ。たとえば、各部門の最高賃金情報を出力します。
 
     ```sql
-    SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
+    SELECT name FROM employees a WHERE salary = (SELECT MAX(salary) FROM employees b WHERE b.Department= a.Department);
     ```
 
 4. スカラー量子クエリは通常の関数のパラメータとして使用されます。
 
     ```sql
-    SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
+    SELECT name FROM employees WHERE salary = abs((SELECT MAX(salary) FROM employees));
     ```
 
 ### WHERE と演算子
