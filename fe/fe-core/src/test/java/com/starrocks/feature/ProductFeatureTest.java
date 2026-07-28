@@ -24,11 +24,12 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(9, features.size());
+        Assertions.assertEquals(10, features.size());
         Assertions.assertEquals("multi-cngroup", features.get(4).getName());
         Assertions.assertEquals("automated-cluster-snapshot", features.get(6).getName());
         Assertions.assertEquals("oidc-email-username", features.get(7).getName());
         Assertions.assertEquals("cross-region-recovery", features.get(8).getName());
+        Assertions.assertEquals("snapshot-storage-volume-inventory", features.get(9).getName());
     }
 
     @Test
@@ -43,6 +44,8 @@ public class ProductFeatureTest {
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("automated-cluster-snapshot")));
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("oidc-email-username")));
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("cross-region-recovery")));
+        Assertions.assertTrue(features.stream()
+                .anyMatch(feature -> feature.getName().equals("snapshot-storage-volume-inventory")));
     }
 
     @Test
@@ -53,6 +56,17 @@ public class ProductFeatureTest {
                 .orElseThrow(() -> new AssertionError("cross-region-recovery feature not found"));
         Assertions.assertTrue(feature.getDescription().contains("cluster snapshot"));
         Assertions.assertTrue(feature.getDescription().contains("shared-data"));
+        Assertions.assertEquals("https://docs.starrocks.io/docs/administration/cluster_snapshot/", feature.getLink());
+    }
+
+    @Test
+    public void testSnapshotStorageVolumeInventoryFeature() {
+        ProductFeature feature = ProductFeature.getFeatures().stream()
+                .filter(f -> f.getName().equals("snapshot-storage-volume-inventory"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("snapshot-storage-volume-inventory feature not found"));
+        Assertions.assertTrue(feature.getDescription().contains("storage volume inventory"));
+        Assertions.assertTrue(feature.getDescription().contains("storage_volumes"));
         Assertions.assertEquals("https://docs.starrocks.io/docs/administration/cluster_snapshot/", feature.getLink());
     }
 

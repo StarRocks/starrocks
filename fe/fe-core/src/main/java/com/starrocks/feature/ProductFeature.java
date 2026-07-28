@@ -100,6 +100,13 @@ public class ProductFeature {
                         "recovery and cluster cloning.",
                 "https://docs.starrocks.io/docs/administration/cluster_snapshot/"
         ));
+        features.add(new ProductFeature(
+                "snapshot-storage-volume-inventory",
+                "Cluster snapshot metadata embeds the source cluster's storage volume inventory " +
+                        "(name/type/locations), so a cross-region restore can rebuild the storage_volumes " +
+                        "section of cluster_snapshot.yaml without access to the source cluster.",
+                "https://docs.starrocks.io/docs/administration/cluster_snapshot/"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 
