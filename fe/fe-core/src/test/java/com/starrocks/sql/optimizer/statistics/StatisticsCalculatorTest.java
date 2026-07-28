@@ -253,15 +253,31 @@ public class StatisticsCalculatorTest {
     @Test
     public void testValidConnectorOutputRowCount() {
         Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(null));
+
+        // A connector metadata implementation that does not override getTableStatistics returns a
+        // builder-default Statistics whose row count is NaN. That is exactly the case the Lance
+        // fallback relies on, so it must be rejected.
+        Assertions.assertTrue(Double.isNaN(Statistics.builder().build().getOutputRowCount()));
         Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(Statistics.builder().build()));
-        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(
-                Statistics.builder().setOutputRowCount(Double.POSITIVE_INFINITY).build()));
-        Assertions.assertFalse(StatisticsCalculator.hasValidOutputRowCount(
-                Statistics.builder().setOutputRowCount(-1).build()));
-        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
-                Statistics.builder().setOutputRowCount(0).build()));
+
         Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
                 Statistics.builder().setOutputRowCount(100).build()));
+
+        // Statistics.Builder#setOutputRowCount clamps its argument into [1, MAXIMUM_ROW_COUNT], so
+        // non-finite and negative row counts can never reach hasValidOutputRowCount through the
+        // builder. Assert the clamping contract instead of unreachable states.
+        Assertions.assertEquals(StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT,
+                Statistics.builder().setOutputRowCount(Double.POSITIVE_INFINITY).build().getOutputRowCount(), 0.001);
+        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(Double.POSITIVE_INFINITY).build()));
+
+        Assertions.assertEquals(1D, Statistics.builder().setOutputRowCount(-1).build().getOutputRowCount(), 0.001);
+        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(-1).build()));
+
+        Assertions.assertEquals(1D, Statistics.builder().setOutputRowCount(0).build().getOutputRowCount(), 0.001);
+        Assertions.assertTrue(StatisticsCalculator.hasValidOutputRowCount(
+                Statistics.builder().setOutputRowCount(0).build()));
     }
 
     @Test
