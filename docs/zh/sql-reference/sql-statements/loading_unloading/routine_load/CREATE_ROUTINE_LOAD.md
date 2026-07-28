@@ -166,7 +166,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必需**：否\
-**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（<code class="language-text">&#124;</code>）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。
+**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（`|`）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：`| "Love StarRocks" |`。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 `|"Love StarRocks"|`。
 
 #### `enclose`     
 
@@ -813,8 +813,8 @@ CREATE TABLE example_db.example_tbl3 (
     country varchar(26) NULL, 
     pay_time bigint(20) NULL, 
     price double SUM NULL) 
-AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
+AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
@@ -959,7 +959,7 @@ CREATE TABLE sensor.sensor_log2 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
@@ -1039,7 +1039,7 @@ CREATE TABLE sensor.sensor_log3 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
