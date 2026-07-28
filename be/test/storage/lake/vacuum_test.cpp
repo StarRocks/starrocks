@@ -4526,7 +4526,7 @@ TEST_P(LakeVacuumTest, test_incremental_multi_round_drain) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         { "id": 30005, "version": 6, "prev_garbage_version": 5, "commit_time": 1006 })DEL")));
 
-    VacuumStatePB state; // empty -> first round is fresh
+    VacuumStatePB state;    // empty -> first round is fresh
     int64_t pass_floor = 0; // the FE captures the pass retain floor on the fresh round and holds it constant
     bool drained = false;
     for (int round = 0; round < 20 && !drained; round++) {
