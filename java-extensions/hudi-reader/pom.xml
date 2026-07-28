@@ -98,6 +98,14 @@
                     <artifactId>lz4-java</artifactId>
                     <groupId>org.lz4</groupId>
                 </exclusion>
+                <!-- org.glassfish:javax.el is pulled (via transitive hbase 2.4.13)
+                     with an open-ended range [3.0.0,), forcing a repeated
+                     javax.el maven-metadata.xml download on every build. It is
+                     not delivered in the reader lib, so prune it (matches fe/pom.xml). -->
+                <exclusion>
+                    <groupId>org.glassfish</groupId>
+                    <artifactId>javax.el</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -113,6 +121,16 @@
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-hadoop-mr</artifactId>
             <version>${hudi.version}</version>
+            <exclusions>
+                <!-- hudi-hadoop-mr re-introduces hbase 2.4.13 (its transitive
+                     hudi-common is not excluded like the direct one above),
+                     which drags in org.glassfish:javax.el:[3.0.0,). Exclude it
+                     to stop the periodic javax.el metadata download. -->
+                <exclusion>
+                    <groupId>org.glassfish</groupId>
+                    <artifactId>javax.el</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
