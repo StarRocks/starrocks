@@ -718,7 +718,6 @@ public:
     }
 };
 
-
 namespace {
 
 // E4: dictionary-bound decompression contexts.
@@ -1011,7 +1010,7 @@ private:
                 if (ZSTD_isError(ret)) {
                     dict_dctx_cache().discard(ctx);
                     return Status::InvalidArgument(strings::Substitute("ZSTD decompress failed: $0",
-                                                                      ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
+                                                                       ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
                 }
                 output->size = ret;
                 return Status::OK();

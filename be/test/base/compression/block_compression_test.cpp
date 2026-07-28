@@ -726,7 +726,6 @@ TEST_F(BlockCompressionTest, E4_dict_overload_not_supported_on_non_zstd) {
     ASSERT_TRUE(s2.is_not_supported());
 }
 
-
 // The dictionary decompression path uses its own thread-local contexts (kept warm
 // so consecutive pages do not re-establish the dictionary session) instead of the
 // shared pool. Pin the two properties that could break:
