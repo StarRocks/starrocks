@@ -187,13 +187,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             // Writers that produce auxiliary segments without a segment file mark (e.g. the
             // column-mode partial update .cols writer) cannot derive a valid standalone index
             // path: the path built below would be malformed and readers never look it up.
-            // Skip standalone (CLucene) index generation there instead of writing it to a
-            // bogus location; readers fall back to evaluating predicates on the data.
-            // Footer-inlined implementations (builtin) need no path and are kept.
-            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
-            if (imp_type != InvertedImplementType::BUILTIN) {
-                opts.need_inverted_index = false;
-            }
+            // On this branch an inverted index is always a standalone (CLucene) index (there
+            // is no footer-inlined/builtin implementation), so skip its generation here
+            // instead of writing it to a bogus location; readers fall back to evaluating
+            // predicates on the data.
+            opts.need_inverted_index = false;
         }
         if (opts.need_inverted_index) {
             opts.standalone_index_file_paths.emplace(

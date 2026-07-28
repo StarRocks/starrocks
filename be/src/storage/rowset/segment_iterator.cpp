@@ -2483,17 +2483,14 @@ Status SegmentIterator::_init_inverted_index_iterators() {
                 std::shared_ptr<TabletIndex> index_meta;
                 RETURN_IF_ERROR(segment_ptr->tablet_schema().get_indexes_for_column(ucid, GIN, index_meta));
                 if (index_meta != nullptr) {
-                    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
-                    if (imp_type != InvertedImplementType::BUILTIN) {
-                        // Standalone (CLucene) inverted indexes are not produced by the DCG
-                        // writer, and the base segment's copy is stale for this column, so no
-                        // index is served. Ordinary predicates (e.g. equality) then evaluate
-                        // on the fresh column data. MATCH predicates cannot be evaluated
-                        // without an index and fail with an explicit error -- preferable to
-                        // silently filtering on pre-update values. Compaction rewrites the
-                        // base segment and restores index acceleration.
-                        continue;
-                    }
+                    // On this branch a GIN index is always a standalone (CLucene) index; it is
+                    // not produced by the DCG writer, and the base segment's copy is stale for
+                    // this column, so no index is served. Ordinary predicates (e.g. equality)
+                    // then evaluate on the fresh column data. MATCH predicates cannot be
+                    // evaluated without an index and fail with an explicit error -- preferable
+                    // to silently filtering on pre-update values. Compaction rewrites the base
+                    // segment and restores index acceleration.
+                    continue;
                 }
             }
             RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(

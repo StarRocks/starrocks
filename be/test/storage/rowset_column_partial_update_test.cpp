@@ -1838,45 +1838,6 @@ static StatusOr<int64_t> count_rows_with_str_eq(const TabletSharedPtr& tablet, i
     return rows;
 }
 
-TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_gin_index_check) {
-    // Column-mode partial update rewrites a column into a DCG (.cols) file while the base
-    // segment's inverted index still reflects pre-update values. The reader must serve the
-    // GIN index from the DCG segment, or GIN-filtered queries silently return wrong rows.
-    const int N = 100;
-    auto tablet = create_tablet_with_gin_index(rand(), rand());
-    ASSERT_EQ(1, tablet->updates()->version_history_count());
-
-    std::vector<int64_t> keys(N);
-    for (int i = 0; i < N; i++) {
-        keys[i] = i;
-    }
-    int64_t version = 1;
-    std::vector<RowsetSharedPtr> rowsets;
-    rowsets.emplace_back(create_str_rowset(tablet, keys, [](int64_t k) { return "old_" + std::to_string(k); }));
-    commit_rowsets(tablet, rowsets, version);
-
-    // GIN-accelerated read against the base segment works.
-    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_5", true).value());
-
-    // Column-mode partial update: v2 = "new_<pk>" for the first half of the keys.
-    std::vector<int64_t> update_keys(keys.begin(), keys.begin() + N / 2);
-    std::vector<int32_t> column_indexes = {0, 2};
-    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
-    RowsetSharedPtr partial_rowset = create_partial_str_rowset(
-            tablet, update_keys, [](int64_t k) { return "new_" + std::to_string(k); }, column_indexes, partial_schema);
-    auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
-    ASSERT_TRUE(st.ok()) << st.to_string();
-
-    for (bool gin_filter : {true, false}) {
-        // An updated row must be found by its new value ...
-        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "new_5", gin_filter).value());
-        // ... and must no longer be found by its old value.
-        ASSERT_EQ(0, count_rows_with_str_eq(tablet, version, 2, "old_5", gin_filter).value());
-        // Rows the update did not touch keep working.
-        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "old_60", gin_filter).value());
-    }
-}
-
 #ifndef __APPLE__
 // CLucene (the shared-nothing default implementation) is not produced for DCG .cols files.
 // After a column-mode partial update on the indexed column, the base segment's CLucene index
