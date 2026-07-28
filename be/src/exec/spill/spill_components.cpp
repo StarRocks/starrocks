@@ -167,7 +167,11 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
     RETURN_IF_YIELD(yield_ctx.need_yield);
     RETURN_IF_ERROR(flush_ctx->output->flush());
     flush_ctx->output.reset();
-    DCHECK_EQ(flush_ctx->compact_input_num_rows, flush_ctx->block_group->num_rows());
+    // On cancellation the transfer stops early, so the compacted block group holds fewer rows than
+    // its input; only assert full compaction while the query is still running. Query cancel sets
+    // the runtime state (which the transfer honors) but not necessarily the spiller flag.
+    DCHECK(_runtime_state->is_cancelled() || _spiller->is_cancel() ||
+           flush_ctx->compact_input_num_rows == flush_ctx->block_group->num_rows());
     this->add_block_group(std::move(flush_ctx->block_group));
 
     return Status::OK();
@@ -827,6 +831,18 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
                 RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
+                    // A restore IO-task error is recorded in the spiller task status rather than
+                    // returned from trigger_restore; surface it instead of concluding a clean EOF,
+                    // otherwise a short read (corrupt/partial spill block, deserialize error) is
+                    // silently treated as end-of-partition and the split proceeds on partial data.
+                    RETURN_IF_ERROR(_spiller->task_status());
+                    // On cancellation the restore stops early with a partial read. Bail out instead
+                    // of continuing the split with an incomplete partition, which downstream assumes
+                    // was fully read. Query cancel sets the runtime state (which restore honors) but
+                    // not necessarily the spiller flag.
+                    if (_runtime_state->is_cancelled() || _spiller->is_cancel()) {
+                        return Status::Cancelled("query is cancelled during partition split");
+                    }
                     DCHECK_EQ(reader->read_rows(), partition->num_rows);
                     break;
                 }

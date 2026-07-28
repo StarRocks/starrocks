@@ -16,11 +16,23 @@
 
 #include <memory>
 
+#include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.hpp"
 
 namespace starrocks::pipeline {
+
+Status SpillProcessOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator) for the whole
+    // spill-processing lifetime, so async spill tasks (which reference context-owned state such as the
+    // build chunks / hash map) never dereference it after the owning operators free it on cancel/close.
+    if (auto* context = _channel->guarded_context(); context != nullptr) {
+        context->ref();
+    }
+    return Status::OK();
+}
 
 bool SpillProcessOperator::has_output() const {
     return !_is_finished && _channel->has_output();
@@ -37,6 +49,11 @@ Status SpillProcessOperator::set_finished(RuntimeState* state) {
 
 void SpillProcessOperator::close(RuntimeState* state) {
     _channel->close();
+    // Release the lifetime-anchor ref taken in prepare(); the channel is drained by now, so no spill
+    // task will dereference the context after this (which may be the last unref -> context close()).
+    if (auto* context = _channel->guarded_context(); context != nullptr) {
+        context->unref(state);
+    }
     SourceOperator::close(state);
 }
 
