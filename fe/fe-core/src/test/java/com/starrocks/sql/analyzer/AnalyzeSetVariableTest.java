@@ -20,10 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.WarehouseManager;
->>>>>>> 043846d490 ([BugFix] Filter resource groups by warehouse (#73209))
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.LiteralExpr;
