@@ -337,9 +337,32 @@ private:
     // data page are then compressed referencing it. See finish_current_page()
     // (sampling gate) and write_data() (dict page emission).
     std::unique_ptr<compression::ZstdCDict> _shared_cdict;
-    std::string _shared_dict_sample; // raw sample bytes, persisted as the dict page
+    std::string _shared_dict_sample; // dict bytes, persisted as the dict page
     bool _shared_dict_ready = false; // _shared_cdict has been built
     bool _cdict_used = false;        // at least one data page was actually dict-compressed
+    bool _shared_dict_trained = false; // dict bytes are ZDICT-trained (vs a raw sample)
+
+    // "train" mode (ZDICT-lite) only. The first config::shared_dict_train_pages
+    // pages are held UNCOMPRESSED here while their fragments accumulate into the
+    // training sample buffer; once the dictionary is trained (or training is
+    // given up on) they are compressed and pushed in order, and normal
+    // page-at-a-time compression resumes. Bounded by train_pages * data_page_size.
+    struct DeferredPage {
+        std::vector<OwnedSlice> body; // raw page body: encoded values [+ nullmap]
+        PageFooterPB footer;
+    };
+    bool _shared_dict_train_mode = false;
+    bool _shared_dict_train_done = false;
+    std::vector<DeferredPage> _deferred_pages;
+
+    // Train the shared dict from the buffered samples (best effort), then
+    // compress and push every deferred page -- with the dict if training
+    // succeeded, without it otherwise. Idempotent.
+    Status _finalize_shared_dict_training();
+    // Level to bake into the CDict (-1 = zstd default).
+    int _effective_compression_level() const;
+    // Compress one already-assembled body and push it as a page.
+    Status _compress_and_push_page(std::vector<OwnedSlice> body, PageFooterPB footer);
 
     Buffer<Slice> _slice_buf;
 };

@@ -723,6 +723,34 @@ CONF_Int32(shared_dict_sample_bytes, "65536");
 // dictionary sample. Guards against building a garbage dict from a tiny/near
 // empty first page and permanently marking the column dict-ready.
 CONF_Int32(shared_dict_min_sample_bytes, "1024");
+// E4 shared-dictionary build mode:
+//   "sample" (default) -- take the first eligible page's bytes verbatim as a
+//       raw-content dictionary. No buffering, no training cost, page 0 is itself
+//       dict-compressed.
+//   "train" -- ZDICT-lite: buffer the first shared_dict_train_pages pages, cut
+//       them into fragments, and train a dictionary. Compresses better because
+//       the dictionary keeps only frequent substrings sampled across many rows,
+//       but it defers those pages' compression and costs training CPU.
+CONF_String(shared_dict_build_mode, "sample");
+// "train" mode only: how many data pages to buffer before training. Bounds the
+// extra write memory at shared_dict_train_pages * data_page_size per column
+// (32 * 64KB = 2MB by default).
+// This -- not shared_dict_max_size -- is the parameter that actually decides how
+// good the trained dictionary is: zstd recommends a sample budget around 100x
+// the dictionary size, and measurements showed K=32 beating K=8 by ~10% on
+// replay-heavy data while raising shared_dict_max_size under a K=8 budget did
+// nothing (the trainer could not fill the requested size).
+CONF_Int32(shared_dict_train_pages, "32");
+// "train" mode only: fragment size the buffered pages are cut into to form
+// training samples. Many small samples train a better dictionary than a few
+// large ones.
+CONF_Int32(shared_dict_train_fragment_bytes, "4096");
+// Maximum dictionary size. 112KB follows the zstd trainer convention (the CLI's
+// --train default is 110 KiB). Worth sweeping per workload: the dictionary is a
+// codebook of frequent substrings, so returns diminish quickly with size while
+// every byte costs read-side memory.
+CONF_Int32(shared_dict_max_size, "114688");
+
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
