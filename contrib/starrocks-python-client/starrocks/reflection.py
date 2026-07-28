@@ -193,8 +193,6 @@ class StarRocksTableDefinitionParser(object):
     _VIEW_SECURITY_PATTERN = re.compile(r'\s+SECURITY\s+(INVOKER|DEFINER|NONE)\b', re.IGNORECASE)
 
     # Patterns to parse CREATE MATERIALIZED VIEW statement
-    # "AS\b" (word boundary) prevents matching the "AS" inside a following ASYNC keyword, which
-    # would otherwise truncate "REFRESH DEFERRED ASYNC EVERY(...)" down to "REFRESH DEFERRED".
     _MV_REFRESH_PATTERN = re.compile(r"\s*REFRESH\s+(.+?)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|PROPERTIES|AS\b|\Z))", re.IGNORECASE | re.DOTALL)
     _MV_PROPERTIES_PATTERN = re.compile(r"\s*PROPERTIES\s*\((.+?)\)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|REFRESH|AS\b|\Z))", re.IGNORECASE | re.DOTALL)
     _MV_AS_DEFINITION_PATTERN = re.compile(r"\s*AS\s*((?:WITH|SELECT)\s*.+)", re.IGNORECASE | re.DOTALL)

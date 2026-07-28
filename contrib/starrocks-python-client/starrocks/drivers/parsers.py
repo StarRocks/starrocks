@@ -169,8 +169,6 @@ class _MVRefreshTransformer(Transformer):
 
     @v_args(inline=True)
     def async_scheme(self, details=None):
-        # Both the ASYNC and the SCHEDULE keyword (StarRocks 4.1+) canonicalize to "ASYNC ..."
-        # so a periodic refresh reflected as "SCHEDULE EVERY(...)" matches metadata "ASYNC EVERY(...)".
         if details:
             return f"ASYNC {details}"
         return "ASYNC"
@@ -188,7 +186,7 @@ class _MVRefreshTransformer(Transformer):
         return "ASYNC"
 
     def SCHEDULE(self, t: Token):
-        # StarRocks 4.1+ SHOW CREATE keyword for a periodic async refresh; canonicalized to ASYNC.
+        # SCHEDULE added as new keyword in 4.1+, return ASYNC for backwards compatibility
         return "ASYNC"
 
     def MANUAL(self, t: Token):

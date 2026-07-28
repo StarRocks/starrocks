@@ -1046,18 +1046,10 @@ def _compare_mv_refresh(
             return None
         # Collapse whitespace and compare case-insensitively
         normalized = " ".join(str(val).split()).upper()
-        # IMMEDIATE is the default refresh moment and StarRocks never renders it in SHOW CREATE
-        # (only DEFERRED is emitted), so the reflected form carries no moment. Drop an explicit
-        # leading IMMEDIATE first so metadata that spells out the default matches the reflection.
-        # Stripping it here also means the SCHEDULE rewrite below only has to consider a bare or
-        # DEFERRED-prefixed scheme.
+        # IMMEDIATE is not rendered in SHOW CREATE, so drop
         if normalized.startswith("IMMEDIATE "):
             normalized = normalized[len("IMMEDIATE "):]
-        # StarRocks 4.1+ renders a periodic async refresh (ASYNC ... EVERY / START) with the
-        # SCHEDULE keyword in SHOW CREATE MATERIALIZED VIEW, while users typically declare it as
-        # ASYNC. Treat the SCHEDULE keyword as ASYNC so equivalent schemes do not diff. It may
-        # appear at the start or after a DEFERRED moment prefix, e.g.
-        # "DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)".
+        # SCHEDULE keyword replaced ASYNC 4.1.1, replace with ASYNC for backwards compatibility 
         for moment_prefix in ("", "DEFERRED "):
             keyword = moment_prefix + "SCHEDULE"
             if normalized.startswith(keyword):
@@ -1644,14 +1636,7 @@ def _compare_table_distribution(
     object_label: str = "Table",
     skip_when_meta_unset: bool = False,
 ) -> None:
-    """Compare distribution changes and add AlterTableDistributionOp if needed.
-
-    ``skip_when_meta_unset``: when True, a metadata that does not declare a distribution is
-    treated as "no change" instead of being compared against the default. This is used for
-    materialized views, whose distribution is always auto-assigned by StarRocks and is immutable,
-    so an undeclared distribution must be left untouched rather than trigger a reset (which raises).
-    Regular tables keep the stricter behavior (raise, forcing the user to declare it).
-    """
+    """Compare distribution changes and add AlterTableDistributionOp if needed."""
     conn_distribution = conn_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
     meta_distribution = meta_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
     if meta_distribution is None:
@@ -1665,11 +1650,8 @@ def _compare_table_distribution(
             )
             meta_distribution = starrocks_distribution
 
-    # For materialized views, a metadata that does not declare a distribution is treated as no
-    # change (like ORDER BY). StarRocks always auto-assigns one and SHOW CREATE renders it (e.g.
-    # "RANDOM BUCKETS n" or a defaulted "HASH(...)"); since the user is not managing this
-    # attribute, it must be left untouched rather than compared against the default and "reset",
-    # which raises for this immutable attribute.
+    # For materialized views, if the distribution is undefined, it is auto-assigned, but appears in SHOW CREATE
+    # Should be skipped because the auto-assign is not managed by user
     if meta_distribution is None and skip_when_meta_unset:
         return
 
