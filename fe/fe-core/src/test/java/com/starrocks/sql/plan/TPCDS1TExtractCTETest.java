@@ -298,26 +298,27 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: bitmap_union(130: bitmap_union), bitmap_union(124: bitmap_union), " +
-                "bitmap_union(126: bitmap_union), bitmap_union(128: bitmap_union)\n" +
+                "  |  output: bitmap_union_if(131: bitmap_union), bitmap_union_if(134: bitmap_union), " +
+                "bitmap_union_if(125: bitmap_union), bitmap_union_if(128: bitmap_union)\n" +
                 "  |  group by: ");
 
-        assertCContains(plan, "  2:AGGREGATE (update serialize)\n" +
-                "  |  output: bitmap_union(if((132: expr) AND (104: c_birth_year = 1993), 131: to_bitmap, NULL)), " +
-                "bitmap_union(if((101: c_birth_country = 'USA1') AND (104: c_birth_year = 2011), " +
-                "131: to_bitmap, NULL)), bitmap_union(if((132: expr) AND (104: c_birth_year = 1995), " +
-                "131: to_bitmap, NULL)), bitmap_union(if(((132: expr) AND (104: c_birth_year >= 1990)) " +
-                "AND (104: c_birth_year <= 2000), 131: to_bitmap, NULL))\n" +
+        assertCContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: bitmap_union_if(130: to_bitmap, ((135: expr) AND (104: c_birth_year >= 1990)) " +
+                "AND (104: c_birth_year <= 2000)), bitmap_union_if(to_bitmap(108: c_customer_id), " +
+                "(135: expr) AND (104: c_birth_year = 1993)), bitmap_union_if(to_bitmap(108: c_customer_id), " +
+                "(101: c_birth_country = 'USA1') AND (104: c_birth_year = 2011)), " +
+                "bitmap_union_if(to_bitmap(108: c_customer_id), (135: expr) AND (104: c_birth_year = 1995))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 101> : 101: c_birth_country\n" +
                 "  |  <slot 104> : 104: c_birth_year\n" +
-                "  |  <slot 131> : 131: to_bitmap\n" +
-                "  |  <slot 132> : 132: expr\n" +
+                "  |  <slot 108> : 108: c_customer_id\n" +
+                "  |  <slot 130> : 136: to_bitmap\n" +
+                "  |  <slot 135> : 135: expr\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 131> : to_bitmap(108: c_customer_id)\n" +
-                "  |  <slot 132> : 101: c_birth_country = 'USA'");
+                "  |  <slot 135> : 101: c_birth_country = 'USA'\n" +
+                "  |  <slot 136> : to_bitmap(108: c_customer_id)");
     }
 
     @Test
