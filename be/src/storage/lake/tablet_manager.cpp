@@ -563,13 +563,47 @@ int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& c
     return candidates.front();
 }
 
+// Refuse to persist a bundle that does not cover every tablet in |expected_tablet_ids|.
+//
+// This is an invariant of the file format rather than defensive paranoia: the file name encodes a
+// version and the write truncates, so the bundle IS the whole metadata of that version. A map short
+// by even one tablet silently yields a version that lacks it, which is unrecoverable once FE marks
+// the version visible, because every later publish must read exactly that version as its base and
+// can only reproduce the same miss. Failing here instead leaves the version unpublished, which is
+// retryable.
+static Status check_bundle_tablet_metadata_coverage(const std::map<int64_t, TabletMetadataPB>& tablet_metas,
+                                                    const std::set<int64_t>& expected_tablet_ids) {
+    std::string missing;
+    size_t missing_count = 0;
+    for (int64_t expected_id : expected_tablet_ids) {
+        if (tablet_metas.find(expected_id) != tablet_metas.end()) {
+            continue;
+        }
+        // Cap the id list: a whole sub-request can go missing at once, and this string ends up in
+        // the publish error that FE retries every few milliseconds.
+        if (missing_count < 16) {
+            missing.append(missing.empty() ? "" : ",").append(std::to_string(expected_id));
+        }
+        ++missing_count;
+    }
+    if (missing_count > 0) {
+        return Status::InternalError(
+                fmt::format("refuse to write incomplete bundle tablet metadata: missing {} of {} tablets [{}{}]",
+                            missing_count, expected_tablet_ids.size(), missing, missing_count > 16 ? ",..." : ""));
+    }
+    return Status::OK();
+}
+
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
-Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas,
+                                                 const std::set<int64_t>& expected_tablet_ids) {
     TEST_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
+
+    RETURN_IF_ERROR(check_bundle_tablet_metadata_coverage(tablet_metas, expected_tablet_ids));
 
     std::vector<int64_t> candidate_tablet_ids;
     candidate_tablet_ids.reserve(tablet_metas.size());
