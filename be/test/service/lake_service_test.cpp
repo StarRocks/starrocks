@@ -3463,6 +3463,65 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version_failed) {
     server.Join();
 }
 
+// Reproduces the shape of the incident this guard exists for: a sub-worker answers OK but its
+// response is short one tablet_meta. Before the coverage check the aggregator happily truncate-wrote
+// a bundle missing that tablet, FE saw OK and advanced the visible version, and the tablet's metadata
+// at that version was gone for good. Now the write is refused and the publish fails, so FE retries.
+TEST_F(LakeServiceTest, test_aggregate_publish_version_incomplete_tablet_metas) {
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    int port = 0;
+    init_server_with_mock(&mock_service, &server, &port);
+
+    constexpr int64_t kTabletId1 = 9001;
+    constexpr int64_t kTabletId2 = 9002;
+    // A version no other case in this fixture writes: TearDown() keeps the test dir, so a bundle
+    // left by an earlier case at the same path would mask the "nothing was written" assertion.
+    constexpr int64_t kVersion = 77;
+
+    auto request = build_default_agg_request(port);
+    request.mutable_publish_reqs(0)->add_tablet_ids(kTabletId1);
+    request.mutable_publish_reqs(0)->add_tablet_ids(kTabletId2);
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    starrocks::TabletMetadataPB metadata1;
+    metadata1.set_id(kTabletId1);
+    metadata1.set_version(kVersion);
+    metadata1.mutable_schema()->CopyFrom(schema_pb);
+
+    // Only kTabletId1 comes back; kTabletId2 is silently absent while the status stays OK.
+    EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+            .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                 PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                resp->mutable_status()->set_status_code(0);
+                (*resp->mutable_tablet_metas())[kTabletId1].CopyFrom(metadata1);
+                done->Run();
+            }));
+
+    PublishVersionResponse response;
+    brpc::Controller cntl;
+    google::protobuf::Closure* done = brpc::NewCallback([]() {});
+    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+    EXPECT_NE(response.status().status_code(), 0);
+    // Nothing was written, so even the tablet that did come back has no metadata at this version.
+    EXPECT_FALSE(_tablet_mgr->get_single_tablet_metadata(kTabletId1, kVersion).ok());
+
+    server.Stop(0);
+    server.Join();
+}
+
 TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
     class MockRunnable : public Runnable {
     public:
