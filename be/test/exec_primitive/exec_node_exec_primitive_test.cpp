@@ -91,34 +91,5 @@ TEST_F(ExecNodeExecPrimitiveTest, TreeHelpersAndDefaultPipelineDecomposition) {
     EXPECT_TRUE(factories.value().empty());
 }
 
-TEST_F(ExecNodeExecPrimitiveTest, GetNextBigChunkMergesSmallChunks) {
-    _runtime_state.set_chunk_size(4);
-
-    ChunkPtr pre_output_chunk;
-    ChunkPtr output_chunk;
-    bool eos = false;
-    int step = 0;
-
-    auto specific_get_next = [&step](RuntimeState*, ChunkPtr* chunk, bool* eos) {
-        if (step == 0) {
-            *chunk = make_int_chunk(1, 1);
-            *eos = false;
-        } else if (step == 1) {
-            *chunk = make_int_chunk(2, 2);
-            *eos = false;
-        } else {
-            *chunk = nullptr;
-            *eos = true;
-        }
-        ++step;
-        return Status::OK();
-    };
-
-    ASSERT_OK(ExecNode::get_next_big_chunk(&_runtime_state, &output_chunk, &eos, pre_output_chunk, specific_get_next));
-    ASSERT_NE(output_chunk, nullptr);
-    EXPECT_FALSE(eos);
-    EXPECT_EQ(output_chunk->num_rows(), 3);
-}
-
 } // namespace
 } // namespace starrocks

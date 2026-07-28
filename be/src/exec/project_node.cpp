@@ -185,11 +185,6 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status ProjectNode::reset(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::reset(state));
-    return Status::OK();
-}
-
 void ProjectNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -199,31 +194,6 @@ void ProjectNode::close(RuntimeState* state) {
     ExprExecutor::close(_common_sub_expr_ctxs, state);
 
     ExecNode::close(state);
-}
-
-void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
-    for (const auto& ctx : (*expr_ctxs)) {
-        if (!ctx->root()->is_bound(_tuple_ids)) {
-            continue;
-        }
-
-        if (!ctx->root()->get_child(0)->is_slotref()) {
-            continue;
-        }
-
-        auto column = down_cast<ColumnRef*>(ctx->root()->get_child(0));
-
-        for (int i = 0; i < _slot_ids.size(); ++i) {
-            if (_slot_ids[i] == column->slot_id() && _expr_ctxs[i]->root()->is_slotref()) {
-                auto ref = down_cast<ColumnRef*>(_expr_ctxs[i]->root());
-                column->set_slot_id(ref->slot_id());
-                column->set_tuple_id(ref->tuple_id());
-                break;
-            }
-        }
-    }
-
-    ExecNode::push_down_predicate(state, expr_ctxs);
 }
 
 void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
