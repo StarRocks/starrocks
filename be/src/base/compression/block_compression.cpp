@@ -41,11 +41,11 @@
 
 #include "base/coding.h"
 #include "base/compression/compression_context_pool_singletons.h"
-#include "common/config_compression_fwd.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
 #include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
+#include "common/config_compression_fwd.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 

@@ -29,7 +29,6 @@ CONF_mDouble(lz4_expected_compression_ratio, "2.1");
 
 CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 
-
 // E4: keep dictionary-loaded ZSTD decompression contexts warm in a small
 // thread-local set instead of borrowing from the shared pool (whose reset clears
 // the sticky refDDict, forcing the dictionary to be re-loaded into a cold context
