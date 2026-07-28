@@ -15,6 +15,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/statusor.h"
 #include "base/string/slice.h"
@@ -35,11 +37,28 @@ namespace starrocks::compression {
 // ZSTD_CCtx_refCDict; never enters the shared context pool.
 class ZstdCDict {
 public:
-    // Build a raw-content (ZSTD_dct_rawContent) CDict from `sample`, baking
-    // `level` (level == -1 falls back to ZSTD_CLEVEL_DEFAULT). Returns an error
-    // Status on failure; the caller degrades to "no shared dict for this
-    // column" and must never fail the segment flush.
-    static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& sample, int level);
+    // Build a CDict from `dict_bytes`, baking `level` (level == -1 falls back to
+    // ZSTD_CLEVEL_DEFAULT). Returns an error Status on failure; the caller
+    // degrades to "no shared dict for this column" and must never fail the
+    // segment flush.
+    //
+    // `trained` selects how the bytes are interpreted:
+    //   false -> ZSTD_dct_rawContent: `dict_bytes` is a verbatim data sample, so
+    //            it is never parsed as a structured dictionary (a sample is
+    //            user-controlled and could begin with ZSTD_MAGIC_DICTIONARY).
+    //   true  -> ZSTD_dct_auto: `dict_bytes` is a ZDICT-trained dictionary whose
+    //            header and entropy tables must be honored.
+    // The read side must use the SAME interpretation (persisted as
+    // ColumnMetaPB.shared_dict_trained).
+    static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& dict_bytes, int level, bool trained = false);
+
+    // Train a dictionary of at most `max_dict_size` bytes from `samples`
+    // (concatenated in `sample_buf`, with per-sample lengths in `sample_sizes`)
+    // via ZDICT_trainFromBuffer. On success returns the dictionary BYTES, which
+    // the caller persists in the shared-dict page and feeds back into create()
+    // with trained=true.
+    static StatusOr<std::string> train(const Slice& sample_buf, const std::vector<size_t>& sample_sizes,
+                                       size_t max_dict_size);
 
     ~ZstdCDict();
     ZstdCDict(const ZstdCDict&) = delete;
@@ -57,10 +76,11 @@ private:
 // per-page into the codec via ZSTD_DCtx_refDDict.
 class ZstdDDict {
 public:
-    // Build a raw-content DDict from `sample` (the bytes of the shared-dict
-    // page). ZSTD copies the sample internally, so the page handle may be
-    // released afterward.
-    static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& sample);
+    // Build a DDict from the bytes of the shared-dict page. `trained` must match
+    // what the writer used (ColumnMetaPB.shared_dict_trained); see ZstdCDict.
+    // ZSTD copies the bytes internally, so the page handle may be released
+    // afterward.
+    static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& dict_bytes, bool trained = false);
 
     ~ZstdDDict();
     ZstdDDict(const ZstdDDict&) = delete;
