@@ -1,0 +1,49 @@
+# Shared-nothing (FE + BE) cluster for documentation SQL-example verification.
+# Set SR_VERSION to the StarRocks release whose docs you are testing, e.g.
+#   SR_VERSION=3.5 docker compose -f docker-compose-shared-nothing.yml up -d
+# Defaults to the current release. See README.md.
+services:
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:${SR_VERSION:-4.1}-latest
+    hostname: starrocks-fe
+    container_name: starrocks-fe
+    command:
+      - /bin/bash
+      - -c
+      - |
+        /opt/starrocks/fe_entrypoint.sh starrocks-fe
+    environment:
+      - HOST_TYPE=FQDN
+      - TZ=America/New_York
+    ports:
+      - "8030:8030"
+      - "9020:9020"
+      - "9030:9030"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-u", "root:", "-s", "-o", "/dev/null", "http://localhost:8030"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:${SR_VERSION:-4.1}-latest
+    hostname: starrocks-be
+    container_name: starrocks-be
+    command:
+      - /bin/bash
+      - -c
+      - |
+        /opt/starrocks/be_entrypoint.sh starrocks-fe
+    environment:
+      - HOST_TYPE=FQDN
+      - TZ=America/New_York
+    ports:
+      - "8040:8040"
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "SHOW BACKENDS\G" |grep "Alive: true"'
+      interval: 5s
+      timeout: 5s
+      retries: 30
