@@ -337,9 +337,9 @@ private:
     // data page are then compressed referencing it. See finish_current_page()
     // (sampling gate) and write_data() (dict page emission).
     std::unique_ptr<compression::ZstdCDict> _shared_cdict;
-    std::string _shared_dict_sample; // dict bytes, persisted as the dict page
-    bool _shared_dict_ready = false; // _shared_cdict has been built
-    bool _cdict_used = false;        // at least one data page was actually dict-compressed
+    std::string _shared_dict_sample;   // dict bytes, persisted as the dict page
+    bool _shared_dict_ready = false;   // _shared_cdict has been built
+    bool _cdict_used = false;          // at least one data page was actually dict-compressed
     bool _shared_dict_trained = false; // dict bytes are ZDICT-trained (vs a raw sample)
 
     // "train" mode (ZDICT-lite) only. The first config::shared_dict_train_pages

@@ -88,7 +88,7 @@ StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vecto
     // f, accel, shrinkDict and zParams stay 0 == zstd defaults; steps/nbThreads/
     // splitPoint only matter for the optimizer we are deliberately bypassing.
     size_t written = ZDICT_trainFromBuffer_fastCover(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
-                                                    static_cast<unsigned>(sample_sizes.size()), params);
+                                                     static_cast<unsigned>(sample_sizes.size()), params);
     if (ZDICT_isError(written)) {
         // Fall back to the stable entry point before giving up.
         written = ZDICT_trainFromBuffer(dict.data(), dict.size(), sample_buf.data, sample_sizes.data(),
