@@ -726,4 +726,68 @@ TEST_F(BlockCompressionTest, E4_dict_overload_not_supported_on_non_zstd) {
     ASSERT_TRUE(s2.is_not_supported());
 }
 
+
+// The dictionary decompression path uses its own thread-local contexts (kept warm
+// so consecutive pages do not re-establish the dictionary session) instead of the
+// shared pool. Pin the two properties that could break:
+//   1. alternating between SEVERAL dictionaries stays correct (the cache is keyed
+//      by dictionary identity, and a stale entry must never be treated as a hit);
+//   2. it does not disturb the shared pool -- interleaved no-dict decompression
+//      still matches a clean reference.
+TEST_F(BlockCompressionTest, E4_dict_ctx_cache_multi_dict_and_pool_isolation) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    // Three different dictionaries + matching bodies.
+    struct Arm {
+        std::string sample, body, compressed;
+        std::unique_ptr<compression::ZstdDDict> ddict;
+    };
+    std::vector<Arm> arms(3);
+    for (int i = 0; i < 3; i++) {
+        for (int k = 0; k < 300; k++) {
+            arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
+        }
+        for (int k = 0; k < 600; k++) {
+            arms[i].body += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " payload ";
+        }
+        auto cd = compression::ZstdCDict::create(Slice(arms[i].sample), 3);
+        ASSERT_TRUE(cd.ok());
+        auto dd = compression::ZstdDDict::create(Slice(arms[i].sample));
+        ASSERT_TRUE(dd.ok());
+        arms[i].ddict = std::move(dd.value());
+        arms[i].compressed.resize(codec->max_compressed_len(arms[i].body.size()));
+        Slice out(arms[i].compressed);
+        std::vector<Slice> in{Slice(arms[i].body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, arms[i].body.size(), nullptr, nullptr, cd.value().get()).ok());
+        arms[i].compressed.resize(out.size);
+    }
+    // Every dictionary must have a distinct identity, which is what the cache keys on.
+    ASSERT_NE(arms[0].ddict->id(), arms[1].ddict->id());
+    ASSERT_NE(arms[1].ddict->id(), arms[2].ddict->id());
+
+    // A clean no-dict reference to compare the interleaved no-dict work against.
+    std::string plain = generate_str(4000);
+    std::string plain_c(codec->max_compressed_len(plain.size()), '\0');
+    Slice pc(plain_c);
+    ASSERT_TRUE(codec->compress(plain, &pc).ok());
+    plain_c.resize(pc.size);
+
+    // Interleave: dict 0, 1, 2, 0, ... plus no-dict in between. More rounds than
+    // the cache has slots, so entries really do get evicted and re-loaded.
+    for (int round = 0; round < 25; round++) {
+        for (int i = 0; i < 3; i++) {
+            std::string got(arms[i].body.size(), '\0');
+            Slice g(got);
+            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok())
+                    << "round " << round << " dict " << i;
+            ASSERT_EQ(arms[i].body, std::string(g.data, g.size)) << "round " << round << " dict " << i;
+        }
+        std::string pgot(plain.size(), '\0');
+        Slice pg(pgot);
+        ASSERT_TRUE(codec->decompress(Slice(plain_c), &pg).ok());
+        ASSERT_EQ(plain, std::string(pg.data, pg.size)) << "no-dict decode disturbed at round " << round;
+    }
+}
+
 } // namespace starrocks

@@ -31,6 +31,7 @@
 #include <zstd/zstd.h>
 #endif
 
+#include <atomic>
 #include <cstring>
 
 #include "base/compression/zstd_dict.h"
@@ -123,6 +124,12 @@ StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, 
     }
     return std::unique_ptr<ZstdDDict>(new ZstdDDict(d));
 }
+
+namespace {
+std::atomic<uint64_t> g_ddict_id_seq{1};
+} // namespace
+
+ZstdDDict::ZstdDDict(ZSTD_DDict* d) : _dict(d), _id(g_ddict_id_seq.fetch_add(1, std::memory_order_relaxed)) {}
 
 ZstdDDict::~ZstdDDict() {
     if (_dict != nullptr) {
