@@ -16,8 +16,6 @@
 
 #include "agent/master_info.h"
 #include "column/nullable_column.h"
-#include "storage_primitive/tablet_basic_info.h"
-#include "schema_scanner/schema_helper.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
@@ -25,6 +23,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "schema_scanner/schema_helper.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment.h"
@@ -32,6 +31,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 
@@ -224,10 +224,9 @@ Status SchemaColumnDictStatsScanner::start(RuntimeState* state) {
     }
 #endif // __APPLE__
 
-    LOG(INFO) << strings::Substitute(
-            "column_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4", _param->table_id,
-            _param->partition_id, _param->tablet_id, _param->table != nullptr ? *_param->table : std::string(),
-            _rows.size());
+    LOG(INFO) << strings::Substitute("column_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4",
+                                     _param->table_id, _param->partition_id, _param->tablet_id,
+                                     _param->table != nullptr ? *_param->table : std::string(), _rows.size());
     return Status::OK();
 }
 
