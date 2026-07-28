@@ -11,7 +11,7 @@ description: "指定された月数を日付に加え、月単位で正確に計
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME months_add(DATETIME expr1, INT expr2);
 ```
 

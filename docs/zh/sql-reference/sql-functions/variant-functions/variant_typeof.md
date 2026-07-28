@@ -11,7 +11,7 @@ description: "以字符串形式返回 VARIANT 值的类型名称。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR variant_typeof(variant_expr)
 ```
 

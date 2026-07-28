@@ -15,7 +15,7 @@ description: "将字符串转换为JSON值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 parse_json(string_expr)
 ```
 

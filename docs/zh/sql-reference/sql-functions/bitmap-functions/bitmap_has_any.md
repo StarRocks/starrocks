@@ -11,7 +11,7 @@ description: "计算两个 Bitmap 列是否存在相交元素并返回布尔值�
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP_HAS_ANY(lhs, rhs)
 ```
 

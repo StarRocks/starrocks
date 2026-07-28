@@ -11,7 +11,7 @@ Returns the sum of non-null values for `expr`. You can use the DISTINCT keyword 
 
 ## Syntax
 
-```Haskell
+```plaintext
 SUM([DISTINCT] expr)
 ```
 

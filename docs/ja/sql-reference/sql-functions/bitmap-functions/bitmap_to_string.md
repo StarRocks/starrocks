@@ -9,7 +9,7 @@ description: "ビットマップをカンマで区切られた文字列に変換
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR BITMAP_TO_STRING(BITMAP input)
 ```
 

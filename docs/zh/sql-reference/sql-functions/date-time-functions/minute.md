@@ -13,7 +13,7 @@ description: "返回指定日期中的分钟部分，取值范围 0 到 59。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT MINUTE(DSATETIME date)
 ```
 

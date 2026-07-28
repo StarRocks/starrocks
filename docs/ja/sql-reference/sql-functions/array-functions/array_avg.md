@@ -9,7 +9,7 @@ ARRAY 内のすべてのデータの平均値を計算し、この結果を返�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_avg(array(type))
 ```
 

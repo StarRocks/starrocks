@@ -11,7 +11,7 @@ Calculates the spherical distance between two points on the Earth in "meters". T
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE ST_Distance_Sphere(DOUBLE x_lng, DOUBLE x_lat, DOUBLE y_lng, DOUBLE x_lat)
 ```
 

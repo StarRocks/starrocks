@@ -11,7 +11,7 @@ description: "从日期中减去指定的时间间隔。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 ```
 

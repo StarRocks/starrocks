@@ -9,7 +9,7 @@ description: "日付に指定された週数を追加した値を返します。
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME weeks_add(DATETIME expr1, INT expr2);
 ```
 

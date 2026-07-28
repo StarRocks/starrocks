@@ -9,7 +9,7 @@ description: "VARIANCE関数は母分散を返し、v2.5.10以降はウィンド
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARIANCE(expr)
 ```
 

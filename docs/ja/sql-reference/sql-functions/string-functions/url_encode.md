@@ -11,7 +11,7 @@ description: "文字列をapplication/x-www-form-urlencoded形式にエンコー
 
 ## 構文
 
-```haskell
+```plaintext
 VARCHAR url_encode(VARCHAR str)
 ```
 

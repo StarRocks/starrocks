@@ -9,7 +9,7 @@ description: "0（含む）から 1（含まない）の間のランダムな浮
 
 ## Syntax
 
-```Haskell
+```plaintext
 RAND(x);
 ```
 

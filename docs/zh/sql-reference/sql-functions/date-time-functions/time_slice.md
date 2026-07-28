@@ -13,7 +13,7 @@ description: "根据指定时间粒度周期，将给定时间转化为其所在
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 ```
 

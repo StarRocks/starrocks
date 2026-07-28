@@ -9,7 +9,7 @@ description: "日付値から指定された秒数の時間間隔を減算しま
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 ```
 

@@ -13,7 +13,7 @@ The [add_months](./add_months.md) function provides similar functionalities.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME months_add(DATETIME expr1, INT expr2);
 ```
 

@@ -13,7 +13,7 @@ description: "生成指定范围和步长的数值数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY array_generate([start,] end [, step])
 ```
 

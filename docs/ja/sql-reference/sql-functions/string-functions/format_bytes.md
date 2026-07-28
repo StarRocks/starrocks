@@ -13,7 +13,7 @@ description: "バイト数を人間が読みやすい単位(B、KB、MB、GB、T
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR format_bytes(BIGINT bytes)
 ```
 

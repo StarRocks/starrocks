@@ -9,7 +9,7 @@ description: "文字列内の部分文字列の1から始まる位置を返し�
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT locate(VARCHAR substr, VARCHAR str[, INT pos])
 ```
 

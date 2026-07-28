@@ -9,7 +9,7 @@ description: "正規表現パターンに一致する文字列の部分を置換
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR regexp_replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 

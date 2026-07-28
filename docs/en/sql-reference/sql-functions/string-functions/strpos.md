@@ -9,7 +9,7 @@ Returns the position of the N-th substring in a string. If N is a negative numbe
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strpos(VARCHAR str, VARCHAR substr [, INT instance])
 ```
 

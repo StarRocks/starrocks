@@ -13,7 +13,7 @@ description: "从 URL 中截取 host 部分。"
 
 ## 语法
 
-```haskell
+```plaintext
 VARCHAR url_extract_host(VARCHAR str)
 ```
 

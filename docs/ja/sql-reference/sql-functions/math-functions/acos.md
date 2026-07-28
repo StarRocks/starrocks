@@ -9,7 +9,7 @@ description: "引数のアークコサインを計算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE acos(DOUBLE arg)
 ```
 

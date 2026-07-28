@@ -11,7 +11,7 @@ This function returns true when the string is empty or NULL. Otherwise, it retur
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)
 BOOLEAN NULL_OR_EMPTY (any_array)
 ```

@@ -15,7 +15,7 @@ description: "将大 BITMAP 拆分成多个不超过指定大小的子 BITMAP。
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP subdivide_bitmap(bitmap, length)
 ```
 

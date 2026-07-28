@@ -9,7 +9,7 @@ description: "2 つの式間のピアソン相関係数を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 CORR(expr1, expr2)
 ```
 

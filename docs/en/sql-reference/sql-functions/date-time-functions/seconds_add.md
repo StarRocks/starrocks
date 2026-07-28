@@ -9,7 +9,7 @@ description: "DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)"
 
 ### Syntax
 
-```Haskell
+```plaintext
 DATETIME SECONDS_ADD(DATETIME expr1,INT expr2)
 ```
 

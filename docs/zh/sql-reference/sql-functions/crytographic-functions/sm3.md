@@ -13,7 +13,7 @@ description: "使用 SM3 摘要算法将字符串加密为 256-bit 的十六进�
 
 ## 语法
 
-```Haskell
+```plaintext
 SM3(str);
 ```
 

@@ -9,7 +9,7 @@ description: "2つの日付式の月差を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT months_diff(DATETIME expr1,DATETIME expr2);
 ```
 

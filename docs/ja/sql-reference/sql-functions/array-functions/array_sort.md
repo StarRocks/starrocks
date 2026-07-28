@@ -9,7 +9,7 @@ description: "ARRAY_SORT関数は配列の要素を昇順にソートし、v4.0�
 
 ## 構文
 
-```Haskell
+```plaintext
 -- ラムダコンパレータを使用しない
 array_sort(array)
 
