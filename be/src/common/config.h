@@ -751,7 +751,6 @@ CONF_Int32(shared_dict_train_fragment_bytes, "4096");
 // every byte costs read-side memory.
 CONF_Int32(shared_dict_max_size, "114688");
 
-
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
