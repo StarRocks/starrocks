@@ -27,7 +27,7 @@ jobs:
       (github.event.pull_request && github.event.requested_team) ||
       (github.event.pull_request.requested_teams && github.event.review && github.event.review.state == 'approved') ||
       github.event.review.state == 'approved'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     env:
       REPO: ${{ github.repository }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

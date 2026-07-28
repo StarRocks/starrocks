@@ -51,7 +51,7 @@ jobs:
 
   rebase:
     name: Rebase
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     needs: info
     if: >
       contains(github.event.comment.body, '@Mergify rebase') ||
@@ -143,7 +143,7 @@ jobs:
 
   close:
     name: CLOSE PR
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     if: >
       contains(github.event.issue.pull_request.html_url, 'pull') &&
       (contains(github.event.comment.body, '@Mergify close') ||
@@ -160,7 +160,7 @@ jobs:
 
   automerge:
     name: AutoMerge PR
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     if: >
       contains(github.event.issue.pull_request.html_url, 'pull') &&
       contains(github.event.comment.body, '@Mergify automerge')
@@ -186,7 +186,7 @@ jobs:
 
   rerun:
     name: Rerun
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     if: >
       contains(github.event.issue.pull_request.html_url, 'pull') &&
       contains(github.event.comment.body, 'Re-run the workflow')

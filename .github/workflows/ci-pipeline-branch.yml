@@ -400,7 +400,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   fe-checker:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, light]
     needs: basic-checker
     name: FE FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
