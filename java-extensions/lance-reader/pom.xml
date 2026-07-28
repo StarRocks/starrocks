@@ -57,12 +57,14 @@
     <build>
         <finalName>starrocks-lance-reader</finalName>
         <plugins>
-            <!-- Arrow memory requires add-opens on Java 17+ for off-heap access -->
+            <!-- Arrow memory requires add-opens on Java 17+ for off-heap access.
+                 @{argLine} preserves the JaCoCo agent injected by prepare-agent; dropping it
+                 silently disables coverage collection for this module. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} --add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
                 </configuration>
             </plugin>
             <!-- copy all dependency libs to target lib dir -->
