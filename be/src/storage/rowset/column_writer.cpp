@@ -397,7 +397,7 @@ Status ScalarColumnWriter::init() {
     // E4: resolve the shared-dictionary build mode once. "train" (ZDICT-lite)
     // buffers the first pages to train a dictionary from spread samples;
     // "sample" (default) takes the first eligible page verbatim.
-    _shared_dict_train_mode = _opts.use_shared_dict && config::shared_dict_build_mode == "train";
+    _shared_dict_train_mode = _opts.use_shared_dict && config::shared_dict_build_mode.value() == "train";
 
     if (!_opts.need_speculate_encoding) {
         auto st = set_encoding(_opts.meta->encoding());
