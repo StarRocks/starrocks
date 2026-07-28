@@ -1062,4 +1062,74 @@ public class StreamLoadMultiStmtTaskTest {
         Assertions.assertEquals(1, loadCalls[0]);
         Assertions.assertFalse(committed[0]);
     }
+
+    // ---- A file_bundling table joining the multi-statement txn turns on combined txn log ----
+    @Test
+    public void testFileBundlingTableEnablesCombinedTxnLog() {
+        Deencapsulation.setField(multiTask, "txnId", 4242L);
+        TransactionState txnState = new TransactionState();
+        Assertions.assertFalse(txnState.isUseCombinedTxnLog());
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        explicitState.setTransactionState(txnState);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return explicitState;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return true;
+            }
+        };
+
+        Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable());
+        Assertions.assertTrue(txnState.isUseCombinedTxnLog());
+    }
+
+    // ---- A non-file_bundling table leaves the combined txn log flag untouched ----
+    @Test
+    public void testNonFileBundlingTableDoesNotEnableCombinedTxnLog() {
+        Deencapsulation.setField(multiTask, "txnId", 4243L);
+        TransactionState txnState = new TransactionState();
+        ExplicitTxnState explicitState = new ExplicitTxnState();
+        explicitState.setTransactionState(txnState);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return explicitState;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return false;
+            }
+        };
+
+        Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable());
+        Assertions.assertFalse(txnState.isUseCombinedTxnLog());
+    }
+
+    // ---- No transaction state yet: a file_bundling table must not blow up ----
+    @Test
+    public void testEnableCombinedTxnLogNoExplicitTxnStateIsNoop() {
+        Deencapsulation.setField(multiTask, "txnId", 4244L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState getExplicitTxnState(long id) {
+                return null;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public Boolean isFileBundling() {
+                return true;
+            }
+        };
+
+        Assertions.assertDoesNotThrow(() ->
+                Deencapsulation.invoke(multiTask, "decideCombinedTxnLogFromFirstTable", new OlapTable()));
+    }
 }
