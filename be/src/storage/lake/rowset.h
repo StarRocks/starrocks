@@ -261,6 +261,7 @@ public:
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
@@ -318,6 +319,10 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    // Set once get_segments_checked() materializes _segments. Keyed on an explicit flag (not
+    // _segments.empty()) so a zero-segment rowset loads once, and stays false on a transient
+    // failure so a retry re-attempts it (issue #75203).
+    bool _segments_loaded = false;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.

@@ -639,4 +639,103 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_cont
     }
 }
 
+// Build a primary-key tablet whose rowsets carry explicit num_dels (so the policy does not need
+// real delete-vector files) and verify PrimaryCompactionPolicy switches to base compaction --
+// reclaiming the delete-bearing rowsets, most deleted rows first -- when the tablet's delete ratio
+// or absolute delete-row count crosses its threshold, or a base compaction is forced, while
+// leaving the clean small rowsets alone.
+TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
+    // Restore the base-compaction configs on every exit path, including a mid-test ASSERT failure,
+    // so modified values don't leak into other tests.
+    struct ConfigGuard {
+        double ratio = config::lake_pk_compaction_base_delete_ratio_threshold;
+        int64_t rows = config::lake_pk_compaction_base_delete_rows_threshold;
+        ~ConfigGuard() {
+            config::lake_pk_compaction_base_delete_ratio_threshold = ratio;
+            config::lake_pk_compaction_base_delete_rows_threshold = rows;
+        }
+    } config_guard;
+
+    constexpr int64_t kBig = 100 * 1024 * 1024; // 100 MB
+    constexpr int64_t kSmall = 2 * 1024 * 1024; // 2 MB
+    // Big value that effectively disables the threshold it is assigned to.
+    constexpr int64_t kDisabledRows = 1'000'000'000LL;
+    constexpr double kDisabledRatio = 0.99;
+
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    struct RowsetSpec {
+        uint32_t id;
+        int64_t num_rows;
+        int64_t num_dels;
+        int64_t data_size;
+    };
+    // rowset 1: 80% deleted (3.2M dels), rowset 2: 50% deleted (2.0M dels) -- both delete-bearing;
+    // rowsets 3,4: fresh, clean small rowsets with no deletes.
+    // Tablet aggregate: sum(num_dels) = 5.2M, sum(num_rows) = 8.1M -> ratio ~= 0.64.
+    const std::vector<RowsetSpec> specs = {
+            {1, 4000000, 3200000, kBig}, {2, 4000000, 2000000, kBig}, {3, 50000, 0, kSmall}, {4, 50000, 0, kSmall}};
+    for (const auto& s : specs) {
+        auto* r = metadata->mutable_rowsets()->Add();
+        r->set_id(s.id);
+        r->set_overlapped(false);
+        r->add_segment_metas()->set_filename("seg");
+        r->set_num_rows(s.num_rows);
+        r->set_num_dels(s.num_dels);
+        r->set_data_size(s.data_size);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    // Base compaction is a full merge of all rowsets, ordered by absolute delete-row count
+    // (num_dels) descending: the two delete-bearing rowsets (1 with 3.2M, then 2 with 2.0M) come
+    // first, ahead of the clean rowsets 3 and 4 (num_dels 0, either order). All four fit within the
+    // result-bytes budget, so all four are picked.
+    auto expect_base_pick = [](const std::vector<RowsetPtr>& rowsets) {
+        ASSERT_EQ(4, rowsets.size());
+        EXPECT_EQ(1, rowsets[0]->id());
+        EXPECT_EQ(2, rowsets[1]->id());
+        // The remaining two are the clean rowsets 3 and 4, in either order.
+        EXPECT_EQ(7, rowsets[2]->id() + rowsets[3]->id());
+    };
+
+    // Case A: ratio trigger. Aggregate ratio (0.64) >= ratio threshold (0.5); count trigger off.
+    config::lake_pk_compaction_base_delete_ratio_threshold = 0.5;
+    config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
+    ASSIGN_OR_ABORT(auto ratio_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto ratio_rowsets, ratio_policy->pick_rowsets());
+    expect_base_pick(ratio_rowsets);
+
+    // Case B: absolute-count trigger (the hot-table case). Aggregate ratio (0.64) < ratio threshold
+    // (0.99) so the ratio does NOT trigger, but sum(num_dels)=5.2M >= count threshold (1M) does --
+    // this is exactly the account case where a low aggregate ratio hides a large absolute delete
+    // volume.
+    config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
+    config::lake_pk_compaction_base_delete_rows_threshold = 1000000;
+    ASSIGN_OR_ABORT(auto count_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto count_rowsets, count_policy->pick_rowsets());
+    expect_base_pick(count_rowsets);
+
+    // Case C: force_base_compaction (from ALTER ... COMPACT) triggers base even with both
+    // thresholds disabled.
+    config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
+    config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
+    ASSIGN_OR_ABORT(auto forced_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, true /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto forced_rowsets, forced_policy->pick_rowsets());
+    expect_base_pick(forced_rowsets);
+
+    // Case D: neither trigger met and no force -> cumulative (size-tiered) selection, which does
+    // NOT force-pick the delete-heavy rowsets. With only 4 non-overlapped segments
+    // (< lake_pk_compaction_min_input_segments), size-tiered declines to compact, so the result is
+    // empty -- proving the base pick was not taken.
+    config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
+    config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
+    ASSIGN_OR_ABORT(auto cumulative_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto cumulative_rowsets, cumulative_policy->pick_rowsets());
+    EXPECT_TRUE(cumulative_rowsets.empty());
+}
+
 } // namespace starrocks::lake

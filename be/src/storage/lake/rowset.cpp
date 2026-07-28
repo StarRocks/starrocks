@@ -756,17 +756,26 @@ RowsetId Rowset::rowset_id() const {
     return rowset_id;
 }
 
-std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
+StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    // Lock-free lazy init: callers must serialize calls on a given Rowset (the split morsel queues
+    // hold _mutex; lake Rowsets are per-reader over immutable metadata). Not std::call_once -- that
+    // marks init done even on a transient failure and would defeat the retry (issue #75203).
+    if (_segments_loaded) {
         return _segments;
     }
-
-    auto segments_or = segments(true);
-    if (!segments_or.ok()) {
-        return {};
-    }
-    _segments = std::move(segments_or.value());
+    // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
+    // _segments_loaded stays false so a later call retries.
+    ASSIGN_OR_RETURN(auto segs, segments(true));
+    _segments = std::move(segs);
+    _segments_loaded = true;
     return _segments;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    // Best-effort shim for callers that tolerate an empty result on a transient failure; callers
+    // that must not proceed on failure use get_segments_checked() and check the Status.
+    auto res = get_segments_checked();
+    return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {

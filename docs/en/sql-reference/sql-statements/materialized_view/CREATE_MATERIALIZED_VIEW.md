@@ -863,7 +863,7 @@ Example 1: Create a non-partitioned materialized view.
 -- create an unpartitioned materialized view sorted by lo_custkey
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC
 AS
 select
@@ -883,7 +883,7 @@ Example 2: Create a partitioned materialized view.
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1072,7 +1072,7 @@ Example 7: Create a partition materialized view with a specific sort key:
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
