@@ -270,8 +270,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_applies_seg_delvecs) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -319,8 +319,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_seg_delvecs_empty_entry) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    for (auto& f : writer->files()) {
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
