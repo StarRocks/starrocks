@@ -23,6 +23,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/empty_iterator.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
@@ -36,17 +37,10 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
-<<<<<<< HEAD
+#include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
-=======
-#include "storage/types.h"
-#include "storage/update_manager.h"
-#include "storage_primitive/column_predicate_factory.h"
-#include "storage_primitive/empty_iterator.h"
-#include "storage_primitive/union_iterator.h"
->>>>>>> 6c7ca6a961 ([BugFix] Serve GIN inverted index from DCG segment after column-mode partial update (#76271))
 
 namespace starrocks {
 
