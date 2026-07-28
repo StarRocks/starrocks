@@ -11,10 +11,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
 
 #include <gtest/gtest.h>
 
+#include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator.h"
+#include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -64,3 +70,114 @@ TEST_F(LimitedMemAggStateTest, budget_is_always_positive) {
 }
 
 } // namespace starrocks
+
+namespace starrocks::pipeline {
+
+// Operator-level tests: drive the real AggregateStreamingSinkOperator /
+// AggregateDistinctStreamingSinkOperator::set_execute_mode() implementations, i.e. the code
+// the pipeline driver invokes when it downgrades a releaseable sink under memory pressure.
+// The aggregator is not prepare()d (that needs a full plan-fragment context); instead the few
+// fields set_execute_mode() reads are set directly — tests compile with -fno-access-control.
+class StreamingAggSinkExecuteModeTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        _state.set_chunk_size(4096);
+        _tnode.__set_node_id(1);
+        _tnode.__set_node_type(TPlanNodeType::AGGREGATION_NODE);
+        _tnode.__set_num_children(1);
+        _tnode.__set_limit(-1);
+        TAggregationNode agg_node;
+        agg_node.__set_use_streaming_preaggregation(true);
+        _tnode.__set_agg_node(agg_node);
+    }
+
+    RuntimeState _state;
+    RuntimeProfile _profile{"test"};
+    AggStatistics _agg_stat{&_profile};
+    TPlanNode _tnode;
+    // AggregateStreamingSinkOperatorFactory keeps a reference to this vector.
+    std::vector<RuntimeFilterBuildDescriptor*> _no_runtime_filters;
+};
+
+TEST_F(StreamingAggSinkExecuteModeTest, streaming_sink_latches_positive_capped_budget) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::AUTO;
+    aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
+
+    op->set_execute_mode(1);
+
+    // AUTO is downgraded to LIMITED_MEM and the latched budget is positive and config-capped.
+    EXPECT_EQ(TStreamingPreaggregationMode::LIMITED_MEM, aggregator->streaming_preaggregation_mode());
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+    EXPECT_GT(sink->_limited_mem_state.limited_memory_size, 0u);
+    EXPECT_LE(sink->_limited_mem_state.limited_memory_size,
+              static_cast<size_t>(config::streaming_agg_limited_memory_size));
+    EXPECT_EQ(LimitedMemAggState::clamp_budget(aggregator->hash_map_memory_usage(),
+                                               config::streaming_agg_limited_memory_size),
+              sink->_limited_mem_state.limited_memory_size);
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest, streaming_sink_keeps_non_auto_mode) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::FORCE_STREAMING;
+    aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
+
+    op->set_execute_mode(1);
+
+    // Only AUTO is downgraded; an explicit mode is preserved but the budget is still latched.
+    EXPECT_EQ(TStreamingPreaggregationMode::FORCE_STREAMING, aggregator->streaming_preaggregation_mode());
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+    EXPECT_GT(sink->_limited_mem_state.limited_memory_size, 0u);
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest, distinct_sink_uses_hash_set_metric_and_caps_budget) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateDistinctStreamingSinkOperatorFactory factory(1, 1, aggregator_factory);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    // Distinct aggregation: only the hash SET is initialized, _hash_map_variant never is.
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::AUTO;
+    aggregator->_is_only_group_by_columns = true;
+    aggregator->_hash_set_variant.init(&_state, AggHashSetVariant::Type::phase1_int32, &_agg_stat);
+
+    op->set_execute_mode(1);
+
+    EXPECT_EQ(TStreamingPreaggregationMode::LIMITED_MEM, aggregator->streaming_preaggregation_mode());
+    auto* sink = static_cast<AggregateDistinctStreamingSinkOperator*>(op.get());
+    // The budget comes from the hash-set-based memory_usage(), stays positive, and is
+    // config-capped — the same scale has_limited() compares against.
+    EXPECT_GT(sink->_limited_mem_state.limited_memory_size, 0u);
+    EXPECT_LE(sink->_limited_mem_state.limited_memory_size,
+              static_cast<size_t>(config::streaming_agg_limited_memory_size));
+    EXPECT_EQ(LimitedMemAggState::clamp_budget(aggregator->memory_usage(), config::streaming_agg_limited_memory_size),
+              sink->_limited_mem_state.limited_memory_size);
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest, distinct_sink_floors_zero_usage_budget_to_one) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateDistinctStreamingSinkOperatorFactory factory(1, 1, aggregator_factory);
+    auto op = factory.create(1, 0);
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    // With no group-by state at all, memory_usage() reports 0. The latched budget must be
+    // floored to 1: a 0 budget would make has_limited() permanently false (its predicate is
+    // `limited_memory_size > 0 && ...`), silently degrading LIMITED_MEM back to AUTO.
+    aggregator->_streaming_preaggregation_mode = TStreamingPreaggregationMode::AUTO;
+    ASSERT_EQ(0, aggregator->memory_usage());
+
+    op->set_execute_mode(1);
+
+    auto* sink = static_cast<AggregateDistinctStreamingSinkOperator*>(op.get());
+    EXPECT_EQ(1u, sink->_limited_mem_state.limited_memory_size);
+}
+
+} // namespace starrocks::pipeline
