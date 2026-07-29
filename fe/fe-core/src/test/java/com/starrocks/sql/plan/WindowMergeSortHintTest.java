@@ -150,6 +150,23 @@ class WindowMergeSortHintTest extends PlanTestBase {
     }
 
     @Test
+    void testHintRequiresOnlyOneHint() {
+        setSkewedStatsForS();
+
+        starRocksAssert.query("select p, s, sum(x) over ([merge_sort,hash] partition by s) from " + TABLE_NAME)
+                .analysisError("The merge_sort hint cannot be combined with any other hint");
+
+        starRocksAssert.query("select p, s, sum(x) over ([merge_sort,skewed] partition by s) from " + TABLE_NAME)
+                .analysisError("The merge_sort hint cannot be combined with any other hint");
+
+        starRocksAssert.query("select p, s, sum(x) over ([merge_sort,skewed,hash] partition by s) from " + TABLE_NAME)
+                .analysisError("The merge_sort hint cannot be combined with any other hint");
+
+        starRocksAssert.query("select p, s, sum(x) over ([sort,merge_sort] partition by s) from " + TABLE_NAME)
+                .analysisError("The merge_sort hint cannot be combined with any other hint");
+    }
+
+    @Test
     void testHintRequiresOrderBy() {
         starRocksAssert.query("select p, s, sum(x) over ([merge_sort] partition by s) from " + TABLE_NAME)
                 .analysisError("The merge_sort hint requires an ORDER BY clause in the window specification.");

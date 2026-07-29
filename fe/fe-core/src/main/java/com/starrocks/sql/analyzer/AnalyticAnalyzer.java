@@ -165,14 +165,18 @@ public class AnalyticAnalyzer {
             }
         }
 
-        if (HintNode.HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
+        if (analyticExpr.isForceMergeSort()) {
+            if (!HintNode.HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(analyticExpr.getSkewHint()) || analyticExpr.isSkewed() || analyticExpr.getPartitionHint() != null) {
+                throw new SemanticException("The merge_sort hint cannot be combined with any other hint",
+                        analyticExpr.getPos());
+            }
             if (analyticExpr.getPartitionExprs().isEmpty()) {
-                throw new SemanticException("The merge_sort hint requires a PARTITION BY clause.",
+                throw new SemanticException("The merge_sort hint requires a PARTITION BY clause",
                         analyticExpr.getPos());
             }
             if (analyticExpr.getOrderByElements().isEmpty()) {
                 throw new SemanticException(
-                        "The merge_sort hint requires an ORDER BY clause in the window specification.",
+                        "The merge_sort hint requires an ORDER BY clause in the window specification",
                         analyticExpr.getPos());
             }
         }
