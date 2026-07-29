@@ -32,6 +32,7 @@ public class QueryQueueOptions {
     private final boolean enableQueryQueueV2;
     private final V2 v2;
     private final SchedulePolicy policy;
+    private final SlotEstimatorFactory.EstimatorPolicy estimatorPolicy;
 
     public static QueryQueueOptions createFromEnvAndQuery(DefaultCoordinator coord) {
         if (!coord.getJobSpec().isEnableQueue() || !coord.getJobSpec().isNeedQueued()) {
@@ -46,36 +47,42 @@ public class QueryQueueOptions {
         if (!slotManager.isEnableQueryQueueV2(warehouseId)) {
             return new QueryQueueOptions(false, V2.DEFAULT);
         }
-        SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_strategy);
+        String scheduleStrategy = slotManager.getQueryQueueV2ScheduleStrategy(warehouseId);
+        SchedulePolicy policy = SchedulePolicy.create(scheduleStrategy);
         if (policy == null) {
-            LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_strategy);
+            LOG.error("unknown query_queue_v2_schedule_policy: {}", scheduleStrategy);
             policy = SchedulePolicy.createDefault();
         }
 
-        SlotEstimatorFactory.EstimatorPolicy estimatorPolicy = SlotEstimatorFactory.getEstimatorPolicy();
-        final V2 v2 = new V2(Config.query_queue_v2_concurrency_level,
+        SlotEstimatorFactory.EstimatorPolicy estimatorPolicy =
+                SlotEstimatorFactory.getEstimatorPolicy(slotManager.getQueryQueueSlotsEstimatorStrategy(warehouseId));
+        final V2 v2 = new V2(slotManager.getQueryQueueV2ConcurrencyLevel(warehouseId),
                 BackendResourceStat.getInstance().getNumBes(warehouseId),
                 BackendResourceStat.getInstance().getAvgNumCoresOfBe(warehouseId),
                 BackendResourceStat.getInstance().getAvgMemLimitBytes(warehouseId),
-                Config.query_queue_v2_mem_bytes_per_slot,
+                slotManager.getQueryQueueV2MemBytesPerSlot(warehouseId),
                 Config.query_queue_v2_num_rows_per_slot,
-                Config.query_queue_v2_cpu_costs_per_slot,
+                slotManager.getQueryQueueV2CpuCostsPerSlot(warehouseId),
                 estimatorPolicy);
 
-        return new QueryQueueOptions(true, v2, policy);
+        return new QueryQueueOptions(true, v2, policy, estimatorPolicy);
     }
 
     @VisibleForTesting
     QueryQueueOptions(boolean enableQueryQueueV2, V2 v2) {
-        this.enableQueryQueueV2 = enableQueryQueueV2 && v2 != null;
-        this.v2 = v2;
-        this.policy = SchedulePolicy.createDefault();
+        this(enableQueryQueueV2, v2, SchedulePolicy.createDefault(), SlotEstimatorFactory.getEstimatorPolicy());
     }
 
     QueryQueueOptions(boolean enableQueryQueueV2, V2 v2, SchedulePolicy policy) {
+        this(enableQueryQueueV2, v2, policy, SlotEstimatorFactory.getEstimatorPolicy());
+    }
+
+    QueryQueueOptions(boolean enableQueryQueueV2, V2 v2, SchedulePolicy policy,
+                      SlotEstimatorFactory.EstimatorPolicy estimatorPolicy) {
         this.enableQueryQueueV2 = enableQueryQueueV2 && v2 != null;
         this.v2 = v2;
         this.policy = policy;
+        this.estimatorPolicy = estimatorPolicy;
     }
 
     public boolean isEnableQueryQueueV2() {
@@ -90,6 +97,10 @@ public class QueryQueueOptions {
         return policy;
     }
 
+    public SlotEstimatorFactory.EstimatorPolicy getEstimatorPolicy() {
+        return estimatorPolicy;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -101,12 +112,13 @@ public class QueryQueueOptions {
         QueryQueueOptions that = (QueryQueueOptions) o;
         return enableQueryQueueV2 == that.enableQueryQueueV2
                 && Objects.equals(v2, that.v2)
-                && policy.equals(that.policy);
+                && policy.equals(that.policy)
+                && estimatorPolicy.equals(that.estimatorPolicy);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(enableQueryQueueV2, v2, policy);
+        return Objects.hash(enableQueryQueueV2, v2, policy, estimatorPolicy);
     }
 
     @Override
@@ -115,6 +127,7 @@ public class QueryQueueOptions {
         sb.append("enableQueryQueueV2=").append(enableQueryQueueV2);
         sb.append(", v2=").append(v2);
         sb.append(", policy=").append(policy);
+        sb.append(", estimatorPolicy=").append(estimatorPolicy);
         sb.append('}');
         return sb.toString();
     }

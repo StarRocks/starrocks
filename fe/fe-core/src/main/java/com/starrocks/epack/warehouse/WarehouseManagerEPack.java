@@ -30,6 +30,8 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -216,6 +218,47 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return cluster.getNextComputeNodeHostId();
     }
 
+    /**
+     * Parse and validate the 5 per-warehouse Query Queue V2 override properties out of {@code properties},
+     * setting them on {@code warehouseProperty}. Each recognized key is removed from {@code properties} so
+     * that callers can still detect genuinely unknown properties afterwards.
+     */
+    private static void parseQueryQueueV2Properties(Map<String, String> properties, WarehouseProperty warehouseProperty)
+            throws DdlException {
+        if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_SLOTS_ESTIMATOR_STRATEGY)) {
+            String v = properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_SLOTS_ESTIMATOR_STRATEGY);
+            if (SlotEstimatorFactory.EstimatorPolicy.create(v) == null) {
+                throw new DdlException("query_queue_slots_estimator_strategy must be one of PBE, MBE, CBE, MAX, "
+                        + "or MIN, current value: " + v);
+            }
+            warehouseProperty.setQueryQueueSlotsEstimatorStrategy(v);
+            properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_SLOTS_ESTIMATOR_STRATEGY);
+        }
+        if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_SCHEDULE_STRATEGY)) {
+            String v = properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_SCHEDULE_STRATEGY);
+            if (QueryQueueOptions.SchedulePolicy.create(v) == null) {
+                throw new DdlException("query_queue_v2_schedule_strategy must be one of SWRR or SJF, current value: " + v);
+            }
+            warehouseProperty.setQueryQueueV2ScheduleStrategy(v);
+            properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_SCHEDULE_STRATEGY);
+        }
+        if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CONCURRENCY_LEVEL)) {
+            warehouseProperty.setQueryQueueV2ConcurrencyLevel(
+                    Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CONCURRENCY_LEVEL)));
+            properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CONCURRENCY_LEVEL);
+        }
+        if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_MEM_BYTES_PER_SLOT)) {
+            warehouseProperty.setQueryQueueV2MemBytesPerSlot(
+                    Long.parseLong(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_MEM_BYTES_PER_SLOT)));
+            properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_MEM_BYTES_PER_SLOT);
+        }
+        if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CPU_COSTS_PER_SLOT)) {
+            warehouseProperty.setQueryQueueV2CpuCostsPerSlot(
+                    Long.parseLong(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CPU_COSTS_PER_SLOT)));
+            properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_V2_CPU_COSTS_PER_SLOT);
+        }
+    }
+
     @Override
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
@@ -306,6 +349,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     warehouseProperty.setQueryQueueConcurrencyLimit(queryQueueConcurrencyLimit);
                     properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT);
                 }
+
+                // query queue v2: query_queue_slots_estimator_strategy, query_queue_v2_concurrency_level,
+                // query_queue_v2_mem_bytes_per_slot, query_queue_v2_cpu_costs_per_slot, query_queue_v2_schedule_strategy
+                parseQueryQueueV2Properties(properties, warehouseProperty);
 
                 if (!properties.isEmpty()) {
                     throw new DdlException(String.format("Unknown warehouse properties: {%s}",
@@ -576,6 +623,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 warehouseProperty.setQueryQueueConcurrencyLimit(queryQueueConcurrencyLimit);
                 properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT);
             }
+
+            // query queue v2: query_queue_slots_estimator_strategy, query_queue_v2_concurrency_level,
+            // query_queue_v2_mem_bytes_per_slot, query_queue_v2_cpu_costs_per_slot, query_queue_v2_schedule_strategy
+            parseQueryQueueV2Properties(properties, warehouseProperty);
 
             if (!properties.isEmpty()) {
                 throw new DdlException(

@@ -211,6 +211,41 @@ public abstract class BaseSlotManager {
     }
 
     /**
+     * Query Queue V2 capacity level (see {@link Config#query_queue_v2_concurrency_level}).
+     */
+    public int getQueryQueueV2ConcurrencyLevel(long warehouseId) {
+        return Config.query_queue_v2_concurrency_level;
+    }
+
+    /**
+     * Query Queue V2 MBE per-slot memory budget in bytes.
+     */
+    public long getQueryQueueV2MemBytesPerSlot(long warehouseId) {
+        return Config.query_queue_v2_mem_bytes_per_slot;
+    }
+
+    /**
+     * Query Queue V2 CBE per-slot CPU cost.
+     */
+    public long getQueryQueueV2CpuCostsPerSlot(long warehouseId) {
+        return Config.query_queue_v2_cpu_costs_per_slot;
+    }
+
+    /**
+     * Query Queue V2 slots estimator strategy name (PBE/MBE/CBE, legacy MAX/MIN).
+     */
+    public String getQueryQueueSlotsEstimatorStrategy(long warehouseId) {
+        return Config.query_queue_slots_estimator_strategy;
+    }
+
+    /**
+     * Query Queue V2 schedule strategy name (SWRR/SJF).
+     */
+    public String getQueryQueueV2ScheduleStrategy(long warehouseId) {
+        return Config.query_queue_v2_schedule_strategy;
+    }
+
+    /**
      * Return warehouse-id to slot tracker map.
      */
     public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
