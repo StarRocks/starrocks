@@ -983,6 +983,10 @@ public class StarOSAgent {
     }
 
     public boolean queryMetaGroupStable(long metaGroupId) {
+        if (Config.lake_skip_colocate_group_stable_check) {
+            return true; // treat meta group as stable without querying StarMgr
+        }
+
         prepare();
 
         try {
