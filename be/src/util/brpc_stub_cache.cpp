@@ -46,7 +46,16 @@ void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract) {
     }
     if (cache->_pipeline_timer != nullptr) {
         for (auto& task : tasks) {
-            (void)cache->_pipeline_timer->unschedule(task.get());
+            // Wait for a task that is mid-Run() to finish before returning. A plain unschedule() only
+            // removes the task from the timer; if the task is already running on the timer thread it
+            // keeps touching the cache (_lock/_stopping/_stub_map), so returning here would let the
+            // caller (~cache / shutdown()) destroy the cache underneath a live doRun() -> use-after-free.
+            // unschedule_and_wait() blocks on the task's latch when it is running (rc == 1), mirroring
+            // main's unschedule_and_join. This relies on the task running on the guarded PipelineTimerTask
+            // path (which carries the latch).
+            if (task != nullptr) {
+                task->unschedule_and_wait(cache->_pipeline_timer);
+            }
         }
     }
 }
