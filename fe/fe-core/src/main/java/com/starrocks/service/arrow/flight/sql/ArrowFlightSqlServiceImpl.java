@@ -40,6 +40,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.arrow.flight.Action;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
@@ -61,6 +62,7 @@ import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.auth2.BearerCredentialWriter;
 import org.apache.arrow.flight.grpc.CredentialCallOption;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
+import org.apache.arrow.flight.sql.FlightSqlUtils;
 import org.apache.arrow.flight.sql.SqlInfoBuilder;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.memory.BufferAllocator;
@@ -189,7 +191,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                 // When proxy is enabled and token is from another FE, forward the request
                 if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
-                    forwardActionToRemoteFE(token, request, listener);
+                    forwardActionToRemoteFE(token, FlightSqlUtils.FLIGHT_SQL_CREATE_PREPARED_STATEMENT.getType(),
+                            request, listener);
                     return;
                 }
 
@@ -232,7 +235,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         // When proxy is enabled and token is from another FE, forward the request
         if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             EXECUTOR.submit(() -> {
-                forwardActionToRemoteFE(token, request, listener);
+                forwardActionToRemoteFE(token, FlightSqlUtils.FLIGHT_SQL_CLOSE_PREPARED_STATEMENT.getType(),
+                        request, listener);
             });
             return;
         }
@@ -718,11 +722,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     /**
      * Forward an action to the FE that issued the token.
      *
+     * <p>The {@code actionType} is the Flight SQL action-type string that the remote FE's {@code doAction} dispatcher
+     * matches on (e.g. {@code "CreatePreparedStatement"}), NOT the protobuf message name. It is supplied by the caller,
+     * which statically knows which action it is issuing.
+     *
      * @param token The bearer token containing the FE host
+     * @param actionType The Flight SQL action-type string (see {@link FlightSqlUtils})
      * @param request The protobuf action request to forward
      * @param listener The listener to receive results
      */
-    private void forwardActionToRemoteFE(String token, Message request, StreamListener<Result> listener) {
+    private void forwardActionToRemoteFE(String token, String actionType, Message request,
+                                         StreamListener<Result> listener) {
         String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
         if (feHost == null) {
             listener.onError(CallStatus.INVALID_ARGUMENT
@@ -738,9 +748,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
-            org.apache.arrow.flight.Action action = new org.apache.arrow.flight.Action(
-                    request.getDescriptorForType().getFullName(),
-                    Any.pack(request).toByteArray());
+            Action action = new Action(actionType, Any.pack(request).toByteArray());
 
             Iterator<Result> results = client.doAction(action, authOption);
             while (results.hasNext()) {
@@ -748,8 +756,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             }
             listener.onCompleted();
 
-            LOG.info("[ARROW] Forwarded action {} to remote FE {}:{}",
-                    request.getDescriptorForType().getName(), feHost, fePort);
+            LOG.info("[ARROW] Forwarded action {} to remote FE {}:{}", actionType, feHost, fePort);
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward action to remote FE {}:{}", feHost, fePort, e);
