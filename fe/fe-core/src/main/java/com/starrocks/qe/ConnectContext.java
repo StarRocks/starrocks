@@ -273,6 +273,12 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
+    // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
+    private final Set<String> viewExpansionPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     private UUID sessionId;
@@ -1096,6 +1102,10 @@ public class ConnectContext {
 
     public boolean isRelationAliasCaseInsensitive() {
         return relationAliasCaseInsensitive;
+    }
+
+    public Set<String> getViewExpansionPath() {
+        return viewExpansionPath;
     }
 
     public void setForwardTimes(int forwardTimes) {
