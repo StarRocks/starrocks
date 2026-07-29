@@ -2180,38 +2180,12 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
         return;
     }
 
-    // 2. do some cleanup before repairing tablet metadata, such as drop local data cache and meta cache.
-    // _cleanup_before_repair() performs StarOS/Starlet filesystem IO (drop_local_cache ->
-    // StarletFileSystem::drop_local_cache -> get_shard_filesystem, which takes StarOSWorker::_cache_mtx,
-    // a std::shared_mutex). This RPC handler runs on a brpc bthread; doing such IO on a bthread can make
-    // pthread_rwlock_wrlock return EDEADLK on an unrelated bthread sharing the same worker pthread, which
-    // std::shared_mutex turns into an uncaught std::system_error and aborts the CN (same mechanism as
-    // issue #76882 / CompactionScheduler::compact). Offload the cleanup to the pthread pool (as this same
-    // handler already does for the put_* tasks below) and wait for it to finish.
-    {
-        Status cleanup_st;
-        auto latch = BThreadCountDownLatch(1);
-        auto task = std::make_shared<CancellableRunnable>(
-                [&] {
-                    DeferOp defer([&] { latch.count_down(); });
-                    cleanup_st = _cleanup_before_repair(request);
-                },
-                [&] {
-                    cleanup_st = Status::Cancelled("repair tablet metadata cleanup task has been cancelled");
-                    latch.count_down();
-                });
-        auto submit_st = thread_pool->submit(std::move(task));
-        if (!submit_st.ok()) {
-            // Task was never enqueued (neither run() nor cancel() will fire); do not wait on the latch.
-            cleanup_st = submit_st;
-        } else {
-            latch.wait();
-        }
-        if (!cleanup_st.ok()) {
-            // cleanup failure will affect correctness, so the rpc should fail immediately when cleanup fails
-            cleanup_st.to_protobuf(response->mutable_status());
-            return;
-        }
+    // 2. do some cleanup before repairing tablet metadata, such as drop local data cache and meta cache
+    auto st = _cleanup_before_repair(request);
+    if (!st.ok()) {
+        // cleanup failure will affect correctness, so the rpc should fail immediately when cleanup fails
+        st.to_protobuf(response->mutable_status());
+        return;
     }
 
     // 3. put new tablet metadatas
