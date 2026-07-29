@@ -14,9 +14,13 @@
 
 #include "storage/lake/compaction_scheduler.h"
 
+#include <atomic>
+#include <thread>
+
 #include "base/bthreads/util.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -446,6 +450,69 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
     latch->wait();
+}
+
+// Regression test for issue #76882: CompactionScheduler::compact() must NOT run the IO-heavy
+// process_parallel_compaction() (tablet-metadata load + StarletFileSystem creation) on the calling
+// brpc bthread. Running blocking filesystem IO on a bthread can make a pthread rwlock (StarOSWorker's
+// std::shared_mutex _cache_mtx) return EDEADLK on an unrelated bthread sharing the same worker pthread,
+// which surfaces as an uncaught std::system_error("Resource deadlock avoided") and aborts the CN. The
+// fix offloads process_parallel_compaction() to the dedicated _threads pthread pool. This test pins the
+// offload: it asserts process_parallel_compaction() executes on a thread different from the caller.
+// (The other parallel tests above only prove "did not crash / did complete"; they pass against the old
+// inline code too, so they cannot catch a regression back to on-bthread execution.)
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thread) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    const auto caller_id = std::this_thread::get_id();
+    std::atomic<bool> fired{false};
+    std::thread::id worker_id{};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("CompactionScheduler::process_parallel_compaction:enter", [&](void* /*arg*/) {
+        worker_id = std::this_thread::get_id();
+        fired.store(true);
+    });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::process_parallel_compaction:enter");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // done->Run() (hence latch) only fires after process_parallel_compaction has entered, so the hook is
+    // guaranteed to have run by the time wait() returns.
+    latch->wait();
+
+    EXPECT_TRUE(fired.load());
+    // The offloaded task runs on a _threads pool worker, never on the caller (gtest) thread.
+    EXPECT_NE(caller_id, worker_id);
 }
 
 } // namespace starrocks::lake
