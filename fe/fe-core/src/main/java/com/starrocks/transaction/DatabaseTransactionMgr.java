@@ -2172,11 +2172,19 @@ public class DatabaseTransactionMgr {
     }
 
     public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIdList) {
+        return isPreviousTransactionsFinished(endTransactionId, tableIdList, Collections.emptySet());
+    }
+
+    public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIdList,
+                                                  Set<Long> excludeTransactionIds) {
         readLock();
         try {
             for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
                 if (entry.getValue().getDbId() != dbId || !isIntersectionNotEmpty(entry.getValue().getTableIdList(),
                         tableIdList) || !entry.getValue().isRunning()) {
+                    continue;
+                }
+                if (excludeTransactionIds.contains(entry.getKey())) {
                     continue;
                 }
                 if (entry.getKey() <= endTransactionId) {

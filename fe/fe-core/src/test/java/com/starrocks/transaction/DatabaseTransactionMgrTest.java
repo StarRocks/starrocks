@@ -1701,4 +1701,26 @@ public class DatabaseTransactionMgrTest {
         table.setReplicationNum((short) 3);
         db.registerTableUnlocked(table);
     }
+
+    @Test
+    public void testIsPreviousTransactionsFinishedExcludeTxnIds() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Use a dedicated table id so the setUp fixture's transactions do not interfere.
+        long uniqueTableId = 987654L;
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(uniqueTableId), "exclude_txn_ids_label", transactionSource,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION, Config.stream_load_default_timeout_second);
+        long watermark = masterTransMgr.getTransactionIDGenerator().peekNextTransactionId();
+
+        try {
+            // A running transaction with id <= watermark blocks by default...
+            Assertions.assertFalse(masterTransMgr.isPreviousTransactionsFinished(watermark,
+                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId)));
+            // ...but is skipped when its id is excluded.
+            Assertions.assertTrue(masterTransMgr.isPreviousTransactionsFinished(watermark,
+                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId), Sets.newHashSet(txnId)));
+        } finally {
+            masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, "cleanup");
+        }
+    }
 }
