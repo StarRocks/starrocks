@@ -1,4 +1,9 @@
 set(EXEC_FILES
+<<<<<<< HEAD
+=======
+        ./exec/aggregator_limited_mem_state_test.cpp
+        ./agent/agent_metrics_test.cpp
+>>>>>>> 7b6e531199 ([BugFix] fix pre agg streaming oom (#76702))
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
