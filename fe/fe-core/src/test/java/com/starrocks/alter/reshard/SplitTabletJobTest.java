@@ -64,6 +64,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,6 +72,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -756,6 +758,111 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
         Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    @Test
+    public void testCleaningClearsPlacementPreferenceBeforeFinishing() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();   // reserves the table: NORMAL -> TABLET_RESHARD
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+
+            AtomicReference<Set<Long>> cleared = new AtomicReference<>();
+            AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(Set<Long> shardIds) {
+                    // Capture only; assert outside the mock so a binding failure cannot hide a
+                    // failed assertion.
+                    calls.incrementAndGet();
+                    cleared.set(new HashSet<>(shardIds));
+                    stateAtCall.set(splitJob.getJobState());
+                }
+            };
+
+            Set<Long> expected = new HashSet<>();
+            for (ReshardingPhysicalPartition partition : splitJob.getReshardingPhysicalPartitions().values()) {
+                for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                    for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                        expected.addAll(tablet.getNewTabletIds());
+                    }
+                }
+            }
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce new tablet ids");
+
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+            Assertions.assertEquals(1, calls.get(), "the finish path must clear the pin exactly once");
+            Assertions.assertEquals(expected, cleared.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, stateAtCall.get(),
+                    "the pin must be cleared before the job is marked FINISHED");
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();   // restores NORMAL on the shared table fixture
+            }
+        }
+    }
+
+    @Test
+    public void testCleaningStillFinishesWhenClearingPlacementPreferenceFails() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(Set<Long> shardIds) throws DdlException {
+                    calls.incrementAndGet();
+                    throw new DdlException("simulated StarOS failure");
+                }
+            };
+
+            // Best-effort: clearing the pin is an optimization, so a StarOS failure must not keep
+            // the job from finishing.
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(1, calls.get(), "the failing mock must actually have been invoked");
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();
+            }
+        }
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {

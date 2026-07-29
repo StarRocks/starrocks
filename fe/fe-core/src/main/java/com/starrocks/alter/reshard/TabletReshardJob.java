@@ -28,7 +28,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -336,6 +338,36 @@ public abstract class TabletReshardJob implements Writable {
                 GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
                         new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndexId));
             }
+        }
+    }
+
+    /**
+     * Shared reshard-completion step for split and merge: drop the creation-time placement pin on
+     * every new shard, so the background balancer can spread them right away. StarOS only drops the
+     * pin on its own once the superseded (old / source) shards are reclaimed, which happens a
+     * recycle-bin retention plus a {@code StarMgrMetaSyncer} cycle later -- and for the whole of
+     * that window the new shards cannot be moved off the source worker at all.
+     *
+     * <p>Best-effort by design: a failure only degrades to that old behavior, so it must never
+     * interrupt the job. The caller is the leader-only cleaning path; replay paths do not call this.
+     */
+    protected void clearPlacementPreference(
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        Set<Long> newTabletIds = new HashSet<>();
+        for (ReshardingPhysicalPartition partition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                    newTabletIds.addAll(tablet.getNewTabletIds());
+                }
+            }
+        }
+        if (newTabletIds.isEmpty()) {
+            return;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().clearPlacementPreference(newTabletIds);
+        } catch (Exception e) {
+            LOG.warn("Failed to clear placement preference for reshard job {}: {}", jobId, e.getMessage());
         }
     }
 }
