@@ -141,7 +141,7 @@ private:
     mutable bthread::Mutex _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
     std::shared_ptr<OlapTableSchemaParam> _schema;
-    std::unique_ptr<RowDescriptor> _row_desc;
+    std::unique_ptr<RecordDescriptor> _record_desc;
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;

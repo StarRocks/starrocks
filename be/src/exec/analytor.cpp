@@ -66,16 +66,8 @@ Analytor::~Analytor() {
     }
 }
 
-Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                   const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
-        : _tnode(tnode),
-          _child_row_desc(child_row_desc),
-          _result_tuple_desc(result_tuple_desc),
-          _use_hash_based_partition(use_hash_based_partition) {
-    if (tnode.analytic_node.__isset.buffered_tuple_id) {
-        _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
-    }
-
+Analytor::Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
+        : _tnode(tnode), _result_tuple_desc(result_tuple_desc), _use_hash_based_partition(use_hash_based_partition) {
     if (!config::pipeline_analytic_enable_streaming_process) {
         _need_partition_materializing = true;
     }
@@ -419,17 +411,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
-    if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
-        vector<TTupleId> tuple_ids;
-        tuple_ids.push_back(_child_row_desc.tuple_descriptors()[0]->id());
-        tuple_ids.push_back(_buffered_tuple_id);
-        RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
-        if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
-        }
-        if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
-        }
+    if (!_partition_ctxs.empty()) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
+    }
+    if (!_order_ctxs.empty()) {
+        RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
     }
     if (_range_start_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_start_boundary.expr_ctx, state));
@@ -1676,8 +1662,7 @@ void Analytor::_set_partition_size_for_function() {
 
 AnalytorPtr AnalytorFactory::create(int i) {
     if (!_analytors[i]) {
-        _analytors[i] =
-                std::make_shared<Analytor>(_tnode, _child_row_desc, _result_tuple_desc, _use_hash_based_partition);
+        _analytors[i] = std::make_shared<Analytor>(_tnode, _result_tuple_desc, _use_hash_based_partition);
     }
     return _analytors[i];
 }
