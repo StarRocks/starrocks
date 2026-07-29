@@ -23,6 +23,44 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+namespace {
+
+inline int64_t absolute_deadline_us(int64_t ttl_seconds) {
+    return butil::gettimeofday_us() + ttl_seconds * 1000 * 1000;
+}
+
+} // namespace
+
+template <typename CacheT, typename ExtractFn>
+void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract) {
+    std::vector<std::shared_ptr<EndpointCleanupTask<CacheT>>> tasks;
+    {
+        std::lock_guard<SpinLock> l(cache->_lock);
+        cache->_stopping = true;
+        for (auto& stub : cache->_stub_map) {
+            tasks.push_back(extract(stub.second));
+        }
+        cache->_stub_map.clear();
+    }
+    if (cache->_pipeline_timer != nullptr) {
+        for (auto& task : tasks) {
+            // Wait for a task that is mid-Run() to finish before returning. A plain unschedule() only
+            // removes the task from the timer; if the task is already running on the timer thread it
+            // keeps touching the cache (_lock/_stopping/_stub_map), so returning here would let the
+            // caller (~cache / shutdown()) destroy the cache underneath a live doRun() -> use-after-free.
+            // unschedule_and_wait() blocks on the task's latch when it is running (rc == 1), mirroring
+            // main's unschedule_and_join. This relies on the task running on the guarded PipelineTimerTask
+            // path (which carries the latch).
+            if (task != nullptr) {
+                task->unschedule_and_wait(cache->_pipeline_timer);
+            }
+        }
+    }
+}
+
+>>>>>>> 998fbd27d7 ([BugFix] Run brpc stub cache cleanup task on the guarded timer path to fix a use-after-free (#76931))
 BrpcStubCache::BrpcStubCache(ExecEnv* exec_env) : _pipeline_timer(exec_env->pipeline_timer()) {
     _stub_map.init(239);
     REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
