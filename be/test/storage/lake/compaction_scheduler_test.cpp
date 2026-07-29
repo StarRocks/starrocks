@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/lake/compaction_task_context.h"
@@ -529,6 +530,57 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
     EXPECT_TRUE(fired.load());
     // The offloaded task runs on a _threads pool worker, never on the caller (gtest) thread.
     EXPECT_TRUE(ran_off_caller_thread.load());
+}
+
+// Regression test for the #76882 fix's shutdown-safety guarantee. When the deferred parallel-compaction
+// task is cancelled in the thread pool (as happens when stop()/shutdown() drains the queue), the
+// CancellableRunnable's canceller MUST still complete the RPC (run `done`), otherwise the FE's compact RPC
+// hangs forever and the closure leaks. A plain submit_func() runnable has a no-op cancel() and would
+// exhibit exactly that hang; this test pins the CancellableRunnable choice.
+//
+// The "ThreadPool::do_submit:replace_task" sync point runs its callback synchronously inside submit() on
+// the caller thread, so we cancel the just-submitted dispatcher there (and swap in a no-op runnable). This
+// makes the whole test deterministic: `done` runs during compact() via the canceller, so latch->wait()
+// returns without depending on any background thread timing.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_cancelled_completes_rpc) {
+    class MockRunnable : public Runnable {
+    public:
+        void run() override {}
+        void cancel() override {}
+    };
+
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+        auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+        ptr->cancel(); // invoke the dispatcher's canceller (must reject_request + run `done`)
+        (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+    });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("ThreadPool::do_submit:replace_task");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // The canceller ran `done` synchronously during submit(); wait() must not hang.
+    latch->wait();
+
+    // The RPC was completed (not leaked) with a non-OK status.
+    EXPECT_NE(0, response.status().status_code());
 }
 
 } // namespace starrocks::lake
