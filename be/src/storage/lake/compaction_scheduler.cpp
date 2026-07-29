@@ -338,25 +338,25 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         // `done` must run exactly once. We use CancellableRunnable (not submit_func, whose runnable has
         // a no-op cancel()) so that all three mutually-exclusive outcomes complete the RPC exactly once:
         //   * task runs      -> process_parallel_compaction -> finish_task runs `done`;
-        //   * task cancelled -> stop()/_threads->shutdown() pops the still-queued task and calls
-        //                       cancel() == complete_with_reject (a no-op cancel() would leak `done` and
-        //                       hang the RPC forever);
+        //   * task cancelled -> stop()/_threads->shutdown() pops the still-queued task and calls cancel(),
+        //                       which rejects with the shutdown-in-progress status and runs `done` (a
+        //                       no-op cancel() would leak `done` and hang the RPC forever);
         //   * submit fails   -> the task was never enqueued (so neither run() nor cancel() fires), and we
-        //                       call complete_with_reject() inline below.
+        //                       surface the real submit error and run `done` inline below.
         guard.release();
-        auto complete_with_reject = [this, controller, request, response, done]() {
-            reject_request(controller, request, response);
-            done->Run();
-        };
         auto runnable = std::make_shared<CancellableRunnable>(
                 [this, request, response, cb]() { process_parallel_compaction(request, response, cb); },
-                complete_with_reject);
+                [this, controller, request, response, done]() {
+                    reject_request(controller, request, response);
+                    done->Run();
+                });
         auto submit_st = _threads->submit(std::move(runnable));
         lock.unlock();
         if (!submit_st.ok()) {
             LOG(WARNING) << "Fail to submit parallel compaction task, txn_id=" << request->txn_id() << ": "
                          << submit_st;
-            complete_with_reject();
+            submit_st.to_protobuf(response->mutable_status());
+            done->Run();
         }
         return;
     }
