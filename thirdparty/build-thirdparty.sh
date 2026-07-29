@@ -1741,8 +1741,14 @@ build_benchgen() {
 }
 
 # paimon-cpp
-# All third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
+# Third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
 # time from the URLs pinned in its third_party/versions.txt (network required).
+# Protobuf is the one exception and reuses the thirdparty-built one: protoc is
+# a build-time executable, and the protoc built by the bundled protobuf may
+# require a newer runtime libstdc++ than the host provides (e.g. rocky9),
+# while the thirdparty protoc is linked with -static-libstdc++ and runs
+# anywhere. Same pattern as build_arrow. paimon's bundled ORC inherits the
+# resolved protobuf automatically.
 build_paimon_cpp() {
     check_if_source_exist $PAIMON_CPP_SOURCE
 
@@ -1760,6 +1766,7 @@ build_paimon_cpp() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
+    # protobuf required for rocky9
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
@@ -1770,7 +1777,10 @@ build_paimon_cpp() {
         -DPAIMON_ENABLE_LUCENE=OFF \
         -DPAIMON_ENABLE_TANTIVY=OFF \
         -DPAIMON_ENABLE_JINDO=OFF \
-        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED
+        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED \
+        -DProtobuf_SOURCE=SYSTEM \
+        -DProtobuf_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_PREFIX_PATH=$TP_INSTALL_DIR
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
