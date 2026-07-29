@@ -576,6 +576,26 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Drop the anonymous PACK groups StarOS created from these shards' creation-time placement
+     * preferences -- the WITH_SHARD pin a tablet split/merge uses so the new shards reuse the source
+     * worker's warm cache. Until the pin is dropped the new shards cannot be spread across workers
+     * by the background balancer, and StarOS only drops it on its own when the superseded shards are
+     * deleted, which is tens of minutes later. Idempotent on the StarOS side.
+     */
+    public void clearPlacementPreference(Set<Long> shardIds) throws DdlException {
+        if (shardIds.isEmpty()) {
+            return;
+        }
+        prepare();
+        try {
+            client.clearPlacementPreference(serviceId, new ArrayList<>(shardIds));
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to clear placement preference for shards " + shardIds
+                    + ". error: " + e.getMessage());
+        }
+    }
+
     public List<ShardGroupInfo> listShardGroup() throws DdlException {
         prepare();
         try {
