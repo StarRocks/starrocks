@@ -415,7 +415,23 @@ public class FlussMetadata implements ConnectorMetadata {
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
-        builder.setOutputRowCount(Config.default_statistics_output_row_count);
+        FlussTable flussTable = (FlussTable) table;
+        long rowCount = Config.default_statistics_output_row_count;
+        if (flussTable.getTableNamePrefix().isEmpty()) {
+            try {
+                TablePath tablePath = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
+                rowCount = admin.getTableStats(tablePath).get().getRowCount();
+                builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+            } catch (Exception e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                LOG.warn("Failed to get statistics for Fluss table {}.{}.{}. Fall back to row count {}.",
+                        catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), rowCount,
+                        ExceptionUtils.stripExecutionException(e));
+            }
+        }
+        builder.setOutputRowCount(rowCount);
         return builder.build();
     }
 

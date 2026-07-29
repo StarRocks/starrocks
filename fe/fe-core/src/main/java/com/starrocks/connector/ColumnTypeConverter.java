@@ -757,6 +757,7 @@ public class ColumnTypeConverter {
 
         @Override
         public Type visit(org.apache.fluss.types.TimeType timeType) {
+            // StarRocks TIME does not preserve the fractional-second precision of Fluss TIME(p).
             return TypeFactory.createType(PrimitiveType.TIME);
         }
 
@@ -1218,4 +1219,3 @@ public class ColumnTypeConverter {
         return true;
     }
 }
-

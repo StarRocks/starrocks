@@ -17,6 +17,8 @@ package com.starrocks.connector.fluss;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FlussTable;
+import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -24,6 +26,7 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
@@ -47,6 +50,7 @@ import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
 import org.apache.fluss.metadata.TableInfo;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.metadata.TableStats;
 import org.apache.fluss.types.DataTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -254,6 +258,34 @@ public class FlussMetadataTest {
                 "Fluss table fluss0.db1.orders is not supported. StarRocks only supports reading Fluss tables with " +
                         "'table.datalake.enabled' = 'true' and 'table.datalake.format' = 'paimon'",
                 exception.getMessage());
+    }
+
+    @Test
+    public void testGetTableStatistics() {
+        new Expectations() {
+            {
+                admin.getTableStats(TablePath.of(DB, TABLE));
+                returns(CompletableFuture.completedFuture(new TableStats(123L)),
+                        CompletableFuture.failedFuture(new RuntimeException("failed")));
+            }
+        };
+        FlussTable table = flussTable(tableInfo(false), "");
+
+        Statistics statistics = metadata.getTableStatistics(null, table, Collections.emptyMap(),
+                Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
+        Assertions.assertEquals(123D, statistics.getOutputRowCount());
+
+        statistics = metadata.getTableStatistics(null, table, Collections.emptyMap(),
+                Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
+        Assertions.assertEquals((double) Config.default_statistics_output_row_count, statistics.getOutputRowCount());
+
+        for (String tableNamePrefix : Arrays.asList("$lake", "$rt")) {
+            table = flussTable(tableInfo(false), tableNamePrefix);
+            statistics = metadata.getTableStatistics(null, table, Collections.emptyMap(),
+                    Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
+            Assertions.assertEquals(
+                    (double) Config.default_statistics_output_row_count, statistics.getOutputRowCount());
+        }
     }
 
     private void mockLakeSourceAsNull() {
