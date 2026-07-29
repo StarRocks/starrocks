@@ -1363,6 +1363,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：レプリケーションのレガシー互換性を有効にするかどうか。StarRocks は、以前のバージョンと新しいバージョンで異なる動作をする可能性があり、クロスクラスターデータ移行中に問題を引き起こすことがあります。したがって、データ移行前にターゲットクラスターでレガシー互換性を有効にし、データ移行完了後に無効にする必要があります。`true` はこのモードを有効にすることを示します。
 - 導入時期：v3.1.10, v3.2.6
 
+### `enable_collect_partition_access_time`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`SHOW PARTITIONS` および `information_schema.partitions_meta` で、パーティションごとの `LAST_ACCESS_TIME`（パーティションがユーザークエリによって最後にスキャンされた時刻）を収集して公開するかどうかを制御します。無効にすると、アクセス時刻は記録されず、FE 間で集約もされず、`LAST_ACCESS_TIME` 列は `NULL` を表示します。この項目は `LAST_UPDATE_TIME` には影響しません。
+- 導入時期：v4.2.0
+
 ### `enable_show_materialized_views_include_all_task_runs`
 
 - デフォルト：true

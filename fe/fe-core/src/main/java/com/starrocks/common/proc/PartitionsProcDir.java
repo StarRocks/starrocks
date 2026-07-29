@@ -55,6 +55,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -80,6 +81,7 @@ import com.starrocks.type.DateType;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -132,7 +134,9 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("MetaSwitchVersion");
+                    .add("MetaSwitchVersion")
+                    .add("LastUpdateTime")
+                    .add("LastAccessTime");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -157,7 +161,9 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("TabletBalanced");
+                    .add("TabletBalanced")
+                    .add("LastUpdateTime")
+                    .add("LastAccessTime");
             this.titleNames = builder.build();
         }
     }
@@ -291,6 +297,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
         long tableId = table.getId();
+        // Access times keyed by logical partition id, aggregated across all FEs (this FE's own records plus
+        // the others' via a best-effort cross-FE RPC).
+        Map<Long, Long> accessTimes = Config.enable_collect_partition_access_time
+                ? GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr().getAccessTimes(db.getId(), tableId)
+                : new HashMap<>();
         locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Long> partitionIds;
@@ -316,16 +327,18 @@ public class PartitionsProcDir implements ProcDirInterface {
                             !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         if (table.isOlapTableOrMaterializedView()) {
                             partitionInfos.add(
-                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         } else {
-                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         }
                     } else if (Config.enable_display_shadow_partitions) {
                         if (table.isOlapTableOrMaterializedView()) {
                             partitionInfos.add(
-                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         } else {
-                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         }
                     }
                 }
@@ -352,7 +365,8 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo,
-                                                  Partition partition, PhysicalPartition physicalPartition) {
+                                                  Partition partition, PhysicalPartition physicalPartition,
+                                                  Map<Long, Long> accessTimes) {
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
         partitionInfo.add(physicalPartition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
@@ -390,11 +404,17 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
 
         partitionInfo.add(physicalPartition.isTabletBalanced());
+        partitionInfo.add(physicalPartition.getLastUpdateTime() == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(physicalPartition.getLastUpdateTime())); // LastUpdateTime
+        long lastAccessTime = accessTimes.getOrDefault(partition.getId(), 0L);
+        partitionInfo.add(lastAccessTime == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(lastAccessTime)); // LastAccessTime
         return partitionInfo;
     }
 
     private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
-                                                  PhysicalPartition physicalPartition) {
+                                                  PhysicalPartition physicalPartition,
+                                                  Map<Long, Long> accessTimes) {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
@@ -427,6 +447,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
         partitionInfo.add(physicalPartition.getMetadataSwitchVersion()); // MetaSwitchVersion
+        partitionInfo.add(physicalPartition.getLastUpdateTime() == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(physicalPartition.getLastUpdateTime())); // LastUpdateTime
+        long lastAccessTime = accessTimes.getOrDefault(partition.getId(), 0L);
+        partitionInfo.add(lastAccessTime == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(lastAccessTime)); // LastAccessTime
         return partitionInfo;
     }
 

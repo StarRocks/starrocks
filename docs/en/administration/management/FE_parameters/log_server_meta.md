@@ -1372,6 +1372,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
 
+### `enable_collect_partition_access_time`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect and expose the per-partition `LAST_ACCESS_TIME` (the last time a partition was scanned by a user query) in `SHOW PARTITIONS` and `information_schema.partitions_meta`. When disabled, the access time is neither recorded nor aggregated across FEs, and the `LAST_ACCESS_TIME` column shows `NULL`. This does not affect `LAST_UPDATE_TIME`.
+- Introduced in: v4.2.0
+
 ### `enable_show_materialized_views_include_all_task_runs`
 
 - Default: true

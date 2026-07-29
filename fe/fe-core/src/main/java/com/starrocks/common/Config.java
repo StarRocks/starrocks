@@ -4593,6 +4593,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
 
+    @ConfField(mutable = true, comment = "Whether to collect and expose the per-partition LAST_ACCESS_TIME " +
+            "(the last time a partition was scanned by a user query) in SHOW PARTITIONS and " +
+            "information_schema.partitions_meta. When disabled, the access time is neither recorded nor aggregated " +
+            "across FEs and the LAST_ACCESS_TIME column shows NULL.")
+    public static boolean enable_collect_partition_access_time = true;
+
     @ConfField(mutable = false)
     public static int max_spm_cache_baseline_size = 1000;
 

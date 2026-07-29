@@ -1371,6 +1371,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用 Legacy 复制兼容性。StarRocks 在新旧版本之间可能表现不同，导致跨集群数据迁移时出现问题。因此，在数据迁移之前，您必须为目标集群启用 Legacy 兼容性，并在数据迁移完成后禁用它。`true` 表示启用此模式。
 - 引入版本: v3.1.10, v3.2.6
 
+### `enable_collect_partition_access_time`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否采集并展示每个分区的 `LAST_ACCESS_TIME`（分区最近一次被用户查询扫描的时间），展示在 `SHOW PARTITIONS` 和 `information_schema.partitions_meta` 中。禁用后，访问时间既不会被记录，也不会跨 FE 聚合，`LAST_ACCESS_TIME` 列显示为 `NULL`。此项不影响 `LAST_UPDATE_TIME`。
+- 引入版本: v4.2.0
+
 ### `enable_show_materialized_views_include_all_task_runs`
 
 - 默认值: true
