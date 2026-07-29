@@ -28,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
@@ -53,6 +54,9 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    // dbName.tableName -> columnName -> low-cardinality global dictionary captured for the query. Keyed by name
+    // (not the numeric column id) so it survives replay, where the table is recreated with a new id.
+    private final Map<String, Map<String, ColumnDict>> tableGlobalDictMap = new HashMap<>();
     // tableName->representative partition values (one tuple per concrete partition). Only populated for tables
     // whose CREATE TABLE omits partition definitions (automatic/expression partitioning), so replay can
     // recreate those partitions and match the per-partition row counts. Each inner list is one partition's
@@ -222,6 +226,7 @@ public class QueryDumpInfo implements DumpInfo {
         this.tableMap.clear();
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
+        this.tableGlobalDictMap.clear();
         this.createTableStmtMap.clear();
         this.numCoresPerBe.clear();
         this.numCoresPerWarehouse.clear();
@@ -277,6 +282,19 @@ public class QueryDumpInfo implements DumpInfo {
             tableStatisticsMap.put(tableName, new HashMap<>());
         }
         tableStatisticsMap.get(tableName).put(column, columnStatistic);
+    }
+
+    @Override
+    public void addTableGlobalDict(Table table, String column, ColumnDict columnDict) {
+        addTableGlobalDict(getTableName(table.getId()), column, columnDict);
+    }
+
+    public void addTableGlobalDict(String tableName, String column, ColumnDict columnDict) {
+        tableGlobalDictMap.computeIfAbsent(tableName, k -> new HashMap<>()).put(column, columnDict);
+    }
+
+    public Map<String, Map<String, ColumnDict>> getTableGlobalDictMap() {
+        return tableGlobalDictMap;
     }
 
     public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {

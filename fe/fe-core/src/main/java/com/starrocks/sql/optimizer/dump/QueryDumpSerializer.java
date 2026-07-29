@@ -40,6 +40,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
@@ -243,6 +244,24 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         if (tableColumnHistogram.size() > 0) {
             dumpJson.add("column_histogram", tableColumnHistogram);
+        }
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- the dict
+        // strings are raw column data, exactly like the histogram exclusion above.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
+            }
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
+            }
+        }
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
         }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
