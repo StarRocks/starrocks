@@ -284,11 +284,10 @@ For a full tutorial on advanced topics like data migrations, handling complex ty
 
 #### Running Unit Tests
 
-To run tests for the StarRocks SQLAlchemy dialect, first install the package in editable mode along with its testing dependencies:
+To run tests for the StarRocks SQLAlchemy dialect, first install the package in editable mode along with its development dependencies:
 
 ```bash
-pip install -e .
-pip install pytest mock
+pip install -e ".[dev]"
 ```
 
 Then, you can run the test suite using `pytest`:

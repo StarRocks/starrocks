@@ -6,6 +6,8 @@ Version history
 - Fix parsing of reflected nested `STRUCT` / `ARRAY` / `MAP` column types when inline field comments are present (#69817)
 - Deserialize complex types to matching Python list, dict types (#70480 by @chris-celerdata)
 - Add `__hash__` to reflected dataclasses to fix unhashable type errors (#70734 by @aholowko)
+- Remove obsolete `setup.py` and `requirements-dev.txt`; consolidate dev dependencies into `pyproject.toml` `[project.optional-dependencies.dev]`
+- Rename `setup.cfg` to `test.cfg` to avoid confusion with setuptools config; drop stale `[aliases]` section
 
 **1.3.3**
 
