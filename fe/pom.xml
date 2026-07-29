@@ -86,10 +86,7 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <bouncycastle.version>1.84</bouncycastle.version>
-<<<<<<< HEAD
-=======
         <thrift.version>0.24.0</thrift.version>
->>>>>>> 41cf05e2b1 ([BugFix][CVE] bump Thrift to 0.24.0 (#76922))
     </properties>
 
     <profiles>
@@ -466,7 +463,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.23.0</version>
+                <version>${thrift.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.apache.tomcat.embed</groupId>
