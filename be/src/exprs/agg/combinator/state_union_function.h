@@ -58,9 +58,8 @@ public:
         // per row (e.g. array_agg_distinct's keys, which _function->destroy() does not reclaim from the
         // pool) is released here instead of accumulating for the whole fragment.
         MemPool nested_mem_pool;
-        FunctionContext* nested_ctx =
-                FunctionContext::create_context(context->state(), &nested_mem_pool,
-                                                _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
+        FunctionContext* nested_ctx = FunctionContext::create_context(
+                context->state(), &nested_mem_pool, _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());
         DeferOp defer_nested_ctx([&]() { delete nested_ctx; });
 
         Columns new_columns;
