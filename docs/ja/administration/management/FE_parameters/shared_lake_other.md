@@ -499,6 +499,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
 
+### `lake_skip_colocate_group_stable_check`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データクラスターで Colocate Group の安定性チェックをスキップするかどうか。`true` に設定すると、Colocate Group は常に安定していると報告され、実際のバランス状態はメタデータサービスに問い合わせられません。安定性チェックが遅いか利用できず、Colocate Group の操作がブロックされている場合の一時的な回避策としてのみ有効にしてください。この項目が `true` の間は、Group 内のタブレットが実際にはバランスされていなくても、クエリが Colocate Join としてプランされる可能性があることに注意してください。
+- 導入時期：v4.2, v4.1.4
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - デフォルト：3000

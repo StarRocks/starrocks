@@ -3571,6 +3571,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int star_client_write_timeout_seconds = 30;
 
+    @ConfField(mutable = true, comment = "When enabled, colocate groups are always reported as stable " +
+            "instead of checking their real balance status from the metadata service. Turn this on if the " +
+            "stability check is slow or unavailable and is blocking colocate group operations.")
+    public static boolean lake_skip_colocate_group_stable_check = false;
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
