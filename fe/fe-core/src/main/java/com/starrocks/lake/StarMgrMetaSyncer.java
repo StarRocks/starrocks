@@ -159,9 +159,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         return groupIds;
     }
 
+    // |isRangeDistribution| tells BE these tablets share physical files with the tablets a reshard
+    // produced, so it must not delete their data files. BE can otherwise only infer that from a dropped
+    // tablet's own metadata, which vacuum removes -- and then it deleted files a split child still read.
     public static void dropTabletAndDeleteShard(ComputeResource computeResource,
                                                 List<Long> shardIds, StarOSAgent starOSAgent,
-                                                boolean isFileBundling) {
+                                                boolean isFileBundling, boolean isRangeDistribution) {
         if (shardIds.isEmpty()) {
             return;
         }
@@ -236,6 +239,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
+            request.isRangeDistribution = isRangeDistribution;
 
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -440,7 +444,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 // allowing a single BE node to complete the tablet deletion. 
                 // Here, even for tables without file bundle enabled, 
                 // the tablet deletion can still be performed by a single node.
-                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true);
+                //
+                // This group is one StarMgr has but FE does not, and a reshard's children reuse their
+                // parent's shard group (SplitTabletJob), as do the indices of one partition
+                // (LocalMetastore#createPhysicalPartition). So a group nothing live is in cannot have a
+                // surviving tablet sharing its files, and its data is safe to delete regardless of how
+                // the table was distributed.
+                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true, false);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));
             }
@@ -632,7 +642,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 try {
                     List<Long> shardIds = new ArrayList<>();
                     shardIds.addAll(entry.getValue());
-                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling());
+                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling(),
+                            table.isRangeDistribution());
                 } catch (Exception e) {
                     // ignore exception
                     LOG.info(e.getMessage());

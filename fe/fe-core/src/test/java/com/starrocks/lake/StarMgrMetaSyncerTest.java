@@ -1771,7 +1771,7 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assertions.assertTrue(deletedShardIds.isEmpty());
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false);
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, allShardIds, starOSAgent, false, false);
         Assertions.assertEquals(successIds.size(), deletedShardIds.size());
         Set<Long> expectedShardIds = new HashSet<>(successIds);
         Assertions.assertEquals(expectedShardIds, deletedShardIds);
@@ -1821,7 +1821,7 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assertions.assertTrue(deletedShardIds.isEmpty());
-        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false);
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false, false);
         Assertions.assertEquals(shardIds.size(), deletedShardIds.size());
         Set<Long> expectedShardIds = new HashSet<>(shardIds);
         Assertions.assertEquals(expectedShardIds, deletedShardIds);
