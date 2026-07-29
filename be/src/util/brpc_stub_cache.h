@@ -56,8 +56,14 @@ constexpr int TIMER_TASK_RUNNING = 1;
 
 class ExecEnv;
 
+// Runs on the guarded timer path: PipelineTimerTask::doRun() holds `auto self = shared_from_this()`
+// across Run(), which is required here because Run() reschedules by replacing the stub cache pool's
+// sole owning reference to this task (dropping ours) and then keeps touching its own members. On the
+// unguarded LightTimerTask path (RunLightTimerTask -> Run() with no owning reference held) that
+// self-replacement frees `this` mid-Run() -> heap-use-after-free. (main fires this task through the
+// equivalent guarded BthreadTimerTask::doRun.)
 template <typename StubCacheT>
-class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
+class EndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
 public:
     // ttl_seconds is the cache-wide expire window (config::brpc_stub_expire_s).
     EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint, int64_t ttl_seconds)
