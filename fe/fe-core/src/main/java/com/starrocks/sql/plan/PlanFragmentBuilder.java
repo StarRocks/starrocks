@@ -3654,9 +3654,13 @@ public class PlanFragmentBuilder {
          * In new planner.
          * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
          * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         *
+         * @param needsMerge when true, forces the SortNode to produce a single merged output stream
+         *                   instead of partition-sorted streams, because the downstream AnalyticNode
+         *                   consumes a single globally-ordered input.
          */
         private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
-                                                      boolean isSkewed) {
+                                                      boolean needsMerge) {
             SortNode sortNode = null;
             if (childRoot instanceof SortNode) {
                 sortNode = (SortNode) childRoot;
@@ -3688,7 +3692,7 @@ public class PlanFragmentBuilder {
 
             if (sortNode != null) {
                 // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(isSkewed);
+                sortNode.setAnalyticNeedsMerge(needsMerge);
             }
         }
 
