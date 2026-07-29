@@ -24,6 +24,7 @@ public class ClusterSnapshotCopyForPersistTest {
     public void testClusterSnapshotCopyForPersist() {
         ClusterSnapshot snapshot = new ClusterSnapshot(1L, "snap",
                 ClusterSnapshot.ClusterSnapshotType.MANUAL, "sv", 10L, 20L, 30L, 40L);
+        snapshot.setScope(ClusterSnapshot.SnapshotScope.EXTERNAL);
         ClusterSnapshot copy = snapshot.copyForPersist();
         Assertions.assertEquals(snapshot.getId(), copy.getId());
         Assertions.assertEquals(snapshot.getSnapshotName(), copy.getSnapshotName());
@@ -32,6 +33,7 @@ public class ClusterSnapshotCopyForPersistTest {
         Assertions.assertEquals(snapshot.getFinishedTimeMs(), copy.getFinishedTimeMs());
         Assertions.assertEquals(snapshot.getFeJournalId(), copy.getFeJournalId());
         Assertions.assertEquals(snapshot.getStarMgrJournalId(), copy.getStarMgrJournalId());
+        Assertions.assertEquals(snapshot.getScope(), copy.getScope());
         Assertions.assertNotSame(snapshot, copy);
     }
 

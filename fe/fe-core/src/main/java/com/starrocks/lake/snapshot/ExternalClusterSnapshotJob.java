@@ -88,6 +88,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     }
 
     @Override
+    protected ClusterSnapshot.SnapshotScope getSnapshotScope() {
+        return ClusterSnapshot.SnapshotScope.EXTERNAL;
+    }
+
+    @Override
     public boolean needClusterSnapshotInfo() {
         return true;
     }

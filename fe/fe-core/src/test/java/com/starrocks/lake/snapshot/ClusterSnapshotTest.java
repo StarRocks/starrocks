@@ -15,6 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.common.collect.Lists;
+import com.google.gson.JsonObject;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -287,6 +288,82 @@ public class ClusterSnapshotTest {
         Assertions.assertEquals(1, writeFilePaths.size());
         Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
         setAutomatedSnapshotOff(false);
+    }
+
+    // Runs the upload path with HdfsUtil mocked out and returns the snapshot_meta.json content.
+    private String uploadAndCaptureMeta(ClusterSnapshotJob job) throws StarRocksException {
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        List<String> writtenContents = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writtenContents.add(new String(data, StandardCharsets.UTF_8));
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writtenContents.size());
+        return writtenContents.get(0);
+    }
+
+    // The scope as the control plane reads it: a lowercase string under the top-level "scope" key.
+    private static String scopeOf(String metaJson) {
+        JsonObject obj = GsonUtils.GSON.fromJson(metaJson, JsonObject.class);
+        Assertions.assertTrue(obj.has("scope"), "snapshot_meta.json must carry a scope: " + metaJson);
+        return obj.get("scope").getAsString();
+    }
+
+    @Test
+    public void testAutomatedSnapshotMetaRecordsLocalScope() throws Exception {
+        setAutomatedSnapshotOn(false);
+        try {
+            ClusterSnapshotJob job =
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+            String metaJson = uploadAndCaptureMeta(job);
+            Assertions.assertEquals("local", scopeOf(metaJson));
+            // The lowercase wire value round-trips back into the typed enum.
+            Assertions.assertEquals(ClusterSnapshot.SnapshotScope.LOCAL,
+                    GsonUtils.GSON.fromJson(metaJson, ClusterSnapshot.class).getScope());
+        } finally {
+            setAutomatedSnapshotOff(false);
+        }
+    }
+
+    @Test
+    public void testExternalSnapshotMetaRecordsExternalScope() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1000L,
+                ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + "1753000000000", storageVolumeName,
+                System.currentTimeMillis());
+        String metaJson = uploadAndCaptureMeta(job);
+        Assertions.assertEquals("external", scopeOf(metaJson));
+        Assertions.assertEquals(ClusterSnapshot.SnapshotScope.EXTERNAL,
+                GsonUtils.GSON.fromJson(metaJson, ClusterSnapshot.class).getScope());
+    }
+
+    @Test
+    public void testSnapshotMetaScopeFallsBackToJobKind() throws Exception {
+        // A job persisted before the scope field existed deserializes with a null scope; the write-time
+        // fallback must still label the meta correctly.
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1002L,
+                ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + "1753000000001", storageVolumeName,
+                System.currentTimeMillis());
+        job.getSnapshot().setScope(null);
+        Assertions.assertEquals("external", scopeOf(uploadAndCaptureMeta(job)));
+    }
+
+    @Test
+    public void testManualSnapshotMetaRecordsLocalScope() throws Exception {
+        // A manual snapshot only uploads the image (no data copy, no diff), same shape as a local
+        // automated snapshot.
+        ManualClusterSnapshotJob job = new ManualClusterSnapshotJob(1001L, "manual_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        Assertions.assertEquals("local", scopeOf(uploadAndCaptureMeta(job)));
     }
 
     private static StorageVolume newS3StorageVolume(String id, String name, List<String> locations,

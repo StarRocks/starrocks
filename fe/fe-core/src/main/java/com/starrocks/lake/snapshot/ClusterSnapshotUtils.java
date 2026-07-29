@@ -132,6 +132,11 @@ public class ClusterSnapshotUtils {
         if (snapshot.getStorageVolumeMetaInfos() == null) {
             snapshot.setStorageVolumeMetaInfos(collectStorageVolumeMetaInfos());
         }
+        // Same upgrade/replay fallback: jobs persisted before the scope field existed deserialize with
+        // a null scope, so derive it from the job kind here.
+        if (snapshot.getScope() == null) {
+            snapshot.setScope(job.getSnapshotScope());
+        }
 
         HdfsUtil.writeFile(GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8),
                 metaFilePath, properties);
