@@ -317,9 +317,47 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
     // Handle parallel compaction mode
     if (enable_parallel && _parallel_mgr != nullptr) {
-        lock.unlock();
+        // process_parallel_compaction() loads tablet metadata and builds the StarOS/Starlet
+        // filesystem, i.e. it performs blocking remote IO while creating the subtasks. This RPC
+        // handler runs on a brpc bthread, and a bthread can be suspended on one worker pthread and
+        // resumed on another. Doing such IO here is unsafe: a pthread rwlock held across the yield
+        // point (e.g. StarOSWorker::_cache_mtx, a std::shared_mutex held while an evicted FileSystem
+        // instance is destroyed and closes its remote connection) makes pthread_rwlock_wrlock return
+        // EDEADLK on an unrelated bthread that happens to be resumed on the same worker pthread.
+        // std::shared_mutex turns EDEADLK into an uncaught std::system_error("Resource deadlock
+        // avoided") and aborts the whole CN (issue #76882). Offload the IO-heavy task creation to the
+        // dedicated pthread pool, mirroring the non-parallel path which never touches the filesystem
+        // on the bthread.
+        //
+        // Hand ownership of `done` to `cb` before submitting: the pool task may run `done` (via
+        // CompactionTaskCallback::finish_task on another thread) as soon as it is scheduled, so the
+        // ClosureGuard here must no longer own it. `request`/`response` stay alive until `done` runs,
+        // and both the runnable (via `cb`) and the canceller keep them referenced, so reading them
+        // from either callback is safe.
+        //
+        // `done` must run exactly once. We use CancellableRunnable (not submit_func, whose runnable has
+        // a no-op cancel()) so that all three mutually-exclusive outcomes complete the RPC exactly once:
+        //   * task runs      -> process_parallel_compaction -> finish_task runs `done`;
+        //   * task cancelled -> stop()/_threads->shutdown() pops the still-queued task and calls
+        //                       cancel() == complete_with_reject (a no-op cancel() would leak `done` and
+        //                       hang the RPC forever);
+        //   * submit fails   -> the task was never enqueued (so neither run() nor cancel() fires), and we
+        //                       call complete_with_reject() inline below.
         guard.release();
-        process_parallel_compaction(request, response, cb);
+        auto complete_with_reject = [this, controller, request, response, done]() {
+            reject_request(controller, request, response);
+            done->Run();
+        };
+        auto runnable = std::make_shared<CancellableRunnable>(
+                [this, request, response, cb]() { process_parallel_compaction(request, response, cb); },
+                complete_with_reject);
+        auto submit_st = _threads->submit(std::move(runnable));
+        lock.unlock();
+        if (!submit_st.ok()) {
+            LOG(WARNING) << "Fail to submit parallel compaction task, txn_id=" << request->txn_id() << ": "
+                         << submit_st;
+            complete_with_reject();
+        }
         return;
     }
 
@@ -340,6 +378,9 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
 void CompactionScheduler::process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
                                                       const std::shared_ptr<CompactionTaskCallback>& callback) {
+    // Regression hook for #76882: this must run on a `_threads` pthread pool worker, never on the brpc
+    // bthread that invoked compact(). The test callback records std::this_thread::get_id() here.
+    TEST_SYNC_POINT("CompactionScheduler::process_parallel_compaction:enter");
     VLOG(1) << "Processing parallel compaction request. txn_id: " << request->txn_id()
             << ", tablet_ids size: " << request->tablet_ids_size()
             << ", max_parallel: " << request->parallel_config().max_parallel_per_tablet()
