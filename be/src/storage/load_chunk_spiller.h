@@ -101,14 +101,17 @@ public:
     // `target_size` controls the maximum amount of data merged per operation,
     // while `memory_usage_per_merge` controls the peak memory usage of each merge.
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
-                       std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
+                       std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func,
+                       bool need_rssid_rowids = false);
 
     StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
-                                                                    bool do_sort, bool do_agg);
+                                                                    bool do_sort, bool do_agg,
+                                                                    bool need_rssid_rowids = false);
 
     StatusOr<LoadSpillPipelineMergeTaskPtr> generate_pipeline_merge_task(size_t target_size,
                                                                          size_t memory_usage_per_merge, bool do_sort,
-                                                                         bool do_agg, bool final_round);
+                                                                         bool do_agg, bool final_round,
+                                                                         bool need_rssid_rowids = false);
 
     bool empty();
 
