@@ -63,6 +63,19 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
    | enable_spill | false       | 是否启用中间结果落盘。如果设置为 `true`，StarRocks 会将中间结果落盘，以减少处理查询中的聚合、排序或连接运算符时的内存使用。 |
    | spill_mode   | auto        | 中间结果落盘的执行模式。有效值：<ul><li>`auto`: 当达到内存使用阈值时自动触发落盘。</li><li>`force`: 无论内存使用情况如何，StarRocks 强制对所有相关运算符执行落盘。</li></ul>此变量仅在 `enable_spill` 变量设置为 `true` 时生效。 |
 
+## [实验性] 落盘数据自适应列编码
+
+从当前版本起，BE 支持实验性的落盘数据自适应列编码选择器。启用后，每个落盘列会按类型采样一组合适的编码
+（RLE、delta、frame-of-reference、带补丁的 FOR、字典、前缀编码、块压缩、面向类 decimal 浮点的 ALP 等），
+并按 "I/O + CPU" 成本模型选出最优编码，替代固定的 streamvbyte/LZ4 编码。
+
+通过以下 BE 配置项控制：
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `spill_enable_codec_selector` | `false` | 启用落盘自适应列编码选择器（v2 落盘序列化格式）。为 `false` 时，保持原有 `spill_encode_level` 驱动的编码行为不变。 |
+| `spill_codec_disk_bandwidth_mbps` | `100` | 落盘目标的有效写吞吐（MB/s），用于在「节省的写盘字节」与「编解码 CPU 开销」之间折算。它是策略输入而非实测值，含义是「1 纳秒的编解码 CPU 折合多少字节的 I/O」。该值只需量级正确，且填低是更安全的方向：它会过度压缩，但多花的 CPU 仍换回真实的 I/O 节省。落盘卷接近容量上限时可填 `20` 左右，用 CPU 换更小的落盘体积。页缓存与真实走盘两种情形下的实测敏感度，见 BE 配置参考中的 `spill_codec_disk_bandwidth_mbps`。 |
+
 ## [预览] 中间结果落盘到对象存储
 
 从 v3.3.0 开始，StarRocks 支持将中间结果落盘到对象存储。

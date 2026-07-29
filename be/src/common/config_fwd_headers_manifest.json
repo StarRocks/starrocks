@@ -173,6 +173,8 @@
         "spill_max_log_block_container_bytes",
         "spill_max_dir_bytes_ratio",
         "spill_read_buffer_min_bytes",
+        "spill_enable_codec_selector",
+        "spill_codec_disk_bandwidth_mbps",
         "mem_limited_chunk_queue_block_size",
         "enable_spill_sort_events",
         "exec_state_report_max_threads",

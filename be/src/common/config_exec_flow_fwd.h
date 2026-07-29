@@ -162,6 +162,30 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
+// Experimental: enable the pluggable spill column-codec selector (v2 spill serde format).
+// When false (default), spill uses the legacy encode_level/EncodeContext path unchanged.
+CONF_mBool(spill_enable_codec_selector, "false");
+
+// Effective write throughput of the spill target (MB/s), used by the codec selector to price
+// encode+decode CPU against saved disk bytes (score = 2*bytes + ns * MBps/1000).
+//
+// This is a POLICY input, not a measurement: it sets how many bytes of IO one nanosecond of
+// codec CPU is worth. Setting it BELOW the target's real throughput values disk space more
+// highly -- e.g. 20 when the spill volume is near capacity, which trades CPU for a smaller
+// footprint; setting it above biases toward cheap encodings and saves CPU instead.
+//
+// Only the order of magnitude matters, and the best value depends on whether a spill is large
+// enough to reach the device or small enough to live in the page cache. Measured on the spill
+// bench (20 datasets, buffered), as the fraction of spill time saved versus no compression:
+//     W:                  50     100     200     800
+//     1GB (page cache)  32.5%   34.0%   34.6%      -
+//     8GB (device)      45.6%   44.2%   40.6%   34.6%
+// 100 is the default because it stays within ~1.5 points of the best value in BOTH regimes, and
+// because erring low costs less than erring high: over-compressing still buys real IO savings,
+// while under-compressing loses them and still pays to sample. (50 wins on the device but
+// regresses one workload -- highly repetitive strings -- by 66%.)
+CONF_mDouble(spill_codec_disk_bandwidth_mbps, "100");
+
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 // Route the spillable sort (ORDER BY / TOP-N) operator onto the pipeline event scheduler instead of the busy-poller.

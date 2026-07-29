@@ -48,6 +48,7 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     spill/operator_mem_resource_manager_test.cpp
     spill/query_spill_manager_test.cpp
     spill/spill_block_manager_test.cpp
+    spill/spill_codec_test.cpp
     spill/spill_metrics_test.cpp
     spill/spill_test.cpp
 )

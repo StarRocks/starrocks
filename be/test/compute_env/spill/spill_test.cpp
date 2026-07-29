@@ -37,6 +37,7 @@
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h" // the spill_enable_* configs live here
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
@@ -123,6 +124,9 @@ private:
 class ColumnFiller : public ColumnVisitorMutableAdapter<ColumnFiller> {
 public:
     const size_t append_size = 4096;
+    // 0 = full-entropy random (default); >0 draws values from [0, value_domain), i.e. a
+    // low-cardinality/compressible fill so stage-2 block compression actually engages.
+    uint32_t value_domain = 0;
 
     ColumnFiller() : ColumnVisitorMutableAdapter(this) {}
 
@@ -149,7 +153,8 @@ public:
     Status do_visit(FixedLengthColumnBase<T>* column) {
         auto& container = column->get_data();
         container.resize(append_size);
-        std::generate(container.begin(), container.end(), []() { return rand(); });
+        const uint32_t domain = value_domain;
+        std::generate(container.begin(), container.end(), [domain]() { return domain ? (rand() % domain) : rand(); });
         return Status::OK();
     }
 };
@@ -465,6 +470,80 @@ TEST_F(SpillTest, unsorted_process) {
             ASSERT_OK(mem_table->finalize(yield_ctx, output));
         } while (yield_ctx.need_yield);
     }
+}
+
+// End-to-end coverage of the v2 wire format (spill_enable_codec_selector): the codec selector
+// path emits the 0xfacd magic + per-column codec descriptors in serialize_v2 and dispatches by
+// them in deserialize_v2. Prior to this the whole v2 wire format was only exercised indirectly
+// via per-codec unit tests, never through a real Spiller spill -> flush -> restore. Low-cardinality
+// data drives the selector onto real (non-RAW) integer codecs, so a completed value-preserving
+// roundtrip proves the header emit/parse and codec dispatch are consistent.
+TEST_F(SpillTest, codec_selector_v2_roundtrip) {
+    struct CfgGuard {
+        bool saved_sel = config::spill_enable_codec_selector;
+        ~CfgGuard() { config::spill_enable_codec_selector = saved_sel; }
+    } cfg_guard;
+    config::spill_enable_codec_selector = true; // v2 path
+
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, true};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_BIGINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    chunk_builder.filler.value_domain = 16; // narrow domain -> selector picks INT_* over RAW
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 4;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.encode_level = 7;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 256;
+    size_t input_rows = 0;
+    size_t raw_bytes = 0;
+    for (size_t i = 0; i < test_loop; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        input_rows += chunk->num_rows();
+        for (const auto& col : chunk->columns()) raw_bytes += col->byte_size();
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    // The selector must have chosen compressing integer codecs (not RAW) for the narrow domain,
+    // so the v2 stream lands well under the raw size.
+    ASSERT_GT(raw_bytes, 0u);
+    ASSERT_LT(spill_bytes.load(), raw_bytes / 2) << "v2 selector did not compress narrow-domain integers: on-disk "
+                                                 << spill_bytes.load() << " vs raw " << raw_bytes;
+
+    std::vector<ChunkPtr> restored;
+    ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    for (size_t i = 0; i < test_loop; ++i) {
+        auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
+        ASSERT_OK(chunk_st.status());
+        ASSERT_OK(spiller->_spilled_task_status);
+        if (chunk_st.value() != nullptr) restored.emplace_back(std::move(chunk_st.value()));
+    }
+    auto tail = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
+    ASSERT_TRUE(tail.status().is_end_of_file());
+    size_t output_rows = 0;
+    for (const auto& chunk : restored) output_rows += chunk->num_rows();
+    ASSERT_EQ(input_rows, output_rows);
 }
 
 struct FailedGuard {

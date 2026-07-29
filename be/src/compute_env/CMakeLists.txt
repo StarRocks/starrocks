@@ -41,6 +41,8 @@ set(COMPUTE_ENV_WORKGROUP_FILES
 
 set(COMPUTE_ENV_SPILL_FILES
     spill/block_group.cpp
+    spill/codec/codec_scalar.cpp
+    spill/codec/spill_codec.cpp
     spill/block_reader.cpp
     spill/data_stream.cpp
     spill/dir_manager.cpp

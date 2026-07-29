@@ -63,6 +63,21 @@ Follow these steps to enable intermediate result spilling:
    | enable_spill | false       | Whether to enable intermediate result spilling. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries. |
    | spill_mode   | auto        | The execution mode of intermediate result spilling. Valid values:<ul><li>`auto`: Spilling is automatically triggered when the memory usage threshold is reached.</li><li>`force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.</li></ul>This variable takes effect only when the variable `enable_spill` is set to `true`. |
 
+## [Experimental] Adaptive spill column encoding
+
+From this version onwards, BE supports an experimental adaptive column-codec selector for
+spilled data. When enabled, each spilled column samples a set of type-appropriate encodings
+(RLE, delta, frame-of-reference, patched FOR, dictionary, front coding, block compression,
+ALP for decimal-like doubles, and more) and picks the one minimizing an I/O-plus-CPU cost
+model instead of the fixed streamvbyte/LZ4 encoding.
+
+Configure it via the following BE configuration items:
+
+| Configuration item | Default | Description |
+| --- | --- | --- |
+| `spill_enable_codec_selector` | `false` | Enables the adaptive spill column-codec selector (v2 spill serialization format). When `false`, the legacy `spill_encode_level`-driven encoding is used unchanged. |
+| `spill_codec_disk_bandwidth_mbps` | `100` | Effective write throughput of the spill target (MB/s), used to price encoding and decoding CPU against saved disk bytes. This is a policy input rather than a measurement: it states how many bytes of I/O one nanosecond of codec CPU is worth. Only the order of magnitude matters, and lower values are the safer error: they over-compress, but the extra CPU still buys real I/O savings. Set it to `20` or so when the spill volume is close to capacity, to trade CPU for a smaller footprint. See `spill_codec_disk_bandwidth_mbps` in the BE configuration reference for the measured sensitivity in both the page-cache and the device regime. |
+
 ## [Preview] Spill intermediate result to object storage
 
 From v3.3.0 onwards, StarRocks supports spilling intermediate results to object storage.

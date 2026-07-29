@@ -638,6 +638,26 @@ This topic introduces the following types of BE configurations:
 - Description: The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
 - Introduced in: -
 
+### spill_codec_disk_bandwidth_mbps
+
+- Default: 100
+- Type: Double
+- Unit: MB/s
+- Is mutable: Yes
+- Description: Experimental. Effective write throughput of the spill target, used by the column-codec selector (`spill_enable_codec_selector`) to price encoding and decoding CPU against saved disk bytes. This is a policy input rather than a measurement: it states how many bytes of I/O one nanosecond of codec CPU is worth. Setting it below the target's real throughput values disk space more highly — for example `20` when the spill volume is close to capacity, which trades CPU for a smaller footprint; setting it above biases toward cheap encodings and saves CPU instead.
+
+  Only the order of magnitude matters, and the curve is asymmetric: erring low over-compresses but the extra CPU still buys real I/O savings, while erring high stops compressing, losing the I/O savings and still paying to sample. The best value depends on whether a spill is large enough to reach the device or small enough to live in the page cache. Measured on the spill benchmark (20 datasets, buffered), as the fraction of spill time saved versus no compression: with a 1 GB spill (absorbed by the page cache) `50`/`100`/`200` save 32.5%/34.0%/34.6%; with an 8 GB spill (reaching the device) they save 45.6%/44.2%/40.6%, and `800` saves 34.6%. The default `100` stays within about 1.5 points of the best value in both regimes. Erring low costs less than erring high: over-compressing still buys real I/O savings, while under-compressing loses them and still pays to sample.
+- Introduced in: -
+
+### spill_enable_codec_selector
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Experimental. Enables the pluggable spill column-codec selector (v2 spill serialization format), which adaptively picks a per-column encoding at spill time. When `false`, spill uses the legacy `spill_encode_level`-driven encoding unchanged.
+- Introduced in: -
+
 ### string_prefix_zonemap_prefix_len
 
 - Default: 16
