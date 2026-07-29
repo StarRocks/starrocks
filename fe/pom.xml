@@ -84,6 +84,10 @@ under the License.
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+<<<<<<< HEAD
+=======
+        <thrift.version>0.24.0</thrift.version>
+>>>>>>> 41cf05e2b1 ([BugFix][CVE] bump Thrift to 0.24.0 (#76922))
     </properties>
 
     <profiles>
