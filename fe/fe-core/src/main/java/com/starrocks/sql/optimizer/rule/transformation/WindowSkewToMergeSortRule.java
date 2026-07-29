@@ -56,7 +56,7 @@ public class WindowSkewToMergeSortRule extends TransformationRule {
         if (input.getOp() instanceof LogicalWindowOperator lwo) {
             List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
             return partitionExprs != null
-                    && !partitionExprs.isEmpty()
+                    && partitionExprs.size() > 1
                     && lwo.getOrderByElements() != null
                     && !lwo.getOrderByElements().isEmpty()
                     && !lwo.isForceMergeSort()
@@ -69,12 +69,6 @@ public class WindowSkewToMergeSortRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalWindowOperator window = (LogicalWindowOperator) input.getOp();
-
-        // Only applies when there are multiple partition expressions.
-        // For single-partition windows, SplitWindowSkewToUnionRule is the preferred strategy.
-        if (window.getPartitionExpressions().size() <= 1) {
-            return Collections.emptyList();
-        }
 
         // Trigger only if every individual partition column shows skew from child statistics.
         OptExpression child = input.inputAt(0);
