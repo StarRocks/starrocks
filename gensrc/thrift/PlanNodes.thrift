@@ -950,7 +950,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
-  31: optional bool analytic_partition_skewed;
+  31: optional bool analytic_need_merge;
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;

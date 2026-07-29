@@ -44,7 +44,7 @@ public:
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
+            pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool analytic_need_merge,
             bool is_merging, bool enable_parallel_merge, bool is_per_pipeline);
 
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
