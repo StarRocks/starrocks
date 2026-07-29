@@ -1411,7 +1411,7 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
         _pending_rowset_data.dels.emplace_back(dels[i]);
         const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
         _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
-        _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : -1);
+        _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
@@ -1484,8 +1484,8 @@ Status MetaFileBuilder::set_final_rowset() {
         // Freshly created del file: stamp its creation version (see apply_opwrite).
         del_file_with_rid.set_version(rowset->version());
         // Carry the tombstone count (parallel to dels) so it can be accounted toward the PK index
-        // rebuild-rows threshold. A negative entry means "not recorded" -> leave num_rows unset (0).
-        if (i < _pending_rowset_data.del_num_rows.size() && _pending_rowset_data.del_num_rows[i] >= 0) {
+        // rebuild-rows threshold. The writer always provides a count (0 when a del carries none).
+        if (i < _pending_rowset_data.del_num_rows.size()) {
             del_file_with_rid.set_num_rows(_pending_rowset_data.del_num_rows[i]);
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
@@ -1538,8 +1538,8 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
     for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
         dels.emplace_back(op_write.dels_meta(del_id));
         del_op_offsets.push_back(del_op_offset_or_unset(op_write, del_id));
-        // Parallel to dels_meta; < 0 (absent/misaligned) means "not recorded".
-        del_num_rows.push_back(del_id < op_write.del_num_rows_size() ? op_write.del_num_rows(del_id) : -1);
+        // Parallel to dels_meta; a del not carrying a recorded count contributes 0.
+        del_num_rows.push_back(del_id < op_write.del_num_rows_size() ? op_write.del_num_rows(del_id) : 0);
     }
 
     // Accumulate into pending rowset

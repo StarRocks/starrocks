@@ -264,9 +264,8 @@ protected:
     std::vector<uint32_t> _del_op_offsets;
     // Parallel to _dels: tombstone (delete row) count for each del file. Populated for EVERY del at
     // flush_del_file() time (deletes.size()), so it is always 1:1 with _dels. Downstream fallbacks
-    // that pad a missing entry (0 in the writer/txn-log emit paths, -1 as the "not recorded" sentinel
-    // in MetaFileBuilder's in-memory pending array) are therefore unreachable defensive code on the
-    // normal write path; they only matter for cross-version metadata where the field may be absent.
+    // that pad a missing entry with 0 are therefore unreachable defensive code on the normal write
+    // path; the absent case only matters when reading cross-version metadata (proto field absent).
     std::vector<int64_t> _del_num_rows;
     std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;

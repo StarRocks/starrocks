@@ -1078,7 +1078,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk
 // Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
 // and an optional del file count.
 static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0,
-                                    int64_t del_rows_per_file = -1) {
+                                    int64_t del_rows_per_file = 0) {
     RowsetMetadataPB rowset;
     rowset.set_id(id);
     int64_t total_rows = 0;
@@ -1167,13 +1167,14 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
         EXPECT_EQ(row_cnt, 100);
     }
 
-    // Case 5: del files without a recorded num_rows (pre-upgrade metadata) are counted in file_cnt
-    // but contribute 0 to row_cnt (backward-compatible fallback).
+    // Case 5: del files with num_rows absent (pre-upgrade metadata, has_num_rows()==false) are counted
+    // in file_cnt but contribute 0 to row_cnt (backward-compatible fallback). Passing a negative to the
+    // helper leaves num_rows unset, simulating a del file written before the field existed.
     // Rowset id=0: 1 segment (100 rows) + 2 del files, num_rows unset.
     {
         metadata.Clear();
         sstable_meta.Clear();
-        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2);
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2, /*del_rows_per_file=*/-1);
 
         auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
         EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
