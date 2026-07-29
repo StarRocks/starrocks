@@ -42,7 +42,7 @@ public:
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
     StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
-                                                           bool is_partition_topn, bool is_partition_skewed,
+                                                           bool is_partition_topn, bool analytic_need_merge,
                                                            bool is_merging, bool enable_parallel_merge,
                                                            bool is_per_pipeline);
 
