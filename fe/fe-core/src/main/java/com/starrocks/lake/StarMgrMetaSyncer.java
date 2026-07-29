@@ -445,11 +445,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 // Here, even for tables without file bundle enabled, 
                 // the tablet deletion can still be performed by a single node.
                 //
-                // This group is one StarMgr has but FE does not, and a reshard's children reuse their
-                // parent's shard group (SplitTabletJob), as do the indices of one partition
-                // (LocalMetastore#createPhysicalPartition). So a group nothing live is in cannot have a
-                // surviving tablet sharing its files, and its data is safe to delete regardless of how
-                // the table was distributed.
+                // Not range-distributed as far as this path is concerned, which is also what it did
+                // before: a reshard's output index keeps the parent's shard group and the superseded
+                // index stays installed on a live partition until the recycle bin erases it (see
+                // TabletReshardJob#recycleOldMaterializedIndexes), so the group always has a live owner
+                // and the parent's leftover shards are reaped by syncTableMetaInternal instead. What
+                // reaches here are groups whose table or partition is gone for good, and refusing to
+                // delete their data would strand it forever -- this is the only path that removes it.
                 dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true, false);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));

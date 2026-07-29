@@ -1828,6 +1828,57 @@ public class StarMgrMetaSyncerTest {
     }
 
     @Test
+    public void testDropTabletAndDeleteShardSendsRangeDistribution() throws StarRocksException {
+        // The flag has to reach BE, because a reshard-consumed tablet whose metadata is already vacuumed
+        // away has no other way to say its files are shared with the tablets that replaced it.
+        ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource();
+        List<Long> shardIds = Stream.of(2000L, 2001L).collect(Collectors.toList());
+        long computeNodeId = 10001L;
+        ComputeNode computeNode = new ComputeNode(computeNodeId, "127.0.0.1", 9060);
+
+        List<DeleteTabletRequest> captured = Lists.newArrayList();
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return new PseudoBackend.PseudoLakeService();
+            }
+        };
+        new MockUp<PseudoBackend.PseudoLakeService>() {
+            @Mock
+            Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+                captured.add(request);
+                DeleteTabletResponse resp = new DeleteTabletResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                resp.failedTablets = Lists.newArrayList();
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+        new Expectations(starOSAgent) {
+            {
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = computeNodeId;
+                systemInfoService.getBackendOrComputeNode(computeNodeId);
+                result = computeNode;
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShards(Set<Long> shardIds) throws DdlException {
+            }
+        };
+
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false, true);
+        Assertions.assertEquals(1, captured.size());
+        Assertions.assertEquals(Boolean.TRUE, captured.get(0).isRangeDistribution);
+
+        captured.clear();
+        StarMgrMetaSyncer.dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, false, false);
+        Assertions.assertEquals(1, captured.size());
+        Assertions.assertEquals(Boolean.FALSE, captured.get(0).isRangeDistribution);
+    }
+
+    @Test
     public void testDeleteUnusedShardAndShardGroupWithIndexSnapshotInfo() {
         boolean oldValue = Config.meta_sync_force_delete_shard_meta;
         Config.meta_sync_force_delete_shard_meta = false;

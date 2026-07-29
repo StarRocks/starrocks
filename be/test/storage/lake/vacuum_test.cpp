@@ -5857,7 +5857,6 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
-// NOLINTNEXTLINE
 // The reported data loss: a reshard-consumed tablet whose own metadata has already been vacuumed away
 // keeps only a txn log, so BE cannot tell it was range-distributed and used to delete the data files that
 // log references -- files the split children are still reading. FE knows from the table definition and
