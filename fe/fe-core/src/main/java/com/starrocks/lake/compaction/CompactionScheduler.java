@@ -160,6 +160,20 @@ public class CompactionScheduler extends Daemon {
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
                     LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
+                } else if (taskResult == CompactionTask.TaskResult.NOT_FINISHED && job.isAborted()
+                        && job.getResult() == CompactionTask.TaskResult.NOT_FINISHED) {
+                    // The job was aborted (e.g. by tablet-reshard cleaning) but its compaction task has not
+                    // finished — the best-effort abort RPC may have been lost. Abort the transaction here so a
+                    // waiter does not block on the still-running compaction. getResult() is re-read after the
+                    // isAborted() check because the task may have finished since taskResult was first sampled;
+                    // if so this branch is skipped and the next cycle commits/fails it normally (an
+                    // ALL_SUCCESS aborted job must still commit and cross-publish, not be discarded). This
+                    // abort runs on the scheduler thread — the same thread that commits compaction txns — so
+                    // it adds no new commit-vs-abort interleaving. The BE/CN task output is orphaned and
+                    // reclaimed by vacuum.
+                    job.getPartition().setMinRetainVersion(0);
+                    errorMsg = "compaction cancelled";
+                    LOG.info("Aborting transaction of cancelled compaction job {}", job.getDebugString());
                 } else if (taskResult != CompactionTask.TaskResult.NOT_FINISHED) {
                     errorMsg = String.format("Unexpected compaction result: %s, %s", taskResult.name(), job.getDebugString());
                     LOG.error(errorMsg);
@@ -657,6 +671,53 @@ public class CompactionScheduler extends Daemon {
                 break;
             }
         }
+    }
+
+    /**
+     * Handle the previous (txn id no greater than {@code endTransactionId}) in-flight compactions on
+     * the given table for a tablet-reshard CLEANING phase, so it does not have to wait for slow
+     * compaction before cleaning up.
+     *
+     * <p>For a compaction on an included physical partition ({@code includePartitionIds}, e.g. the
+     * partitions a reshard job is resharding), only an uncommitted one is aborted (a pre-reshard
+     * compaction is dropped when it is cross-published to the child tablets anyway, so aborting loses
+     * nothing); an already-committed compaction has taken a partition version and must still publish so
+     * its version cross-publishes onto the child tablets, hence it is left running for the
+     * previous-transactions wait to drain.
+     *
+     * <p>A compaction on a partition NOT in {@code includePartitionIds} is unaffected by the reshard: it
+     * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
+     * it from the previous-transactions wait.
+     *
+     * <p>For an uncommitted compaction this only requests the abort of the compaction task. The
+     * compaction scheduler thread then aborts the transaction: {@link #scheduleNewCompaction} aborts an
+     * aborted job's transaction even if its task has not finished (e.g. because the best-effort abort RPC
+     * was lost), so the previous-transactions wait drains without blocking on the original long-running
+     * compaction. Doing the transaction abort there keeps it on the same thread that commits compaction
+     * transactions, so it adds no new commit-vs-abort interleaving. It is safe to re-issue every cleaning
+     * retry — {@link CompactionJob#abort} is idempotent once the abort has been requested.
+     *
+     * @return the txn ids of compactions on partitions not in {@code includePartitionIds}.
+     */
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds) {
+        Set<Long> ignoredTxnIds = new HashSet<>();
+        for (Map.Entry<PartitionIdentifier, CompactionJob> entry : runningCompactions.entrySet()) {
+            PartitionIdentifier partition = entry.getKey();
+            CompactionJob job = entry.getValue();
+            if (partition.getDbId() != dbId || partition.getTableId() != tableId
+                    || job.getTxnId() > endTransactionId) {
+                continue;
+            }
+            if (!includePartitionIds.contains(partition.getPartitionId())) {
+                ignoredTxnIds.add(job.getTxnId());
+                continue;
+            }
+            if (!job.transactionHasCommitted()) {
+                job.abort();
+            }
+        }
+        return ignoredTxnIds;
     }
 
     protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
