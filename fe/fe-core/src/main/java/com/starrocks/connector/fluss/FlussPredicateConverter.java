@@ -17,7 +17,6 @@ package com.starrocks.connector.fluss;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -285,11 +284,6 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
             }
         }
 
-        @Override
-        public Object visitCastOperator(CastOperator operator, DataType dataType) {
-            return operator.getChild(0).accept(this, dataType);
-        }
-
         private boolean needCast(PrimitiveType sourceType, DataType dataType) {
             switch (sourceType) {
                 case BOOLEAN:
@@ -386,10 +380,6 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
 
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
             return operator.getName();
-        }
-
-        public String visitCastOperator(CastOperator operator, Void context) {
-            return operator.getChild(0).accept(this, context);
         }
     }
 }

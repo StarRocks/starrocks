@@ -16,7 +16,6 @@ package com.starrocks.connector.fluss;
 
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -298,20 +297,6 @@ public class FlussPredicateConverterTest {
                 assertLeaf(conjuncts.get(0), NotEqual.class, 2, "flag").literals().get(0));
         Assertions.assertEquals(false,
                 assertLeaf(conjuncts.get(1), NotEqual.class, 2, "flag").literals().get(0));
-    }
-
-    @Test
-    public void testCastOperands() {
-        CastOperator castId = new CastOperator(com.starrocks.type.IntegerType.BIGINT, ID);
-        LeafPredicate castColumnPredicate = assertLeaf(CONVERTER.convert(new BinaryPredicateOperator(
-                BinaryType.GE, castId, ConstantOperator.createInt(10))), GreaterOrEqual.class, 0, "id");
-        Assertions.assertEquals(10, castColumnPredicate.literals().get(0));
-
-        CastOperator castLiteral = new CastOperator(
-                com.starrocks.type.IntegerType.BIGINT, ConstantOperator.createInt(12));
-        LeafPredicate castLiteralPredicate = assertLeaf(CONVERTER.convert(new BinaryPredicateOperator(
-                BinaryType.EQ, ID, castLiteral)), Equal.class, 0, "id");
-        Assertions.assertEquals(12, castLiteralPredicate.literals().get(0));
     }
 
     @Test
