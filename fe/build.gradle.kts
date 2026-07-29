@@ -75,7 +75,12 @@ subprojects {
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
+<<<<<<< HEAD
         set("staros.version", "4.0.0")
+=======
+        set("staros.version", "4.2-rc2")
+        set("thrift.version", "0.24.0")
+>>>>>>> 41cf05e2b1 ([BugFix][CVE] bump Thrift to 0.24.0 (#76922))
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
         // var sync end
