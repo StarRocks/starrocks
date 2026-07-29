@@ -123,8 +123,13 @@ public class CompactionTask {
         }
     }
 
-    public void abort() {
+    /**
+     * @return true if the abort request was delivered (or the task already finished so there is nothing to
+     *         abort), false if the abort RPC failed and should be retried by the caller.
+     */
+    public boolean abort() {
         TaskResult taskResult = getResult();
+<<<<<<< HEAD
         if (taskResult == TaskResult.NOT_FINISHED || taskResult == TaskResult.NONE_SUCCESS) {
             AbortCompactionRequest abortRequest = new AbortCompactionRequest();
             abortRequest.txnId = request.txnId;
@@ -135,6 +140,21 @@ public class CompactionTask {
                 LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
                         nodeId, e.getMessage());
             }
+=======
+        if (taskResult != TaskResult.NOT_FINISHED && taskResult != TaskResult.NONE_SUCCESS) {
+            return true;
+        }
+        AbortCompactionRequest abortRequest = new AbortCompactionRequest();
+        abortRequest.txnId = request.txnId;
+        try {
+            rpcChannel.abortCompaction(abortRequest);
+            LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
+            return true;
+        } catch (Exception e) {
+            LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
+                    nodeId, e.getMessage());
+            return false;
+>>>>>>> 6e8e3b41cc ([Enhancement] Cancel in-flight compactions on resharded partitions during reshard cleaning (#76759))
         }
     }
 
