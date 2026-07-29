@@ -68,9 +68,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StarOSAgentTest {
@@ -457,6 +460,53 @@ public class StarOSAgentTest {
             Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
             Assertions.assertEquals(oldShardId, pref.getRelationshipTargetId());
         }
+    }
+
+    @Test
+    public void testClearPlacementPreference() throws StarClientException, DdlException {
+        List<Long> captured = new ArrayList<>();
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations(client) {
+            {
+                client.clearPlacementPreference("1", (List<Long>) any);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void clearPlacementPreference(String sid, List<Long> shardIds) {
+                        // Capture only; assert outside the mock so a binding failure cannot hide a
+                        // failed assertion.
+                        calls.incrementAndGet();
+                        captured.clear();
+                        captured.addAll(shardIds);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        starosAgent.clearPlacementPreference(Set.of(10L, 11L));
+        Assertions.assertEquals(1, calls.get());
+        Assertions.assertEquals(Set.of(10L, 11L), new HashSet<>(captured));
+
+        // An empty shard set must short-circuit before the RPC.
+        starosAgent.clearPlacementPreference(Set.of());
+        Assertions.assertEquals(1, calls.get(), "empty shard set must not issue an RPC");
+    }
+
+    @Test
+    public void testClearPlacementPreferenceWrapsStarClientException() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.clearPlacementPreference("1", (List<Long>) any);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException thrown = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.clearPlacementPreference(Set.of(10L)));
+        Assertions.assertTrue(thrown.getMessage().contains("mocked exception"),
+                "expected the cause message, got: " + thrown.getMessage());
     }
 
     @Test
