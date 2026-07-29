@@ -297,6 +297,8 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract TTabletReshardJobsItem getInfo();
 
+    public abstract Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions();
+
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
      * schedule its removal in the {@code CatalogRecycleBin} at index granularity, so an in-flight query
@@ -351,10 +353,9 @@ public abstract class TabletReshardJob implements Writable {
      * <p>Best-effort by design: a failure only degrades to that old behavior, so it must never
      * interrupt the job. The caller is the leader-only cleaning path; replay paths do not call this.
      */
-    protected void clearPlacementPreference(
-            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+    protected void clearPlacementPreference() {
         Set<Long> newTabletIds = new HashSet<>();
-        for (ReshardingPhysicalPartition partition : reshardingPhysicalPartitions.values()) {
+        for (ReshardingPhysicalPartition partition : getReshardingPhysicalPartitions().values()) {
             for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
                 for (ReshardingTablet tablet : index.getReshardingTablets()) {
                     newTabletIds.addAll(tablet.getNewTabletIds());
