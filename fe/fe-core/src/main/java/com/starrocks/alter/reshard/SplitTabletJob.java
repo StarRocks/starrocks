@@ -322,7 +322,9 @@ public class SplitTabletJob extends TabletReshardJob {
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
      * 4. Set tablet state to NORMAL
-     * 5. Set job state to FINISHED
+     * 5. Update metrics
+     * 6. Release the new shards' creation-time placement pin
+     * 7. Set job state to FINISHED
      */
     @Override
     protected void runCleaningJob() {
@@ -355,7 +357,11 @@ public class SplitTabletJob extends TabletReshardJob {
             MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(System.currentTimeMillis() - createdTimeMs);
         }
 
-        // 6. Set job state to FINISHED
+        // 6. Release the child shards' creation-time placement pin so the balancer can spread them
+        //    now, instead of when the parent shards are finally reclaimed tens of minutes later.
+        clearPlacementPreference(reshardingPhysicalPartitions);
+
+        // 7. Set job state to FINISHED
         setJobState(JobState.FINISHED);
     }
 
