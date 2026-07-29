@@ -3002,6 +3002,7 @@ public class SchemaChangeHandler extends AlterHandler {
             TTabletMetaType metaType = TTabletMetaType.ENABLE_PERSISTENT_INDEX;
             String compactionStrategy = "";
             FlatJsonConfig flatJsonConfig = null;
+            boolean enableChangeDataCapture = false;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
@@ -3122,6 +3123,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 newConfig.incVersion();
                 metaType = TTabletMetaType.FLAT_JSON_CONFIG;
                 flatJsonConfig = newConfig;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE)) {
+                enableChangeDataCapture = PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, false);
+                if (enableChangeDataCapture && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                    throw new DdlException(
+                            "change data capture is only supported for shared-data primary key tables");
+                }
+                if (enableChangeDataCapture == olapTable.enableChangeDataCapture()) {
+                    LOG.info("table: {} enable_change_data_capture is {}, nothing need to do",
+                            olapTable.getName(), enableChangeDataCapture);
+                    return null;
+                }
+                metaType = TTabletMetaType.CHANGE_DATA_CAPTURE;
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -3137,7 +3151,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                         db.getId(),
                         olapTable.getId(), olapTable.getName(), timeoutSecond * 1000 /* should be ms*/,
-                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy);
+                        metaType, enablePersistentIndex, persistentIndexType, enableFileBundling, compactionStrategy,
+                        enableChangeDataCapture);
             }
         } else {
             // shouldn't happen

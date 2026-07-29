@@ -92,4 +92,18 @@ public class TablePropertyCopyTest {
         Assertions.assertTrue(copied.hasDelete());
         Assertions.assertTrue(copied.hasForbiddenGlobalDict());
     }
+
+    // enableChangeDataCapture is a derived scalar field (built from the properties map, not re-derived on
+    // copy). ADD PARTITION copies the table via TableProperty.copy(), so the copy must carry the field or the
+    // new partition's tablets are created with change data capture off even though the table enabled it.
+    @Test
+    public void testCopyPreservesEnableChangeDataCapture() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, "true");
+        TableProperty original = new TableProperty(properties);
+        original.buildEnableChangeDataCapture();
+        Assertions.assertTrue(original.enableChangeDataCapture());
+
+        Assertions.assertTrue(original.copy().enableChangeDataCapture());
+    }
 }

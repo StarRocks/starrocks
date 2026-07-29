@@ -160,8 +160,8 @@ Status ChangesReadPlanner::_locate_changed_segments(const TabletMetadataPB& befo
         for (int seg = 0; seg < r.segment_metas_size(); ++seg) {
             const uint32_t rssid = lake::get_rssid(r, seg);
             const bool is_compaction_input = after_position->find(rssid) == after_position->end();
-            const auto& after_delvecs =
-                    is_compaction_input ? cdc.compaction_input_delvecs() : after_meta.delvec_meta().delvecs();
+            const auto& after_delvecs = is_compaction_input ? cdc.pk_change_locator().compaction_input_delvecs()
+                                                            : after_meta.delvec_meta().delvecs();
             bool delvec_changed = false;
             auto dv_it = after_delvecs.find(rssid);
             if (dv_it != after_delvecs.end() && dv_it->second.version() > before_version) {
@@ -174,7 +174,7 @@ Status ChangesReadPlanner::_locate_changed_segments(const TabletMetadataPB& befo
             // (primary-key recover, replication) marks the version NotSupported, which the traversal
             // rejects before reaching this step. So the plain presence lookup here cannot drop an
             // update: no entry here is always "no column change on this segment", not "lost rows".
-            const bool column_overlaid = cdc.column_overlay_vecs().count(rssid) > 0;
+            const bool column_overlaid = cdc.pk_change_locator().column_overlay_vecs().count(rssid) > 0;
             if (delvec_changed || column_overlaid) {
                 carried->push_back(CarriedSegment{rs, seg, is_compaction_input, delvec_changed, column_overlaid});
             }
@@ -201,7 +201,7 @@ Status ChangesReadPlanner::_plan_insert_change_read(const VersionChangeReadPlan&
         Roaring rows;
         if (a.is_compaction_output) {
             // rows it column-updated, minus any the same publish then deleted (delvec_after).
-            const auto& upd = after.cdc_metadata().column_overlay_vecs();
+            const auto& upd = after.cdc_metadata().pk_change_locator().column_overlay_vecs();
             auto it = upd.find(rssid);
             if (it != upd.end()) {
                 ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, it->second));
@@ -215,7 +215,7 @@ Status ChangesReadPlanner::_plan_insert_change_read(const VersionChangeReadPlan&
             insert_changes->push_back({a.rowset_pos, a.segment_pos, false, std::move(rows), true});
         }
     }
-    const auto& upd = after.cdc_metadata().column_overlay_vecs();
+    const auto& upd = after.cdc_metadata().pk_change_locator().column_overlay_vecs();
     for (const auto& c : carried) {
         // is_compaction_input is unreachable here: the compaction/partial-update conflict resolver
         // drops any compaction whose input segment got a newer delta column group, so a carried
@@ -251,13 +251,13 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
         const auto& r = after.rowsets(a.rowset_pos);
         const uint32_t rssid = lake::get_rssid(r, a.segment_pos);
         ASSIGN_OR_RETURN(Roaring rows, load_delvec(_tablet_mgr, after, rssid)); // delvec_after
-        auto upd = cdc.column_overlay_vecs().find(rssid);
-        if (upd != cdc.column_overlay_vecs().end()) {
+        auto upd = cdc.pk_change_locator().column_overlay_vecs().find(rssid);
+        if (upd != cdc.pk_change_locator().column_overlay_vecs().end()) {
             ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, upd->second));
             rows |= updated;
         }
-        auto base = cdc.compaction_output_delvecs().find(rssid);
-        if (base != cdc.compaction_output_delvecs().end()) {
+        auto base = cdc.pk_change_locator().compaction_output_delvecs().find(rssid);
+        if (base != cdc.pk_change_locator().compaction_output_delvecs().end()) {
             ASSIGN_OR_RETURN(Roaring baseline, load_delvec_page(_tablet_mgr, after, base->second));
             rows -= baseline;
         }
@@ -274,8 +274,8 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
         if (c.delvec_changed) {
             Roaring after_delvec;
             if (c.is_compaction_input) {
-                auto it = cdc.compaction_input_delvecs().find(rssid);
-                if (it != cdc.compaction_input_delvecs().end()) {
+                auto it = cdc.pk_change_locator().compaction_input_delvecs().find(rssid);
+                if (it != cdc.pk_change_locator().compaction_input_delvecs().end()) {
                     ASSIGN_OR_RETURN(after_delvec, load_delvec_page(_tablet_mgr, after, it->second));
                 }
             } else {
@@ -285,8 +285,8 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
             rows |= (after_delvec - before_delvec);
         }
         if (c.column_overlaid) {
-            auto upd = cdc.column_overlay_vecs().find(rssid);
-            if (upd != cdc.column_overlay_vecs().end()) {
+            auto upd = cdc.pk_change_locator().column_overlay_vecs().find(rssid);
+            if (upd != cdc.pk_change_locator().column_overlay_vecs().end()) {
                 ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, upd->second));
                 ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
                 rows |= (updated - delvec_after);
@@ -775,9 +775,18 @@ StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
     return true;
 }
 
-Status ChangesDataSource::_check_degradation(const TabletMetadataPtr& meta) {
-    if (meta->has_cdc_metadata() && meta->cdc_metadata().has_capture_status()) {
-        Status status(meta->cdc_metadata().capture_status());
+Status ChangesDataSource::_check_degradation(const TabletMetadataPtr& meta) const {
+    const auto& cdc = meta->cdc_metadata();
+    // enable_cdc gates only primary-key CDC, which needs the recorded change locator. Duplicate-key and
+    // aggregate changes are derivable from the base rowset metadata, so their CDC is always available.
+    if (_is_primary_key_table() && !cdc.enable_cdc()) {
+        return Status::NotSupported(
+                fmt::format("CHANGES window on tablet {} spans version {} which was not recorded "
+                            "(change data capture was not enabled at that version)",
+                            meta->id(), meta->version()));
+    }
+    if (meta->has_cdc_metadata() && cdc.has_capture_status()) {
+        Status status(cdc.capture_status());
         if (!status.ok()) {
             return status;
         }

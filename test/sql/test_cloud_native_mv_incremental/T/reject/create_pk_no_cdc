@@ -1,0 +1,10 @@
+-- name: test_ivm_pk_base_no_cdc_rejected @cloud
+CREATE TABLE pk_nc (k INT NOT NULL, v BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_pk_nc DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, v FROM pk_nc;
+
+-- name: test_ivm_pk_join_missing_cdc_rejected @cloud
+CREATE TABLE pk_cdc (k INT NOT NULL, v BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE pk_nc2 (k INT NOT NULL, w BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_pk_join DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT a.k, a.v, b.w FROM pk_cdc a INNER JOIN pk_nc2 b ON a.k = b.k;

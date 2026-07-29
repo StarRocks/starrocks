@@ -69,6 +69,7 @@ public class CreateReplicaTask extends AgentTask {
     private final int compressionLevel;
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
+    private final boolean enableChangeDataCapture;
     private TPersistentIndexType persistentIndexType;
 
     private BinlogConfig binlogConfig;
@@ -116,6 +117,7 @@ public class CreateReplicaTask extends AgentTask {
         this.storageMedium = builder.getStorageMedium();
         this.latch = builder.getLatch();
         this.enablePersistentIndex = builder.isEnablePersistentIndex();
+        this.enableChangeDataCapture = builder.isEnableChangeDataCapture();
         this.primaryIndexCacheExpireSec = builder.getPrimaryIndexCacheExpireSec();
         this.persistentIndexType = builder.getPersistentIndexType();
         this.tabletType = builder.getTabletType();
@@ -219,6 +221,7 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setVersion(version);
         createTabletReq.setStorage_medium(storageMedium);
         createTabletReq.setEnable_persistent_index(enablePersistentIndex);
+        createTabletReq.setEnable_change_data_capture(enableChangeDataCapture);
         if (persistentIndexType != null) {
             createTabletReq.setPersistent_index_type(persistentIndexType);
         }
@@ -270,6 +273,7 @@ public class CreateReplicaTask extends AgentTask {
         private int compressionLevel;
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
+        private boolean enableChangeDataCapture;
         private TPersistentIndexType persistentIndexType;
         private BinlogConfig binlogConfig;
         private FlatJsonConfig flatJsonConfig;
@@ -386,6 +390,15 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setEnablePersistentIndex(boolean enablePersistentIndex) {
             this.enablePersistentIndex = enablePersistentIndex;
+            return this;
+        }
+
+        public boolean isEnableChangeDataCapture() {
+            return enableChangeDataCapture;
+        }
+
+        public Builder setEnableChangeDataCapture(boolean enableChangeDataCapture) {
+            this.enableChangeDataCapture = enableChangeDataCapture;
             return this;
         }
 

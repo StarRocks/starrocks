@@ -47,7 +47,7 @@ PRIMARY KEY(dt, k)
 PARTITION BY RANGE(dt) (
     PARTITION p1 VALUES LESS THAN ('2024-02-01')
 )
-DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO base_mix_pk VALUES ('2024-01-10', 1, 10), ('2024-01-11', 2, 20);
 CREATE MATERIALIZED VIEW mv_mix_pk
 DISTRIBUTED BY HASH(k) BUCKETS 2

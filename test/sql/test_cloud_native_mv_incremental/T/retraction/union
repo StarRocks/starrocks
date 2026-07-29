@@ -4,9 +4,9 @@
 -- distinct MV rows instead of collapsing to one. Oracle: the MV equals a full UNION ALL recompute, diff=0 both
 -- ways, and the row count matches (a diff=0 alone would miss a collapsed duplicate, which is set-eliminated).
 CREATE TABLE pk_ua (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_ub (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ua VALUES (1,10),(2,20);
 INSERT INTO pk_ub VALUES (1,100),(3,300);
 CREATE MATERIALIZED VIEW mv_pk_union
@@ -50,11 +50,11 @@ DROP TABLE pk_ub;
 -- Three-branch UNION ALL: the branch ordinal spans three encodes; a delete/update on any branch touches only
 -- that branch's rows. Oracle: diff=0 both ways.
 CREATE TABLE pk_va (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_vb (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_vc (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_va VALUES (1,10),(2,20);
 INSERT INTO pk_vb VALUES (1,10),(3,30);
 INSERT INTO pk_vc VALUES (1,10),(4,40);
@@ -84,11 +84,11 @@ DROP TABLE pk_vc;
 -- cancellation; when both join sides change the same key in one interval it must still land on the final
 -- combined row, not a stale intermediate. Oracle: diff=0 both ways.
 CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_jc (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ja VALUES (1,10),(2,20);
 INSERT INTO pk_jb VALUES (1,100),(2,200);
 INSERT INTO pk_jc VALUES (7,70);
@@ -125,9 +125,9 @@ DROP TABLE pk_jc;
 -- Rejected union shapes: a branch that is GROUP BY or DISTINCT lowers to an aggregation (no per-base-row
 -- identity) and must not be admitted as a retractable union branch.
 CREATE TABLE pk_ug (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_uh (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- a GROUP BY branch (no aggregate function) is rejected
 CREATE MATERIALIZED VIEW mv_rej_union_groupby DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT id, v FROM pk_ug UNION ALL SELECT id, v FROM pk_uh GROUP BY id, v;
 -- a DISTINCT branch is rejected
@@ -139,8 +139,8 @@ DROP TABLE pk_uh;
 -- Two UNION ALL branches carry the same key value; each branch is independently updated/deleted in one
 -- batch. The branch-ordinal keeps colliding keys as distinct MV rows. Oracle: MV == full UNION ALL
 -- recompute, diff=0 both ways.
-CREATE TABLE uca (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
-CREATE TABLE ucb (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE uca (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE ucb (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO uca VALUES (1,10),(2,20);
 INSERT INTO ucb VALUES (1,10),(2,20);
 CREATE MATERIALIZED VIEW mv_ucc REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")

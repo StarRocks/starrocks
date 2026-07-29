@@ -148,6 +148,10 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+function: assert_latest_schema_change_job_path("${db[0]}", "dup_t", "slow")
+-- result:
+None
+-- !result
 INSERT INTO dup_t VALUES (2, 'hi');
 -- result:
 -- !result

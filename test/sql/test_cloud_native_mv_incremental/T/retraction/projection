@@ -2,7 +2,7 @@
 -- Single-table PRIMARY KEY projection/filter IVM MV, retractable (delete/update) refresh.
 -- Oracle: after every incremental refresh the MV must exactly equal (base WHERE v>=0), diff=0 both ways.
 CREATE TABLE pk_proj_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_proj_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
 CREATE MATERIALIZED VIEW mv_pk_proj
 DISTRIBUTED BY HASH(id) BUCKETS 2
@@ -46,7 +46,7 @@ DROP TABLE pk_proj_base;
 -- VARCHAR single-column primary key (a non-integer key type). All PK cases here use the v1 row-id
 -- encoding: the derived row-id SlotRefs carry no analyzed type, so v0 is not selected.
 CREATE TABLE pk_vk_base (k VARCHAR(64) NOT NULL, v BIGINT)
-PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_vk_base VALUES ('alpha',10),('beta',20),('gamma',30);
 CREATE MATERIALIZED VIEW mv_pk_vk
 DISTRIBUTED BY HASH(k) BUCKETS 2
@@ -67,9 +67,9 @@ DROP TABLE pk_vk_base;
 -- name: test_ivm_pk_retraction_rejects @cloud
 -- Shapes this foundation does not yet maintain over a cloud-native PK base must be rejected at CREATE.
 CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- UNION ALL mixing a retractable PK branch with an append-only (DUPLICATE KEY) branch: the union would carry
 -- __ROW_ID__ on the PK branch only, so the analyzer rejects the mix. A pure-PK UNION ALL is now supported --
 -- see test_ivm_pk_union_retraction.
@@ -92,7 +92,7 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a LE
 -- join over PK bases with a non-orderable output column: net-collapse orders by every output column to
 -- cancel cross-base intermediate rows, and JSON has no order, so the join is rejected at CREATE
 CREATE TABLE rej_pk_json (id INT NOT NULL, j JSON)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.j FROM rej_pk_json a JOIN rej_pk2 b ON a.id = b.id;
 DROP TABLE rej_pk_json;
@@ -103,7 +103,7 @@ DROP TABLE rej_pk2;
 -- name: test_ivm_pk_composite_key @cloud
 -- Composite (multi-column) PRIMARY KEY exercises __ROW_ID__ = encode(k1, k2).
 CREATE TABLE pk_ck_base (a INT NOT NULL, b INT NOT NULL, v BIGINT)
-PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ck_base VALUES (1,1,10),(1,2,20),(2,1,30);
 CREATE MATERIALIZED VIEW mv_pk_ck
 DISTRIBUTED BY HASH(a) BUCKETS 2
@@ -136,7 +136,7 @@ DROP TABLE pk_ck_base;
 -- name: test_ivm_pk_projection_star @cloud
 -- SELECT * over a PK base: the star SelectListItem (expr==null) must survive __ROW_ID__ prepend.
 CREATE TABLE pk_star_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_star_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
 CREATE MATERIALIZED VIEW mv_pk_star
 DISTRIBUTED BY HASH(id) BUCKETS 2
@@ -158,7 +158,7 @@ DROP TABLE pk_star_base;
 -- Many updates/deletes/re-inserts on one PK across several transactions, folded into a single
 -- incremental refresh (net-collapse). Oracle: MV == base WHERE v>=0, diff=0 both ways.
 CREATE TABLE pk_mbf (id INT NOT NULL, v BIGINT, tag VARCHAR(8))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_mbf SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,1000));
 CREATE MATERIALIZED VIEW mv_mbf REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, v, tag FROM pk_mbf WHERE v >= 0;

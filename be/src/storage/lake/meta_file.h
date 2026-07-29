@@ -161,7 +161,7 @@ private:
     Status _collect_cdc_column_overlay_vecs(uint32_t rssid, const Roaring& updated_rowids);
     // whether there is any delvec in buffer _buf used by cdc
     bool _is_cdc_using_buffer();
-    void _finalize_cdc_metadata(int64_t version);
+    void _finalize_change_locator(int64_t version);
     void _collect_cdc_referenced_delvec_file_versions(std::set<int64_t>& referenced_versions);
 
 private:
@@ -179,16 +179,15 @@ private:
         uint32_t assigned_segment_idx = 0;
     };
 
-    // Metadata describing the data changes in this publish, used by Change Data Capture (CDC) to derive the
-    // changes that the publish's loads introduced. These will be saved to CdcMetadataPB.
-    struct CdcMetadata {
-        // newly-generated compaction input delvecs, and need to be saved to CdcMetadataPB.compaction_input_delvecs
+    // This publish's in-memory change-locator captures.
+    struct ChangeLocator {
+        // saved to PkChangeLocatorPB.compaction_input_delvecs
         std::unordered_map<uint32_t, DelvecPagePB> compaction_input_delvecs;
-        // newly-generated compaction output delvecs, and need to be saved to CdcMetadataPB.compaction_output_delvecs
+        // saved to PkChangeLocatorPB.compaction_output_delvecs
         std::unordered_map<uint32_t, DelvecPagePB> compaction_output_delvecs;
-        // newly-generated column partial update row positions (reuse data structure DelVector),
-        // and need to be saved to CdcMetadataPB.column_overlay_vecs.
+        // reused DelVector working copy of column_overlay_vec_pages
         std::unordered_map<uint32_t, DelVectorPtr> column_overlay_vecs;
+        // saved to PkChangeLocatorPB.column_overlay_vecs
         std::unordered_map<uint32_t, DelvecPagePB> column_overlay_vec_pages;
     };
 
@@ -205,7 +204,7 @@ private:
     RecoverFlag _recover_flag = RecoverFlag::OK;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
-    CdcMetadata _cdc_metadata;
+    ChangeLocator _change_locator;
 };
 
 struct DelvecFileInfo {

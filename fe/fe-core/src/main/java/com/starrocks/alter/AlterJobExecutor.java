@@ -553,7 +553,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)
-                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -567,6 +568,10 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 } else {
                     if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                         throw new DdlException("StarRocks doesn't support alter persistent_index_type under shared-nothing mode");
+                    }
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE)) {
+                        throw new DdlException(
+                                "change data capture is only supported for shared-data (cloud-native) tables");
                     }
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);

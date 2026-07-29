@@ -46,6 +46,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "flatJsonConfig")
     private FlatJsonConfig flatJsonConfig;
 
+    @SerializedName(value = "enableChangeDataCapture")
+    private boolean enableChangeDataCapture;
+
     // for deserialization
     public LakeTableAlterMetaJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -55,20 +58,22 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType) {
         this(jobId, dbId, tableId, tableName, timeoutMs, metaType, metaValue, persistentIndexType,
-                false, "DEFAULT");
+                false, "DEFAULT", false);
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue,
                                  String persistentIndexType,
                                  boolean enableFileBundling,
-                                 String compactionStrategy) {
+                                 String compactionStrategy,
+                                 boolean enableChangeDataCapture) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
         this.metaValue = metaValue;
         this.persistentIndexType = persistentIndexType;
         this.enableFileBundling = enableFileBundling;
         this.compactionStrategy = compactionStrategy;
+        this.enableChangeDataCapture = enableChangeDataCapture;
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
@@ -86,6 +91,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.enableFileBundling = job.enableFileBundling;
         this.compactionStrategy = job.compactionStrategy;
         this.flatJsonConfig = job.flatJsonConfig == null ? null : new FlatJsonConfig(job.flatJsonConfig);
+        this.enableChangeDataCapture = job.enableChangeDataCapture;
     }
 
     @Override
@@ -106,6 +112,10 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         if (metaType == TTabletMetaType.FLAT_JSON_CONFIG) {
             return TabletMetadataUpdateAgentTaskFactory.createFlatJsonConfigUpdateTask(nodeId, tablets,
                         flatJsonConfig);
+        }
+        if (metaType == TTabletMetaType.CHANGE_DATA_CAPTURE) {
+            return TabletMetadataUpdateAgentTaskFactory.createChangeDataCaptureUpdateTask(nodeId, tablets,
+                        enableChangeDataCapture);
         }
         return null;
     }
@@ -151,6 +161,11 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         if (metaType == TTabletMetaType.FLAT_JSON_CONFIG && flatJsonConfig != null) {
             table.setFlatJsonConfig(flatJsonConfig);
         }
+        if (metaType == TTabletMetaType.CHANGE_DATA_CAPTURE) {
+            table.getTableProperty().modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, String.valueOf(enableChangeDataCapture));
+            table.getTableProperty().buildEnableChangeDataCapture();
+        }
     }
 
     @Override
@@ -164,6 +179,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.flatJsonConfig = other.flatJsonConfig == null
                 ? null
                 : new FlatJsonConfig(other.flatJsonConfig);
+        this.enableChangeDataCapture = other.enableChangeDataCapture;
     }
 
     @Override

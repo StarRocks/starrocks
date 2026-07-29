@@ -1,5 +1,5 @@
 -- name: test_ivm_ret_no_change_skipped @cloud
-CREATE TABLE pk_sk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_sk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_sk VALUES (1,10),(2,20),(3,30);
@@ -35,7 +35,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_sk EXCEPT SELECT id,v 
 0
 -- !result
 -- name: test_ivm_ret_delete_to_empty @cloud
-CREATE TABLE pk_em (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_em (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_em VALUES (1,10),(2,20);

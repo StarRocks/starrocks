@@ -9,7 +9,7 @@ PRIMARY KEY(dt, k)
 PARTITION BY RANGE(dt) (
     PARTITION p1 VALUES LESS THAN ('2024-02-01')
 )
-DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO base_init VALUES ('2024-01-10', 1, 10);
 CREATE MATERIALIZED VIEW mv_init
 DISTRIBUTED BY HASH(k) BUCKETS 2

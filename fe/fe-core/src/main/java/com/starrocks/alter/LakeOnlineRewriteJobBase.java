@@ -460,6 +460,7 @@ public abstract class LakeOnlineRewriteJobBase
                         .setStorageMedium(storageMedium)
                         .setLatch(countDownLatch)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setEnableChangeDataCapture(table.enableChangeDataCapture())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         // Carry the table's flat-json config: this per-tablet metadata replaces the shared
                         // base template (which had it), so without this a flat-json-enabled table's shadow

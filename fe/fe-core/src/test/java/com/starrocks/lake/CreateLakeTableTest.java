@@ -361,6 +361,81 @@ public class CreateLakeTableTest {
     }
 
     @Test
+    public void testCreateLakeTableEnableChangeDataCapture() throws Exception {
+        // default off
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cdc_default\n" +
+                        "(c0 int, c1 string)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2;"));
+        Assertions.assertFalse(getLakeTable("lake_test", "cdc_default").enableChangeDataCapture());
+
+        // explicit on, surfaces in SHOW CREATE TABLE
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cdc_on\n" +
+                        "(c0 int, c1 string)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_change_data_capture' = 'true');"));
+        LakeTable t = getLakeTable("lake_test", "cdc_on");
+        Assertions.assertTrue(t.enableChangeDataCapture());
+        String sql = "show create table lake_test.cdc_on";
+        ShowCreateTableStmt stmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet rs = ShowExecutor.execute(stmt, connectContext);
+        Assertions.assertTrue(rs.getResultRows().get(0).get(1).contains("\"enable_change_data_capture\" = \"true\""));
+
+        // rejected on a DUPLICATE (non-PK) table
+        ExceptionChecker.expectThrows(DdlException.class, () -> createTable(
+                "create table lake_test.cdc_dup\n" +
+                        "(c0 int, c1 string)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_change_data_capture' = 'true');"));
+
+        // a non-boolean value (e.g. a typo) is rejected at CREATE, matching the strict ALTER validation,
+        // rather than silently parsing to false and creating the table with capture off
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "Invalid enable_change_data_capture",
+                () -> createTable(
+                        "create table lake_test.cdc_bad_bool\n" +
+                                "(c0 int, c1 string)\n" +
+                                "PRIMARY KEY(c0)\n" +
+                                "distributed by hash(c0) buckets 2\n" +
+                                "properties('enable_change_data_capture' = 'ture');"));
+    }
+
+    @Test
+    public void testAlterEnableChangeDataCapture() throws Exception {
+        // The ALTER analyzer accepts the property on a primary-key cloud-native table and rejects it
+        // elsewhere. Analysis alone is exercised here (via parseStmtWithNewParser); the async alter-meta
+        // job that actually toggles the metadata is covered by LakeTableAlterMetaJobTest.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.alter_cdc (c0 int, c1 string)\n" +
+                        "primary key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+
+        // enabling and disabling are both accepted on a primary-key table
+        ExceptionChecker.expectThrowsNoException(() -> UtFrameUtils.parseStmtWithNewParser(
+                "alter table lake_test.alter_cdc set ('enable_change_data_capture' = 'true')", connectContext));
+        ExceptionChecker.expectThrowsNoException(() -> UtFrameUtils.parseStmtWithNewParser(
+                "alter table lake_test.alter_cdc set ('enable_change_data_capture' = 'false')", connectContext));
+
+        // invalid value rejected by the analyzer
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "must be bool type",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table lake_test.alter_cdc set ('enable_change_data_capture' = 'ture')", connectContext));
+
+        // the property only governs primary-key tables; rejected on a duplicate-key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.alter_cdc_dup (c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        ExceptionChecker.expectThrowsWithMsg(Exception.class, "only supported for shared-data primary key tables",
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table lake_test.alter_cdc_dup set ('enable_change_data_capture' = 'true')",
+                        connectContext));
+    }
+
+    @Test
     public void testCreateLakeTableException() {
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,

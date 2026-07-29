@@ -5,7 +5,7 @@
 -- Oracle: after every incremental refresh the MV must equal (SELECT g, SUM/MAX/MIN/COUNT ... GROUP BY g),
 -- diff=0 both ways.
 CREATE TABLE pk_agg_base (id INT NOT NULL, g INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_agg_base VALUES (1,10,100),(2,10,200),(3,20,300),(4,20,400),(5,30,500),(7,NULL,700);
 CREATE MATERIALIZED VIEW mv_pk_agg
 DISTRIBUTED BY HASH(g) BUCKETS 2
@@ -50,9 +50,9 @@ DROP TABLE pk_agg_base;
 -- FROM/TO snapshots of the whole join, so deleting a build-side row drops the matching fact rows out
 -- of the inner join and the affected group recomputes smaller.
 CREATE TABLE pk_fact (id INT NOT NULL, cust INT, amt BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_cust (cid INT NOT NULL, region INT)
-PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_fact VALUES (1,10,100),(2,10,200),(3,20,300);
 INSERT INTO pk_cust VALUES (10,1),(20,2);
 CREATE MATERIALIZED VIEW mv_pk_aggjoin
@@ -83,7 +83,7 @@ DROP TABLE pk_cust;
 -- PRIMARY KEY base under delete/update. A value update can move a row in or out of the filter set,
 -- recomputing the affected composite group.
 CREATE TABLE pk_avg (id INT NOT NULL, k1 INT, k2 INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_avg VALUES (1,1,1,100),(2,1,1,200),(3,1,2,300),(4,2,1,400),(5,2,1,-5);
 CREATE MATERIALIZED VIEW mv_pk_avg
 DISTRIBUTED BY HASH(k1) BUCKETS 2
@@ -123,7 +123,7 @@ DROP TABLE pk_avg;
 -- rebuilds each affected group's metric state from the FROM/TO snapshots, so a deleted row drops from the
 -- distinct count and an emptied group disappears.
 CREATE TABLE pk_metric (id INT NOT NULL, g INT, uid INT, val INT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_metric VALUES (1,10,100,10),(2,10,200,20),(3,10,100,30),(4,20,300,40),(5,20,400,50);
 CREATE MATERIALIZED VIEW mv_pk_metric
 DISTRIBUTED BY HASH(g) BUCKETS 2
@@ -162,7 +162,7 @@ DROP TABLE pk_metric;
 -- Deleting/updating the current extreme row of a group must re-derive MIN/MAX from the survivors
 -- (per-group recompute), not leave the stale extreme. Oracle: MV == GROUP BY recompute of the base.
 CREATE TABLE pk_mm (id INT NOT NULL, g INT, v BIGINT)
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_mm VALUES (1,10,100),(2,10,500),(3,10,300),(4,20,50),(5,20,50);
 CREATE MATERIALIZED VIEW mv_mm REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT g, MAX(v) mx, MIN(v) mn, COUNT(*) c FROM pk_mm GROUP BY g;
@@ -183,7 +183,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT g,MAX(v),MIN(v),COUNT(*) FROM pk_mm
 -- (per-group recompute reruns each function, so counting aggregates are fine here -- unlike the AGG_KEYS
 -- rollup path). Oracle: MV == GROUP BY recompute.
 CREATE TABLE pk_nd (id INT NOT NULL, g INT, v BIGINT)
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_nd VALUES (1,10,1),(2,10,1),(3,10,2),(4,20,5),(5,20,6);
 CREATE MATERIALIZED VIEW mv_nd REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT g, APPROX_COUNT_DISTINCT(v) nd, SUM(v) sv, MAX(v) mx, COUNT(*) c FROM pk_nd GROUP BY g;

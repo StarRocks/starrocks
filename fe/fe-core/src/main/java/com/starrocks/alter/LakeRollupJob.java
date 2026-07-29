@@ -284,6 +284,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setStorageMedium(storageMedium)
                             .setLatch(countDownLatch)
                             .setEnablePersistentIndex(table.enablePersistentIndex())
+                            .setEnableChangeDataCapture(table.enableChangeDataCapture())
                             .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                             .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                             .setCompressionType(table.getCompressionType())

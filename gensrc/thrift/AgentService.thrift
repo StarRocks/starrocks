@@ -141,6 +141,7 @@ struct TCreateTabletReq {
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
     27: optional Types.TTabletRange range;
+    28: optional bool enable_change_data_capture;
 
     // New fields should be added above this comment.
     // NOTE: If you add a new field here that ends up in tablet metadata,
@@ -538,7 +539,8 @@ enum TTabletMetaType {
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
     FLAT_JSON_CONFIG,
     ENABLE_FILE_BUNDLING,
-    COMPACTION_STRATEGY
+    COMPACTION_STRATEGY,
+    CHANGE_DATA_CAPTURE
 }
 
 struct TTabletMetaInfo {
@@ -558,6 +560,7 @@ struct TTabletMetaInfo {
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
     15: optional Types.TTabletRange tablet_range;
+    16: optional bool enable_change_data_capture;
 }
 
 struct TUpdateTabletMetaInfoReq {

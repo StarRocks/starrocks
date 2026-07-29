@@ -1,6 +1,6 @@
 -- name: test_ivm_pk_subquery_retraction @cloud
 CREATE TABLE pk_sq_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_sq_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
@@ -89,11 +89,11 @@ DROP TABLE pk_sq_base;
 -- !result
 -- name: test_ivm_pk_subquery_over_join @cloud
 CREATE TABLE pk_sqj_a (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE pk_sqj_b (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_sqj_a VALUES (1,10),(2,20);
@@ -154,7 +154,7 @@ DROP TABLE pk_sqj_b;
 -- !result
 -- name: test_ivm_pk_subquery_hidden_key @cloud
 CREATE TABLE pk_hk_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_hk_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
@@ -227,7 +227,7 @@ DROP TABLE pk_hk_base;
 -- !result
 -- name: test_ivm_pk_subquery_varchar_key @cloud
 CREATE TABLE pk_svk (k VARCHAR(64) NOT NULL, v BIGINT)
-PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_svk VALUES ('alpha',10),('beta',20),('gamma',30);
@@ -275,7 +275,7 @@ DROP TABLE pk_svk;
 -- !result
 -- name: test_ivm_pk_subquery_composite_key @cloud
 CREATE TABLE pk_sck (a INT NOT NULL, b INT NOT NULL, v BIGINT)
-PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_sck VALUES (1,1,10),(1,2,20),(2,1,30);
@@ -323,11 +323,11 @@ DROP TABLE pk_sck;
 -- !result
 -- name: test_ivm_pk_subquery_union_branch @cloud
 CREATE TABLE pk_uba (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE pk_ubb (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_uba VALUES (1,10),(2,20),(3,30);
@@ -453,11 +453,11 @@ DROP TABLE pk_ubb;
 -- !result
 -- name: test_ivm_pk_subquery_rejects @cloud
 CREATE TABLE sq_rej (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE sq_rej2 (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_sub_agg DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL

@@ -69,6 +69,12 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateFileBundlingTask(backendId, tablets, enableFileBundling);
     }
 
+    public static TabletMetadataUpdateAgentTask createChangeDataCaptureUpdateTask(long backendId, Set<Long> tablets,
+                                                                                  boolean enableChangeDataCapture) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateChangeDataCaptureTask(backendId, tablets, enableChangeDataCapture);
+    }
+
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
                                                                                       Boolean value) {
         requireNonNull(tablets, "tablets is null");
@@ -273,6 +279,35 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 metaInfo.setTablet_id(tabletId);
                 metaInfo.setBundle_tablet_metadata(enableFileBundling);
                 metaInfo.setMeta_type(TTabletMetaType.ENABLE_FILE_BUNDLING);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateChangeDataCaptureTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private final boolean enableChangeDataCapture;
+
+        private UpdateChangeDataCaptureTask(long backendId, Set<Long> tablets, boolean enableChangeDataCapture) {
+            super(backendId, Objects.hash(tablets, enableChangeDataCapture));
+            this.tablets = tablets;
+            this.enableChangeDataCapture = enableChangeDataCapture;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setEnable_change_data_capture(enableChangeDataCapture);
+                metaInfo.setMeta_type(TTabletMetaType.CHANGE_DATA_CAPTURE);
                 metaInfos.add(metaInfo);
             }
             return metaInfos;

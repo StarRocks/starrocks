@@ -1,6 +1,6 @@
 -- name: test_ivm_pk_agg_retraction @cloud
 CREATE TABLE pk_agg_base (id INT NOT NULL, g INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_agg_base VALUES (1,10,100),(2,10,200),(3,20,300),(4,20,400),(5,30,500),(7,NULL,700);
@@ -98,11 +98,11 @@ DROP TABLE pk_agg_base;
 -- !result
 -- name: test_ivm_pk_agg_over_join @cloud
 CREATE TABLE pk_fact (id INT NOT NULL, cust INT, amt BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE pk_cust (cid INT NOT NULL, region INT)
-PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(cid) DISTRIBUTED BY HASH(cid) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_fact VALUES (1,10,100),(2,10,200),(3,20,300);
@@ -161,7 +161,7 @@ DROP TABLE pk_cust;
 -- !result
 -- name: test_ivm_pk_agg_avg_filter @cloud
 CREATE TABLE pk_avg (id INT NOT NULL, k1 INT, k2 INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_avg VALUES (1,1,1,100),(2,1,1,200),(3,1,2,300),(4,2,1,400),(5,2,1,-5);
@@ -246,7 +246,7 @@ DROP TABLE pk_avg;
 -- !result
 -- name: test_ivm_pk_agg_metric_union @cloud
 CREATE TABLE pk_metric (id INT NOT NULL, g INT, uid INT, val INT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_metric VALUES (1,10,100,10),(2,10,200,20),(3,10,100,30),(4,20,300,40),(5,20,400,50);
@@ -315,7 +315,7 @@ DROP TABLE pk_metric;
 -- !result
 -- name: test_ivm_ret_minmax_recompute @cloud
 CREATE TABLE pk_mm (id INT NOT NULL, g INT, v BIGINT)
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_mm VALUES (1,10,100),(2,10,500),(3,10,300),(4,20,50),(5,20,50);
@@ -358,7 +358,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT g,MAX(v),MIN(v),COUNT(*) FROM pk_mm
 -- !result
 -- name: test_ivm_ret_agg_ndv_coexist @cloud
 CREATE TABLE pk_nd (id INT NOT NULL, g INT, v BIGINT)
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_nd VALUES (1,10,1),(2,10,1),(3,10,2),(4,20,5),(5,20,6);

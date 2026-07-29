@@ -614,6 +614,9 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         cfg.update(tablet_meta_info.flat_json_config);
         cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
+    if (tablet_meta_info.__isset.enable_change_data_capture) {
+        metadata_update_info->set_enable_change_data_capture(tablet_meta_info.enable_change_data_capture);
+    }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();

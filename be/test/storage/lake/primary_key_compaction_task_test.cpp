@@ -2471,8 +2471,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
 // publishes, the primary index maps the superseded key to the upsert's rowset, whose id is greater
 // than the largest input rowset id, so the compaction stamps a delete bit on its own output segment.
 // That delete bit is the conflict subset, and it must be captured into
-// cdc_metadata().compaction_output_delvecs() keyed by the output segment's rssid.
+// cdc_metadata().pk_change_locator().compaction_output_delvecs() keyed by the output segment's rssid.
 TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_output_delvecs_captured) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet
+    // (SetUp seeded the tablet with the flag off).
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     // try_replace(... max_src_rssid ...) only runs on the non-light publish path; the light path
     // resolves conflicts from the input segments' base-version delvec and would not exercise the
     // in-batch superseded-key case. Force the non-light path for the duration of this test.
@@ -2547,7 +2551,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_output_delvecs_captured
     auto new_version = base_version + txn_ids.size();
     ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
 
-    const auto& output_delvecs = metadata->cdc_metadata().compaction_output_delvecs();
+    const auto& output_delvecs = metadata->cdc_metadata().pk_change_locator().compaction_output_delvecs();
     ASSERT_FALSE(output_delvecs.empty());
     // The only conflict entry belongs to the compaction output segment; all kChunkSize keys were
     // superseded, so the captured subset is non-empty and stamped at the compaction publish version.
@@ -2577,6 +2581,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_output_delvecs_captured
 // compaction publish path: op_write delete-vector stamping is independent of that config, and a
 // compaction with no concurrent supersede produces no conflict capture on either path.
 TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_then_load_records_no_output_delvecs) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     // Three input rowsets carrying the same key set [0, kChunkSize) so the compaction has overlapping
     // keys to merge into a single output segment.
     auto chunk0 = generate_data(kChunkSize, 0);
@@ -2651,7 +2658,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_then_load_records_no_ou
     ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
 
     // The compaction was clean: nothing recorded in the conflict capture.
-    EXPECT_TRUE(metadata->cdc_metadata().compaction_output_delvecs().empty());
+    EXPECT_TRUE(metadata->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
 
     // The load's deletes landed on the compaction output as an ordinary op_write delete vector: the
     // single output rowset (the one carrying max_compact_input_rowset_id) is half deleted; its merged-
@@ -2673,6 +2680,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_then_load_records_no_ou
 // ori_base_version == V, so every captured page (version V <= V) is pruned at publish start and the
 // three CDC maps come up empty on the V+1 metadata.
 TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_next_normal_publish) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -2712,12 +2722,13 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_next_normal_publish)
     auto compaction_version = version;
 
     ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, compaction_version));
-    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().compaction_input_delvecs().empty());
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
     // Each captured page keeps the version at which its delete bits were written (the overwrite
     // publishes before this compaction), so every page.version() <= base of the compaction publish,
     // hence < compaction_version. That is exactly why the next publish (whose ori_base ==
     // compaction_version) prunes them all.
-    for (const auto& [rssid, page] : metadata_after_compaction->cdc_metadata().compaction_input_delvecs()) {
+    for (const auto& [rssid, page] :
+         metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs()) {
         EXPECT_LT(page.version(), compaction_version);
     }
 
@@ -2742,16 +2753,19 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_next_normal_publish)
     }
 
     ASSIGN_OR_ABORT(auto metadata_next, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_TRUE(metadata_next->cdc_metadata().compaction_input_delvecs().empty());
-    EXPECT_TRUE(metadata_next->cdc_metadata().compaction_output_delvecs().empty());
-    EXPECT_TRUE(metadata_next->cdc_metadata().column_overlay_vecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().column_overlay_vecs().empty());
 }
 
 // After a compaction leaves a compaction_input_delvecs entry at version V, an empty publish (a single
 // txn whose txn_id is EMPTY_TXNLOG_TXNID, taking publish_version's fast path) advances to V+1. The fast
 // path leaves the CDC capture cleared, so the V+1 metadata's maps are empty and it carries no
-// cdc_metadata capture status.
+// capture status.
 TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -2789,7 +2803,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
     version++;
 
     ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().compaction_input_delvecs().empty());
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
 
     // Empty publish (no txnlog) -> publish_version's reshard/empty fast path.
     {
@@ -2803,9 +2817,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
         ASSIGN_OR_ABORT(auto empty_meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version,
                                                          version + 1, txns, false));
         version++;
-        EXPECT_TRUE(empty_meta->cdc_metadata().compaction_input_delvecs().empty());
-        EXPECT_TRUE(empty_meta->cdc_metadata().compaction_output_delvecs().empty());
-        EXPECT_TRUE(empty_meta->cdc_metadata().column_overlay_vecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().column_overlay_vecs().empty());
         EXPECT_TRUE(!empty_meta->has_cdc_metadata() || !empty_meta->cdc_metadata().has_capture_status() ||
                     empty_meta->cdc_metadata().capture_status().status_code() == 0);
     }

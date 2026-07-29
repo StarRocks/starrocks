@@ -286,9 +286,10 @@ private:
     // reaches base. Errors (rather than short-reading) if the version chain can't reach base — i.e.
     // the requested range isn't on it.
     StatusOr<bool> _advance_to_next_version();
-    // Returns the publish's recorded degradation status (OK if reconstructable), so an
-    // unreconstructable publish surfaces as an error instead of silently dropping rows.
-    static Status _check_degradation(const TabletMetadataPtr& meta);
+    // Rejects a window a CHANGES read cannot reconstruct: a primary-key version where change data
+    // capture was not enabled, or a publish whose recorded capture status is not OK. Surfacing the
+    // error keeps an unreconstructable publish from silently dropping rows.
+    Status _check_degradation(const TabletMetadataPtr& meta) const;
     // Opens a chunk iterator for one located read (segment + rowids). change_type selects the
     // read-stats counter; returns null for an empty read.
     StatusOr<ChunkIteratorPtr> _build_segment_iterator(const VersionChangeReadPlan& plan,

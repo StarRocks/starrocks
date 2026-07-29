@@ -48,11 +48,18 @@ import java.util.stream.Collectors;
  * file (not in the community-shared {@code IVMAnalyzer}) so upstream syncs of {@code IVMAnalyzer}
  * never conflict with this logic; {@code IVMAnalyzer} only calls {@link #validate}.
  *
- * <p>Two policies, both rooted in the append-only CDC delta stream:
+ * <p>Three policies, all rooted in how CDC exposes a base table's changes:
  * <ul>
- *   <li>PRIMARY KEY / UNIQUE KEY bases are rejected: their replace/upsert semantics can't be
- *       maintained by an append-only delta (a key update emits an append, so the MV would keep
- *       the stale pre-update row alongside the new one).
+ *   <li>A PRIMARY KEY base is admitted but must have change data capture enabled via the table
+ *       property {@code enable_change_data_capture}: its updates and deletes replace earlier rows,
+ *       so capturing what changed needs extra lightweight metadata written at load time -- recorded
+ *       only while the property is on, and read back by the incremental refresh. Duplicate/aggregate
+ *       bases are append-only, so their changes can be derived without extra metadata and need no
+ *       such switch. The per-MV-shape retraction gate (which output shapes can carry a row id) lives
+ *       in the analyzer.
+ *   <li>A UNIQUE KEY base is rejected: its replace/upsert semantics can't be maintained by an
+ *       append-only delta (a key update emits an append, so the MV would keep the stale pre-update
+ *       row alongside the new one).
  *   <li>An AGGREGATE KEY base MV must be a strict rollup: CDC delta on AGG_KEYS emits raw
  *       pre-merge rowset rows, so MV state matches a SELECT-from-base only when each MV group
  *       maps to whole post-merge base groups and each aggregate is invariant under base merging.
@@ -99,6 +106,20 @@ public final class IvmBaseTableValidator {
 
     public static void validate(SelectRelation selectRelation) {
         Relation inner = selectRelation.getRelation();
+
+        List<OlapTable> pkBases = collectCloudNativeBases(inner, IS_PRIMARY_KEYS);
+        for (OlapTable pkBase : pkBases) {
+            if (IVMAnalyzer.SUPPORTED_TABLE_TYPES.contains(pkBase.getType())
+                    && !Boolean.TRUE.equals(pkBase.enableChangeDataCapture())) {
+                throw new SemanticException(
+                        "IVM on cloud-native PRIMARY KEY base '%s' requires change data capture to be enabled on " +
+                                "the base table: a primary key table must explicitly enable it so that each load " +
+                                "records the lightweight metadata that captures its changes, which the incremental " +
+                                "refresh then reads. Enable it with " +
+                                "ALTER TABLE %s SET ('enable_change_data_capture' = 'true').",
+                        pkBase.getName(), pkBase.getName());
+            }
+        }
 
         // UNIQUE KEY stays unsupported anywhere in the tree (this retraction path targets PRIMARY KEY only);
         // a PRIMARY KEY base is now admitted here and gated per MV shape by the analyzer's retraction check.
@@ -231,34 +252,44 @@ public final class IvmBaseTableValidator {
     }
 
     private static OlapTable findAnyCloudNativeBase(Relation relation, Predicate<OlapTable> match) {
+        List<OlapTable> bases = collectCloudNativeBases(relation, match);
+        return bases.isEmpty() ? null : bases.get(0);
+    }
+
+    /**
+     * Every cloud-native base matching {@code match} in the relation tree, in left-to-right traversal order.
+     * {@link #findAnyCloudNativeBase} takes the first; the change-data-capture gate needs them all.
+     */
+    private static List<OlapTable> collectCloudNativeBases(Relation relation, Predicate<OlapTable> match) {
+        List<OlapTable> bases = Lists.newArrayList();
+        collectCloudNativeBasesInto(relation, match, bases);
+        return bases;
+    }
+
+    private static void collectCloudNativeBasesInto(Relation relation, Predicate<OlapTable> match,
+                                                    List<OlapTable> out) {
         if (relation == null) {
-            return null;
+            return;
         }
         if (relation instanceof TableRelation) {
-            return asCloudNativeBase(((TableRelation) relation).getTable(), match);
-        }
-        if (relation instanceof JoinRelation) {
-            JoinRelation join = (JoinRelation) relation;
-            OlapTable left = findAnyCloudNativeBase(join.getLeft(), match);
-            return left != null ? left : findAnyCloudNativeBase(join.getRight(), match);
-        }
-        if (relation instanceof SubqueryRelation) {
-            return findAnyCloudNativeBase(
-                    ((SubqueryRelation) relation).getQueryStatement().getQueryRelation(), match);
-        }
-        if (relation instanceof UnionRelation) {
-            for (QueryRelation child : ((UnionRelation) relation).getRelations()) {
-                OlapTable found = findAnyCloudNativeBase(child, match);
-                if (found != null) {
-                    return found;
-                }
+            OlapTable base = asCloudNativeBase(((TableRelation) relation).getTable(), match);
+            if (base != null) {
+                out.add(base);
             }
-            return null;
+        } else if (relation instanceof JoinRelation) {
+            JoinRelation join = (JoinRelation) relation;
+            collectCloudNativeBasesInto(join.getLeft(), match, out);
+            collectCloudNativeBasesInto(join.getRight(), match, out);
+        } else if (relation instanceof SubqueryRelation) {
+            collectCloudNativeBasesInto(
+                    ((SubqueryRelation) relation).getQueryStatement().getQueryRelation(), match, out);
+        } else if (relation instanceof UnionRelation) {
+            for (QueryRelation child : ((UnionRelation) relation).getRelations()) {
+                collectCloudNativeBasesInto(child, match, out);
+            }
+        } else if (relation instanceof SelectRelation) {
+            collectCloudNativeBasesInto(((SelectRelation) relation).getRelation(), match, out);
         }
-        if (relation instanceof SelectRelation) {
-            return findAnyCloudNativeBase(((SelectRelation) relation).getRelation(), match);
-        }
-        return null;
     }
 
     private static OlapTable asCloudNativeBase(Table table, Predicate<OlapTable> match) {

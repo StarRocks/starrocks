@@ -3,7 +3,7 @@
 -- ARRAY, so the deterministic post-DML snapshot is the oracle: after update id2 and delete id3 the MV
 -- must equal the base rows {(1,[1,2,3],a),(2,[9,9],b)}.
 CREATE TABLE pv_arr (id INT NOT NULL, arr ARRAY<INT>, s VARCHAR(16))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pv_arr VALUES (1,[1,2,3],'a'),(2,[4,5],'b'),(3,[],'c');
 CREATE MATERIALIZED VIEW mv_pv_arr REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, arr, s FROM pv_arr;
@@ -16,7 +16,7 @@ SELECT id, arr, s FROM mv_pv_arr ORDER BY id;
 
 -- name: test_ivm_ret_value_json @cloud
 CREATE TABLE pv_json (id INT NOT NULL, j JSON, s VARCHAR(16))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pv_json VALUES (1,PARSE_JSON('{"a":1}'),'a'),(2,PARSE_JSON('{"b":2}'),'b'),(3,PARSE_JSON('null'),'c');
 CREATE MATERIALIZED VIEW mv_pv_json REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, j, s FROM pv_json;
@@ -31,7 +31,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,CAST(j AS VARCHAR),s FROM pv_jso
 
 -- name: test_ivm_ret_value_map @cloud
 CREATE TABLE pv_map (id INT NOT NULL, m MAP<INT,INT>, s VARCHAR(16))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pv_map VALUES (1,map{1:10},'a'),(2,map{2:20},'b'),(3,map{},'c');
 CREATE MATERIALIZED VIEW mv_pv_map REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, m, s FROM pv_map;
@@ -44,7 +44,7 @@ SELECT id, m, s FROM mv_pv_map ORDER BY id;
 
 -- name: test_ivm_ret_value_null_col @cloud
 CREATE TABLE pv_null (id INT NOT NULL, v BIGINT, s VARCHAR(16))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pv_null VALUES (1,10,'a'),(2,NULL,'b'),(3,30,NULL);
 CREATE MATERIALIZED VIEW mv_pv_null REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, v, s FROM pv_null;
@@ -65,7 +65,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pv_null EXCEPT SELECT i
 -- projection has no reason to be rejected (only non-orderable JOIN output is). Asserting the current
 -- error so the gap is tracked; flip this to a supported diff=0 case once the plan-generation bug is fixed.
 CREATE TABLE pv_st (id INT NOT NULL, st STRUCT<a INT, b INT>, s VARCHAR(16))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pv_st VALUES (1,row(1,10),'a'),(2,row(2,20),'b');
 CREATE MATERIALIZED VIEW mv_pv_st REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, st, s FROM pv_st;

@@ -1,7 +1,7 @@
 -- name: test_ivm_ret_bucket_only_optimize_keeps_active @cloud
 -- A bucket-count-only reshard does not change MV-visible semantics, so the retractable MV must stay
 -- active and keep maintaining across it. Oracle: IS_ACTIVE stays true and MV == base (diff=0 both ways).
-CREATE TABLE pk_bo (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_bo (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_bo VALUES (1,10),(2,20),(3,30);
 CREATE MATERIALIZED VIEW mv_bo REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT id, v FROM pk_bo;
@@ -19,7 +19,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_bo EXCEPT SELECT id,v 
 -- name: test_ivm_distkey_optimize_inactivates @cloud
 -- An OPTIMIZE that changes the distribution key changes MV-visible semantics, so the related MV is
 -- inactivated. Oracle: IS_ACTIVE flips to false.
-CREATE TABLE pk_dk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_dk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_dk VALUES (1,1,10),(2,2,20);
 CREATE MATERIALIZED VIEW mv_dk REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT k, k2, v FROM pk_dk;
@@ -30,7 +30,7 @@ SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA =
 -- name: test_ivm_sortkey_optimize_inactivates @cloud
 -- An OPTIMIZE that changes the sort key also changes MV-visible semantics, so the related MV is
 -- inactivated. Oracle: IS_ACTIVE flips to false. (hash->RANDOM is not a valid form on a PK table.)
-CREATE TABLE pk_sk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_sk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO pk_sk VALUES (1,1,10),(2,2,20);
 CREATE MATERIALIZED VIEW mv_sk_opt REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
 AS SELECT k, k2, v FROM pk_sk;

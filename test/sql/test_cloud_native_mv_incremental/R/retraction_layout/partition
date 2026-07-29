@@ -4,7 +4,7 @@ CREATE TABLE pk_rp (id INT NOT NULL, dt DATE NOT NULL, v BIGINT)
   PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
                           PARTITION p2 VALUES LESS THAN ('2026-03-01'),
                           PARTITION p3 VALUES LESS THAN ('2026-04-01'))
-  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_rp VALUES (1,'2026-01-15',10),(2,'2026-02-15',20),(3,'2026-03-15',30);
@@ -47,7 +47,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,dt,v FROM pk_rp WHERE v>=0 EXCEP
 CREATE TABLE pk_lp (id INT NOT NULL, region VARCHAR(8) NOT NULL, v BIGINT)
   PRIMARY KEY(id, region)
   PARTITION BY LIST(region) (PARTITION pa VALUES IN ('us'), PARTITION pb VALUES IN ('eu'))
-  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_lp VALUES (1,'us',10),(2,'eu',20),(3,'us',30);

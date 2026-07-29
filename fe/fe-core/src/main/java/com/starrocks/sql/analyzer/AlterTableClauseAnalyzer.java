@@ -300,6 +300,22 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX +
                                 " must be bool type(false/true)");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE +
+                                " must be bool type(false/true)");
+            }
+            // The property only governs primary-key tables: duplicate/aggregate tables always capture
+            // their changes from existing metadata and need no switch. Reject setting it elsewhere.
+            if (!(table instanceof OlapTable
+                    && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS
+                    && table.isCloudNativeTableOrMaterializedView())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "the \"" + PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE +
+                                "\" property is only supported for shared-data primary key tables");
+            }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE).equalsIgnoreCase("CLOUD_NATIVE") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE).equalsIgnoreCase("LOCAL")) {

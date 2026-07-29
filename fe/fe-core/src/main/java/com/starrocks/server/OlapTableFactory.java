@@ -381,6 +381,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                     table.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1);
                 }
             }
+            boolean enableChangeDataCapture =
+                    PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                            PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, false);
+            if (enableChangeDataCapture
+                    && !(table.getKeysType() == KeysType.PRIMARY_KEYS
+                            && table.isCloudNativeTableOrMaterializedView())) {
+                throw new DdlException(
+                        "the \"enable_change_data_capture\" property is only supported for shared-data primary key tables");
+            }
+            table.setEnableChangeDataCapture(enableChangeDataCapture);
             if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 // Shared-data primary key tables only support the cloud-native persistent index.
                 // The local-disk persistent index and the in-memory index are deprecated: reject an

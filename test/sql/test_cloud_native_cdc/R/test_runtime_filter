@@ -86,7 +86,7 @@ SELECT get_query_profile(last_query_id()) LIKE '%RuntimeMinMax%';
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE pk_nc (k int, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE dim_nc (id int)

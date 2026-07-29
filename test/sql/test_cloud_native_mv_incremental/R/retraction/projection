@@ -1,6 +1,6 @@
 -- name: test_ivm_pk_projection_retraction @cloud
 CREATE TABLE pk_proj_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_proj_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
@@ -95,7 +95,7 @@ DROP TABLE pk_proj_base;
 -- !result
 -- name: test_ivm_pk_projection_varchar_key @cloud
 CREATE TABLE pk_vk_base (k VARCHAR(64) NOT NULL, v BIGINT)
-PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_vk_base VALUES ('alpha',10),('beta',20),('gamma',30);
@@ -143,11 +143,11 @@ DROP TABLE pk_vk_base;
 -- !result
 -- name: test_ivm_pk_retraction_rejects @cloud
 CREATE TABLE rej_pk (id INT NOT NULL, g INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE rej_pk2 (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE TABLE rej_dup (id INT NOT NULL, v BIGINT)
@@ -180,7 +180,7 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v FROM rej_pk a LE
 [REGEX].*does not support join type: LEFT OUTER JOIN.*
 -- !result
 CREATE TABLE rej_pk_json (id INT NOT NULL, j JSON)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW mv_rej_json_join DISTRIBUTED BY HASH(id) BUCKETS 2 REFRESH DEFERRED MANUAL
@@ -202,7 +202,7 @@ DROP TABLE rej_pk2;
 -- !result
 -- name: test_ivm_pk_composite_key @cloud
 CREATE TABLE pk_ck_base (a INT NOT NULL, b INT NOT NULL, v BIGINT)
-PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(a, b) DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_ck_base VALUES (1,1,10),(1,2,20),(2,1,30);
@@ -274,7 +274,7 @@ DROP TABLE pk_ck_base;
 -- !result
 -- name: test_ivm_pk_projection_star @cloud
 CREATE TABLE pk_star_base (id INT NOT NULL, v BIGINT, name VARCHAR(50))
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_star_base VALUES (1,10,'a'),(2,20,'b'),(3,30,'c');
@@ -322,7 +322,7 @@ DROP TABLE pk_star_base;
 -- !result
 -- name: test_ivm_pk_proj_mixed_batch_fold @cloud
 CREATE TABLE pk_mbf (id INT NOT NULL, v BIGINT, tag VARCHAR(8))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_mbf SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,1000));

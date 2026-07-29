@@ -1,0 +1,105 @@
+-- name: test_cdc_trackable_add_column @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- A fast (metadata-only) schema change keeps the same tablets and base index id, so it does not break
+-- the change chain: a CHANGES window spanning an ADD COLUMN stays trackable and surfaces the rows
+-- written after it, projected against the new schema.
+CREATE TABLE t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO t VALUES (1, 10);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+ALTER TABLE t ADD COLUMN c int;
+function: wait_alter_table_finish()
+function: assert_latest_schema_change_job_path("${db[0]}", "t", "fast")
+INSERT INTO t VALUES (2, 20, 200);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+SELECT k, v, c, __CHANGE_TYPE__ FROM t [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "t", "${bk0}", "tk");
+    SELECT bookmark_release("${db[0]}", "t", "${bk1}", "tk");
+} END CLEANUP
+
+
+-- name: test_cdc_trackable_drop_column @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- DROP COLUMN is likewise fast; a CHANGES window spanning it stays trackable.
+CREATE TABLE t (k int NOT NULL, v int, w int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO t VALUES (1, 10, 100);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+ALTER TABLE t DROP COLUMN w;
+function: wait_alter_table_finish()
+function: assert_latest_schema_change_job_path("${db[0]}", "t", "fast")
+INSERT INTO t VALUES (2, 20);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM t [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "t", "${bk0}", "tk");
+    SELECT bookmark_release("${db[0]}", "t", "${bk1}", "tk");
+} END CLEANUP
+
+
+-- name: test_cdc_trackable_modify_column @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- Widening int -> bigint can reuse the zonemap, so it takes the fast path (base index id unchanged)
+-- rather than a data rewrite; a CHANGES window spanning it stays trackable. Contrast with the
+-- bigint -> varchar rewrite, which advances the index id and is not trackable across the boundary.
+CREATE TABLE t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO t VALUES (1, 10);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+ALTER TABLE t MODIFY COLUMN v BIGINT;
+function: wait_alter_table_finish()
+function: assert_latest_schema_change_job_path("${db[0]}", "t", "fast")
+INSERT INTO t VALUES (2, 20);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM t [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "t", "${bk0}", "tk");
+    SELECT bookmark_release("${db[0]}", "t", "${bk1}", "tk");
+} END CLEANUP
+
+
+-- name: test_cdc_trackable_add_drop_index @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- Adding and dropping a bitmap index is metadata-only and does not rewrite data, so a CHANGES window
+-- spanning either stays trackable.
+CREATE TABLE t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO t VALUES (1, 10);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+ALTER TABLE t ADD INDEX idx_v (v) USING BITMAP;
+function: wait_alter_table_finish()
+INSERT INTO t VALUES (2, 20);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM t [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+ALTER TABLE t DROP INDEX idx_v;
+function: wait_alter_table_finish()
+INSERT INTO t VALUES (3, 30);
+[UC]bk2=SELECT bookmark_create("${db[0]}", "t", "tk", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM t [_CHANGES_${bk1}_${bk2}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "t", "${bk0}", "tk");
+    SELECT bookmark_release("${db[0]}", "t", "${bk1}", "tk");
+    SELECT bookmark_release("${db[0]}", "t", "${bk2}", "tk");
+} END CLEANUP

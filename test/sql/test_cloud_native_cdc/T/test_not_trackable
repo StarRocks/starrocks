@@ -142,6 +142,9 @@ INSERT INTO dup_t VALUES (1, 10);
 -- and advances the base index meta id.
 ALTER TABLE dup_t MODIFY COLUMN v VARCHAR(50);
 function: wait_alter_table_finish()
+-- The rewrite advances the base index id (index_id != origin_index_id), confirming the shadow-tablet
+-- data-rewrite path that makes a window spanning it not trackable.
+function: assert_latest_schema_change_job_path("${db[0]}", "dup_t", "slow")
 
 INSERT INTO dup_t VALUES (2, 'hi');
 

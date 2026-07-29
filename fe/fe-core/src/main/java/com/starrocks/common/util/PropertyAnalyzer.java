@@ -156,6 +156,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE = "enable_change_data_capture";
+
     public static final String PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION = "light_weight_tablet_creation";
 
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";

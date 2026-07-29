@@ -1,5 +1,5 @@
 -- name: test_ivm_ret_bucket_only_optimize_keeps_active @cloud
-CREATE TABLE pk_bo (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_bo (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_bo VALUES (1,10),(2,20),(3,30);
@@ -42,7 +42,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v FROM pk_bo EXCEPT SELECT id,v 
 0
 -- !result
 -- name: test_ivm_distkey_optimize_inactivates @cloud
-CREATE TABLE pk_dk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_dk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_dk VALUES (1,1,10),(2,2,20);
@@ -61,7 +61,7 @@ SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA =
 false
 -- !result
 -- name: test_ivm_sortkey_optimize_inactivates @cloud
-CREATE TABLE pk_sk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE pk_sk (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_sk VALUES (1,1,10),(2,2,20);

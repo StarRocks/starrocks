@@ -2134,6 +2134,10 @@ public class OlapTable extends Table {
         return tableProperty.enablePersistentIndex();
     }
 
+    public Boolean enableChangeDataCapture() {
+        return tableProperty != null && tableProperty.enableChangeDataCapture();
+    }
+
     public boolean isLightWeightTabletCreation() {
         return tableProperty.lightWeightTabletCreation();
     }
@@ -2207,6 +2211,12 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public void setEnableChangeDataCapture(boolean enableChangeDataCapture) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE,
+                Boolean.valueOf(enableChangeDataCapture).toString());
+        tableProperty.buildEnableChangeDataCapture();
     }
 
     public void setPrimaryIndexCacheExpireSec(int primaryIndexCacheExpireSec) {
@@ -3136,6 +3146,10 @@ public class OlapTable extends Table {
         if (keysType == KeysType.PRIMARY_KEYS) {
             // persistent index
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
+            if (isCloudNativeTable()) {
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE,
+                        enableChangeDataCapture().toString());
+            }
 
             // index cache expire
             int indexCacheExpireSec = primaryIndexCacheExpireSec();

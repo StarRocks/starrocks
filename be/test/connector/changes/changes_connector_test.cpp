@@ -517,18 +517,18 @@ protected:
         auto& file = (*delvec_meta->mutable_version_to_file())[page_version];
         file.set_name(name);
         file.set_size(file_buf.size());
-        auto* cdc_metadata = meta->mutable_cdc_metadata();
+        auto* change_locator = meta->mutable_cdc_metadata()->mutable_pk_change_locator();
         for (const auto& loc : locs) {
             DelvecPagePB* page_ptr = nullptr;
             switch (which) {
             case CdcCaptureMap::COMPACTION_INPUT:
-                page_ptr = &(*cdc_metadata->mutable_compaction_input_delvecs())[loc.segment_id];
+                page_ptr = &(*change_locator->mutable_compaction_input_delvecs())[loc.segment_id];
                 break;
             case CdcCaptureMap::COMPACTION_OUTPUT:
-                page_ptr = &(*cdc_metadata->mutable_compaction_output_delvecs())[loc.segment_id];
+                page_ptr = &(*change_locator->mutable_compaction_output_delvecs())[loc.segment_id];
                 break;
             case CdcCaptureMap::COLUMN_OVERLAY:
-                page_ptr = &(*cdc_metadata->mutable_column_overlay_vecs())[loc.segment_id];
+                page_ptr = &(*change_locator->mutable_column_overlay_vecs())[loc.segment_id];
                 break;
             }
             auto& page = *page_ptr;
@@ -691,6 +691,14 @@ protected:
             meta->add_metadata_ancestors(a);
         }
         set_default_schema(meta.get(), schema_id);
+        // A primary-key CHANGES read is gated on the per-table CDC switch: the connector
+        // rejects any in-range version whose metadata does not record enable_cdc. Every
+        // primary-key scenario here reads the pk_change_locator capture maps that only
+        // exist once CDC is enabled, so mark each published version accordingly.
+        // Duplicate/aggregate keys are not gated and need no flag.
+        if (_keys_type == PRIMARY_KEYS) {
+            meta->mutable_cdc_metadata()->set_enable_cdc(true);
+        }
         if (!cdc_status.ok()) {
             cdc_status.to_protobuf(meta->mutable_cdc_metadata()->mutable_capture_status());
         }

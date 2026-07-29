@@ -4055,6 +4055,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             meta.setSchema(schemaInfo.toTabletSchema());
 
             meta.setEnable_persistent_index(olapTable.enablePersistentIndex());
+            meta.setEnable_change_data_capture(olapTable.enableChangeDataCapture());
             if (olapTable.getPersistentIndexType() != null) {
                 meta.setPersistent_index_type(olapTable.getPersistentIndexType());
             }

@@ -469,6 +469,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setStorageMedium(storageMedium)
                                 .setLatch(countDownLatch)
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
+                                .setEnableChangeDataCapture(table.enableChangeDataCapture())
                                 .setPersistentIndexType(table.getPersistentIndexType())
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)

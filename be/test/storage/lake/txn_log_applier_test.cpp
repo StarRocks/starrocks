@@ -868,6 +868,8 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationMarksCdcNotTrackable) {
     // returns NotSupported for a range spanning it instead of silently emitting an incomplete diff.
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50007);
     auto meta = build_pk_metadata(50007);
+    // The replication path only marks the change locator not-trackable when CDC is enabled.
+    meta->mutable_cdc_metadata()->set_enable_cdc(true);
     meta->set_next_rowset_id(10);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -893,6 +895,44 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationMarksCdcNotTrackable) {
     ASSERT_TRUE(meta->cdc_metadata().has_capture_status());
     EXPECT_NE(0, meta->cdc_metadata().capture_status().status_code())
             << "incremental replication must mark cdc_metadata.capture_status non-OK";
+}
+
+TEST(TxnLogApplierBatchTest, NonPKReplicationMarksCdcNotTrackable) {
+    // Change data capture is always on for duplicate-key/aggregate tables (their changes derive from the
+    // base rowset metadata, with no enable_cdc opt-in). A replication imports another cluster's rowsets
+    // wholesale, which is not a local DML diff, so it must mark cdc_metadata.capture_status non-OK --
+    // otherwise a CHANGES range spanning the replication would silently emit an incomplete diff over the
+    // replaced rowsets. capture_status lives on CdcMetadataPB, not the primary-key-only change locator.
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50009);
+    auto meta = build_non_pk_metadata(50009);
+    meta->set_next_rowset_id(10);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(50009);
+    log->set_txn_id(211);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(211);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    auto* op_write = op_rep->add_op_writes();
+    auto* rowset = op_write->mutable_rowset();
+    rowset->set_id(5);
+    rowset->set_num_rows(30);
+    rowset->set_data_size(100);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename("nonpk_repl_seg");
+    sm->set_size(100);
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+    ASSERT_TRUE(meta->has_cdc_metadata());
+    ASSERT_TRUE(meta->cdc_metadata().has_capture_status());
+    EXPECT_NE(0, meta->cdc_metadata().capture_status().status_code())
+            << "non-primary-key replication must mark cdc_metadata.capture_status non-OK";
+    // The change locator is primary-key-only; a non-primary-key tablet records none.
+    EXPECT_FALSE(meta->cdc_metadata().has_pk_change_locator());
 }
 
 TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {

@@ -248,6 +248,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private boolean enablePersistentIndex = false;
 
+    private boolean enableChangeDataCapture = false;
+
     // Only meaningful when enablePersistentIndex = true.
     TPersistentIndexType persistentIndexType;
 
@@ -392,6 +394,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.mvQueryRewriteSwitch = other.mvQueryRewriteSwitch;
         this.mvTransparentRewriteMode = other.mvTransparentRewriteMode;
         this.enablePersistentIndex = other.enablePersistentIndex;
+        this.enableChangeDataCapture = other.enableChangeDataCapture;
         this.persistentIndexType = other.persistentIndexType;
         this.lightWeightTabletCreation = other.lightWeightTabletCreation;
         this.primaryIndexCacheExpireSec = other.primaryIndexCacheExpireSec;
@@ -925,6 +928,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
         return this;
+    }
+
+    public TableProperty buildEnableChangeDataCapture() {
+        enableChangeDataCapture = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, "false"));
+        return this;
+    }
+
+    public boolean enableChangeDataCapture() {
+        return enableChangeDataCapture;
     }
 
     public TableProperty buildLightWeightTabletCreation() {
@@ -1499,6 +1512,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageVolume();
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
+        buildEnableChangeDataCapture();
         buildPersistentIndexType();
         buildPrimaryIndexCacheExpireSec();
         buildCompressionType();

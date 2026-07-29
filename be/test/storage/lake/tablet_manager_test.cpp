@@ -31,6 +31,7 @@
 #include "common/storage_define.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -252,6 +253,79 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_TRUE(metadata->enable_persistent_index());
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
     EXPECT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
+}
+
+TEST_F(LakeTabletManagerTest, create_tablet_with_change_data_capture) {
+    // Case 1: a tablet created with the flag explicitly true records it in the metadata.
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_change_data_capture(true);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_TRUE(metadata->cdc_metadata().enable_cdc());
+
+    // Case 2: byte-identity guarantee. FE always sets the thrift field, so an OFF table
+    // arrives with __isset true and value false. The cdc_metadata message must stay ABSENT (not
+    // materialized with an explicit false), so a never-enabled table's metadata is byte-identical to pre-CDC.
+    auto tablet_id2 = next_id();
+    auto schema_id2 = next_id();
+    TCreateTabletReq req2;
+    req2.tablet_id = tablet_id2;
+    req2.__set_version(1);
+    req2.__set_version_hash(0);
+    req2.__set_enable_change_data_capture(false);
+    req2.tablet_schema.__set_id(schema_id2);
+    req2.tablet_schema.__set_schema_hash(270068375);
+    req2.tablet_schema.__set_short_key_column_count(2);
+    req2.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req2));
+    ASSIGN_OR_ABORT(auto tablet2, _tablet_manager->get_tablet(tablet_id2));
+    ASSIGN_OR_ABORT(auto metadata2, tablet2.get_metadata(1));
+    EXPECT_FALSE(metadata2->has_cdc_metadata());
+}
+
+TEST_F(LakeTabletManagerTest, build_initial_metadata_with_change_data_capture) {
+    // light_weight_tablet_creation skips CreateReplicaTask, so a tablet's v1 metadata is
+    // materialized from the FE getTabletMetadata response via build_initial_metadata rather than
+    // create_tablet. The CDC flag must survive this path too, with the same byte-identity guarantee.
+
+    // Case 1: the response carries the flag true -> recorded in v1 metadata.
+    {
+        auto tablet_id = next_id();
+        TGetTabletMetadataResponse resp;
+        resp.meta.__set_enable_change_data_capture(true);
+        resp.meta.schema.__set_id(next_id());
+        resp.meta.schema.__set_schema_hash(270068375);
+        resp.meta.schema.__set_short_key_column_count(2);
+        resp.meta.schema.__set_keys_type(TKeysType::DUP_KEYS);
+        resp.__isset.meta = true;
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        EXPECT_TRUE(metadata->cdc_metadata().enable_cdc());
+    }
+
+    // Case 2: byte-identity guarantee. FE always sets the thrift field, so an OFF table arrives
+    // with __isset true and value false. The cdc_metadata message must stay ABSENT.
+    {
+        auto tablet_id = next_id();
+        TGetTabletMetadataResponse resp;
+        resp.meta.__set_enable_change_data_capture(false);
+        resp.meta.schema.__set_id(next_id());
+        resp.meta.schema.__set_schema_hash(270068375);
+        resp.meta.schema.__set_short_key_column_count(2);
+        resp.meta.schema.__set_keys_type(TKeysType::DUP_KEYS);
+        resp.__isset.meta = true;
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        EXPECT_FALSE(metadata->has_cdc_metadata());
+    }
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_enable_tablet_creation_optimization) {

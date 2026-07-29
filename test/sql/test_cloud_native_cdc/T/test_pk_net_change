@@ -4,7 +4,7 @@
 
 CREATE TABLE pk_nc (k int, v int, c varchar(10))
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 
 [UC]bk0=SELECT bookmark_create("${db[0]}", "pk_nc", "pknc", "1800000");
 
@@ -107,7 +107,7 @@ CREATE TABLE pk_mp (k int NOT NULL, dt date NOT NULL, v int)
 PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) (
     PARTITION p1 VALUES LESS THAN ('2024-02-01'),
     PARTITION p2 VALUES LESS THAN ('2024-03-01')
-) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 
 -- Seed both partitions so bm0 sits past the empty initial version. A DataChanged range
 -- whose base is the empty initial version reads FULL (the window is folded away), so bm0 must

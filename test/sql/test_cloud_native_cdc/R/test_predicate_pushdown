@@ -2,7 +2,7 @@
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE pk_t (k int, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 [UC]bk0=SELECT bookmark_create("${db[0]}", "pk_t", "ppk", "1800000");
@@ -78,3 +78,52 @@ SELECT regexp_extract(get_query_profile(last_query_id()), 'PredFilterRows: ([0-9
 -- result:
 500
 -- !result
+-- name: test_cdc_mixed_index_bloom_filter @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE bf_t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "bf_t", "pbf", "1800000");
+INSERT INTO bf_t SELECT number, number FROM TABLE(generate_series(1, 1000)) g(number);
+-- result:
+-- !result
+ALTER TABLE bf_t SET ("bloom_filter_columns" = "v");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO bf_t SELECT 1000 + number, 2 * number - 1 FROM TABLE(generate_series(1, 1000)) g(number);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "bf_t", "pbf", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM bf_t [_CHANGES_${bk0}_${bk1}_] WHERE v = 500;
+-- result:
+500	500	0
+-- !result
+function: assert_explain_contains("SELECT count(*) FROM bf_t [_CHANGES_${bk0}_${bk1}_] WHERE v = 500", "ChangesScanNode", "PREDICATES", "v = 500")
+-- result:
+None
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SELECT count(*) FROM bf_t [_CHANGES_${bk0}_${bk1}_] WHERE v = 500;
+-- result:
+1
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'BloomFilterFilterRows: ([0-9]+)', 1) AS INT) > 0 AS bloom_filter_used, CAST(regexp_extract(get_query_profile(last_query_id()), 'PredFilterRows: ([0-9]+)', 1) AS INT) > 0 AS predicate_used;
+-- result:
+1	1
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "bf_t", "${bk0}", "pbf");
+    SELECT bookmark_release("${db[0]}", "bf_t", "${bk1}", "pbf");
+    SET enable_profile = false;
+} END CLEANUP

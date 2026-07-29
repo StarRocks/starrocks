@@ -2,7 +2,7 @@
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE pk_t (k int, v int, c varchar(10))
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 [UC]bk0=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
@@ -108,7 +108,7 @@ SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE __CHANGE_TYPE__ = 1 ORDER 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE pk_t (k int, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO pk_t VALUES (1, 10), (2, 20), (3, 30);
@@ -169,4 +169,110 @@ GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
 -- result:
 0	3
 1	3
+-- !result
+-- name: test_cdc_pk_added_partition @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_expr (k int NOT NULL, dt date NOT NULL, v int)
+PRIMARY KEY(k, dt) PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO pk_expr VALUES (1, '2024-01-01', 10);
+-- result:
+-- !result
+INSERT INTO pk_expr VALUES (2, '2024-06-01', 20);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_expr", "ap", "1800000");
+UPDATE pk_expr SET v = 200 WHERE k = 2 AND dt = '2024-06-01';
+-- result:
+-- !result
+INSERT INTO pk_expr VALUES (3, '2024-06-01', 30);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_expr", "ap", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_expr", "${bk0}", "ap");
+    SELECT bookmark_release("${db[0]}", "pk_expr", "${bk1}", "ap");
+} END CLEANUP
+
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_expr [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+-- result:
+2	2024-06-01	200	0
+2	2024-06-01	20	1
+3	2024-06-01	30	0
+-- !result
+-- name: test_cdc_pk_light_weight @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_lw (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true',
+            'light_weight_tablet_creation' = 'true');
+-- result:
+-- !result
+INSERT INTO pk_lw VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_lw", "lw", "1800000");
+UPDATE pk_lw SET v = 100 WHERE k = 1;
+-- result:
+-- !result
+INSERT INTO pk_lw VALUES (3, 30);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_lw", "lw", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_lw", "${bk0}", "lw");
+    SELECT bookmark_release("${db[0]}", "pk_lw", "${bk1}", "lw");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM pk_lw [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+-- result:
+1	100	0
+1	10	1
+3	30	0
+-- !result
+-- name: test_cdc_pk_schema_change @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_sc (k int NOT NULL, v bigint)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO pk_sc VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+ALTER TABLE pk_sc MODIFY COLUMN v VARCHAR(50);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_latest_schema_change_job_path("${db[0]}", "pk_sc", "slow")
+-- result:
+None
+-- !result
+INSERT INTO pk_sc VALUES (3, '30');
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_sc", "sc", "1800000");
+UPDATE pk_sc SET v = '300' WHERE k = 3;
+-- result:
+-- !result
+INSERT INTO pk_sc VALUES (4, '40');
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_sc", "sc", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_sc", "${bk0}", "sc");
+    SELECT bookmark_release("${db[0]}", "pk_sc", "${bk1}", "sc");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM pk_sc [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+-- result:
+3	300	0
+3	30	1
+4	40	0
 -- !result

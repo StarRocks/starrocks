@@ -136,6 +136,21 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testEnableChangeDataCapture() throws Exception {
+        Assertions.assertFalse(table.enableChangeDataCapture());
+        LakeTableAlterMetaJob cdcJob = new LakeTableAlterMetaJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
+                60 * 1000, TTabletMetaType.CHANGE_DATA_CAPTURE, true, "CLOUD_NATIVE", false, "DEFAULT", true);
+        cdcJob.runPendingJob();
+        cdcJob.runRunningJob();
+        while (cdcJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            cdcJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertTrue(table.enableChangeDataCapture());
+    }
+
+    @Test
     public void testForceCancelAtFinishedRewriting() throws Exception {
         // Phase 2: CANCEL ALTER TABLE ... FORCE must bypass the FINISHED_REWRITING
         // guard. Lake AlterMeta has no shadow tablets to clean up — pure state
@@ -251,7 +266,7 @@ public class LakeTableAlterMetaJobTest {
         // would have set metadataSwitchVersion for exactly this metaType.
         LakeTableAlterMetaJob job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), bundled.getId(), bundled.getName(), 60 * 1000, TTabletMetaType.ENABLE_FILE_BUNDLING,
-                true, "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT");
+                true, "CLOUD_NATIVE", /*enableFileBundling=*/ true, "DEFAULT", false);
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,

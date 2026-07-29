@@ -264,9 +264,10 @@ TEST_P(LakePartialUpdateTest, test_write) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols files into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 3 : 2;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -591,6 +592,10 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
 // rows it actually changed (the condition winners, old <= new) as a bitmap page in column_overlay_vecs.
 // The losers (old > new) keep their previous values and must be absent from the bitmap.
 TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_records_only_winners) {
+    // Column-mode partial update only records the overlay row vector when change data capture is
+    // enabled on the tablet (SetUp published version 1 with the flag off).
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         return;
     }
@@ -686,7 +691,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_records_only_w
               }));
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    const auto& row_vecs = metadata->cdc_metadata().column_overlay_vecs();
+    const auto& row_vecs = metadata->cdc_metadata().pk_change_locator().column_overlay_vecs();
     ASSERT_EQ(row_vecs.size(), 1) << "exactly one source segment was column-updated";
 
     const auto& seg_page = *row_vecs.begin();
@@ -719,6 +724,10 @@ TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_records_only_w
 //     copy source is metadata@vA, whose column_overlay_vecs[A]@vA must be kept (vA > ori_base v0) so
 //     the diff still covers (v0, new]. A naive "clear all at start" would have dropped it.
 TEST_P(LakePartialUpdateTest, test_cdc_retry_inherits_prefix_capture) {
+    // Column-mode partial update only records the overlay row vector when change data capture is
+    // enabled on the tablet (SetUp published version 1 with the flag off).
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         return;
     }
@@ -811,8 +820,8 @@ TEST_P(LakePartialUpdateTest, test_cdc_retry_inherits_prefix_capture) {
         std::vector<int64_t> prefix_txns{t1};
         ASSIGN_OR_ABORT(auto prefix_meta, batch_publish(tablet_id, v0, vA, prefix_txns));
         // t1's capture is present at vA, keyed by segment A's rssid.
-        ASSERT_EQ(prefix_meta->cdc_metadata().column_overlay_vecs().size(), 1);
-        for (const auto& [rssid, page] : prefix_meta->cdc_metadata().column_overlay_vecs()) {
+        ASSERT_EQ(prefix_meta->cdc_metadata().pk_change_locator().column_overlay_vecs().size(), 1);
+        for (const auto& [rssid, page] : prefix_meta->cdc_metadata().pk_change_locator().column_overlay_vecs()) {
             EXPECT_EQ(page.version(), vA);
         }
     }
@@ -825,7 +834,7 @@ TEST_P(LakePartialUpdateTest, test_cdc_retry_inherits_prefix_capture) {
 
     // The inheritance window survived: t1's capture (version vA, in (v0, vA]) is still present, and
     // t2's fresh capture (version final_version) was added by the replay.
-    const auto& row_vecs = final_meta->cdc_metadata().column_overlay_vecs();
+    const auto& row_vecs = final_meta->cdc_metadata().pk_change_locator().column_overlay_vecs();
     ASSERT_EQ(row_vecs.size(), 2) << "both the inherited t1 capture and the replayed t2 capture must be present";
     bool found_inherited = false;
     bool found_fresh = false;
@@ -1145,9 +1154,10 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                // move old .cols into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 4 : 3;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
@@ -1231,9 +1241,10 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                // move old .cols into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 4 : 3;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
@@ -1473,9 +1484,10 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 3 : 2;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -1554,9 +1566,10 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 3 : 2;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -2096,9 +2109,10 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                // move old .cols into orphan files, plus the prior publish's per-publish
-                // column_overlay_vecs delvec file (superseded each column-update publish).
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
+                // Superseded .cols files are orphaned; with change data capture on, the prior
+                // publish's per-publish column_overlay_vecs delvec is orphaned too (the extra one).
+                const int expected = new_tablet_metadata->cdc_metadata().enable_cdc() ? 4 : 3;
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), expected);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);

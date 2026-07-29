@@ -5,7 +5,7 @@ PARTITION BY RANGE(dt) (
     PARTITION p1 VALUES LESS THAN ('2024-02-01'),
     PARTITION p2 VALUES LESS THAN ('2024-03-01')
 )
-DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 -- result:
 -- !result
 INSERT INTO base_pk_part VALUES ('2024-01-10', 1, 10), ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);

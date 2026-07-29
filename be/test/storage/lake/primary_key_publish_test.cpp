@@ -1259,6 +1259,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_marks_cdc_not_trackable) {
     config::enable_primary_key_recover = true;
     DeferOp reset_recover([]() { config::enable_primary_key_recover = false; });
 
+    // This test exercises the CDC-on recover path, so re-seed the already-published version-1
+    // metadata (SetUp() published it with the flag off) with the flag on before writing anything.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -1323,6 +1328,36 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_marks_cdc_not_trackable) {
     ASSERT_TRUE(metadata->cdc_metadata().has_capture_status());
     EXPECT_NE(metadata->cdc_metadata().capture_status().status_code(), 0)
             << "recover must mark cdc_metadata.capture_status non-OK";
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_cdc_disabled_metadata_is_clean) {
+    // fixture seed metadata does NOT set enable_change_data_capture -> off by default
+    auto tablet_id = _tablet_metadata->id();
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    int64_t version = 1;
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                     .set_tablet_manager(_tablet_mgr.get())
+                                     .set_tablet_id(tablet_id)
+                                     .set_txn_id(txn_id)
+                                     .set_partition_id(_partition_id)
+                                     .set_mem_tracker(_mem_tracker.get())
+                                     .set_schema_id(_tablet_schema->id())
+                                     .set_profile(&_dummy_runtime_profile)
+                                     .build());
+    ASSERT_OK(dw->open());
+    ASSERT_OK(dw->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(dw->finish_with_txnlog());
+    dw->close();
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    // Capture off: no cdc_metadata is recorded. The generic ancestor chain is built for every tablet
+    // regardless of capture, so it is present here just as it is for a plain non-CDC table.
+    EXPECT_FALSE(metadata->has_cdc_metadata());
+    EXPECT_EQ(1, metadata->metadata_ancestors_size());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
@@ -3206,6 +3241,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_sstable_meta) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_meta) {
+    // Change data capture must be enabled for the replication publish to mark the change locator
+    // not-trackable (SetUp published version 1 with the flag off).
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     auto tablet_id = _tablet_metadata->id();
     int64_t version = 1;
 

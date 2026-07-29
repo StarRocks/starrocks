@@ -1435,6 +1435,9 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
     metadata->set_version(10);
     metadata->set_next_rowset_id(100);
     metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    // Compaction only captures input delvecs (so the merged segment's file survives the prune) when
+    // CDC is enabled on the tablet.
+    metadata->mutable_cdc_metadata()->set_enable_cdc(true);
 
     // Create initial metadata on disk
     {
@@ -1504,7 +1507,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         // PK CDC (Gap 2 A): the merged segment's delvec is kept in compaction_input_delvecs (captured
         // this batch, version 13) so the changes connector can still read its pre-change rows. The
         // delvec file is therefore NOT an orphan and must survive the prune below.
-        const auto& compacted = metadata->cdc_metadata().compaction_input_delvecs();
+        const auto& compacted = metadata->cdc_metadata().pk_change_locator().compaction_input_delvecs();
         auto cit = compacted.find(100);
         ASSERT_TRUE(cit != compacted.end()) << "compaction_input_delvecs should capture merged segment 100";
         EXPECT_EQ(13, cit->second.version());
@@ -1517,7 +1520,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         // version referenced only by a CDC map is a legitimate capture, not an orphan.
         auto referenced_by_any = [&](int64_t ver) {
             const auto& dm = metadata->delvec_meta();
-            const auto& cdc = metadata->cdc_metadata();
+            const auto& cdc = metadata->cdc_metadata().pk_change_locator();
             for (const auto& e : dm.delvecs()) {
                 if (e.second.version() == ver) return true;
             }
@@ -1557,6 +1560,8 @@ TEST_F(MetaFileTest, test_cdc_compaction_input_delvec_keeps_older_publish_file) 
     metadata->set_version(10);
     metadata->set_next_rowset_id(100);
     metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    // compaction_input_delvecs is only captured when CDC is enabled on the tablet.
+    metadata->mutable_cdc_metadata()->set_enable_cdc(true);
 
     { // v10: baseline
         MetaFileBuilder builder(*tablet, metadata);
@@ -1597,7 +1602,7 @@ TEST_F(MetaFileTest, test_cdc_compaction_input_delvec_keeps_older_publish_file) 
         // segment 100's live delvec is gone, but compaction_input_delvecs captured its older page
         // (version 12).
         const auto& dm = metadata->delvec_meta();
-        const auto& cdc = metadata->cdc_metadata();
+        const auto& cdc = metadata->cdc_metadata().pk_change_locator();
         EXPECT_TRUE(dm.delvecs().find(100) == dm.delvecs().end());
         auto cit = cdc.compaction_input_delvecs().find(100);
         ASSERT_TRUE(cit != cdc.compaction_input_delvecs().end());
@@ -2747,13 +2752,13 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
 }
 
-// PK CDC: the three cdc_metadata capture maps and its capture_status survive a serialize/parse
+// PK CDC: the three pk_change_locator capture maps and the capture status survive a serialize/parse
 // round-trip (confirms the proto fields and their generated accessors).
 TEST_F(MetaFileTest, test_cdc_maps_and_cdc_metadata_roundtrip) {
     TabletMetadataPB meta;
     meta.set_id(12345);
     meta.set_version(7);
-    auto* cdc = meta.mutable_cdc_metadata();
+    auto* cdc = meta.mutable_cdc_metadata()->mutable_pk_change_locator();
     DelvecPagePB page;
     page.set_version(7);
     page.set_offset(0);
@@ -2770,7 +2775,7 @@ TEST_F(MetaFileTest, test_cdc_maps_and_cdc_metadata_roundtrip) {
     TabletMetadataPB parsed;
     ASSERT_TRUE(parsed.ParseFromString(buf));
 
-    const auto& pcdc = parsed.cdc_metadata();
+    const auto& pcdc = parsed.cdc_metadata().pk_change_locator();
     auto c = pcdc.compaction_input_delvecs().find(100);
     ASSERT_TRUE(c != pcdc.compaction_input_delvecs().end());
     EXPECT_EQ(7, c->second.version());
@@ -2800,6 +2805,8 @@ TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_same_segment_in_one_publish)
     // column_overlay_vecs is a primary-key concept; _finalize_delvec only persists the delvec
     // file (and its version_to_file entry) for a primary-key tablet.
     metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    // column_overlay_vecs is only captured when change data capture is enabled on the tablet.
+    metadata->mutable_cdc_metadata()->set_enable_cdc(true);
 
     MetaFileBuilder builder(*tablet, metadata);
 
@@ -2818,7 +2825,7 @@ TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_same_segment_in_one_publish)
     ASSERT_OK(builder.finalize(next_id()));
 
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    const auto& dcg_map = persisted->cdc_metadata().column_overlay_vecs();
+    const auto& dcg_map = persisted->cdc_metadata().pk_change_locator().column_overlay_vecs();
     auto it = dcg_map.find(rssid);
     ASSERT_TRUE(it != dcg_map.end());
 
@@ -2852,6 +2859,8 @@ TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_inherited_window_on_retry) {
     meta_base->set_version(advanced_base);
     meta_base->set_next_rowset_id(110);
     meta_base->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    // column_overlay_vecs is only captured when change data capture is enabled on the tablet.
+    meta_base->mutable_cdc_metadata()->set_enable_cdc(true);
     {
         MetaFileBuilder builder(*tablet, meta_base);
         Roaring r;
@@ -2867,8 +2876,8 @@ TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_inherited_window_on_retry) {
     ASSIGN_OR_ABORT(auto reloaded_base, _tablet_manager->get_tablet_metadata(tablet_id, advanced_base));
     auto meta_retry = std::make_shared<TabletMetadata>(*reloaded_base);
     meta_retry->set_version(new_version);
-    ASSERT_TRUE(meta_retry->cdc_metadata().column_overlay_vecs().find(rssid) !=
-                meta_retry->cdc_metadata().column_overlay_vecs().end());
+    ASSERT_TRUE(meta_retry->cdc_metadata().pk_change_locator().column_overlay_vecs().find(rssid) !=
+                meta_retry->cdc_metadata().pk_change_locator().column_overlay_vecs().end());
 
     // Replayed tail column-updates the SAME segment, rows {2, 3} (overlapping the window, not equal).
     {
@@ -2881,8 +2890,8 @@ TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_inherited_window_on_retry) {
     }
 
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, new_version));
-    auto it = persisted->cdc_metadata().column_overlay_vecs().find(rssid);
-    ASSERT_TRUE(it != persisted->cdc_metadata().column_overlay_vecs().end());
+    auto it = persisted->cdc_metadata().pk_change_locator().column_overlay_vecs().find(rssid);
+    ASSERT_TRUE(it != persisted->cdc_metadata().pk_change_locator().column_overlay_vecs().end());
 
     DelVector read_dv;
     LakeIOOptions lake_io_opts;

@@ -928,4 +928,41 @@ TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
     ASSERT_EQ(3, flat_json_config_pb.version());
 }
 
+TEST_F(AlterTabletMetaTest, test_alter_enable_change_data_capture) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    tablet_meta_info.__set_meta_type(TTabletMetaType::CHANGE_DATA_CAPTURE);
+    tablet_meta_info.__set_enable_change_data_capture(true);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_TRUE(new_tablet_meta.value()->cdc_metadata().enable_cdc());
+
+    // Disable path: ALTER to false must write an explicit false (the apply site guards on
+    // has_...(), NOT on the value), so the flag flips back off. Guards against a future
+    // "write only when true" regression at the apply site.
+    int64_t txn_id2 = next_id();
+    TUpdateTabletMetaInfoReq disable_req;
+    disable_req.__set_txn_id(txn_id2);
+    TTabletMetaInfo disable_info;
+    disable_info.__set_tablet_id(tablet_id);
+    disable_info.__set_meta_type(TTabletMetaType::CHANGE_DATA_CAPTURE);
+    disable_info.__set_enable_change_data_capture(false);
+    disable_req.tabletMetaInfos.push_back(disable_info);
+    ASSERT_OK(handler.process_update_tablet_meta(disable_req));
+
+    auto disabled_meta = publish_single_version(tablet_id, 3, txn_id2);
+    ASSERT_OK(disabled_meta.status());
+    ASSERT_FALSE(disabled_meta.value()->cdc_metadata().enable_cdc());
+}
+
 } // namespace starrocks::lake

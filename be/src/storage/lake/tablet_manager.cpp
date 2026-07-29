@@ -288,6 +288,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
         }
     }
 
+    if (req.__isset.enable_change_data_capture && req.enable_change_data_capture) {
+        tablet_metadata_pb->mutable_cdc_metadata()->set_enable_cdc(true);
+    }
+
     if (req.__isset.flat_json_config) {
         FlatJsonConfig flat_json_config;
         flat_json_config.update(req.flat_json_config);
@@ -446,6 +450,10 @@ StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet
     // Shared-data primary-key tablets only support the cloud-native persistent index; keep the
     // initial metadata consistent with that invariant regardless of what the FE sent.
     force_cloud_native_pk_persistent_index(metadata.get());
+
+    if (meta.__isset.enable_change_data_capture && meta.enable_change_data_capture) {
+        metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    }
 
     // flat json config
     if (meta.__isset.flat_json_config) {

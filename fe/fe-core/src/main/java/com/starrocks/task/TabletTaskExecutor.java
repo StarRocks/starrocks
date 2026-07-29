@@ -308,6 +308,7 @@ public class TabletTaskExecutor {
                         .setVersion(physicalPartition.getVisibleVersion())
                         .setStorageMedium(storageMedium)
                         .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setEnableChangeDataCapture(table.enableChangeDataCapture())
                         .setPersistentIndexType(table.getPersistentIndexType())
                         .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
                         .setBinlogConfig(table.getCurBinlogConfig())

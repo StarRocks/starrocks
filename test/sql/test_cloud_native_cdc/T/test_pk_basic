@@ -4,7 +4,7 @@
 
 CREATE TABLE pk_t (k int, v int, c varchar(10))
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 
 [UC]bk0=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
@@ -80,7 +80,7 @@ SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE __CHANGE_TYPE__ = 1 ORDER 
 
 CREATE TABLE pk_t (k int, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
-PROPERTIES ('replication_num' = '1');
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 
 INSERT INTO pk_t VALUES (1, 10), (2, 20), (3, 30);
 
@@ -122,3 +122,91 @@ SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk_pre}_${bk_after}_]
 ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC, k;
 SELECT __CHANGE_TYPE__, count(*) FROM pk_t [_CHANGES_${bk_pre}_${bk_after}_]
 GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+
+
+-- name: test_cdc_pk_added_partition @cloud
+-- enable_change_data_capture must reach the tablets of a partition created AFTER the table, not
+-- just the create-time partitions. With expression (auto) partitioning, inserting a value in a
+-- new date range auto-creates a partition; its tablets inherit the flag from the table property.
+-- bk0/bk1 straddle a second load into the new partition so the window is a genuine version-chain
+-- diff (not an empty-base FULL read, which would pass even if the flag were lost).
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE pk_expr (k int NOT NULL, dt date NOT NULL, v int)
+PRIMARY KEY(k, dt) PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO pk_expr VALUES (1, '2024-01-01', 10);
+INSERT INTO pk_expr VALUES (2, '2024-06-01', 20);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_expr", "ap", "1800000");
+UPDATE pk_expr SET v = 200 WHERE k = 2 AND dt = '2024-06-01';
+INSERT INTO pk_expr VALUES (3, '2024-06-01', 30);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_expr", "ap", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_expr", "${bk0}", "ap");
+    SELECT bookmark_release("${db[0]}", "pk_expr", "${bk1}", "ap");
+} END CLEANUP
+
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_expr [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+
+
+-- name: test_cdc_pk_light_weight @cloud
+-- light_weight_tablet_creation skips CreateReplicaTask at CREATE; the tablet's v1 metadata and
+-- the CDC flag are materialized lazily on first write via the FE getTabletMetadata RPC. CHANGES
+-- over an incremental window must still work, proving the lazy path seeds the flag.
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE pk_lw (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true',
+            'light_weight_tablet_creation' = 'true');
+
+INSERT INTO pk_lw VALUES (1, 10), (2, 20);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_lw", "lw", "1800000");
+UPDATE pk_lw SET v = 100 WHERE k = 1;
+INSERT INTO pk_lw VALUES (3, 30);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_lw", "lw", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_lw", "${bk0}", "lw");
+    SELECT bookmark_release("${db[0]}", "pk_lw", "${bk1}", "lw");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM pk_lw [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+
+
+-- name: test_cdc_pk_schema_change @cloud
+-- A data-rewrite schema change (MODIFY COLUMN type) replaces the tablets with shadow tablets;
+-- those must inherit enable_change_data_capture, else CDC silently stops and CHANGES over
+-- post-change versions errors "not recorded". The window is taken entirely AFTER the rewrite,
+-- asserting CDC RESUMES on the new tablets (a window spanning the rewrite is separately not
+-- trackable -- see test_cdc_not_trackable_schema_rewrite).
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE pk_sc (k int NOT NULL, v bigint)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO pk_sc VALUES (1, 10), (2, 20);
+-- bigint -> varchar cannot reuse the zonemap, so this drops the fast path and rewrites the
+-- partition through shadow tablets (LakeTableSchemaChangeJob).
+ALTER TABLE pk_sc MODIFY COLUMN v VARCHAR(50);
+function: wait_alter_table_finish()
+-- The rewrite advances the base index id (index_id != origin_index_id), confirming the shadow-tablet
+-- data-rewrite path rather than a fast metadata-only change.
+function: assert_latest_schema_change_job_path("${db[0]}", "pk_sc", "slow")
+
+INSERT INTO pk_sc VALUES (3, '30');
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_sc", "sc", "1800000");
+UPDATE pk_sc SET v = '300' WHERE k = 3;
+INSERT INTO pk_sc VALUES (4, '40');
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_sc", "sc", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_sc", "${bk0}", "sc");
+    SELECT bookmark_release("${db[0]}", "pk_sc", "${bk1}", "sc");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM pk_sc [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;

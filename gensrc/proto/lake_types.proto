@@ -103,7 +103,7 @@ message DelvecMetadataPB {
     // map from version to delete vector file meta
     // so that we no need to keep file name (consume more memory) in each DelvecPagePB
     // instead we can lookup delete vector file name by version saved in DelvecPagePB
-    // **NOTE**: file may be also refereneced by delvecs in |CdcMetadataPB|
+    // **NOTE**: file may also be referenced by delvecs in |CdcMetadataPB.pk_change_locator|
     map<int64, FileMetaPB> version_to_file = 1;
     // from segment id to delvec page
     map<uint32, DelvecPagePB> delvecs = 2;
@@ -128,20 +128,16 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
-// Metadata describing the data changes in this publish, used by Change Data Capture (CDC) to derive the
-// changes that the publish's loads introduced. It never carries over between publishes, so it must be
-// cleared whenever a new publish copies the previous metadata.
-message CdcMetadataPB {
-    // Whether the load changes in this publish can be captured, and if not, why (e.g. replication or pk
-    // recover are not capturable). Unset or Status::OK means capturable.
-    optional StatusPB capture_status = 1;
+// Metadata that locates the changes a load introduced in a primary-key table so that
+// CDC can reconstruct its row-level changes. Never carries over between publishes.
+message PkChangeLocatorPB {
     // Input-segment delvecs captured before compaction is applied (file in |DelvecMetadataPB.version_to_file|).
     // Once compaction is applied, those input-segment delvecs are removed from |DelvecMetadataPB.delvecs|,
     // so if a load is followed by a compaction on the same input segment within one batch publish, the
     // load-produced delvec can no longer be read from |DelvecMetadataPB.delvecs|. Recording it here lets CDC
     // recover the load's "before" image by diffing against the delvec in the previous metadata.
     // Segments here never overlap with those in |DelvecMetadataPB.delvecs|.
-    map<uint32, DelvecPagePB> compaction_input_delvecs = 2;
+    map<uint32, DelvecPagePB> compaction_input_delvecs = 1;
     // Output-segment delvecs produced when compaction is applied (file in |DelvecMetadataPB.version_to_file|).
     // Take a batch publish that applies load L1, then compaction, then load L2:
     //   - applying compaction produces delvec D1, marking the compaction-output rows that conflict with L1;
@@ -151,11 +147,27 @@ message CdcMetadataPB {
     // Segments here overlap with those in |DelvecMetadataPB.delvecs|; if no load follows the compaction, the
     // two hold the same delvec, pointing to the same byte range (same offset and size) in the same file
     // resolved via |DelvecMetadataPB.version_to_file|.
-    map<uint32, DelvecPagePB> compaction_output_delvecs = 3;
+    map<uint32, DelvecPagePB> compaction_output_delvecs = 2;
     // Segment rows updated by column-mode partial update (file in |DelvecMetadataPB.version_to_file|), which
     // lets CDC locate each row's position before and after the update. When the same segment is updated by
     // multiple column partial updates within one batch publish, the recorded result is their union.
-    map<uint32, DelvecPagePB> column_overlay_vecs = 4;
+    map<uint32, DelvecPagePB> column_overlay_vecs = 3;
+}
+
+// Metadata that Change Data Capture (CDC) uses to derive the changes this publish's loads introduced.
+message CdcMetadataPB {
+    // Whether CDC is enabled. The switch is controlled by a table property via ALTER, so it is carried
+    // forward across publishes. Only primary-key tables are governed by it: they collect extra publish-path
+    // metadata (PkChangeLocatorPB) to track changes, and the switch bounds that cost on loads; duplicate-key
+    // and aggregate tables capture their changes from existing metadata at no load cost, so they are always on.
+    optional bool enable_cdc = 1 [default = false];
+    // Whether this publish's change can be captured at all, and if not, why (e.g. replication or
+    // primary-key recover). Applies to every table type; unset or Status::OK means capturable.
+    // Per-publish: reset whenever a new publish copies the previous metadata.
+    optional StatusPB capture_status = 2;
+    // The current publish's primary-key change locator; never carries over between publishes, so it is
+    // reset whenever a new publish copies the previous metadata.
+    optional PkChangeLocatorPB pk_change_locator = 3;
 }
 
 // An Index Delta Group (IDG) entry describes a standalone .idx file
@@ -404,6 +416,7 @@ message MetadataUpdateInfoPB {
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
     optional TabletRangePB tablet_range = 7;
+    optional bool enable_change_data_capture = 8;
 }
 
 message BundleTabletMetadataPB {

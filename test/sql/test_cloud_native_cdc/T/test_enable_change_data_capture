@@ -1,0 +1,147 @@
+-- name: test_enable_change_data_capture @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- cdc_off never enables the property (default off): CHANGES on it must error,
+-- not return rows, even though the bookmarks themselves are valid.
+CREATE TABLE cdc_off (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO cdc_off VALUES (1, 10);
+[UC]bkoff=SELECT bookmark_create("${db[0]}", "cdc_off", "pk", "1800000");
+INSERT INTO cdc_off VALUES (2, 20);
+[UC]bkoff1=SELECT bookmark_create("${db[0]}", "cdc_off", "pk", "1800000");
+
+SELECT k, v FROM cdc_off [_CHANGES_${bkoff}_${bkoff1}_] ORDER BY k;
+
+-- cdc_on enables the property at CREATE: it must surface in SHOW CREATE TABLE
+-- and CHANGES over it must work end to end.
+CREATE TABLE cdc_on (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+SHOW CREATE TABLE cdc_on;
+
+INSERT INTO cdc_on VALUES (1, 10), (2, 20), (3, 30);
+[UC]bk0=SELECT bookmark_create("${db[0]}", "cdc_on", "pk", "1800000");
+INSERT INTO cdc_on VALUES (4, 40);
+[UC]bk1=SELECT bookmark_create("${db[0]}", "cdc_on", "pk", "1800000");
+
+SELECT k, v, __CHANGE_TYPE__ FROM cdc_on [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "cdc_off", "${bkoff}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_off", "${bkoff1}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_on", "${bk0}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_on", "${bk1}", "pk");
+} END CLEANUP
+
+
+-- name: test_cdc_alter_toggle @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- enable_change_data_capture is toggled via ALTER after CREATE and is versioned: a CHANGES window is
+-- trackable only when every version it covers was recorded (CDC enabled at that version). A window
+-- reaching back before an enable -- or forward past a disable -- covers unrecorded versions and errors;
+-- a window wholly inside an enabled span returns rows. Redundant toggles keep this intact. Each ALTER
+-- SET runs as an async alter-meta job, so wait for it before reading.
+CREATE TABLE tg (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO tg VALUES (1, 10);
+[UC]a=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+
+-- false -> false: a redundant disable on a never-enabled table is a no-op; the window stays off and is not trackable.
+ALTER TABLE tg SET ("enable_change_data_capture" = "false");
+function: wait_alter_table_finish()
+INSERT INTO tg VALUES (2, 20);
+[UC]b=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${a}_${b}_] ORDER BY k;
+
+-- false -> true: enable. [a,c] still covers the pre-enable (unrecorded) versions, so it errors (no
+-- backfill); [b,c] starts at the enable boundary and is trackable.
+ALTER TABLE tg SET ("enable_change_data_capture" = "true");
+function: wait_alter_table_finish()
+INSERT INTO tg VALUES (3, 30);
+[UC]c=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${a}_${c}_] ORDER BY k;
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${b}_${c}_] ORDER BY k;
+
+INSERT INTO tg VALUES (4, 40);
+[UC]d=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${c}_${d}_] ORDER BY k;
+
+-- true -> true: a redundant enable keeps the span trackable across it.
+ALTER TABLE tg SET ("enable_change_data_capture" = "true");
+function: wait_alter_table_finish()
+INSERT INTO tg VALUES (5, 50);
+[UC]e=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${c}_${e}_] ORDER BY k;
+
+-- true -> false: disable. [e,f] reaches past the disable into unrecorded versions and errors.
+ALTER TABLE tg SET ("enable_change_data_capture" = "false");
+function: wait_alter_table_finish()
+INSERT INTO tg VALUES (6, 60);
+[UC]f=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${e}_${f}_] ORDER BY k;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "tg", "${a}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${b}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${c}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${d}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${e}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${f}", "tg");
+} END CLEANUP
+
+
+-- name: test_cdc_alter_property_rejected @cloud
+
+-- The property only governs primary-key tables, so ALTER SET on any other table type is rejected;
+-- and the value must parse strictly as a boolean.
+CREATE TABLE dup_r (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+ALTER TABLE dup_r SET ("enable_change_data_capture" = "true");
+
+CREATE TABLE pk_r (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+ALTER TABLE pk_r SET ("enable_change_data_capture" = "ture");
+
+
+-- name: test_cdc_alter_enable_then_schema_rewrite @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- CDC enabled via ALTER (not CREATE), then a data-rewrite schema change replaces the tablets with
+-- shadow tablets. Those must inherit the ALTER-enabled flag (read from the live table property), so
+-- CHANGES over post-rewrite versions still works.
+CREATE TABLE pk_ar (k int NOT NULL, v bigint)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+ALTER TABLE pk_ar SET ("enable_change_data_capture" = "true");
+function: wait_alter_table_finish()
+INSERT INTO pk_ar VALUES (1, 10), (2, 20);
+
+-- bigint -> varchar cannot reuse the zonemap, so this drops the fast path and rewrites the partition
+-- through shadow tablets; the new base index id differs from the origin (the "slow" path).
+ALTER TABLE pk_ar MODIFY COLUMN v VARCHAR(50);
+function: wait_alter_table_finish()
+function: assert_latest_schema_change_job_path("${db[0]}", "pk_ar", "slow")
+
+INSERT INTO pk_ar VALUES (3, '30');
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_ar", "ar", "1800000");
+UPDATE pk_ar SET v = '300' WHERE k = 3;
+INSERT INTO pk_ar VALUES (4, '40');
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_ar", "ar", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM pk_ar [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_ar", "${bk0}", "ar");
+    SELECT bookmark_release("${db[0]}", "pk_ar", "${bk1}", "ar");
+} END CLEANUP

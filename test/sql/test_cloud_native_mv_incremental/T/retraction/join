@@ -4,9 +4,9 @@
 -- delete on either side drops the joined rows that row participated in. Oracle: the MV equals a full
 -- recompute of the join, diff=0 both ways.
 CREATE TABLE pk_ja (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_jb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ja VALUES (1,10),(2,20),(3,30);
 INSERT INTO pk_jb VALUES (1,100),(2,200),(4,400);
 CREATE MATERIALIZED VIEW mv_pk_join
@@ -51,11 +51,11 @@ DROP TABLE pk_jb;
 -- Three-table inner join: the row id concatenates all three primary keys. A delete on the middle table
 -- drops every joined row that used it; a value update on any table re-emits the joined row.
 CREATE TABLE pk_ta (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_tb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_tc (id INT NOT NULL, x BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ta VALUES (1,10),(2,20);
 INSERT INTO pk_tb VALUES (1,100),(2,200);
 INSERT INTO pk_tc VALUES (1,1000),(2,2000);
@@ -88,9 +88,9 @@ DROP TABLE pk_tc;
 -- filter over the join. The row id concatenates both primary keys, so an update on either side re-emits every
 -- product row that base row produced and a delete drops them. Oracle: the MV equals a full recompute, diff=0.
 CREATE TABLE pk_ca (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_cb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ca VALUES (1,10),(2,20);
 INSERT INTO pk_cb VALUES (1,100),(2,200);
 CREATE MATERIALIZED VIEW mv_pk_cross
@@ -128,9 +128,9 @@ DROP TABLE pk_cb;
 -- intermediate row (new left x old right) alongside the final row under the same __ROW_ID__; net-collapse
 -- must cancel the intermediate so the MV keeps only the final joined value. Oracle: diff=0 both ways.
 CREATE TABLE pk_ma (id INT NOT NULL, v BIGINT, z BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_mb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ma VALUES (1,10,0),(2,20,0),(3,30,0);
 INSERT INTO pk_mb VALUES (1,100),(2,200),(3,300);
 CREATE MATERIALIZED VIEW mv_pk_mc
@@ -174,9 +174,9 @@ DROP TABLE pk_mb;
 -- Both join branches then emit the same projected tuple as an INSERT (net +1 over one row id); the duplicate
 -- must collapse to a single UPSERT of the final value. Oracle: diff=0 both ways.
 CREATE TABLE pk_da (id INT NOT NULL, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_db (id INT NOT NULL, w BIGINT, q BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_da VALUES (1,10);
 INSERT INTO pk_db VALUES (1,100,0);
 CREATE MATERIALIZED VIEW mv_pk_di
@@ -203,9 +203,9 @@ DROP TABLE pk_db;
 -- row id (which concatenates both primary keys) changes: the old joined row is deleted and a new one
 -- inserted rather than updated in place. Oracle: diff=0 both ways.
 CREATE TABLE pk_ka (id INT NOT NULL, fk INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 CREATE TABLE pk_kb (id INT NOT NULL, w BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_ka VALUES (1,10,500);
 INSERT INTO pk_kb VALUES (10,100),(20,200);
 CREATE MATERIALIZED VIEW mv_pk_kk
@@ -235,7 +235,7 @@ DROP TABLE pk_kb;
 -- sides of a pair. A change to that row must propagate through both scans of the delta; the row id
 -- concatenates the two primary keys. Oracle: diff=0 both ways.
 CREATE TABLE pk_sj (id INT NOT NULL, fk INT, v BIGINT)
-PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
 INSERT INTO pk_sj VALUES (1,2,10),(2,2,20),(3,1,30);
 CREATE MATERIALIZED VIEW mv_pk_sj
 DISTRIBUTED BY HASH(aid) BUCKETS 2
@@ -260,8 +260,8 @@ DROP TABLE pk_sj;
 -- name: test_ivm_pk_join_both_sides_cross_boundary @cloud
 -- Both join sides change the same key in one batch and the result crosses the WHERE boundary
 -- (net-collapse join tuple cancellation). Oracle: MV == the filtered join recompute, diff=0 both ways.
-CREATE TABLE jla (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
-CREATE TABLE jlb (id INT NOT NULL, w BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE jla (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE jlb (id INT NOT NULL, w BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 INSERT INTO jla VALUES (1,10),(2,20),(3,30);
 INSERT INTO jlb VALUES (1,100),(2,200),(3,300);
 CREATE MATERIALIZED VIEW mv_jbc REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")

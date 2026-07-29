@@ -1,0 +1,227 @@
+-- name: test_enable_change_data_capture @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE cdc_off (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO cdc_off VALUES (1, 10);
+-- result:
+-- !result
+[UC]bkoff=SELECT bookmark_create("${db[0]}", "cdc_off", "pk", "1800000");
+INSERT INTO cdc_off VALUES (2, 20);
+-- result:
+-- !result
+[UC]bkoff1=SELECT bookmark_create("${db[0]}", "cdc_off", "pk", "1800000");
+SELECT k, v FROM cdc_off [_CHANGES_${bkoff}_${bkoff1}_] ORDER BY k;
+-- result:
+[REGEX]E:.*CHANGES window on tablet [0-9]+ spans version [0-9]+ which was not recorded.*change data capture was not enabled at that version.*BE:[0-9]+.*
+-- !result
+CREATE TABLE cdc_on (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+SHOW CREATE TABLE cdc_on;
+-- result:
+cdc_on	CREATE TABLE `cdc_on` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_change_data_capture" = "true",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+INSERT INTO cdc_on VALUES (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "cdc_on", "pk", "1800000");
+INSERT INTO cdc_on VALUES (4, 40);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "cdc_on", "pk", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM cdc_on [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+-- result:
+4	40	0
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "cdc_off", "${bkoff}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_off", "${bkoff1}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_on", "${bk0}", "pk");
+    SELECT bookmark_release("${db[0]}", "cdc_on", "${bk1}", "pk");
+} END CLEANUP
+
+-- name: test_cdc_alter_toggle @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE tg (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO tg VALUES (1, 10);
+-- result:
+-- !result
+[UC]a=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+ALTER TABLE tg SET ("enable_change_data_capture" = "false");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+
+-- !result
+INSERT INTO tg VALUES (2, 20);
+-- result:
+-- !result
+[UC]b=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${a}_${b}_] ORDER BY k;
+-- result:
+[REGEX]E:.*CHANGES window on tablet [0-9]+ spans version [0-9]+ which was not recorded.*change data capture was not enabled at that version.*BE:[0-9]+.*
+-- !result
+ALTER TABLE tg SET ("enable_change_data_capture" = "true");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO tg VALUES (3, 30);
+-- result:
+-- !result
+[UC]c=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${a}_${c}_] ORDER BY k;
+-- result:
+[REGEX]E:.*CHANGES window on tablet [0-9]+ spans version [0-9]+ which was not recorded.*change data capture was not enabled at that version.*BE:[0-9]+.*
+-- !result
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${b}_${c}_] ORDER BY k;
+-- result:
+3	30	0
+-- !result
+INSERT INTO tg VALUES (4, 40);
+-- result:
+-- !result
+[UC]d=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${c}_${d}_] ORDER BY k;
+-- result:
+4	40	0
+-- !result
+ALTER TABLE tg SET ("enable_change_data_capture" = "true");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO tg VALUES (5, 50);
+-- result:
+-- !result
+[UC]e=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${c}_${e}_] ORDER BY k;
+-- result:
+4	40	0
+5	50	0
+-- !result
+ALTER TABLE tg SET ("enable_change_data_capture" = "false");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO tg VALUES (6, 60);
+-- result:
+-- !result
+[UC]f=SELECT bookmark_create("${db[0]}", "tg", "tg", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM tg [_CHANGES_${e}_${f}_] ORDER BY k;
+-- result:
+[REGEX]E:.*CHANGES window on tablet [0-9]+ spans version [0-9]+ which was not recorded.*change data capture was not enabled at that version.*BE:[0-9]+.*
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "tg", "${a}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${b}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${c}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${d}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${e}", "tg");
+    SELECT bookmark_release("${db[0]}", "tg", "${f}", "tg");
+} END CLEANUP
+
+-- name: test_cdc_alter_property_rejected @cloud
+CREATE TABLE dup_r (k int, v int)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+ALTER TABLE dup_r SET ("enable_change_data_capture" = "true");
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: the "enable_change_data_capture" property is only supported for shared-data primary key tables.')
+-- !result
+CREATE TABLE pk_r (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+ALTER TABLE pk_r SET ("enable_change_data_capture" = "ture");
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property enable_change_data_capture must be bool type(false/true).')
+-- !result
+-- name: test_cdc_alter_enable_then_schema_rewrite @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_ar (k int NOT NULL, v bigint)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+ALTER TABLE pk_ar SET ("enable_change_data_capture" = "true");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO pk_ar VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+ALTER TABLE pk_ar MODIFY COLUMN v VARCHAR(50);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: assert_latest_schema_change_job_path("${db[0]}", "pk_ar", "slow")
+-- result:
+None
+-- !result
+INSERT INTO pk_ar VALUES (3, '30');
+-- result:
+-- !result
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_ar", "ar", "1800000");
+UPDATE pk_ar SET v = '300' WHERE k = 3;
+-- result:
+-- !result
+INSERT INTO pk_ar VALUES (4, '40');
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_ar", "ar", "1800000");
+SELECT k, v, __CHANGE_TYPE__ FROM pk_ar [_CHANGES_${bk0}_${bk1}_] ORDER BY k, __CHANGE_TYPE__;
+-- result:
+3	300	0
+3	30	1
+4	40	0
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_ar", "${bk0}", "ar");
+    SELECT bookmark_release("${db[0]}", "pk_ar", "${bk1}", "ar");
+} END CLEANUP

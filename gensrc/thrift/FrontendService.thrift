@@ -2597,6 +2597,7 @@ struct TCloudTabletMeta {
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
+    11: optional bool enable_change_data_capture;
 }
 
 struct TGetTabletMetadataResponse {

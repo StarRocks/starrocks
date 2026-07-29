@@ -30,6 +30,7 @@
 #include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "storage/lake/cdc_util.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
@@ -76,6 +77,9 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // because the primary index is available in cache
             // But it will be remove from index cache after apply is finished
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
+        }
+        if (alter_meta.has_enable_change_data_capture()) {
+            alter_cdc(metadata, alter_meta.enable_change_data_capture());
         }
         // Check if the alter_meta has a persistent index type change
         if (alter_meta.has_persistent_index_type()) {
@@ -534,8 +538,8 @@ private:
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;
             }
-            Status::NotSupported("Change data capture does not support primary key recover")
-                    .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
+            set_capture_status_if_cdc_enabled(
+                    _metadata.get(), Status::NotSupported("Change data capture does not support primary key recover"));
             if (need_re_publish(ret)) {
                 _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
@@ -896,10 +900,8 @@ private:
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
-
-        Status::NotSupported("Change data capture does not support replication")
-                .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
-
+        set_capture_status_if_cdc_enabled(_metadata.get(),
+                                          Status::NotSupported("Change data capture does not support replication"));
         return Status::OK();
     }
 
@@ -1436,10 +1438,8 @@ private:
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
-
-        Status::NotSupported("Change data capture does not support replication")
-                .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
-
+        set_capture_status_if_cdc_enabled(_metadata.get(),
+                                          Status::NotSupported("Change data capture does not support replication"));
         return Status::OK();
     }
 

@@ -1,6 +1,6 @@
 -- name: test_ivm_ret_multibucket @cloud
 CREATE TABLE pk_mb (id INT NOT NULL, v BIGINT, s VARCHAR(8))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 8 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 8 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_mb SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,50));
@@ -29,7 +29,7 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT id,v,s FROM pk_mb WHERE v>=0 EXCEPT
 -- !result
 -- name: test_ivm_ret_random_distribution @cloud
 CREATE TABLE pk_rd (id INT NOT NULL, v BIGINT, s VARCHAR(8))
-  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES('replication_num'='1');
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
 -- result:
 -- !result
 INSERT INTO pk_rd SELECT generate_series, generate_series*10, 'a' FROM TABLE(generate_series(1,50));
