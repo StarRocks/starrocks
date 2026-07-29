@@ -478,11 +478,14 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
     const auto caller_id = std::this_thread::get_id();
+    // Compute the "ran off the caller thread" result inside the callback (where both ids are known) and
+    // publish it via an atomic, so the main thread never reads a std::thread::id written on another
+    // thread. caller_id is set before compact() and only read here, so it is not racy.
     std::atomic<bool> fired{false};
-    std::thread::id worker_id{};
+    std::atomic<bool> ran_off_caller_thread{false};
     auto* sync_point = SyncPoint::GetInstance();
     sync_point->SetCallBack("CompactionScheduler::process_parallel_compaction:enter", [&](void* /*arg*/) {
-        worker_id = std::this_thread::get_id();
+        ran_off_caller_thread.store(std::this_thread::get_id() != caller_id);
         fired.store(true);
     });
     sync_point->EnableProcessing();
@@ -512,7 +515,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
 
     EXPECT_TRUE(fired.load());
     // The offloaded task runs on a _threads pool worker, never on the caller (gtest) thread.
-    EXPECT_NE(caller_id, worker_id);
+    EXPECT_TRUE(ran_off_caller_thread.load());
 }
 
 } // namespace starrocks::lake
