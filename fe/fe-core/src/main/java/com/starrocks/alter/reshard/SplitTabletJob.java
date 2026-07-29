@@ -312,7 +312,7 @@ public class SplitTabletJob extends TabletReshardJob {
     }
 
     /*
-     * 1. Wait for previous transactions finished
+     * 1. Abort in-flight lake compactions, then wait for the remaining previous transactions finished
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
      * 4. Set tablet state to NORMAL
@@ -320,10 +320,14 @@ public class SplitTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runCleaningJob() {
-        // 1. Wait for previous transactions finished
+        // 1. Cancel previous in-flight compactions on the resharded partitions so cleaning does not wait
+        //    for slow compaction, then wait for the rest. Compactions on partitions this job does not
+        //    reshard are neither cancelled nor waited on (see CompactionScheduler#cancelPreviousCompactions).
+        Set<Long> ignoredCompactionTxnIds = GlobalStateMgr.getCurrentState().getCompactionMgr()
+                .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet());
         try {
             if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
-                    endTransactionId, dbId, List.of(tableId))) {
+                    endTransactionId, dbId, List.of(tableId), ignoredCompactionTxnIds)) {
                 return;
             }
         } catch (AnalysisException e) { // Db is dropped, ignore exception

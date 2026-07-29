@@ -72,26 +72,30 @@ public class AggregateCompactionTask extends CompactionTask {
     }
 
     @Override
-    public void abort() {
+    public boolean abort() {
         // no need to aggregate abort request
         TaskResult taskResult = getResult();
-        if (taskResult == TaskResult.NOT_FINISHED || taskResult == TaskResult.NONE_SUCCESS) {
-            // abort compaction one by one
-            for (int i = 0; i < request.requests.size(); i++) {
-                CompactRequest eachRequest = request.requests.get(i);
-                ComputeNodePB computeNodePB = request.computeNodes.get(i);
-                AbortCompactionRequest abortRequest = new AbortCompactionRequest();
-                abortRequest.txnId = eachRequest.txnId;
-                try {
-                    LakeService service = BrpcProxy.getLakeService(computeNodePB.getHost(), computeNodePB.getBrpcPort());
-                    Future<AbortCompactionResponse> ignored = service.abortCompaction(abortRequest);
-                    LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", eachRequest.txnId, nodeId);
-                } catch (Exception e) {
-                    LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", eachRequest.txnId,
-                            nodeId, e.getMessage());
-                }
+        if (taskResult != TaskResult.NOT_FINISHED && taskResult != TaskResult.NONE_SUCCESS) {
+            return true;
+        }
+        // abort compaction one by one
+        boolean allDelivered = true;
+        for (int i = 0; i < request.requests.size(); i++) {
+            CompactRequest eachRequest = request.requests.get(i);
+            ComputeNodePB computeNodePB = request.computeNodes.get(i);
+            AbortCompactionRequest abortRequest = new AbortCompactionRequest();
+            abortRequest.txnId = eachRequest.txnId;
+            try {
+                LakeService service = BrpcProxy.getLakeService(computeNodePB.getHost(), computeNodePB.getBrpcPort());
+                Future<AbortCompactionResponse> ignored = service.abortCompaction(abortRequest);
+                LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", eachRequest.txnId, nodeId);
+            } catch (Exception e) {
+                LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", eachRequest.txnId,
+                        nodeId, e.getMessage());
+                allDelivered = false;
             }
         }
+        return allDelivered;
     }
 
     @Override
