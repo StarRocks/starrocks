@@ -3,6 +3,7 @@
 package com.starrocks.epack;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.WarehouseProperty;
@@ -327,5 +328,63 @@ public class WarehouseStmtTest {
         Assert.assertEquals(100, warehouseSlotManager.getQueryQueueMaxQueuedQueries(warehouseId));
         Assert.assertEquals(600, warehouseSlotManager.getQueryQueuePendingTimeoutSecond(warehouseId));
         Assert.assertEquals(10, property.getQueryQueueConcurrencyLimit());
+    }
+
+    @Test
+    public void testAlterWarehouseQueryQueueV2Properties() throws Exception {
+        String sql = "CREATE WAREHOUSE warehouse_1;";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+        WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
+        LocalWarehouse warehouse = (LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1");
+
+        sql = "ALTER WAREHOUSE warehouse_1\n" +
+                "SET (\n" +
+                "    'query_queue_slots_estimator_strategy' = 'MBE',\n" +
+                "    'query_queue_v2_concurrency_level' = '8',\n" +
+                "    'query_queue_v2_mem_bytes_per_slot' = '2048',\n" +
+                "    'query_queue_v2_cpu_costs_per_slot' = '500',\n" +
+                "    'query_queue_v2_schedule_strategy' = 'SJF'\n" +
+                ")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
+        DDLStmtExecutor.execute(stmt, connectCtx);
+
+        WarehouseProperty property = warehouse.getProperty();
+        Assert.assertEquals("MBE", property.getQueryQueueSlotsEstimatorStrategy());
+        Assert.assertEquals(8, property.getQueryQueueV2ConcurrencyLevel());
+        Assert.assertEquals(2048L, property.getQueryQueueV2MemBytesPerSlot());
+        Assert.assertEquals(500L, property.getQueryQueueV2CpuCostsPerSlot());
+        Assert.assertEquals("SJF", property.getQueryQueueV2ScheduleStrategy());
+
+        warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "warehouse_1"));
+        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
+    }
+
+    @Test
+    public void testAlterWarehouseInvalidEstimatorStrategyFails() throws Exception {
+        String sql = "CREATE WAREHOUSE warehouse_1;";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
+        DDLStmtExecutor.execute(statement, connectCtx);
+        WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
+
+        String alterSql = "ALTER WAREHOUSE warehouse_1 SET ('query_queue_slots_estimator_strategy' = 'XYZ')";
+        StatementBase alterStmt = AnalyzeTestUtil.analyzeSuccess(alterSql);
+        Assert.assertTrue(alterStmt instanceof AlterWarehouseStmt);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "query_queue_slots_estimator_strategy",
+                () -> DDLStmtExecutor.execute(alterStmt, connectCtx));
+
+        warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "warehouse_1"));
+        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
     }
 }

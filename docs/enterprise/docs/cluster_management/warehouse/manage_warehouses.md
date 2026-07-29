@@ -88,6 +88,11 @@ CREATE WAREHOUSE [ IF NOT EXISTS ] <warehouse_name>
   - `query_queue_concurrency_limit`: Maximum number of concurrent queries. Valid values: `-1` (indicating unlimited) or any positive integer.
   - `query_queue_max_queued_queries`: Maximum length of the query queue. Default value: `1024`. It must be a positive integer.
   - `query_queue_pending_timeout_second`: Maximum time (in seconds) that a query can wait in the queue. Default value: `600`. It must be a positive integer.
+  - `query_queue_slots_estimator_strategy`: Per-warehouse override of the Query Queue V2 slot estimator (`PBE` / `MBE` / `CBE`; legacy `MAX` / `MIN` accepted). When unset, falls back to the FE-global configuration.
+  - `query_queue_v2_concurrency_level`: Per-warehouse capacity level for Query Queue V2. When unset (or `<= 0`), falls back to the FE-global configuration.
+  - `query_queue_v2_mem_bytes_per_slot`: Per-warehouse MBE per-slot memory budget, in bytes. When unset (or `<= 0`), falls back to the FE-global configuration.
+  - `query_queue_v2_cpu_costs_per_slot`: Per-warehouse CBE per-slot CPU cost. When unset (or `<= 0`), falls back to the FE-global configuration.
+  - `query_queue_v2_schedule_strategy`: Per-warehouse pending-query scheduling strategy (`SWRR` / `SJF`). When unset, falls back to the FE-global configuration.
 
 **Example**:
 
@@ -165,6 +170,12 @@ SET(
 ALTER WAREHOUSE default_warehouse SET("enable_query_queue" = "true"); 
 -- Adjust the query queue pending timeout for default_warehouse
 ALTER WAREHOUSE default_warehouse SET("query_queue_pending_timeout_second" = "3600");
+
+-- Alter the Query Queue V2 properties of the warehouse.
+ALTER WAREHOUSE default_warehouse SET (
+    "query_queue_slots_estimator_strategy" = "MBE",
+    "query_queue_v2_concurrency_level" = "8"
+);
 ```
 
 ### View warehouses

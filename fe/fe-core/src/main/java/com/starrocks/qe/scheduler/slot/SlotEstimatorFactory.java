@@ -73,7 +73,7 @@ public class SlotEstimatorFactory {
             return new DefaultSlotEstimator();
         }
 
-        EstimatorPolicy policy = getEstimatorPolicy();
+        EstimatorPolicy policy = opts.getEstimatorPolicy();
         return policy.createEstimator();
     }
 
@@ -86,15 +86,18 @@ public class SlotEstimatorFactory {
             return 1;
         }
 
-        EstimatorPolicy policy = getEstimatorPolicy();
+        EstimatorPolicy policy = opts.getEstimatorPolicy();
         return estimateSlotsFromExecPlan(opts, context, execPlan, policy);
     }
 
     static EstimatorPolicy getEstimatorPolicy() {
-        EstimatorPolicy policy = EstimatorPolicy.create(Config.query_queue_slots_estimator_strategy);
+        return getEstimatorPolicy(Config.query_queue_slots_estimator_strategy);
+    }
+
+    static EstimatorPolicy getEstimatorPolicy(String strategyName) {
+        EstimatorPolicy policy = EstimatorPolicy.create(strategyName);
         if (policy == null) {
-            LOG.warn("unknown query_queue_slots_estimator_strategy: {}, fallback to default policy",
-                    Config.query_queue_slots_estimator_strategy);
+            LOG.warn("unknown query_queue_slots_estimator_strategy: {}, fallback to default policy", strategyName);
             policy = EstimatorPolicy.createDefault();
         }
         return policy;

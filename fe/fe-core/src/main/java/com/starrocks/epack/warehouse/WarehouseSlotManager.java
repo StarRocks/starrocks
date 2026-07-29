@@ -382,6 +382,71 @@ public class WarehouseSlotManager extends BaseSlotManager {
     }
 
     @Override
+    public int getQueryQueueV2ConcurrencyLevel(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueV2ConcurrencyLevel(warehouseId);
+        }
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+            return super.getQueryQueueV2ConcurrencyLevel(warehouseId);
+        }
+        int v = ((LocalWarehouse) warehouse).getProperty().getQueryQueueV2ConcurrencyLevel();
+        return v > 0 ? v : super.getQueryQueueV2ConcurrencyLevel(warehouseId);
+    }
+
+    @Override
+    public long getQueryQueueV2MemBytesPerSlot(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueV2MemBytesPerSlot(warehouseId);
+        }
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+            return super.getQueryQueueV2MemBytesPerSlot(warehouseId);
+        }
+        long v = ((LocalWarehouse) warehouse).getProperty().getQueryQueueV2MemBytesPerSlot();
+        return v > 0 ? v : super.getQueryQueueV2MemBytesPerSlot(warehouseId);
+    }
+
+    @Override
+    public long getQueryQueueV2CpuCostsPerSlot(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueV2CpuCostsPerSlot(warehouseId);
+        }
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+            return super.getQueryQueueV2CpuCostsPerSlot(warehouseId);
+        }
+        long v = ((LocalWarehouse) warehouse).getProperty().getQueryQueueV2CpuCostsPerSlot();
+        return v > 0 ? v : super.getQueryQueueV2CpuCostsPerSlot(warehouseId);
+    }
+
+    @Override
+    public String getQueryQueueSlotsEstimatorStrategy(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueSlotsEstimatorStrategy(warehouseId);
+        }
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+            return super.getQueryQueueSlotsEstimatorStrategy(warehouseId);
+        }
+        String v = ((LocalWarehouse) warehouse).getProperty().getQueryQueueSlotsEstimatorStrategy();
+        return (v != null && !v.isEmpty()) ? v : super.getQueryQueueSlotsEstimatorStrategy(warehouseId);
+    }
+
+    @Override
+    public String getQueryQueueV2ScheduleStrategy(long warehouseId) {
+        if (RunMode.isSharedNothingMode()) {
+            return super.getQueryQueueV2ScheduleStrategy(warehouseId);
+        }
+        Warehouse warehouse = getWarehouse(warehouseId);
+        if (warehouse == null || !(warehouse instanceof LocalWarehouse)) {
+            return super.getQueryQueueV2ScheduleStrategy(warehouseId);
+        }
+        String v = ((LocalWarehouse) warehouse).getProperty().getQueryQueueV2ScheduleStrategy();
+        return (v != null && !v.isEmpty()) ? v : super.getQueryQueueV2ScheduleStrategy(warehouseId);
+    }
+
+    @Override
     public void onQueryFinished(LogicalSlot slot, ConnectContext context) {
         if (RunMode.isSharedNothingMode() || context == null) {
             return;

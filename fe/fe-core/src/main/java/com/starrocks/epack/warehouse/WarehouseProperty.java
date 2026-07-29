@@ -23,6 +23,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 
 public class WarehouseProperty {
@@ -41,6 +42,11 @@ public class WarehouseProperty {
     public static final String PROPERTY_QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
     public static final String PROPERTY_QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
     public static final String PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
+    public static final String PROPERTY_QUERY_QUEUE_SLOTS_ESTIMATOR_STRATEGY = "query_queue_slots_estimator_strategy";
+    public static final String PROPERTY_QUERY_QUEUE_V2_CONCURRENCY_LEVEL = "query_queue_v2_concurrency_level";
+    public static final String PROPERTY_QUERY_QUEUE_V2_MEM_BYTES_PER_SLOT = "query_queue_v2_mem_bytes_per_slot";
+    public static final String PROPERTY_QUERY_QUEUE_V2_CPU_COSTS_PER_SLOT = "query_queue_v2_cpu_costs_per_slot";
+    public static final String PROPERTY_QUERY_QUEUE_V2_SCHEDULE_STRATEGY = "query_queue_v2_schedule_strategy";
 
     public enum ReplicationType {
         NONE,
@@ -85,6 +91,18 @@ public class WarehouseProperty {
     @SerializedName(value = "query_queue_concurrency_limit")
     private int queryQueueConcurrencyLimit = -1;
 
+    // Query Queue V2 per-warehouse overrides. Sentinel (null / -1) => fall back to the FE-global Config.
+    @SerializedName(value = "query_queue_slots_estimator_strategy")
+    private String queryQueueSlotsEstimatorStrategy = null;
+    @SerializedName(value = "query_queue_v2_concurrency_level")
+    private int queryQueueV2ConcurrencyLevel = -1;
+    @SerializedName(value = "query_queue_v2_mem_bytes_per_slot")
+    private long queryQueueV2MemBytesPerSlot = -1;
+    @SerializedName(value = "query_queue_v2_cpu_costs_per_slot")
+    private long queryQueueV2CpuCostsPerSlot = -1;
+    @SerializedName(value = "query_queue_v2_schedule_strategy")
+    private String queryQueueV2ScheduleStrategy = null;
+
     @SerializedName(value = "warehouse_session_variables")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
@@ -110,6 +128,11 @@ public class WarehouseProperty {
         this.queryQueueMaxQueuedQueries = that.queryQueueMaxQueuedQueries;
         this.queryQueuePendingTimeoutSecond = that.queryQueuePendingTimeoutSecond;
         this.queryQueueConcurrencyLimit = that.queryQueueConcurrencyLimit;
+        this.queryQueueSlotsEstimatorStrategy = that.queryQueueSlotsEstimatorStrategy;
+        this.queryQueueV2ConcurrencyLevel = that.queryQueueV2ConcurrencyLevel;
+        this.queryQueueV2MemBytesPerSlot = that.queryQueueV2MemBytesPerSlot;
+        this.queryQueueV2CpuCostsPerSlot = that.queryQueueV2CpuCostsPerSlot;
+        this.queryQueueV2ScheduleStrategy = that.queryQueueV2ScheduleStrategy;
         if (that.sessionVariables != null) {
             this.sessionVariables.putAll(that.sessionVariables);
         }
@@ -203,6 +226,46 @@ public class WarehouseProperty {
         this.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
     }
 
+    public String getQueryQueueSlotsEstimatorStrategy() {
+        return queryQueueSlotsEstimatorStrategy;
+    }
+
+    public void setQueryQueueSlotsEstimatorStrategy(String queryQueueSlotsEstimatorStrategy) {
+        this.queryQueueSlotsEstimatorStrategy = queryQueueSlotsEstimatorStrategy;
+    }
+
+    public int getQueryQueueV2ConcurrencyLevel() {
+        return queryQueueV2ConcurrencyLevel;
+    }
+
+    public void setQueryQueueV2ConcurrencyLevel(int queryQueueV2ConcurrencyLevel) {
+        this.queryQueueV2ConcurrencyLevel = queryQueueV2ConcurrencyLevel;
+    }
+
+    public long getQueryQueueV2MemBytesPerSlot() {
+        return queryQueueV2MemBytesPerSlot;
+    }
+
+    public void setQueryQueueV2MemBytesPerSlot(long queryQueueV2MemBytesPerSlot) {
+        this.queryQueueV2MemBytesPerSlot = queryQueueV2MemBytesPerSlot;
+    }
+
+    public long getQueryQueueV2CpuCostsPerSlot() {
+        return queryQueueV2CpuCostsPerSlot;
+    }
+
+    public void setQueryQueueV2CpuCostsPerSlot(long queryQueueV2CpuCostsPerSlot) {
+        this.queryQueueV2CpuCostsPerSlot = queryQueueV2CpuCostsPerSlot;
+    }
+
+    public String getQueryQueueV2ScheduleStrategy() {
+        return queryQueueV2ScheduleStrategy;
+    }
+
+    public void setQueryQueueV2ScheduleStrategy(String queryQueueV2ScheduleStrategy) {
+        this.queryQueueV2ScheduleStrategy = queryQueueV2ScheduleStrategy;
+    }
+
     public Map<String, String> getSessionVariables() {
         return sessionVariables;
     }
@@ -228,6 +291,11 @@ public class WarehouseProperty {
                 && this.queryQueueMaxQueuedQueries == prop.queryQueueMaxQueuedQueries
                 && this.queryQueuePendingTimeoutSecond == prop.queryQueuePendingTimeoutSecond
                 && this.queryQueueConcurrencyLimit == prop.queryQueueConcurrencyLimit
+                && Objects.equals(this.queryQueueSlotsEstimatorStrategy, prop.queryQueueSlotsEstimatorStrategy)
+                && this.queryQueueV2ConcurrencyLevel == prop.queryQueueV2ConcurrencyLevel
+                && this.queryQueueV2MemBytesPerSlot == prop.queryQueueV2MemBytesPerSlot
+                && this.queryQueueV2CpuCostsPerSlot == prop.queryQueueV2CpuCostsPerSlot
+                && Objects.equals(this.queryQueueV2ScheduleStrategy, prop.queryQueueV2ScheduleStrategy)
                 && this.sessionVariables.equals(prop.sessionVariables);
     }
 

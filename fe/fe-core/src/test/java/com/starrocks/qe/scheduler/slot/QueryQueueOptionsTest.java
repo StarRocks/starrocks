@@ -353,4 +353,16 @@ public class QueryQueueOptionsTest extends SchedulerTestBase {
         assertThat(QueryQueueOptions.correctSlotNum(4)).isEqualTo(4);
         assertThat(QueryQueueOptions.correctSlotNum(5)).isEqualTo(5);
     }
+
+    @Test
+    public void testBaseSlotManagerV2GettersDefaultToConfig() {
+        BaseSlotManager mgr = GlobalStateMgr.getCurrentState().getSlotManager();
+        long wh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+        assertThat(mgr.getQueryQueueV2ConcurrencyLevel(wh)).isEqualTo(Config.query_queue_v2_concurrency_level);
+        assertThat(mgr.getQueryQueueV2MemBytesPerSlot(wh)).isEqualTo(Config.query_queue_v2_mem_bytes_per_slot);
+        assertThat(mgr.getQueryQueueV2CpuCostsPerSlot(wh)).isEqualTo(Config.query_queue_v2_cpu_costs_per_slot);
+        assertThat(mgr.getQueryQueueSlotsEstimatorStrategy(wh)).isEqualTo(Config.query_queue_slots_estimator_strategy);
+        assertThat(mgr.getQueryQueueV2ScheduleStrategy(wh)).isEqualTo(Config.query_queue_v2_schedule_strategy);
+    }
 }
