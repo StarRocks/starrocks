@@ -110,7 +110,7 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
     if (_encode_context == nullptr) {
         return Status::InternalError("ColumnarSerde::serialize() called before prepare(): encode context is null");
     }
-    raw::RawString& serialize_buffer = ctx.serialize_buffer;
+    raw::RawStringPage& serialize_buffer = ctx.serialize_buffer;
     {
         SCOPED_TIMER(_parent->metrics().serialize_timer);
         size_t ALIGNED_SIZE = 1;
