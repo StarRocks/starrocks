@@ -425,6 +425,7 @@ public final class MetricRepo {
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
     public static GaugeMetric<Long> GAUGE_LICENSE_EXPIRE_DAYS;
+    public static GaugeMetric<Long> GAUGE_CLUSTER_CORE_SECONDS;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
@@ -591,6 +592,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LICENSE_EXPIRE_DAYS);
+
+        GAUGE_CLUSTER_CORE_SECONDS = new GaugeMetric<Long>(
+                "cluster_core_seconds", MetricUnit.NOUNIT, "cumulative cluster compute usage in core-seconds") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getLicenseMgr().getLicenseUsage();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CLUSTER_CORE_SECONDS);
 
         GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
                 "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,

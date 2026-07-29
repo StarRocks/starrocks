@@ -98,6 +98,24 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testClusterCoreSecondsMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("cluster_core_seconds");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        long expected = GlobalStateMgr.getCurrentState().getLicenseMgr().getLicenseUsage();
+        Assertions.assertEquals(expected, metric.getValue());
+
+        MetricVisitor prometheusVisitor = new PrometheusMetricVisitor("starrocks_fe");
+        prometheusVisitor.visit(metric);
+        Assertions.assertTrue(prometheusVisitor.build().contains("starrocks_fe_cluster_core_seconds"));
+
+        MetricVisitor coreVisitor = new SimpleCoreMetricVisitor("starrocks_fe");
+        coreVisitor.visit(metric);
+        Assertions.assertTrue(coreVisitor.build().contains("starrocks_fe_cluster_core_seconds"));
+    }
+
+    @Test
     public void testAlterColumnMetricsExposure() {
         // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
         // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).

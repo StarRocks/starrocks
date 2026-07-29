@@ -88,6 +88,10 @@ public class EditLogEPack extends EditLog {
         logJsonObject(OperationTypeEPack.OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME, log, applier);
     }
 
+    public void logUpdateLicenseUsage(LicenseUsageLog log, WALApplier applier) {
+        logJsonObject(OperationTypeEPack.OP_UPDATE_LICENSE_USAGE, log, applier);
+    }
+
     @Override
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
@@ -150,6 +154,11 @@ public class EditLogEPack extends EditLog {
                 case OperationTypeEPack.OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME: {
                     ScaleOutLicenseFreeStartTimeLog log = (ScaleOutLicenseFreeStartTimeLog) journal.data();
                     globalStateMgr.getLicenseMgr().applyScaleOutLicenseFreeStartTime(log);
+                    break;
+                }
+                case OperationTypeEPack.OP_UPDATE_LICENSE_USAGE: {
+                    LicenseUsageLog log = (LicenseUsageLog) journal.data();
+                    globalStateMgr.getLicenseMgr().applyUpdateLicenseUsage(log);
                     break;
                 }
                 default: {

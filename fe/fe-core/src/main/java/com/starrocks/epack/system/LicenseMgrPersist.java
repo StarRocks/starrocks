@@ -31,11 +31,18 @@ public class LicenseMgrPersist {
     @SerializedName("scale_out_license_free_start_time")
     Long scaleOutLicenseFreeStartTime;
 
+    // Cumulative license usage (core-seconds) maintained by the leader, stored as a base64
+    // string that is AES-encrypted when isEncrypted is true (same protection as systemInfoStr).
+    // Absent (null) in images written before this field was introduced, which is treated as 0.
+    @SerializedName("usage")
+    String usageStr;
+
     public LicenseMgrPersist(List<String> licenses, boolean isEncrypted, String systemInfoStr,
-                             Long scaleOutLicenseFreeStartTime) {
+                             Long scaleOutLicenseFreeStartTime, String usageStr) {
         this.licenses = licenses;
         this.isEncrypted = isEncrypted;
         this.systemInfoStr = systemInfoStr;
         this.scaleOutLicenseFreeStartTime = scaleOutLicenseFreeStartTime;
+        this.usageStr = usageStr;
     }
 }

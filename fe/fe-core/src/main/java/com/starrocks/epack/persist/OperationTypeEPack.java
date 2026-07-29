@@ -94,6 +94,7 @@ public class OperationTypeEPack extends OperationType {
     public static final short OP_REGISTER_LICENSE = 20611;
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME = 20612;
+    public static final short OP_UPDATE_LICENSE_USAGE = 20613;
 
     /**
      * Union of the community ignorable ops and the EE ones. Replay-failure skip checks must
