@@ -238,4 +238,9 @@ public class MvUdfPlanCacheTest extends MVTestBase {
             connectContext.setCurrentUserIdentity(savedIdentity);
         }
     }
+
+    @org.junit.jupiter.api.AfterAll
+    public static void afterClass() {
+        Config.enable_udf = false;
+    }
 }
