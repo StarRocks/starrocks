@@ -108,7 +108,6 @@ public class SplitTabletJob extends TabletReshardJob {
         return tableId;
     }
 
-    @Override
     public Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions() {
         return reshardingPhysicalPartitions;
     }
@@ -360,7 +359,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
         // 6. Release the child shards' creation-time placement pin so the balancer can spread them
         //    now, instead of when the parent shards are finally reclaimed tens of minutes later.
-        clearPlacementPreference();
+        clearPlacementPreference(reshardingPhysicalPartitions);
 
         // 7. Set job state to FINISHED
         setJobState(JobState.FINISHED);

@@ -297,8 +297,6 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract TTabletReshardJobsItem getInfo();
 
-    public abstract Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions();
-
     /**
      * Shared reshard-cleanup step for split and merge: for every superseded (old) materialized index,
      * schedule its removal in the {@code CatalogRecycleBin} at index granularity, so an in-flight query
@@ -353,9 +351,10 @@ public abstract class TabletReshardJob implements Writable {
      * <p>Best-effort by design: a failure only degrades to that old behavior, so it must never
      * interrupt the job. The caller is the leader-only cleaning path; replay paths do not call this.
      */
-    protected void clearPlacementPreference() {
+    protected void clearPlacementPreference(
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
         Set<Long> newTabletIds = new HashSet<>();
-        for (ReshardingPhysicalPartition partition : getReshardingPhysicalPartitions().values()) {
+        for (ReshardingPhysicalPartition partition : reshardingPhysicalPartitions.values()) {
             for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
                 for (ReshardingTablet tablet : index.getReshardingTablets()) {
                     newTabletIds.addAll(tablet.getNewTabletIds());
@@ -368,7 +367,10 @@ public abstract class TabletReshardJob implements Writable {
         try {
             GlobalStateMgr.getCurrentState().getStarOSAgent().clearPlacementPreference(newTabletIds);
         } catch (Exception e) {
-            LOG.warn("Failed to clear placement preference for reshard job {}: {}", jobId, e.getMessage());
+            // Log the throwable, not just its message: this catch is broad enough to swallow a
+            // programming error (an NPE would otherwise be recorded as a bare "null"), and the job
+            // goes on to FINISHED either way, so the stack trace is the only trace left.
+            LOG.warn("Failed to clear placement preference for reshard job {}", jobId, e);
         }
     }
 }
