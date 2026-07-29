@@ -1482,11 +1482,24 @@ public class DefaultCoordinator extends Coordinator {
     public boolean join(int timeoutS) {
         final long fixedMaxWaitTime = 5;
 
-        long leftTimeoutS = timeoutS;
+        long leftTimeoutMs = timeoutS * 1000L;
         boolean awaitRes = false;
-        while (leftTimeoutS > 0) {
-            long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+        while (leftTimeoutMs > 0) {
+            // Check before blocking, otherwise a grace period of 0 would still wait out a whole round.
+            // A cancel that lands while we are already blocked is only noticed when that round ends, so
+            // the effective bound is the grace period plus at most one round.
+            if (profileWaitAfterCancelExpired()) {
+                return true;
+            }
+
+            long waitTimeMs = Math.min(leftTimeoutMs, fixedMaxWaitTime * 1000L);
+            long graceLeftMs = remainingCancelGraceMs();
+            if (graceLeftMs >= 0) {
+                // Never sleep past the end of the grace period. At least 1ms, so this cannot spin.
+                waitTimeMs = Math.max(1, Math.min(waitTimeMs, graceLeftMs));
+            }
+
+            awaitRes = queryProfile.waitForProfileFinished(waitTimeMs, TimeUnit.MILLISECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1495,16 +1508,12 @@ public class DefaultCoordinator extends Coordinator {
                 return true;
             }
 
-            if (profileWaitAfterCancelExpired()) {
-                return true;
-            }
-
             if (ThriftServer.getExecutor() != null
                     && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
             }
 
-            leftTimeoutS -= waitTime;
+            leftTimeoutMs -= waitTimeMs;
         }
 
         if (!awaitRes) {
@@ -1527,15 +1536,13 @@ public class DefaultCoordinator extends Coordinator {
      */
     @VisibleForTesting
     public boolean profileWaitAfterCancelExpired() {
-        long cancelledAt = cancelledAtMs;
-        if (cancelledAt < 0) {
-            return false;
-        }
-        long waitedMs = System.currentTimeMillis() - cancelledAt;
-        if (waitedMs < Config.profile_wait_after_cancel_second * 1000L) {
+        long graceLeftMs = remainingCancelGraceMs();
+        if (graceLeftMs != 0) {
+            // -1 means the query was not cancelled, anything positive means the grace period is still open.
             return false;
         }
 
+        long waitedMs = System.currentTimeMillis() - cancelledAtMs;
         List<String> unreported = queryProfile.getUnfinishedInstanceIds();
         LOG.warn("query {} was cancelled {}ms ago and {} instance(s) still have not reported, " +
                         "giving up on their profile: {}",
@@ -1543,6 +1550,19 @@ public class DefaultCoordinator extends Coordinator {
         // Release the latch so isDone() holds and the caller does not mistake this for a timeout.
         queryProfile.finishAllInstances(Status.OK);
         return true;
+    }
+
+    /**
+     * Milliseconds left in the cancellation grace period: -1 if the query was not cancelled, 0 once the
+     * grace period has elapsed. {@link #join} also uses it to avoid sleeping past the deadline.
+     */
+    private long remainingCancelGraceMs() {
+        long cancelledAt = cancelledAtMs;
+        if (cancelledAt < 0) {
+            return -1;
+        }
+        long deadlineMs = cancelledAt + Config.profile_wait_after_cancel_second * 1000L;
+        return Math.max(0, deadlineMs - System.currentTimeMillis());
     }
 
     // build execution profile  from every BE's report
