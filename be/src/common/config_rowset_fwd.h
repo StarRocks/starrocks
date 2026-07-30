@@ -106,6 +106,7 @@ CONF_mInt32(compression_dict_sample_bytes, "65536");
 // dictionary sample. Guards against building a garbage dict from a tiny/near
 // empty first page and permanently marking the column dict-ready.
 CONF_mInt32(compression_dict_min_sample_bytes, "1024");
+
 // compression dict compression-dictionary build mode:
 //   "sample" (default) -- take the first eligible page's bytes verbatim as a
 //       raw-content dictionary. No buffering, no training cost, page 0 is itself
@@ -115,6 +116,7 @@ CONF_mInt32(compression_dict_min_sample_bytes, "1024");
 //       the dictionary keeps only frequent substrings sampled across many rows,
 //       but it defers those pages' compression and costs training CPU.
 CONF_mString(compression_dict_build_mode, "sample");
+
 // "train" mode only: how many data pages to buffer before training. Bounds the
 // extra write memory at compression_dict_train_pages * data_page_size per column
 // (32 * 64KB = 2MB by default).
@@ -124,10 +126,12 @@ CONF_mString(compression_dict_build_mode, "sample");
 // replay-heavy data while raising compression_dict_max_size under a K=8 budget did
 // nothing (the trainer could not fill the requested size).
 CONF_mInt32(compression_dict_train_pages, "32");
+
 // "train" mode only: fragment size the buffered pages are cut into to form
 // training samples. Many small samples train a better dictionary than a few
 // large ones.
 CONF_mInt32(compression_dict_train_fragment_bytes, "4096");
+
 // Maximum dictionary size. 64KB, not the 110KiB zstd-CLI convention: measured on
 // a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
 // 112KB and 256KB on EVERY column, because the dictionary is a codebook of
