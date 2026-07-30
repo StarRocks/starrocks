@@ -73,4 +73,11 @@ public class EmptySetNode extends PlanNode {
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         planNode.setNode_type(TPlanNodeType.EXCHANGE_NODE);
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into an empty-set source operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }
