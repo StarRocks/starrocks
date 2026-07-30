@@ -24,6 +24,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -620,21 +621,21 @@ public class HistogramStatisticsTest {
         mcvLeft = new HashMap<>();
         mcvLeft.put("10", 300L);
         mcvLeft.put("22", 100L);
-        histogramLeft = new Histogram(null, mcvLeft);
+        histogramLeft = new Histogram(List.of(), mcvLeft);
         columnStatisticLeft = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramLeft, ColumnStatistic.StatisticType.ESTIMATE);
 
         mcvRight = new HashMap<>();
         mcvRight.put("22", 80L);
         mcvRight.put("9", 50L);
-        histogramRight = new Histogram(null, mcvRight);
+        histogramRight = new Histogram(List.of(), mcvRight);
         columnStatisticRight = new ColumnStatistic(1, 50, 0, 4, 500,
                 histogramRight, ColumnStatistic.StatisticType.ESTIMATE);
 
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
                 columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertNull(exist.get().getBuckets());
+        Assertions.assertTrue(CollectionUtils.isEmpty(exist.get().getBuckets()));
         Assertions.assertEquals(exist.get().getMCV().size(), 1);
         Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
 
