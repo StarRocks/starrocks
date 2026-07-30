@@ -17,7 +17,13 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+<<<<<<< HEAD
+=======
+import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -84,6 +90,23 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
+
+    // Global dicts seeded from a query dump during ReplayFromDump. On replay there is no BE to load a dict
+    // from, so hasGlobalDict/getGlobalDict below short-circuit to a seeded dict when present -- reproducing the
+    // dict-encoding optimization the dump captured. Keyed by the REPLAYED (newly assigned) tableId + column.
+    // Empty outside replay, so it is inert in production.
+    @VisibleForTesting
+    private static final Map<ColumnIdentifier, ColumnDict> REPLAY_DICTS = Maps.newConcurrentMap();
+
+    @VisibleForTesting
+    public static void replayPut(long tableId, ColumnId columnName, ColumnDict dict) {
+        REPLAY_DICTS.put(new ColumnIdentifier(tableId, columnName), dict);
+    }
+
+    @VisibleForTesting
+    public static void clearReplayDicts() {
+        REPLAY_DICTS.clear();
+    }
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
@@ -189,6 +212,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        // A dump-seeded dict is authoritative for replay; deliberately ignore versionTime (the recreated
+        // replay table has a fresh, larger version that would otherwise fail the version gate below).
+        // REPLAY_DICTS is empty outside ReplayFromDump, so the isEmpty() guard makes this a no-op in production.
+        if (!REPLAY_DICTS.isEmpty() && REPLAY_DICTS.containsKey(columnIdentifier)) {
+            return true;
+        }
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
             return false;
@@ -239,6 +268,9 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public boolean hasGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (!REPLAY_DICTS.isEmpty() && REPLAY_DICTS.containsKey(columnIdentifier)) {
+            return true;
+        }
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
             return false;
@@ -343,6 +375,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (!REPLAY_DICTS.isEmpty()) {
+            ColumnDict replayDict = REPLAY_DICTS.get(columnIdentifier);
+            if (replayDict != null) {
+                return Optional.of(replayDict);
+            }
+        }
         CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
         if (columnFuture.isDone()) {
             try {

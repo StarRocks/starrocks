@@ -45,6 +45,11 @@ import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -134,6 +139,8 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1048,10 +1055,29 @@ public class UtFrameUtils {
                                 columnStatisticEntry.getValue());
             }
         }
+        // mock low-cardinality global dicts: relocate each captured dict (keyed db.table + column name) onto
+        // the REPLAYED table's freshly-assigned id, and seed CacheDictManager so hasGlobalDict returns true
+        // offline. This reproduces the dict-encoding (Decode-node) optimization that would otherwise be lost
+        // because the replay env has no BE to load a dict from. Kept on the real CacheDictManager path (not
+        // USE_MOCK_DICT_MANAGER) so only genuinely dict-optimized columns light up.
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : replayDumpInfo.getTableGlobalDictMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                    .getTable(entry.getKey().split("\\.")[1]);
+            if (replayTable == null) {
+                continue;
+            }
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                CacheDictManager.replayPut(replayTable.getId(),
+                        ColumnId.create(columnEntry.getKey()), columnEntry.getValue());
+            }
+        }
         return replaySql;
     }
 
     private static void tearMockEnv() {
+        // Drop dump-seeded global dicts so they never leak into a later test.
+        CacheDictManager.clearReplayDicts();
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         for (int i = 1; i < backendIdSize; ++i) {

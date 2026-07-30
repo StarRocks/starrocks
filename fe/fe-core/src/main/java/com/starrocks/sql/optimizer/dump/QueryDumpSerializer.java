@@ -31,6 +31,11 @@ import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
@@ -167,6 +172,47 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+<<<<<<< HEAD
+=======
+        // column histogram: the full histogram (buckets + mcv) round-trips here, keyed the same way as
+        // column_statistics, because column_statistics only keeps the truncated MCV preview from toString().
+        // Only emitted when a column actually carries a histogram, so older/histogram-free dumps are unaffected.
+        // Intentionally not emitted on the desensitized path: raw bucket bounds and MCV values would leak data.
+        JsonObject tableColumnHistogram = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
+            JsonObject columnHistograms = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                Histogram histogram = columnEntry.getValue().getHistogram();
+                if (histogram != null) {
+                    columnHistograms.addProperty(columnEntry.getKey(), HistogramUtils.serializeHistogram(histogram));
+                }
+            }
+            if (columnHistograms.size() > 0) {
+                tableColumnHistogram.add(entry.getKey(), columnHistograms);
+            }
+        }
+        if (tableColumnHistogram.size() > 0) {
+            dumpJson.add("column_histogram", tableColumnHistogram);
+        }
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- the dict
+        // strings are raw column data, exactly like the histogram exclusion above.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
+            }
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
+            }
+        }
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
+        }
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         }

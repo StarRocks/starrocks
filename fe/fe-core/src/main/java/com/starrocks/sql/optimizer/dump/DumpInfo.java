@@ -19,6 +19,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.Map;
@@ -43,6 +44,19 @@ public interface DumpInfo {
     default void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
     }
 
+<<<<<<< HEAD
+=======
+    default void addExternalTableRowCount(Table table, long rowCount) {
+    }
+
+    default void addExternalTablePartitions(Table table, List<String> partitionSpec,
+                                            List<String> partitionNames) {
+    }
+
+    default void addTableGlobalDict(Table table, String column, ColumnDict columnDict) {
+    }
+
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
     default void addPartitionRowCount(Table table, String partition, long rowCount) {
     }
 

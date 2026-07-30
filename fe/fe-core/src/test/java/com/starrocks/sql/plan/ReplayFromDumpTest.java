@@ -111,6 +111,48 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 30"), replayPair.second);
     }
 
+    // Low-cardinality global dictionary replay: the dump carries the real global dict (captured via the new
+    // global_dict section), and replay seeds it into CacheDictManager keyed by the recreated table's id, so the
+    // dict-encoding (Decode-node) optimization reproduces OFFLINE. Deliberately does NOT set
+    // USE_MOCK_DICT_MANAGER: unlike the blanket mock (which fakes a dict for every varchar column), this uses
+    // the real dict captured in the dump. Before this change, replay had no dict (the production cache has no
+    // BE to load from) and produced no Decode node at all.
+    @Test
+    public void testLowCardinalityGlobalDictReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/low_cardinality_global_dict");
+        // The dump must actually carry the captured dict.
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableGlobalDictMap()
+                        .getOrDefault("qd_lowcard.lc", java.util.Collections.emptyMap()).containsKey("mode"),
+                "dump should carry the global_dict for qd_lowcard.lc.mode");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        Assertions.assertTrue(plan.contains(":Decode"),
+                "expected a Decode node reproduced from the captured global dict, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("<dict id"),
+                "expected the dict-id mapping in the Decode node, plan:\n" + plan);
+    }
+
+    // ARRAY<VARCHAR> counterpart: the low-card optimization dict-encodes array-of-varchar element strings too, and
+    // the dict is keyed by the same (tableId, columnId). Verifies capture is not limited to scalar varchar and
+    // that replay reproduces the array Decode from the captured dict.
+    @Test
+    public void testArrayLowCardinalityGlobalDictReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/array_low_cardinality_global_dict");
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableGlobalDictMap()
+                        .getOrDefault("qd_arr_lc.arr_lc", java.util.Collections.emptyMap()).containsKey("tags"),
+                "dump should carry the global_dict for the array column qd_arr_lc.arr_lc.tags");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        // This query decodes inline (array_min/array_max output ids), so the dict shows up as scan dict-encoding
+        // and inline DictDecode expressions rather than a standalone :Decode node.
+        Assertions.assertTrue(plan.contains("dict_col=tags"),
+                "expected the array column tags to be dict-optimized at scan, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("ARRAY<INT>"),
+                "expected tags to be dict-encoded as ARRAY<INT> from the captured dict, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("DictDecode("),
+                "expected inline DictDecode reproduced from the captured array global dict, plan:\n" + plan);
+    }
+
     @Test
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
@@ -1244,4 +1286,5 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
                         + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
+
 }

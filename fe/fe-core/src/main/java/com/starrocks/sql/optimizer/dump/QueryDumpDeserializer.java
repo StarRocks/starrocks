@@ -26,6 +26,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,6 +122,59 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addTableStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
             }
         }
+<<<<<<< HEAD
+=======
+        // column histogram: merge the round-tripped histogram back onto the column statistic parsed above.
+        // Optional section (older dumps don't have it), guarded by has().
+        if (dumpJsonObject.has("column_histogram")) {
+            JsonObject tableColumnHistogram = dumpJsonObject.getAsJsonObject("column_histogram");
+            for (String tableKey : tableColumnHistogram.keySet()) {
+                JsonObject columnHistograms = tableColumnHistogram.get(tableKey).getAsJsonObject();
+                Map<String, ColumnStatistic> tableStats =
+                        dumpInfo.getTableStatisticsMap().getOrDefault(tableKey, Collections.emptyMap());
+                for (String columnKey : columnHistograms.keySet()) {
+                    ColumnStatistic base = tableStats.get(columnKey);
+                    if (base == null) {
+                        continue;
+                    }
+                    String histogramStr = columnHistograms.get(columnKey).getAsString();
+                    Histogram histogram = HistogramUtils.deserializeHistogram(histogramStr);
+                    dumpInfo.addTableStatistics(tableKey, columnKey,
+                            ColumnStatistic.buildFrom(base).setHistogram(histogram).build());
+                }
+            }
+        }
+        // low-cardinality global dictionary captured for the query; replay seeds it so the dict-encoding
+        // (Decode-node) optimization reproduces offline. Optional section (older dumps lack it), guarded by has().
+        if (dumpJsonObject.has("global_dict")) {
+            JsonObject tableGlobalDict = dumpJsonObject.getAsJsonObject("global_dict");
+            for (String tableKey : tableGlobalDict.keySet()) {
+                JsonObject columnDicts = tableGlobalDict.get(tableKey).getAsJsonObject();
+                for (String columnKey : columnDicts.keySet()) {
+                    dumpInfo.addTableGlobalDict(tableKey, columnKey,
+                            ColumnDict.fromJson(columnDicts.get(columnKey).getAsString()));
+                }
+            }
+        }
+        // automatic/expression partition values: one representative value tuple per concrete partition, used
+        // to recreate partitions on replay for tables whose CREATE TABLE omits partition definitions.
+        // Optional section (older dumps and tables with explicit partitions don't have it), guarded by has().
+        if (dumpJsonObject.has("partition_values")) {
+            JsonObject tablePartitionValues = dumpJsonObject.getAsJsonObject("partition_values");
+            for (String tableKey : tablePartitionValues.keySet()) {
+                JsonArray valuesArray = tablePartitionValues.get(tableKey).getAsJsonArray();
+                List<List<String>> partitionValues = new ArrayList<>();
+                for (JsonElement tupleElement : valuesArray) {
+                    List<String> tuple = new ArrayList<>();
+                    for (JsonElement valueElement : tupleElement.getAsJsonArray()) {
+                        tuple.add(valueElement.getAsString());
+                    }
+                    partitionValues.add(tuple);
+                }
+                dumpInfo.addAutomaticPartitionValues(tableKey, partitionValues);
+            }
+        }
+>>>>>>> 81a43e77a4 ([Enhancement] Capture and replay the low-cardinality global dictionary in query dump (#76941))
         // BE number
         int beNum = dumpJsonObject.get("be_number").getAsInt();
         dumpInfo.setBeNum(beNum);
