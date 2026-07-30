@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.dump;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,6 +59,9 @@ public class QueryDumpInfo implements DumpInfo {
     // dbName.tableName -> columnName -> low-cardinality global dictionary captured for the query. Keyed by name
     // (not the numeric column id) so it survives replay, where the table is recreated with a new id.
     private final Map<String, Map<String, ColumnDict>> tableGlobalDictMap = new HashMap<>();
+    // dbName.tableName -> columnName -> column min/max captured for the query. Same name-keying rationale as
+    // tableGlobalDictMap. Drives the meta-scan / group-by-compressed-key rewrites on replay.
+    private final Map<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> tableColumnMinMaxMap = new HashMap<>();
     // tableName->representative partition values (one tuple per concrete partition). Only populated for tables
     // whose CREATE TABLE omits partition definitions (automatic/expression partitioning), so replay can
     // recreate those partitions and match the per-partition row counts. Each inner list is one partition's
@@ -227,6 +232,7 @@ public class QueryDumpInfo implements DumpInfo {
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
         this.tableGlobalDictMap.clear();
+        this.tableColumnMinMaxMap.clear();
         this.createTableStmtMap.clear();
         this.numCoresPerBe.clear();
         this.numCoresPerWarehouse.clear();
@@ -295,6 +301,32 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<String, Map<String, ColumnDict>> getTableGlobalDictMap() {
         return tableGlobalDictMap;
+    }
+
+    @Override
+    public void addColumnMinMax(Table table, String column, IMinMaxStatsMgr.ColumnMinMax minMax) {
+        addColumnMinMax(getTableName(table.getId()), column, minMax);
+    }
+
+    public void addColumnMinMax(String tableName, String column, IMinMaxStatsMgr.ColumnMinMax minMax) {
+        tableColumnMinMaxMap.computeIfAbsent(tableName, k -> new HashMap<>()).put(column, minMax);
+    }
+
+    public Map<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> getTableColumnMinMaxMap() {
+        return tableColumnMinMaxMap;
+    }
+
+    // Shared capture entry for the optimizer rules that consume IMinMaxStatsMgr (meta-scan / group-by
+    // compressed-key / monotonic-function rewrites). Records the accepted min/max iff this query is being
+    // dumped -- gated on a real QueryDumpInfo (also covers the failure/virtual dump), inert otherwise.
+    public static void captureColumnMinMax(ConnectContext connectContext, Table table, String column,
+                                           IMinMaxStatsMgr.ColumnMinMax minMax) {
+        // Only internal OLAP tables are supported (replay seeds ColumnMinMaxMgr). External/iceberg min/max
+        // (IcebergColumnMinMaxMgr) is not captured, so a non-OlapTable is skipped here rather than dumped.
+        if (table instanceof OlapTable && connectContext != null
+                && connectContext.getDumpInfo() instanceof QueryDumpInfo dumpInfo) {
+            dumpInfo.addColumnMinMax(table, column, minMax);
+        }
     }
 
     public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {

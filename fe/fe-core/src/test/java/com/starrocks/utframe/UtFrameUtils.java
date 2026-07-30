@@ -146,8 +146,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
@@ -1286,12 +1288,30 @@ public class UtFrameUtils {
                         ColumnId.create(columnEntry.getKey()), columnEntry.getValue());
             }
         }
+        // mock column min/max: same relocation as the global dict above, seeding ColumnMinMaxMgr so the
+        // meta-scan / group-by-compressed-key / monotonic-function rewrites reproduce offline (the replay env
+        // has no BE to compute min/max).
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                replayDumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                    .getTable(entry.getKey().split("\\.")[1]);
+            // Only OLAP min/max is replayable (seeded into ColumnMinMaxMgr); skip any other table type.
+            if (!(replayTable instanceof OlapTable)) {
+                continue;
+            }
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                ColumnMinMaxMgr.replayPut(replayTable.getId(),
+                        ColumnId.create(columnEntry.getKey()), columnEntry.getValue());
+            }
+        }
         return replaySql;
     }
 
     private static void tearMockEnv() {
-        // Drop dump-seeded global dicts so they never leak into a later test.
+        // Drop dump-seeded global dicts and column min/max so they never leak into a later test.
         CacheDictManager.clearReplayDicts();
+        ColumnMinMaxMgr.clearReplayMinMax();
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         for (int i = 1; i < backendIdSize; ++i) {
