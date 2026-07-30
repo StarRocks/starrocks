@@ -942,6 +942,21 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Number of transactions currently sitting in COMMITTED status (committed but not yet published to
+    // VISIBLE). Pairs with getMaxCommittedTxnPendingPublishMs (the age of the oldest one): "how many are
+    // pending publish" alongside "how long the oldest has waited". Computed on demand from the authoritative
+    // running set under the read lock, so there is no maintained counter to drift across replay or failover.
+    public int getCommittedTxnNum() {
+        readLock();
+        try {
+            return (int) idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> transactionState.getTransactionStatus() == TransactionStatus.COMMITTED)
+                    .count();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {

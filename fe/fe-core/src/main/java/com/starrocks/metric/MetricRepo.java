@@ -1866,6 +1866,17 @@ public final class MetricRepo {
             };
             maxCommittedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(maxCommittedPendingPublish);
+
+            LeaderAwareGaugeMetric<Integer> committedPendingPublish = new LeaderAwareGaugeMetricInteger(
+                    "txn_committed_pending_publish", MetricUnit.NOUNIT,
+                    "number of transactions sitting in committed status pending publish to visible") {
+                @Override
+                public Integer getValueLeader() {
+                    return mgr.getCommittedTxnNum();
+                }
+            };
+            committedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
+            visitor.visit(committedPendingPublish);
         }
     }
 
