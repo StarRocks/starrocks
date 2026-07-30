@@ -26,6 +26,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
@@ -172,6 +173,18 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                     Histogram histogram = HistogramUtils.deserializeHistogram(histogramStr);
                     dumpInfo.addTableStatistics(tableKey, columnKey,
                             ColumnStatistic.buildFrom(base).setHistogram(histogram).build());
+                }
+            }
+        }
+        // low-cardinality global dictionary captured for the query; replay seeds it so the dict-encoding
+        // (Decode-node) optimization reproduces offline. Optional section (older dumps lack it), guarded by has().
+        if (dumpJsonObject.has("global_dict")) {
+            JsonObject tableGlobalDict = dumpJsonObject.getAsJsonObject("global_dict");
+            for (String tableKey : tableGlobalDict.keySet()) {
+                JsonObject columnDicts = tableGlobalDict.get(tableKey).getAsJsonObject();
+                for (String columnKey : columnDicts.keySet()) {
+                    dumpInfo.addTableGlobalDict(tableKey, columnKey,
+                            ColumnDict.fromJson(columnDicts.get(columnKey).getAsString()));
                 }
             }
         }

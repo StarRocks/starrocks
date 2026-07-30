@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.GsonBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -210,6 +213,29 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setSqlMode(0);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+    }
+
+    // Query-dump capture path: enabling the dump makes buildPlan install a real QueryDumpInfo (shouldDumpQuery()
+    // true), so the low-cardinality rewrite captures the accepted global dict into the dump. The mock dict manager
+    // supplies the dict here. Exercises DecodeCollector capture + LowCardinalityRewriteRule commit + the
+    // QueryDumpSerializer global_dict section.
+    @Test
+    public void testCaptureGlobalDictIntoQueryDump() throws Exception {
+        connectContext.getSessionVariable().setEnableQueryDump(true);
+        try {
+            getFragmentPlan("select S_ADDRESS, count(*) from supplier_nullable group by S_ADDRESS");
+            QueryDumpInfo dumpInfo = (QueryDumpInfo) connectContext.getDumpInfo();
+            Assertions.assertTrue(dumpInfo.getTableGlobalDictMap().values().stream()
+                            .anyMatch(m -> m.containsKey("S_ADDRESS")),
+                    "low-cardinality rewrite should capture S_ADDRESS's global dict into the dump");
+            String json = new GsonBuilder()
+                    .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpSerializer())
+                    .create().toJson(dumpInfo, QueryDumpInfo.class);
+            Assertions.assertTrue(json.contains("global_dict"),
+                    "serialized dump should carry a global_dict section, json:\n" + json);
+        } finally {
+            connectContext.getSessionVariable().setEnableQueryDump(false);
+        }
     }
 
     @Test
