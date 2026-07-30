@@ -1565,9 +1565,10 @@ public class Config extends ConfigBase {
      * set no larger than, `max_running_txn_num_per_db`.
      *
      * The limit is evaluated when a load transaction begins, against the tables it declares at that point.
-     * An explicit multi-statement transaction (BEGIN ... INSERT ... COMMIT) does not know its tables at
-     * begin, so its own admission is bounded only by `max_running_txn_num_per_db`; once its tables are
-     * attached it still counts toward the per-table total that gates other transactions on those tables.
+     * An explicit multi-statement transaction (BEGIN ... INSERT ... COMMIT) does not declare its tables at
+     * begin: its first target table is checked when that first statement runs, while tables added by later
+     * statements are not admission-checked (they still count toward the per-table total that gates other
+     * transactions on those tables).
      *
      * Routine-load and lake-compaction transactions are excluded from this check, exactly as they are from
      * the per-database check. This exempts them from the check only: lake-compaction transactions still

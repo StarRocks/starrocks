@@ -14,17 +14,20 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadJob;
@@ -309,6 +312,88 @@ public class ExplicitTxnTest {
             Assertions.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
         Assertions.assertEquals(1, activationCount.get());
+    }
+
+    @Test
+    public void testExplicitTxnFirstTableGatedByPerTableLimit() throws Exception {
+        // With the per-table cap enabled, an explicit transaction's FIRST INSERT into a table that is already
+        // at the cap must be rejected at admission. An explicit transaction registers before any table is
+        // attached, so without passing the target table explicitly the check sees an empty table list and
+        // gates nothing, admitting the load regardless of how loaded that table already is.
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+        long dbId = database.getId();
+        long tblId = olapTable.getId();
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(10, 11));
+        context.setLastQueryId(new UUID(12L, 13L));
+
+        DatabaseTransactionMgr dbTxnMgr =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(dbId);
+        TransactionState occupy = new TransactionState(dbId, Lists.newArrayList(tblId), 90011L, "occupy_tbl1", null,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"), -1, 3600000L);
+        occupy.setTransactionStatus(TransactionStatus.PREPARE);
+
+        int savedTable = Config.max_running_txn_num_per_table;
+        int savedDb = Config.max_running_txn_num_per_db;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            Config.max_running_txn_num_per_table = 1;
+            // Occupy tbl1's single per-table slot with a running transaction.
+            Deencapsulation.invoke(dbTxnMgr, "unprotectUpsertTransactionState", occupy);
+
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+            String sql = "insert into db1.tbl1 values(1,2,3)";
+            DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+            Analyzer.analyze(stmt, context);
+
+            TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+
+            // tbl1 is already at its per-table cap, so the explicit transaction's first INSERT into it is rejected.
+            Assertions.assertTrue(context.getState().isError());
+        } finally {
+            occupy.setTransactionStatus(TransactionStatus.ABORTED);
+            Deencapsulation.invoke(dbTxnMgr, "unprotectUpsertTransactionState", occupy);
+            Config.max_running_txn_num_per_table = savedTable;
+            Config.max_running_txn_num_per_db = savedDb;
+        }
     }
 
     @Test
@@ -1022,7 +1107,8 @@ public class ExplicitTxnTest {
         try {
             new MockUp<DatabaseTransactionMgr>() {
                 @Mock
-                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                public void upsertTransactionState(TransactionState transactionState,
+                        List<Long> admissionTableIds) throws AnalysisException {
                     throw new AnalysisException("injected upsert failure");
                 }
             };
@@ -1055,7 +1141,8 @@ public class ExplicitTxnTest {
         try {
             new MockUp<DatabaseTransactionMgr>() {
                 @Mock
-                public void upsertTransactionState(TransactionState transactionState) throws AnalysisException {
+                public void upsertTransactionState(TransactionState transactionState,
+                        List<Long> admissionTableIds) throws AnalysisException {
                     throw new AnalysisException("injected upsert failure");
                 }
             };

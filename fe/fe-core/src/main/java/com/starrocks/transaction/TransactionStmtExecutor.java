@@ -185,8 +185,11 @@ public class TransactionStmtExecutor {
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {
+            // Gate the transaction's first target table against the per-table running-txn limit. An
+            // explicit BEGIN...COMMIT registers with an empty table list, so pass the table explicitly
+            // rather than relying on transactionState.getTableIdList(), which is attached afterward.
             TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
-                    context.getTxnId(), database.getId());
+                    context.getTxnId(), database.getId(), List.of(targetTable.getId()));
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
@@ -236,6 +239,11 @@ public class TransactionStmtExecutor {
     public static void loadData(long dbId, long tableId, ExplicitTxnState.ExplicitTxnStateItem item,
             ConnectContext context) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        // No admission table is passed here on purpose. This overload is reached from multi statement
+        // stream load only after every table coordinator has been dispatched and joined, so the data has
+        // already been uploaded. Gating at this point would reject a load that has done all of its work and
+        // force a rollback, which is worse than letting it finish. Admission for this path would have to
+        // happen before the transfer starts, which is a separate change.
         TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
                 context.getTxnId(), dbId);
         ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(

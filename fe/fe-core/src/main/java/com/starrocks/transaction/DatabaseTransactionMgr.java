@@ -263,12 +263,21 @@ public class DatabaseTransactionMgr {
 
     public void upsertTransactionState(TransactionState transactionState)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
+        upsertTransactionState(transactionState, transactionState.getTableIdList());
+    }
+
+    // admissionTableIds is the set of tables to run the per-table running-txn check against. It usually equals
+    // the transaction's own tableIdList, but an explicit BEGIN...COMMIT transaction registers before its first
+    // statement attaches any table, so the caller passes that first target table here to gate it at admission
+    // like an implicit load, without persisting the table onto the transaction yet.
+    public void upsertTransactionState(TransactionState transactionState, List<Long> admissionTableIds)
+            throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
 
         writeLock();
         try {
             checkLabel(transactionState.getLabel(), transactionState.getRequestId());
-            checkRunningTxnExceedLimit(transactionState.getSourceType(), transactionState.getTableIdList());
+            checkRunningTxnExceedLimit(transactionState.getSourceType(), admissionTableIds);
             unprotectUpsertTransactionState(transactionState);
 
             if (MetricRepo.hasInit) {
