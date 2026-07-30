@@ -37,7 +37,9 @@ We recommend that you use 10 Gigabit Ethernet networking to ensure stable data t
 
 ## Operating System
 
-StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9, Ubuntu Linux 22.04, or Ubuntu Linux 24.04.
+For StarRocks v4.1 and earlier, supported operating systems include Red Hat Enterprise Linux 7.9, CentOS Linux 7.9, Ubuntu Linux 22.04, and Ubuntu Linux 24.04.
+
+Starting from StarRocks v4.2, binaries built on Rocky Linux 9 require glibc 2.34 or later. Therefore, these binaries do not run on operating systems with glibc earlier than 2.34, including EL7 and EL8 distributions, CentOS 8, Alibaba Cloud Linux 3, Kylin OS V10, and Amazon Linux 2.
 
 ## Software
 
