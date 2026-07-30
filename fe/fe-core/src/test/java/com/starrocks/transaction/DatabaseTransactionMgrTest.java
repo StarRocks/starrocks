@@ -605,6 +605,23 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void getCommittedTxnNumTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // setUp() seeds several committed transactions; the count must match getCommittedTxnList().
+        int committedCount = masterDbTransMgr.getCommittedTxnList().size();
+        Assertions.assertTrue(committedCount > 0);
+        assertEquals(committedCount, masterDbTransMgr.getCommittedTxnNum());
+
+        // once every committed transaction becomes visible, nothing is pending publish.
+        for (TransactionState txn : masterDbTransMgr.getCommittedTxnList()) {
+            masterDbTransMgr.finishTransaction(txn.getTransactionId(), null, 0);
+        }
+        assertEquals(0, masterDbTransMgr.getCommittedTxnNum());
+    }
+
+    @Test
     public void testAbortTransactionWithNotFoundException() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
