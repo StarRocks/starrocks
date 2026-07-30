@@ -24,7 +24,6 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.commons.collections.CollectionUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -635,7 +634,7 @@ public class HistogramStatisticsTest {
         Optional<Histogram> exist = BinaryPredicateStatisticCalculator.updateHistWithJoin(
                 columnStatisticLeft, IntegerType.BIGINT, columnStatisticRight, IntegerType.BIGINT);
         Assertions.assertTrue(exist.isPresent());
-        Assertions.assertTrue(CollectionUtils.isEmpty(exist.get().getBuckets()));
+        Assertions.assertTrue(exist.get().getBuckets().isEmpty());
         Assertions.assertEquals(exist.get().getMCV().size(), 1);
         Assertions.assertEquals(exist.get().getMCV().get("22").longValue(), 100 * 80);
 

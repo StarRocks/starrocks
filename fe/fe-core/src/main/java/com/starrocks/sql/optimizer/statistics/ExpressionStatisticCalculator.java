@@ -212,7 +212,7 @@ public class ExpressionStatisticCalculator {
 
             if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
                 Map<String, Long> mcv = childStat.getHistogram().getMCV();
-                if (mcv != null && (!mcv.isEmpty())) {
+                if (!mcv.isEmpty()) {
                     String trueKey = booleanToMcvValue(true);
                     String falseKey = booleanToMcvValue(false);
 
@@ -1129,7 +1129,7 @@ public class ExpressionStatisticCalculator {
             for (ColumnStatistic input : inputs) {
                 final double nullsFraction = input.getNullsFraction();
                 final var histogram = input.getHistogram();
-                if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
+                if (nullsFraction < 1 && histogram != null) {
                     for (final var entry : histogram.getMCV().entrySet().stream()
                             .sorted((a, b) -> {
                                 int cmp = Long.compare(b.getValue(), a.getValue());
@@ -1315,7 +1315,7 @@ public class ExpressionStatisticCalculator {
                     // If condition MCVs are available, use branch row weights and collapse
                     // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
-                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                    if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
                         final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
                         final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
@@ -1392,8 +1392,8 @@ public class ExpressionStatisticCalculator {
             long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
             long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
 
-            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
-            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+            final boolean thenHasHist = thenStat.getHistogram() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null;
 
             // If neither branch has a histogram, nothing to propagate.
             if (!thenHasHist && !elseHasHist) {
@@ -1509,7 +1509,7 @@ public class ExpressionStatisticCalculator {
             //     - if buckets are all <= 0: y = -x (monotonic decreasing) => [l,u] -> [-u,-l], reverse order
             //     - if buckets cross 0: non-monotonic => fail closed (Optional.empty()) to avoid inconsistent histogram
             List<Bucket> newBuckets = childHist.getBuckets();
-            if (newBuckets != null && !newBuckets.isEmpty()) {
+            if (!newBuckets.isEmpty()) {
                 boolean needNegateBuckets = FunctionSet.NEGATIVE.equalsIgnoreCase(fn);
                 if (FunctionSet.ABS.equalsIgnoreCase(fn)) {
                     boolean allNonNegative = newBuckets.stream().allMatch(b -> b.getLower() >= 0);
@@ -1657,16 +1657,14 @@ public class ExpressionStatisticCalculator {
                     final double bucketShift = FunctionSet.SUBTRACT.equalsIgnoreCase(callOperator.getFnName())
                             ? -deltaOpt.getAsDouble()
                             : deltaOpt.getAsDouble();
-                    if (baseHist.getBuckets() != null) {
-                        newBuckets = baseHist.getBuckets().stream()
-                                .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
-                                        b.getCount(), b.getUpperRepeats()))
-                                .collect(Collectors.toList());
-                    }
+                    newBuckets = baseHist.getBuckets().stream()
+                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                    b.getCount(), b.getUpperRepeats()))
+                            .collect(Collectors.toList());
                 }
             } else {
                 OptionalDouble cOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
-                if (cOpt.isPresent() && baseHist.getBuckets() != null && !baseHist.getBuckets().isEmpty()) {
+                if (cOpt.isPresent() && !baseHist.getBuckets().isEmpty()) {
                     final double cDouble = cOpt.getAsDouble();
                     final List<Bucket> baseBuckets = baseHist.getBuckets();
                     long prevCum = 0L;

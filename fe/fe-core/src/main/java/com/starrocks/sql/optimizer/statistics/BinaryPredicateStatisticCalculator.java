@@ -595,10 +595,7 @@ public class BinaryPredicateStatisticCalculator {
         return mergedBuckets;
     }
 
-    private static List<Bucket> withFiniteBounds(List<Bucket> buckets) {
-        if (buckets == null) {
-            return List.of();
-        }
+    private static List<Bucket> withFiniteBounds(@Nonnull List<Bucket> buckets) {
         return buckets.stream()
                 .filter(b -> Double.isFinite(b.getLower()) && Double.isFinite(b.getUpper()))
                 .collect(Collectors.toList());
@@ -609,7 +606,7 @@ public class BinaryPredicateStatisticCalculator {
     // histogram fully described by MCVs is legitimately complete, not a placeholder.
     private static boolean hasOnlyNonFiniteBuckets(Histogram histogram) {
         List<Bucket> buckets = histogram.getBuckets();
-        return buckets != null && !buckets.isEmpty() && withFiniteBounds(buckets).isEmpty();
+        return !buckets.isEmpty() && withFiniteBounds(buckets).isEmpty();
     }
 
     private static Optional<StatisticRangeValues> computeBucketIntersection(Bucket leftBucket, Bucket rightBucket) {
