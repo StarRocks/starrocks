@@ -1064,17 +1064,17 @@ public class PropertyAnalyzer {
                 return compressionDictColumns;
             }
 
-            String[] sharedDictColumnArr = compressionDictColumnsStr.split(COMMA_SEPARATOR);
-            Set<String> sharedDictColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            for (String sharedDictColumn : sharedDictColumnArr) {
-                sharedDictColumn = sharedDictColumn.trim();
-                String finalCompressionDictColumn = sharedDictColumn;
+            String[] compressionDictColumnArr = compressionDictColumnsStr.split(COMMA_SEPARATOR);
+            Set<String> compressionDictColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String compressionDictColumn : compressionDictColumnArr) {
+                compressionDictColumn = compressionDictColumn.trim();
+                String finalCompressionDictColumn = compressionDictColumn;
                 Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalCompressionDictColumn))
                         .findFirst()
                         .orElse(null);
                 if (column == null) {
                     throw new AnalysisException(
-                            String.format("Invalid compression dict column '%s': not exists", sharedDictColumn));
+                            String.format("Invalid compression dict column '%s': not exists", compressionDictColumn));
                 }
 
                 Type type = column.getType();
@@ -1083,20 +1083,20 @@ public class PropertyAnalyzer {
                 if (!type.isStringType() && !type.isJsonType()) {
                     throw new AnalysisException(String.format(
                             "Invalid compression dict column '%s': unsupported type %s, "
-                                    + "only CHAR/VARCHAR/STRING/JSON are supported", sharedDictColumn, type));
+                                    + "only CHAR/VARCHAR/STRING/JSON are supported", compressionDictColumn, type));
                 }
 
                 // compression dict is only used in value columns, not key columns.
                 if (column.isKey()) {
                     throw new AnalysisException(
-                            "Compression dict column only used in value columns. invalid column: " + sharedDictColumn);
+                            "Compression dict column only used in value columns. invalid column: " + compressionDictColumn);
                 }
 
-                if (sharedDictColumnSet.contains(sharedDictColumn)) {
-                    throw new AnalysisException(String.format("Duplicate compression dict column '%s'", sharedDictColumn));
+                if (compressionDictColumnSet.contains(compressionDictColumn)) {
+                    throw new AnalysisException(String.format("Duplicate compression dict column '%s'", compressionDictColumn));
                 }
 
-                sharedDictColumnSet.add(sharedDictColumn);
+                compressionDictColumnSet.add(compressionDictColumn);
                 compressionDictColumns.add(column.getName());
             }
 
