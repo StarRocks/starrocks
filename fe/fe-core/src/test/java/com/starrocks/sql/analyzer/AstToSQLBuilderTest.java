@@ -249,11 +249,49 @@ public class AstToSQLBuilderTest {
     public void testValuesInDerivedTablePositionKeepsParentheses() {
         // Counterpart to testInsertValuesRoundTrip: outside the INSERT source, a VALUES relation sits in
         // derived-table position and *must* stay parenthesized.
-        String sql = "select * from (values (1, 'a'), (2, 'b')) tt(x, y)";
-        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        String serializedSql = AstToSQLBuilder.toSQL(stmt);
-        Assertions.assertEquals("SELECT *\nFROM (VALUES(1, 'a'), (2, 'b')) tt(x,y)", serializedSql);
-        Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT));
+        String[][] cases = {
+                // explicit column names
+                {"select * from (values (1, 'a'), (2, 'b')) tt(x, y)",
+                        "SELECT *\nFROM (VALUES(1, 'a'), (2, 'b')) tt(x,y)"},
+                // alias without column names: the deparser supplies the generated column_0
+                {"select cast(column_0 as datetime) from (values ('2020.02.29')) as tmp",
+                        "SELECT CAST(`column_0` AS DATETIME)\nFROM (VALUES('2020.02.29')) tmp(column_0)"},
+                // VALUES nested under an INSERT ... SELECT: the INSERT source is the SELECT, not the
+                // VALUES, so the inner relation must still be parenthesized
+                {"insert into t0 select cast(column_0 as int) from (values ('1')) as tmp",
+                        "INSERT INTO `t0` SELECT CAST(`column_0` AS INT)\nFROM (VALUES('1')) tmp(column_0)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT),
+                    c[0]);
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
+    }
+
+    @Test
+    public void testInsertValuesWithDefaultKeyword() {
+        // DefaultValueExpr used to serialize to null, so joining the row's child strings threw NPE.
+        String[][] cases = {
+                {"insert into t0 (v1, v2) values (DEFAULT, 3)", "INSERT INTO `t0` (`v1`,`v2`) VALUES(DEFAULT, 3)"},
+                {"insert into t0 values (DEFAULT)", "INSERT INTO `t0` VALUES(DEFAULT)"},
+                {"insert into t0 (v1, v2) values (1, DEFAULT), (2, 3)",
+                        "INSERT INTO `t0` (`v1`,`v2`) VALUES(1, DEFAULT), (2, 3)"},
+                {"insert into t0 (v1, v2) values (DEFAULT, DEFAULT)",
+                        "INSERT INTO `t0` (`v1`,`v2`) VALUES(DEFAULT, DEFAULT)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = Assertions.assertDoesNotThrow(() -> AstToSQLBuilder.toSQL(stmt), c[0]);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
     }
 
     @Test
