@@ -3057,9 +3057,9 @@ public class OlapTable extends Table {
         }
 
         // compression dict columns (compression dict)
-        Set<String> sharedDictColumnNames = getCompressionDictColumnNames();
-        if (sharedDictColumnNames != null && !sharedDictColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, Joiner.on(", ").join(sharedDictColumnNames));
+        Set<String> compressionDictColumnNames = getCompressionDictColumnNames();
+        if (compressionDictColumnNames != null && !compressionDictColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, Joiner.on(", ").join(compressionDictColumnNames));
         }
 
         // colocate group

@@ -1833,15 +1833,15 @@ public class SchemaChangeHandler extends AlterHandler {
             compressionDictColumns = null;
         }
 
-        Set<ColumnId> sharedDictColumnIds = null;
+        Set<ColumnId> compressionDictColumnIds = null;
         if (compressionDictColumns != null) {
-            sharedDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
             for (String columnName : compressionDictColumns) {
                 Column column = olapTable.getColumn(columnName);
                 if (column == null) {
                     throw new DdlException("can not find column by name: " + columnName);
                 }
-                sharedDictColumnIds.add(column.getColumnId());
+                compressionDictColumnIds.add(column.getColumnId());
             }
         }
 
@@ -1856,7 +1856,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
-                .withCompressionDictColumns(sharedDictColumnIds)
+                .withCompressionDictColumns(compressionDictColumnIds)
                 .withCompressionDictColumnsChanged(hasCompressionDictChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 

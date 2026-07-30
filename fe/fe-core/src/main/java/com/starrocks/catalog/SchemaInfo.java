@@ -59,7 +59,7 @@ public class SchemaInfo {
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
     @SerializedName("compressionDictColumns")
-    private final Set<ColumnId> sharedDictColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
+    private final Set<ColumnId> compressionDictColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -79,7 +79,7 @@ public class SchemaInfo {
         this.indexes = builder.indexes;
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
-        this.sharedDictColumnNames = builder.sharedDictColumnNames;
+        this.compressionDictColumnNames = builder.compressionDictColumnNames;
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
@@ -131,7 +131,7 @@ public class SchemaInfo {
     }
 
     public Set<ColumnId> getCompressionDictColumnNames() {
-        return sharedDictColumnNames;
+        return compressionDictColumnNames;
     }
 
     public TCompressionType getCompressionType() {
@@ -159,7 +159,7 @@ public class SchemaInfo {
                 tColumn.setIs_bloom_filter_column(true);
             }
             // use column-level compression dictionary (a ZSTD dictionary)
-            if (sharedDictColumnNames != null && sharedDictColumnNames.contains(column.getColumnId())) {
+            if (compressionDictColumnNames != null && compressionDictColumnNames.contains(column.getColumnId())) {
                 tColumn.setUse_compression_dict(true);
             }
             tColumns.add(tColumn);
@@ -204,7 +204,7 @@ public class SchemaInfo {
                 Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
                 Objects.equals(indexes, that.indexes) &&
                 Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
-                Objects.equals(sharedDictColumnNames, that.sharedDictColumnNames) &&
+                Objects.equals(compressionDictColumnNames, that.compressionDictColumnNames) &&
                 compressionType == that.compressionType &&
                 primaryKeyEncodingType == that.primaryKeyEncodingType;
     }
@@ -212,7 +212,7 @@ public class SchemaInfo {
     @Override
     public int hashCode() {
         return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
-                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, sharedDictColumnNames, compressionType,
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionDictColumnNames, compressionType,
                 compressionLevel, primaryKeyEncodingType);
     }
 
@@ -233,7 +233,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
-        private Set<ColumnId> sharedDictColumnNames; // compression dict
+        private Set<ColumnId> compressionDictColumnNames; // compression dict
         private TCompressionType compressionType;
         private int compressionLevel = -1;
         private TPrimaryKeyEncodingType primaryKeyEncodingType;
@@ -315,10 +315,10 @@ public class SchemaInfo {
             return this;
         }
 
-        public Builder setCompressionDictColumnNames(Collection<ColumnId> sharedDictColumnNames) {
-            Preconditions.checkState(this.sharedDictColumnNames == null);
-            if (sharedDictColumnNames != null) {
-                this.sharedDictColumnNames = new HashSet<>(sharedDictColumnNames);
+        public Builder setCompressionDictColumnNames(Collection<ColumnId> compressionDictColumnNames) {
+            Preconditions.checkState(this.compressionDictColumnNames == null);
+            if (compressionDictColumnNames != null) {
+                this.compressionDictColumnNames = new HashSet<>(compressionDictColumnNames);
             }
             return this;
         }

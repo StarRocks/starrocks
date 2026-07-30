@@ -345,13 +345,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
                     compressionDictColumns = null;
                 }
-                Set<ColumnId> sharedDictColumnIds = null;
+                Set<ColumnId> compressionDictColumnIds = null;
                 if (compressionDictColumns != null && !compressionDictColumns.isEmpty()) {
-                    sharedDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-                    sharedDictColumnIds.addAll(
+                    compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    compressionDictColumnIds.addAll(
                             compressionDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
                 }
-                table.setCompressionDictColumns(sharedDictColumnIds);
+                table.setCompressionDictColumns(compressionDictColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
