@@ -3056,10 +3056,11 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
 
-        // compression dict columns (compression dict)
+        // columns using a compression dictionary
         Set<String> compressionDictColumnNames = getCompressionDictColumnNames();
         if (compressionDictColumnNames != null && !compressionDictColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, Joiner.on(", ").join(compressionDictColumnNames));
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS,
+                    Joiner.on(", ").join(compressionDictColumnNames));
         }
 
         // colocate group
