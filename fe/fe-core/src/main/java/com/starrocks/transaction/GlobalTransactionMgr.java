@@ -369,22 +369,9 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
-        List<Long> tableIdList = transactionState.getTableIdList();
-
-        Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
-                timeoutMillis, TimeUnit.MILLISECONDS)) {
-            String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
-                    transactionId, db.getFullName(), timeoutMillis);
-            throw new StarRocksException(errMsg);
-        }
-        try {
-            waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
-        }
+        waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
         if (waiter == null) {
+            TransactionState transactionState = getTransactionState(db.getId(), transactionId);
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
                     transactionState.toString()));
         }
@@ -403,6 +390,38 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
+        }
+    }
+
+    VisibleStateWaiter retryCommitPreparedOnRateLimitExceeded(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        long startTime = System.currentTimeMillis();
+        while (true) {
+            try {
+                return commitPreparedTransactionUnderDatabaseWLock(db, transactionId, timeoutMs);
+            } catch (CommitRateExceededException e) {
+                throttleCommitOnRateExceed(e, startTime, timeoutMs);
+            }
+        }
+    }
+
+    private VisibleStateWaiter commitPreparedTransactionUnderDatabaseWLock(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        List<Long> tableIdList = transactionState.getTableIdList();
+
+        Locker locker = new Locker();
+        if (!locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), tableIdList, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+            String errMsg = String.format(
+                    "get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
+                    transactionId, db.getFullName(), timeoutMs);
+            throw new StarRocksException(errMsg);
+        }
+        try {
+            return getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 

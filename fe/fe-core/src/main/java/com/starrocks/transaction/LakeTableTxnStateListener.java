@@ -135,16 +135,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
-        if (enableIngestSlowdown()) {
-            long currentTimeMs = System.currentTimeMillis();
-            Set<Long> partitionIds = Sets.newHashSet();
-            for (Long partitionId : dirtyPartitionSet) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                partitionIds.add(partition.getParentId());
-            }
-            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
-        }
-
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -167,6 +157,28 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException(
                     "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
+    }
+
+    @Override
+    public void preCommitPreparedTransaction(TransactionState txnState) throws TransactionException {
+        if (!enableIngestSlowdown()) {
+            return;
+        }
+
+        TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
+        if (tableCommitInfo == null || tableCommitInfo.getIdToPartitionCommitInfo() == null) {
+            return;
+        }
+
+        Set<Long> partitionIds = Sets.newHashSet();
+        for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPhysicalPartitionId());
+            if (partition != null) {
+                partitionIds.add(partition.getParentId());
+            }
+        }
+        new CommitRateLimiter(compactionMgr, txnState, table.getId())
+                .check(partitionIds, System.currentTimeMillis());
     }
 
     @Override

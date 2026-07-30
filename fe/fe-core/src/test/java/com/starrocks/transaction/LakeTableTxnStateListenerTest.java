@@ -57,7 +57,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
     }
 
     @Test
-    public void testCommitRateExceeded() {
+    public void testCommitRateExceededAtFinalCommit() throws TransactionException {
         new MockUp<LakeTableTxnStateListener>() {
             @Mock
             boolean enableIngestSlowdown() {
@@ -69,8 +69,11 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
         LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         makeCompactionScoreExceedSlowdownThreshold();
+        TransactionState txnState = prepareTransactionState(listener);
+
+        LakeTableTxnStateListener commitListener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         Assertions.assertThrows(CommitRateExceededException.class,
-                () -> listener.preCommit(newTransactionState(), buildFullTabletCommitInfo(), Collections.emptyList()));
+                () -> commitListener.preCommitPreparedTransaction(txnState));
     }
 
     @Test
@@ -86,7 +89,10 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
         LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         makeCompactionScoreExceedSlowdownThreshold();
-        listener.preCommit(newTransactionState(), buildFullTabletCommitInfo(), Collections.emptyList());
+        TransactionState txnState = prepareTransactionState(listener);
+
+        LakeTableTxnStateListener commitListener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
+        commitListener.preCommitPreparedTransaction(txnState);
     }
 
     @ParameterizedTest
@@ -222,6 +228,14 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)));
+    }
+
+    private TransactionState prepareTransactionState(LakeTableTxnStateListener listener) throws TransactionException {
+        TransactionState txnState = newTransactionState();
+        listener.preCommit(txnState, buildFullTabletCommitInfo(), Collections.emptyList());
+        txnState.setTransactionStatus(TransactionStatus.PREPARED);
+        listener.preWriteCommitLog(txnState);
+        return txnState;
     }
 
     private static Stream<Arguments> dataProvider() {

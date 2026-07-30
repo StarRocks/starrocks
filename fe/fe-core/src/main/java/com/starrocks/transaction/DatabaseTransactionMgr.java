@@ -498,6 +498,11 @@ public class DatabaseTransactionMgr {
             txnSpan.addEvent("commit_start");
             txnSpan.setAttribute("tables", buildTableListString(db, transactionState));
 
+            List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
+            for (TransactionStateListener listener : stateListeners) {
+                listener.preCommitPreparedTransaction(transactionState);
+            }
+
             // before state transform
             transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
             // COW

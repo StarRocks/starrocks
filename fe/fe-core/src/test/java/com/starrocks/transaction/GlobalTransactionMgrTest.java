@@ -1127,6 +1127,44 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+    public void testRetryCommitPreparedOnRateLimitExceeded() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        VisibleStateWaiter waiter = new VisibleStateWaiter(new TransactionState());
+
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doThrow(new CommitRateExceededException(1001, System.currentTimeMillis()))
+                .doReturn(waiter)
+                .when(dbTransactionMgr)
+                .commitPreparedTransaction(1001L);
+
+        Assertions.assertSame(waiter,
+                globalTransactionMgr.retryCommitPreparedOnRateLimitExceeded(db, 1001L, 1000L));
+
+        Mockito.verify(dbTransactionMgr, Mockito.times(2)).commitPreparedTransaction(1001L);
+    }
+
+    @Test
+    public void testRetryCommitPreparedOnRateLimitExceededTimeout() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doThrow(new CommitRateExceededException(1001, System.currentTimeMillis() + 60_000L))
+                .when(dbTransactionMgr)
+                .commitPreparedTransaction(1001L);
+
+        Assertions.assertThrows(CommitRateExceededException.class,
+                () -> globalTransactionMgr.retryCommitPreparedOnRateLimitExceeded(db, 1001L, 10L));
+    }
+
+    @Test
     public void testPublishVersionTimeout()
             throws StarRocksException, LockTimeoutException {
         Database db = new Database(10, "db0");
