@@ -66,6 +66,35 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         for (Map.Entry<String, JsonElement> entry : tableMeta.entrySet()) {
             dumpInfo.addTableCreateStmt(entry.getKey(), entry.getValue().getAsString());
         }
+        // external-catalog table -> catalog name (newer dumps only; older dumps omit it and replay infers
+        // the catalog from the SQL). Keyed like table_meta (db.table).
+        if (dumpJsonObject.has("external_table_catalog")) {
+            JsonObject externalCatalog = dumpJsonObject.getAsJsonObject("external_table_catalog");
+            for (Map.Entry<String, JsonElement> entry : externalCatalog.entrySet()) {
+                dumpInfo.addExternalTableCatalog(entry.getKey(), entry.getValue().getAsString());
+            }
+        }
+        if (dumpJsonObject.has("external_table_row_count")) {
+            JsonObject externalRowCount = dumpJsonObject.getAsJsonObject("external_table_row_count");
+            for (Map.Entry<String, JsonElement> entry : externalRowCount.entrySet()) {
+                dumpInfo.addExternalTableRowCount(entry.getKey(), entry.getValue().getAsLong());
+            }
+        }
+        if (dumpJsonObject.has("external_table_partition_names")) {
+            JsonObject specObj = dumpJsonObject.has("external_table_partition_spec")
+                    ? dumpJsonObject.getAsJsonObject("external_table_partition_spec") : new JsonObject();
+            JsonObject namesObj = dumpJsonObject.getAsJsonObject("external_table_partition_names");
+            for (Map.Entry<String, JsonElement> entry : namesObj.entrySet()) {
+                String key = entry.getKey();
+                List<String> names = new ArrayList<>();
+                entry.getValue().getAsJsonArray().forEach(e -> names.add(e.getAsString()));
+                List<String> spec = new ArrayList<>();
+                if (specObj.has(key)) {
+                    specObj.getAsJsonArray(key).forEach(e -> spec.add(e.getAsString()));
+                }
+                dumpInfo.addExternalTablePartitions(key, spec, names);
+            }
+        }
         // hive meta store table info
         if (dumpJsonObject.has("hms_table")) {
             JsonObject externalTableMeta = dumpJsonObject.getAsJsonObject("hms_table");
