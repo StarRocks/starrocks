@@ -718,9 +718,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
     // otherwise the incremental refresh may cause incorrect result.
-    // 0: no encode row id
-    // 1: encode_sort_key
-    // 2: encode_fingerprint_sha256
+    // Keys of IvmOpUtils.ENCODE_ROW_ID_FUNCTION_MAP, chosen by IvmOpUtils.deduceEncodeRowIdVersion():
+    // 0 is encode_sort_key, 1 is encode_fingerprint_sha256.
+    // "No row id" is not a value here -- it is expressed by the mv having no __ROW_ID__ column, so the
+    // default 0 is indistinguishable from an append-only mv. Test for the column, not for this field.
     @SerializedName(value = "encodeRowIdVersion")
     private int encodeRowIdVersion = 0;
 
