@@ -68,7 +68,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples),
+          _record_descriptor(descs, tnode.row_tuples),
           _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }

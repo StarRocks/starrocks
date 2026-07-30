@@ -26,7 +26,7 @@
 #include "runtime/serde/chunk_encode_context.h"
 
 namespace starrocks {
-class RowDescriptor;
+class RecordDescriptor;
 class Schema;
 } // namespace starrocks
 
@@ -54,7 +54,7 @@ public:
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+    static StatusOr<Chunk> deserialize(const RecordDescriptor& record_desc, const ChunkPB& chunk_pb,
                                        const int encode_level = 0);
 
     static StatusOr<Chunk> deserialize_with_schema(const Schema& schema, std::string_view buff);
@@ -91,6 +91,6 @@ private:
     std::vector<int> _encode_level;
 };
 
-StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
+StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RecordDescriptor& record_desc, const ChunkPB& chunk_pb);
 
 } // namespace starrocks::serde

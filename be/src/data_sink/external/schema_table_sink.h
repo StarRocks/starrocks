@@ -22,7 +22,6 @@
 
 namespace starrocks {
 
-class RowDescriptor;
 class TExpr;
 class TMysqlTableSink;
 class RuntimeState;
@@ -33,7 +32,7 @@ class StarRocksNodesInfo;
 // This class is a sinker, which modifies BE related schema tables
 class SchemaTableSink : public DataSink {
 public:
-    SchemaTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
+    SchemaTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs);
 
     ~SchemaTableSink() override;
 

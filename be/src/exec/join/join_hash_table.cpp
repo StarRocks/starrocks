@@ -467,9 +467,9 @@ void JoinHashTable::create(const HashTableParam& param) {
 }
 
 void JoinHashTable::_init_probe_column(const HashTableParam& param) {
-    const auto& probe_desc = *param.probe_row_desc;
-    for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
+    const auto& probe_desc = *param.probe_record_desc;
+    for (auto* slot : probe_desc.slots()) {
+        {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
@@ -525,15 +525,15 @@ void JoinHashTable::_init_probe_column(const HashTableParam& param) {
 }
 
 void JoinHashTable::_init_build_column(const HashTableParam& param) {
-    const auto& build_desc = *param.build_row_desc;
+    const auto& build_desc = *param.build_record_desc;
     std::unordered_set<SlotId> join_key_col_refs;
     for (const auto& join_key : param.join_keys) {
         if (join_key.col_ref != nullptr) {
             join_key_col_refs.insert(join_key.col_ref->slot_id());
         }
     }
-    for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
+    for (auto* slot : build_desc.slots()) {
+        {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 

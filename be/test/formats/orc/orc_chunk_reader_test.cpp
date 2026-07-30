@@ -83,8 +83,7 @@ void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDe
     DescriptorTbl* tbl = nullptr;
     auto st = DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     CHECK(st.ok()) << st;
-    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
-    *tuple_desc = row_desc->tuple_descriptors()[0];
+    *tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
     return;
 }
 

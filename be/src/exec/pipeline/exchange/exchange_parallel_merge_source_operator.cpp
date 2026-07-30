@@ -81,7 +81,7 @@ std::string ExchangeParallelMergeSourceOperator::get_name() const {
 
 Status ExchangeParallelMergeSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc));
+    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs->open(state));
     return Status::OK();
 }
@@ -101,7 +101,7 @@ DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(Ru
         auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
         auto* query_execution_services = state->query_execution_services();
         _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
-                state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
+                state, _record_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
                 config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, _degree_of_parallelism, true);
     }
     return _stream_recvr.get();
@@ -114,8 +114,7 @@ merge_path::MergePathCascadeMerger* ExchangeParallelMergeSourceOperatorFactory::
         SortDescs sort_descs(_is_asc_order, _nulls_first);
         _merger = std::make_unique<merge_path::MergePathCascadeMerger>(
                 state->chunk_size(), degree_of_parallelism(), _sort_exec_exprs->lhs_ordering_expr_ctxs(), sort_descs,
-                _row_desc.tuple_descriptors()[0], TTopNType::ROW_NUMBER, _offset, _limit, chunk_providers,
-                _late_materialize_mode);
+                _record_desc, TTopNType::ROW_NUMBER, _offset, _limit, chunk_providers, _late_materialize_mode);
     }
     return _merger.get();
 }

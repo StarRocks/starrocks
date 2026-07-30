@@ -47,7 +47,6 @@ TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
         : PipelineNode(pool, tnode, descs), _tnode(tnode) {
     _sort_keys = tnode.sort_node.__isset.sql_sort_keys ? tnode.sort_node.sql_sort_keys : "NONE";
     _offset = tnode.sort_node.__isset.offset ? tnode.sort_node.offset : 0;
-    _materialized_tuple_desc = nullptr;
 }
 
 TopNNode::~TopNNode() {
@@ -103,8 +102,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     DCHECK_EQ(_conjuncts.size(), 0) << "TopNNode should never have predicates to evaluate.";
     _abort_on_default_limit_exceeded = tnode.sort_node.is_default_limit;
-    _materialized_tuple_desc = _row_descriptor.tuple_descriptors()[0];
-    DCHECK(_materialized_tuple_desc != nullptr);
+    DCHECK(_tuple_ids.size() == 1) << "TopNNode should only have one tuple id.";
 
     bool all_slot_ref = true;
     std::unordered_set<SlotId> early_materialized_slots;
@@ -126,7 +124,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // but if c0 is tinyint, the byte width of the element of c0 is 1, obviously permuting ordinal column costs more.
     // The permutation cost is proportion of the total size of bytes of the elements of non-group-by columns.
     int materialized_cost = 0;
-    for (auto* slot : _materialized_tuple_desc->slots()) {
+    for (auto* slot : _record_descriptor.slots()) {
         if (early_materialized_slots.count(slot->id())) {
             continue;
         }
@@ -234,11 +232,12 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
         max_buffered_rows = _tnode.sort_node.max_buffered_rows;
     }
 
-    sink_operator = std::make_shared<SinkFactory>(
-            context->next_operator_id(), id(), context_factory, _sort_exec_exprs, _is_asc_order, _is_null_first,
-            _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc,
-            child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs, max_buffered_rows, max_buffered_bytes,
-            _early_materialized_slots, spill_channel_factory);
+    // The record produced by TopNNode is the record materialized before sorting.
+    sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), context_factory, _sort_exec_exprs,
+                                                  _is_asc_order, _is_null_first, _sort_keys, _offset, _limit,
+                                                  _tnode.sort_node.topn_type, _order_by_types, _record_descriptor,
+                                                  _analytic_partition_exprs, max_buffered_rows, max_buffered_bytes,
+                                                  _early_materialized_slots, spill_channel_factory);
 
     // Initialize OperatorFactory's fields involving runtime filters.
     pipeline::init_runtime_filter_for_operator(*this, sink_operator.get(), context, rc_rf_probe_collector);
@@ -249,7 +248,7 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
     source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), context_factory);
     if constexpr (std::is_same_v<LocalParallelMergeSortSourceOperatorFactory, SourceFactory>) {
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
-                ->set_tuple_desc(_materialized_tuple_desc);
+                ->set_record_desc(_record_descriptor);
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())->set_is_gathered(need_merge);
         if (_tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
             down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())

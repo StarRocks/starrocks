@@ -797,7 +797,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             _query_ctx->set_final_sink();
         }
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
-                                                   request.sender_id(), plan->row_desc(), &datasink));
+                                                   request.sender_id(), plan->record_desc(), &datasink));
         RETURN_IF_ERROR(datasink->decompose_data_sink_to_pipeline(&context, runtime_state, std::move(exec_ops), request,
                                                                   tsink, fragment.output_exprs));
     }

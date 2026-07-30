@@ -71,7 +71,6 @@ class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
 class RuntimeFilterRegistry;

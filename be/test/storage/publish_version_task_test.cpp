@@ -207,8 +207,7 @@ public:
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+        auto* tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
 
         return tuple_desc;
     }
