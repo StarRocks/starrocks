@@ -226,6 +226,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                                                     const NgramBloomFilterReaderOptions& reader_options) const {
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning. This check must precede the cached NgramBloomFilterState because
+    // one ExprContext can scan rowsets with different index metadata.
+    if (reader_options.index_gram_num == 0) {
+        return true;
+    }
+
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
@@ -317,13 +324,6 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
                                                               const std::string& func_name) {
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
-
-    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
-    // pruning: a zero gram size would otherwise make the loop below read past
-    // the end of the UTF-8 offset vector.
-    if (index_gram_num == 0) {
-        return false;
-    }
 
     auto gram_num_column = fn_ctx->get_constant_column(2);
     if (gram_num_column != nullptr) {

@@ -213,13 +213,6 @@ public:
 
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
-        // Older materialized views could persist an NGRAMBF index without its
-        // properties. Such an index reaches BE with gram_num == 0. Treat it as
-        // inactive rather than indexing zero-length grams and reading past the
-        // UTF-8 offset vector below.
-        if (gram_num == 0) {
-            return;
-        }
         const auto* cur_slice = reinterpret_cast<const Slice*>(values);
         for (int i = 0; i < count; ++i) {
             // For a case-insensitive index, lowercase the whole value once and build ngrams from the
@@ -274,6 +267,9 @@ struct BloomFilterBuilderFunctor {
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
+    if (bf_options.use_ngram && bf_options.gram_num == 0) {
+        return Status::InvalidArgument("NGRAMBF index requires gram_num greater than zero");
+    }
     return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
 }
 

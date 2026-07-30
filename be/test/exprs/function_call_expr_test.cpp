@@ -476,10 +476,19 @@ TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
     ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     NgramBloomFilterReaderOptions opts;
-    opts.index_gram_num = 0;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+    std::unique_ptr<BloomFilter> bf;
+    ASSERT_OK(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+    ASSERT_OK(bf->init(16, 0.05, HashStrategyPB::HASH_MURMUR3_X64_64));
 
-    // A legacy schema without gram_num must leave the page unpruned.
-    auto bf = make_bf_with_cyrillic_lowered_trigrams();
+    // Populate the expression-local cache from a valid rowset first. The
+    // empty bloom filter makes the valid 3-gram probe reject the page.
+    EXPECT_FALSE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    // A later legacy rowset must still leave the page unpruned, rather than
+    // using the ngrams cached for the earlier valid rowset.
+    opts.index_gram_num = 0;
     EXPECT_TRUE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
 
     ExprExecutor::close(expr_ctxs, &_runtime_state);
