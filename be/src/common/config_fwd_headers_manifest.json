@@ -834,7 +834,6 @@
         "compression_dict_train_pages",
         "compression_dict_train_fragment_bytes",
         "compression_dict_max_size",
-        "enable_compression_dict_ctx_cache",
         "dictionary_encoding_ratio_for_non_string_column",
         "dictionary_speculate_min_chunk_size",
         "metadata_cache_memory_limit_percent",
@@ -988,9 +987,7 @@
       "configs": [
         "lz4_acceleration",
         "lz4_expected_compression_ratio",
-        "lz4_expected_compression_speed_mbps"
-      ],
-      "fields": [
+        "lz4_expected_compression_speed_mbps",
         "enable_compression_dict_ctx_cache"
       ]
     }
