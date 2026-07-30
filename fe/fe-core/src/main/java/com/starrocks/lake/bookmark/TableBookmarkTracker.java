@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -597,7 +598,7 @@ public class TableBookmarkTracker {
     // Caller holds rwLock.writeLock(); the apply runs under the same lock so
     // commit and visibility are atomic.
     private void journalAndApply(BookmarkLogEntry entry) {
-        GlobalStateMgr.getCurrentState().getEditLog()
+        ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                 .logBookmarkEntry(entry, o -> apply((BookmarkLogEntry) o, false));
     }
 

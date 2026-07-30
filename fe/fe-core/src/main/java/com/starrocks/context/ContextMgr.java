@@ -17,6 +17,7 @@ package com.starrocks.context;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.context.policy.CollectionTypePolicy;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.persist.ContextOpLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -219,7 +220,7 @@ public class ContextMgr {
             // follower ever saw, and the leader/follower metadata maps would silently diverge.
             // Letting the EditLog exception propagate without touching the map keeps the failure
             // visible to the caller and the cluster state coherent.
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logCreateContextBase(ContextOpLog.forContextBase(id, name, properties),
                             wal -> putContextBaseLocked(meta));
             LOG.info("create contextbase {} id={}", name, id);
@@ -256,7 +257,7 @@ public class ContextMgr {
             }
             ContextBaseMeta updated = new ContextBaseMeta(prev.getId(), prev.getName(), merged);
             // EditLog before mutation (see createContextBase rationale).
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logAlterContextBase(ContextOpLog.forContextBase(prev.getId(), name, merged),
                             wal -> putContextBaseLocked(updated));
             LOG.info("alter contextbase {} id={} merged_keys={}", name, prev.getId(),
@@ -283,7 +284,7 @@ public class ContextMgr {
             // would never see the drop, and the next image dump would race the failure: if it
             // ran before the operator retried, the drop would silently take effect with no
             // journal record. Persist first, then mutate.
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logDropContextBase(ContextOpLog.forName(name), wal -> {
                         removeContextBaseLocked(name);
                         // Cascade: every collection under `<name>.*` and every workspace under
@@ -323,7 +324,7 @@ public class ContextMgr {
             }
             // EditLog before mutation (see createContextBase rationale). The payload carries the
             // stable id plus old/new names so followers apply the exact same rekey.
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logRenameContextBase(ContextOpLog.forRename(existing.getId(), oldName, newName),
                             wal -> applyRenameContextBaseLocked(oldName, newName, existing));
             LOG.info("rename contextbase {} -> {} id={}", oldName, newName, existing.getId());
@@ -556,7 +557,7 @@ public class ContextMgr {
             }
             long id = GlobalStateMgr.getCurrentState().getNextId();
             CollectionMeta meta = new CollectionMeta(id, cb.getId(), name, normalizedCollectionType, properties);
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logCreateContextCollection(
                             ContextOpLog.forCollection(id, cb.getId(), key, normalizedCollectionType, properties),
                             wal -> putCollectionLocked(key, meta));
@@ -583,7 +584,7 @@ public class ContextMgr {
             // would survive in-memory and be re-persisted into the next image as orphans whose
             // parent collection no longer exists. Image load only used to verify the parent
             // contextbase was present; the matching guard there has been tightened too.
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logDropContextCollection(ContextOpLog.forQualifiedName(key), wal -> {
                         removeCollectionLocked(key);
                         cascadeRemoveWorkspacesUnderCollectionLocked(contextBase, name);
@@ -739,7 +740,7 @@ public class ContextMgr {
             long id = GlobalStateMgr.getCurrentState().getNextId();
             // EditLog before mutation (see createContextBase rationale). A journal-write
             // failure must not leave the leader holding a workspace no follower ever sees.
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logCreateContextWorkspace(
                             ContextOpLog.forWorkspace(id, collectionId, qualifiedName, properties),
                             wal -> workspaces.put(qualifiedName,
@@ -761,7 +762,7 @@ public class ContextMgr {
                 return false;
             }
             // EditLog before mutation (see dropContextBase rationale).
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logDropContextWorkspace(ContextOpLog.forQualifiedName(qualifiedName),
                             wal -> workspaces.remove(qualifiedName));
             return true;
@@ -819,7 +820,7 @@ public class ContextMgr {
             }
             long id = GlobalStateMgr.getCurrentState().getNextId();
             // EditLog before mutation (see createContextBase rationale).
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logCreateContextRetrievalProfile(
                             ContextOpLog.forRetrievalProfile(id, name, properties),
                             wal -> retrievalProfiles.put(name, new RetrievalProfileMeta(id, name, properties)));
@@ -840,7 +841,7 @@ public class ContextMgr {
                 return false;
             }
             // EditLog before mutation (see dropContextBase rationale).
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logDropContextRetrievalProfile(ContextOpLog.forName(name),
                             wal -> retrievalProfiles.remove(name));
             return true;

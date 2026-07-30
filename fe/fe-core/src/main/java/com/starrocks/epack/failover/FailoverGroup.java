@@ -13,6 +13,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.failover.job.CheckReplicatedObjectMetaJob;
 import com.starrocks.epack.failover.job.UpdateReplicatedObjectJob;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
@@ -245,7 +246,7 @@ public class FailoverGroup implements Writable {
         excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     // For primary
@@ -282,7 +283,7 @@ public class FailoverGroup implements Writable {
         excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     // For primary
@@ -313,7 +314,7 @@ public class FailoverGroup implements Writable {
         excludeMgr = newExcludeMgr;
 
         triggerNewHandshakes();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     // For primary and secondary
@@ -322,7 +323,7 @@ public class FailoverGroup implements Writable {
             triggerNewHandshakes();
         } else if (role.equals(FailoverGroupRole.SECONDARY)) {
             schedule.forceSchedule();
-            GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+            ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
         } else {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FAILOVER_GROUP_ROLE, role);
         }
@@ -364,7 +365,7 @@ public class FailoverGroup implements Writable {
         role = FailoverGroupRole.PRIMARY;
         cancelReplication();
 
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
         LOG.info("Failover group promoted to primary, name: {}, members: {}", name, members);
     }
 
@@ -375,7 +376,7 @@ public class FailoverGroup implements Writable {
         }
 
         schedule.suspend();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     // For secondary
@@ -385,7 +386,7 @@ public class FailoverGroup implements Writable {
         }
 
         schedule.resume();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     /*
@@ -487,7 +488,7 @@ public class FailoverGroup implements Writable {
             if (!remoteSecondaryMember.equals(localSecondaryMember)) { // Update secondary member
                 members.put(remoteSecondaryMember.getName(), remoteSecondaryMember);
                 triggerNewHandshakes();
-                GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+                ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
             }
         }
 
@@ -522,7 +523,7 @@ public class FailoverGroup implements Writable {
                 GlobalStateMgr.getServingState().triggerNewImage();
                 schedule.finishSchedule(false);
 
-                GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+                ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
             }
         }
     }
@@ -579,7 +580,7 @@ public class FailoverGroup implements Writable {
 
         state = FailoverGroupState.RUNNING;
         errorMessages.clear();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     /*
@@ -660,7 +661,7 @@ public class FailoverGroup implements Writable {
         CheckReplicatedObjectMetaJob job = new CheckReplicatedObjectMetaJob(this);
         job.start();
 
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
         LOG.info("Failover group {} start replication from primary {}, finished round: {}",
                 name, primary, schedule.getRoundFinishedTimes());
     }
@@ -701,7 +702,7 @@ public class FailoverGroup implements Writable {
         UpdateReplicatedObjectJob job = new UpdateReplicatedObjectJob(this);
         job.start();
 
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
         LOG.info("Failover group {} finished replication and start updating from primary {}, finished round: {}",
                 name, primary, schedule.getRoundFinishedTimes());
     }
@@ -717,7 +718,7 @@ public class FailoverGroup implements Writable {
         objectMeta = null;
         jobExecutor.clear();
         objectMap.clear();
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
         LOG.info("Failover group {} finished updating from primary {}, finished round: {}, need retry: {}",
                 name, primary, schedule.getRoundFinishedTimes(), needRetry);
     }
@@ -796,7 +797,7 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        GlobalStateMgr.getServingState().getEditLog().logUpdateFailoverGroup(this);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logUpdateFailoverGroup(this);
     }
 
     /*

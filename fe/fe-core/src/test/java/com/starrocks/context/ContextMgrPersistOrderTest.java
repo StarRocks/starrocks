@@ -15,6 +15,7 @@
 package com.starrocks.context;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ContextOpLog;
 import com.starrocks.persist.EditLog;
@@ -35,7 +36,7 @@ import java.util.concurrent.BlockingQueue;
  * {@code EditLog.log*} would leave the leader carrying state that no follower would ever see,
  * and the next image dump would silently persist the drift.
  *
- * <p>Implementation note: we subclass the real {@link EditLog} reusing the shared
+ * <p>Implementation note: we subclass the real {@link EditLogEPack} reusing the shared
  * {@code journalQueue} that {@link UtFrameUtils#setUpForPersistTest()} wired up, then override
  * only the three contextbase log methods to throw. Unrelated journal calls — notably
  * {@code logSaveNextId} triggered by {@code getNextId()} — still flow through the real journal
@@ -65,10 +66,10 @@ public class ContextMgrPersistOrderTest {
         return (BlockingQueue<JournalTask>) f.get(editLog);
     }
 
-    /** EditLog subclass that re-uses the existing journal queue but throws from the three context paths. */
+    /** EditLogEPack subclass that re-uses the existing journal queue but throws from the three context paths. */
     private static EditLog throwingFor(EditLog real) throws Exception {
         BlockingQueue<JournalTask> queue = queueOf(real);
-        return new EditLog(queue) {
+        return new EditLogEPack(queue) {
             @Override
             public void logCreateContextBase(ContextOpLog log, WALApplier walApplier) {
                 throw new RuntimeException("simulated journal write failure on create");

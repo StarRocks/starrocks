@@ -15,8 +15,8 @@
 package com.starrocks.context;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.persist.ContextOpLog;
-import com.starrocks.persist.OperationType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -121,7 +121,7 @@ public class ContextMgrRenameTest {
         leader.renameContextBase("ai_team", "team_ai");
 
         ContextOpLog log = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_RENAME_CONTEXTBASE);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_RENAME_CONTEXTBASE);
         Assertions.assertNotNull(log);
         Assertions.assertEquals(id, log.getId());
         Assertions.assertEquals("ai_team", log.getName());

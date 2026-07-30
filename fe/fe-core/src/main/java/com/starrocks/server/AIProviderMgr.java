@@ -24,6 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.context.ai.AIProviderType;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.persist.DropAIProviderLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultAIProviderLog;
@@ -83,7 +84,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
             }
             String id = UUID.randomUUID().toString();
             AIProvider provider = new AIProvider(id, name, type, params, comment);
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logCreateAIProvider(provider, wal -> idToProvider.put(id, provider));
             return id;
         }
@@ -101,7 +102,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
             }
             AIProvider updated = new AIProvider(existing);
             updated.mergeParams(params);
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logAlterAIProvider(updated, wal -> idToProvider.put(updated.getId(), updated));
         }
     }
@@ -120,7 +121,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
                     "Default %s provider cannot be dropped; SET another provider as DEFAULT first",
                     existing.getType().lower());
             DropAIProviderLog log = new DropAIProviderLog(existing.getId());
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logDropAIProvider(log, wal -> idToProvider.remove(existing.getId()));
         }
     }
@@ -130,7 +131,7 @@ public class AIProviderMgr implements Writable, GsonPostProcessable {
             AIProvider provider = getProviderByNameNoLock(name);
             Preconditions.checkState(provider != null, "AI provider '%s' does not exist", name);
             SetDefaultAIProviderLog log = new SetDefaultAIProviderLog(provider.getId());
-            GlobalStateMgr.getCurrentState().getEditLog()
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                     .logSetDefaultAIProvider(log, wal -> applyDefaultNoLock(provider.getId()));
         }
     }

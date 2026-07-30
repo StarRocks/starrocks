@@ -116,9 +116,9 @@ public class SecurityPolicyMgr {
 
             registerPolicy(policy);
             if (stmt.getPolicyType().equals(PolicyType.MASKING)) {
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateMaskingPolicy(policy);
+                ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logCreateMaskingPolicy(policy);
             } else {
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateRowAccessPolicy(policy);
+                ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logCreateRowAccessPolicy(policy);
             }
         } finally {
             policyLock.writeLock().unlock();
@@ -165,7 +165,7 @@ public class SecurityPolicyMgr {
             doDropPolicyUnlocked(policy.getPolicyType(), dbUID, stmt.getPolicyName().getName(), policy.getPolicyId(),
                     stmt.isForce());
 
-            GlobalStateMgr.getCurrentState().getEditLog().logDropPolicy(policyName, dbUID, policy);
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logDropPolicy(policyName, dbUID, policy);
         } finally {
             policyLock.writeLock().unlock();
         }
@@ -235,20 +235,20 @@ public class SecurityPolicyMgr {
                 AlterPolicyStmt.PolicySetBody policySetBody =
                         (AlterPolicyStmt.PolicySetBody) stmt.getAlterPolicyClause();
                 doAlterPolicySetBodyUnlocked(policy, policySetBody.getPolicyBody());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterPolicySetBody(stmt.getPolicyName(),
+                ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logAlterPolicySetBody(stmt.getPolicyName(),
                         stmt.getPolicyType(),
                         AstToSQLBuilder.toSQL(policySetBody.getPolicyBody()));
             } else if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicySetComment) {
                 AlterPolicyStmt.PolicySetComment policySetComment =
                         (AlterPolicyStmt.PolicySetComment) stmt.getAlterPolicyClause();
                 doAlterPolicySetCommentUnlocked(policy, policySetComment.getComment());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterPolicySetComment(stmt.getPolicyName(),
+                ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logAlterPolicySetComment(stmt.getPolicyName(),
                         stmt.getPolicyType(),
                         policySetComment.getComment());
             } else if (stmt.getAlterPolicyClause() instanceof AlterPolicyStmt.PolicyRename) {
                 AlterPolicyStmt.PolicyRename policyRename = (AlterPolicyStmt.PolicyRename) stmt.getAlterPolicyClause();
                 doAlterPolicyRenameUnlocked(policy, policyRename.getNewPolicyName());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterPolicyRename(stmt.getPolicyName(),
+                ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logAlterPolicyRename(stmt.getPolicyName(),
                         policy.getPolicyType(),
                         policyRename.getNewPolicyName());
             }
@@ -496,7 +496,7 @@ public class SecurityPolicyMgr {
         doApplyMaskingPolicyContext(tableUID, columnId, columnName,
                 new MaskingPolicyContext(withColumnMaskingPolicy.getPolicyId(),
                         MetaUtils.getColumnIdsByColumnNames(table, withColumnMaskingPolicy.getUsingColumns())));
-        GlobalStateMgr.getCurrentState().getEditLog().logApplyMaskingPolicy(
+        ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logApplyMaskingPolicy(
                 new ApplyOrRevokeMaskingPolicyLog(tableUID, columnId,
                         new MaskingPolicyContext(withColumnMaskingPolicy.getPolicyId(),
                                 MetaUtils.getColumnIdsByColumnNames(table, withColumnMaskingPolicy.getUsingColumns()))));
@@ -559,7 +559,7 @@ public class SecurityPolicyMgr {
         }
         ColumnId columnId = table.getColumn(columnName).getColumnId();
         doRevokeMaskingPolicyContext(tableUID, columnId);
-        GlobalStateMgr.getCurrentState().getEditLog().logRevokeMaskingPolicy(
+        ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logRevokeMaskingPolicy(
                 new ApplyOrRevokeMaskingPolicyLog(tableUID, columnId, null));
     }
 
@@ -592,7 +592,7 @@ public class SecurityPolicyMgr {
                         MetaUtils.getColumnIdsByColumnNames(table, withRowAccessPolicy.getOnColumns()));
 
         doApplyRowAccessPolicyContext(tableUID, rowAccessPolicyContext);
-        GlobalStateMgr.getCurrentState().getEditLog()
+        ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())
                 .logApplyRowAccessPolicy(new ApplyOrRevokeRowAccessPolicyLog(tableUID, rowAccessPolicyContext));
     }
 
@@ -670,7 +670,7 @@ public class SecurityPolicyMgr {
                 return v;
             });
 
-            GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logRevokeRowAccessPolicy(
                     new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(policyId, null)));
         } finally {
             policyLock.writeLock().unlock();
@@ -686,7 +686,7 @@ public class SecurityPolicyMgr {
                 return v;
             });
 
-            GlobalStateMgr.getCurrentState().getEditLog().logRevokeRowAccessPolicy(
+            ((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog()).logRevokeRowAccessPolicy(
                     new ApplyOrRevokeRowAccessPolicyLog(tableUID, new RowAccessPolicyContext(null, null)));
         } finally {
             policyLock.writeLock().unlock();

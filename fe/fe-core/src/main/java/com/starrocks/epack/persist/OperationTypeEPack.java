@@ -97,6 +97,49 @@ public class OperationTypeEPack extends OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_LICENSE_USAGE = 20613;
 
+    // Bookmark (com.starrocks.lake.bookmark).
+    @IgnorableOnReplayFailed
+    public static final short OP_BOOKMARK_LOG = 20615;
+
+    // Semantic context module (contextbases, collections, workspaces, retrieval profiles).
+    // Ignorable on replay: context metadata is an auxiliary feature, so a failed replay should
+    // log and continue rather than halt the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_CONTEXTBASE = 20700;
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_CONTEXTBASE = 20701;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_CONTEXTBASE = 20702;
+    @IgnorableOnReplayFailed
+    public static final short OP_RENAME_CONTEXTBASE = 20703;
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_CONTEXT_COLLECTION = 20710;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_CONTEXT_COLLECTION = 20711;
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_CONTEXT_WORKSPACE = 20720;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_CONTEXT_WORKSPACE = 20721;
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_CONTEXT_RETRIEVAL_PROFILE = 20730;
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_CONTEXT_RETRIEVAL_PROFILE = 20731;
+
+    // AI providers (SQL-managed OpenAI-compatible embedding / rerank endpoints).
+    // Ignorable on replay: an AI provider is auxiliary external-service config, so a failed replay
+    // should log and continue rather than halt the FE.
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_AI_PROVIDER = 20740;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_AI_PROVIDER = 20741;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_AI_PROVIDER = 20742;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_DEFAULT_AI_PROVIDER = 20743;
+
     /**
      * Union of the community ignorable ops and the EE ones. Replay-failure skip checks must
      * consult THIS set instead of {@link OperationType#IGNORABLE_OPERATIONS}: the community

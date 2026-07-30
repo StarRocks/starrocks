@@ -408,6 +408,25 @@ int maxConnections = Config.max_connections;
 2. Implement evaluation in BE (for scalar functions)
 3. Add tests
 
+### Adding a New Edit-Log Operation Type (EE)
+
+EE-only operation types and their edit-log logic live in the EPack classes, never in the
+community `OperationType` / `EditLog` files:
+
+1. Declare the op code in `com.starrocks.epack.persist.OperationTypeEPack` — the value must
+   be above `OP_TYPE_EOF` (20000, the EE-reserved range); the class's builder exits the FE
+   on range violations and on community/EE value collisions.
+2. Annotate it with `@IgnorableOnReplayFailed` unless a failed replay must halt the FE
+   (see `OP_RESTORE_FROM_SNAPSHOT` for a deliberate exception). `OperationTypeEPackTest`
+   fails if a new EPack op is neither annotated nor listed as an exception.
+3. Add the log method and the replay `case` to `com.starrocks.epack.persist.EditLogEPack`;
+   callers obtain it via `((EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog())`.
+4. Register the payload class in the `OperationTypeEPack.*` section of `EditLogDeserializer`.
+
+The replay-failure skip check consults `OperationTypeEPack.IGNORABLE_OPERATIONS` (the union
+of community and EE ignorable ops); new code must not read
+`OperationType.IGNORABLE_OPERATIONS`.
+
 ## Key Files to Know
 
 | File | Purpose |

@@ -15,8 +15,8 @@
 package com.starrocks.context;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.persist.ContextOpLog;
-import com.starrocks.persist.OperationType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -53,7 +53,7 @@ public class ContextMgrEditLogTest {
         leader.createContextBase("editlog_cb", ImmutableMap.of("default_consistency", "STRICT"), false);
 
         ContextOpLog log = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXTBASE);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXTBASE);
         Assertions.assertNotNull(log);
         Assertions.assertEquals("editlog_cb", log.getName());
         Assertions.assertEquals("STRICT", log.getProperties().get("default_consistency"));
@@ -73,19 +73,19 @@ public class ContextMgrEditLogTest {
         leader.createContextBase("editlog_cb2", null, false);
 
         // Drain the create-contextbase entry so the next replayNextJournal returns the collection op.
-        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXTBASE);
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXTBASE);
 
         leader.createCollection("editlog_cb2", "pipeline", "knowledge",
                 ImmutableMap.of("retrieval_profile", "balanced"), false);
         ContextOpLog createLog = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXT_COLLECTION);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXT_COLLECTION);
         Assertions.assertEquals("editlog_cb2.pipeline", createLog.getName());
         Assertions.assertEquals("knowledge", createLog.getTypeTag());
         Assertions.assertEquals("balanced", createLog.getProperties().get("retrieval_profile"));
 
         leader.dropCollection("editlog_cb2", "pipeline", false);
         ContextOpLog dropLog = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_CONTEXT_COLLECTION);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_DROP_CONTEXT_COLLECTION);
         Assertions.assertEquals("editlog_cb2.pipeline", dropLog.getQualifiedName());
 
         // Replay both entries on a fresh follower.
@@ -102,13 +102,13 @@ public class ContextMgrEditLogTest {
     public void testCreateWorkspaceRoundTrip() throws Exception {
         ContextMgr leader = new ContextMgr();
         leader.createContextBase("cb", null, false);
-        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXTBASE);
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXTBASE);
         long colId = leader.createCollection("cb", "col", "knowledge", null, false);
-        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXT_COLLECTION);
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXT_COLLECTION);
         leader.createWorkspace("cb.col.session_1", colId,
                 ImmutableMap.of("ttl_hours", "24"), false);
         ContextOpLog log = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXT_WORKSPACE);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXT_WORKSPACE);
         Assertions.assertEquals("cb.col.session_1", log.getQualifiedName());
         Assertions.assertEquals(colId, log.getParentId());
         Assertions.assertEquals("24", log.getProperties().get("ttl_hours"));
@@ -125,7 +125,7 @@ public class ContextMgrEditLogTest {
         leader.createRetrievalProfile("balanced_v1",
                 ImmutableMap.of("fusion_mode", "RRF", "text_weight", "0.5"), false);
         ContextOpLog log = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXT_RETRIEVAL_PROFILE);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXT_RETRIEVAL_PROFILE);
         Assertions.assertEquals("balanced_v1", log.getName());
         Assertions.assertEquals("RRF", log.getProperties().get("fusion_mode"));
 
@@ -144,7 +144,7 @@ public class ContextMgrEditLogTest {
         ContextMgr leader = new ContextMgr();
         leader.createContextBase("alter_cb",
                 ImmutableMap.of("default_consistency", "PRIMARY_CONSISTENT"), false);
-        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CONTEXTBASE);
+        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_CONTEXTBASE);
 
         // Merge: change default_consistency, add a new key — old keys not present in the call must
         // be preserved.
@@ -152,7 +152,7 @@ public class ContextMgrEditLogTest {
                 ImmutableMap.of("default_consistency", "STRICT", "owner", "alice"), false);
 
         ContextOpLog log = (ContextOpLog) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_CONTEXTBASE);
+                .PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_ALTER_CONTEXTBASE);
         Assertions.assertNotNull(log);
         Assertions.assertEquals("alter_cb", log.getName());
         Assertions.assertEquals("STRICT", log.getProperties().get("default_consistency"));

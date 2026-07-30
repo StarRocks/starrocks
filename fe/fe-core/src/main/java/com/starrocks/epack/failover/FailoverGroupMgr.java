@@ -14,6 +14,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
@@ -87,7 +88,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
         previous = idToFailoverGroup.putIfAbsent(failoverGroup.getId(), failoverGroup);
         Preconditions.checkState(previous == null);
-        GlobalStateMgr.getServingState().getEditLog().logCreateFailoverGroup(failoverGroup);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logCreateFailoverGroup(failoverGroup);
     }
 
     public void createFailoverGroup(CreateSecondaryFailoverGroupStmt stmt) throws DdlException {
@@ -108,7 +109,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
         previous = idToFailoverGroup.putIfAbsent(failoverGroup.getId(), failoverGroup);
         Preconditions.checkState(previous == null);
-        GlobalStateMgr.getServingState().getEditLog().logCreateFailoverGroup(failoverGroup);
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logCreateFailoverGroup(failoverGroup);
     }
 
     public void dropFailoverGroup(DropFailoverGroupStmt stmt) throws DdlException {
@@ -126,7 +127,7 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
         failoverGroup.cancelReplication();
 
-        GlobalStateMgr.getServingState().getEditLog().logDropFailoverGroup(failoverGroup.getId());
+        ((EditLogEPack) GlobalStateMgr.getServingState().getEditLog()).logDropFailoverGroup(failoverGroup.getId());
         LOG.info("Failover group {} is dropped, cancel all running replication jobs", stmt.getFailoverGroupName());
     }
 
