@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
@@ -60,14 +61,17 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionNames;
@@ -92,8 +96,10 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -113,11 +119,6 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NA
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
 
 public class QueryAnalyzer {
-<<<<<<< HEAD
-=======
-    private static final String JDBC_QUERY_TABLE_FUNCTION_USAGE =
-            "JDBC query table function only supports TABLE(<catalog>.native_query('<sql>'))";
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -139,28 +140,14 @@ public class QueryAnalyzer {
         new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Pre-resolve external (non-internal catalog) relations without touching internal table metadata.
-     * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
-     * (e.g. JDBC external tables and JDBC native_query schema inference).
-     */
     public void analyzeExternalTablesOnly(StatementBase node) {
         analyzeExternalTablesOnly(node, false);
     }
 
-    /**
-     * Pre-resolve external tables without touching internal table metadata.
-     * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
-     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
-     * internal meta-lock critical path.
-     */
     public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
         new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
     }
 
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     public void analyze(StatementBase node, Scope parent) {
         new Visitor().process(node, parent);
     }
@@ -612,7 +599,11 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = tableRelation.getTable();
+                String catalogName = resolveTableName.getCatalog();
+                if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    table = resolveTable(tableRelation);
+                }
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
@@ -1541,84 +1532,6 @@ public class QueryAnalyzer {
             return node.getScope();
         }
 
-<<<<<<< HEAD
-=======
-        private Scope tryResolveJdbcQueryTableFunction(TableFunctionRelation node, List<String> argNames) {
-            JdbcQueryTableFunctionName functionName = tryParseJdbcQueryTableFunctionName(
-                    node.getFunctionName().getFunction());
-            if (functionName == null) {
-                return null;
-            }
-
-            if (node.getColumnOutputNames() != null) {
-                throw new SemanticException("column aliases are not supported for JDBC query table function");
-            }
-
-            List<Expr> args = node.getFunctionParams().exprs();
-            if (args.size() != 1) {
-                throw new SemanticException("JDBC query table function requires exactly one query argument");
-            }
-            if (argNames != null && !argNames.isEmpty()) {
-                throw new SemanticException(JDBC_QUERY_TABLE_FUNCTION_USAGE);
-            }
-
-            Expr queryExpr = args.get(0);
-            if (!(queryExpr instanceof StringLiteral)) {
-                throw new SemanticException("JDBC query table function argument must be a string literal");
-            }
-            String passThroughQuery;
-            try {
-                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
-            } catch (IllegalArgumentException e) {
-                throw new SemanticException(e.getMessage());
-            }
-
-            node.setChildExpressions(args);
-
-            JDBCTable jdbcTable = node.getQueryTable();
-            if (jdbcTable == null) {
-                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
-            }
-            return buildJdbcQueryTableScope(node, jdbcTable);
-        }
-
-        private List<Expr> appendPositionalDefaultArgExprs(FunctionParams functionParams, Function fn) {
-            List<Expr> result = Lists.newArrayList(functionParams.exprs());
-            List<Expr> lastDefaults = fn.getLastDefaultsFromN(functionParams.exprs().size());
-            if (lastDefaults != null) {
-                result.addAll(lastDefaults);
-            }
-            return result;
-        }
-
-        private List<Expr> reorderNamedArgAndAppendDefaults(FunctionParams functionParams, Function fn) {
-            String[] names = fn.getArgNames();
-            List<String> exprNames = functionParams.getExprsNames();
-            Preconditions.checkState(names != null && exprNames != null && names.length >= exprNames.size());
-
-            Map<String, Expr> nameToExpr = new HashMap<>();
-            for (int i = 0; i < exprNames.size(); i++) {
-                nameToExpr.put(exprNames.get(i), functionParams.exprs().get(i));
-            }
-
-            List<Expr> result = Lists.newArrayListWithExpectedSize(names.length);
-            int defaultNum = 0;
-            for (String name : names) {
-                Expr expr = nameToExpr.get(name);
-                if (expr != null) {
-                    result.add(expr);
-                    continue;
-                }
-
-                Expr defaultExpr = fn.getDefaultNamedExpr(name);
-                Preconditions.checkState(defaultExpr != null);
-                result.add(defaultExpr);
-                defaultNum++;
-            }
-            Preconditions.checkState(defaultNum + exprNames.size() == names.length);
-            return result;
-        }
-
     }
 
     /**
@@ -1713,7 +1626,7 @@ public class QueryAnalyzer {
                         table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
                     }
                     // Validate constraints similar to resolveTable
-                    PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
+                    PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
                     if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
                         throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
                     }
@@ -1758,53 +1671,6 @@ public class QueryAnalyzer {
             return null;
         }
 
-        @Override
-        public Void visitTableFunction(TableFunctionRelation node, Void context) {
-            if (node.getQueryTable() != null) {
-                return null;
-            }
-
-            JdbcQueryTableFunctionName functionName =
-                    tryParseCanonicalJdbcQueryTableFunctionName(node.getFunctionName().getFunction());
-            if (functionName == null) {
-                return null;
-            }
-
-            if (node.getColumnOutputNames() != null) {
-                return null;
-            }
-
-            List<Expr> args = node.getFunctionParams().exprs();
-            List<String> argNames = node.getFunctionParams().getExprsNames();
-            if (args.size() != 1 || (argNames != null && !argNames.isEmpty())) {
-                return null;
-            }
-
-            Expr queryExpr = args.get(0);
-            if (!(queryExpr instanceof StringLiteral)) {
-                return null;
-            }
-
-            String passThroughQuery;
-            try {
-                passThroughQuery = JDBCTable.normalizePassThroughQuery(((StringLiteral) queryExpr).getStringValue());
-            } catch (IllegalArgumentException e) {
-                return null;
-            }
-
-            Optional<ConnectorMetadata> metadata = metadataMgr.getOptionalMetadata(functionName.catalogName);
-            if (metadata.isEmpty()) {
-                return null;
-            }
-
-            JDBCTable jdbcTable;
-            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
-                jdbcTable = resolveJdbcQueryTable(functionName, passThroughQuery);
-            }
-            node.setQueryTable(jdbcTable);
-            return null;
-        }
-
         private Set<String> collectCteNames(List<CTERelation> cteRelations) {
             Set<String> names = Sets.newHashSet();
             for (CTERelation cteRelation : cteRelations) {
@@ -1826,7 +1692,6 @@ public class QueryAnalyzer {
             }
             return false;
         }
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
     }
 
     /**
