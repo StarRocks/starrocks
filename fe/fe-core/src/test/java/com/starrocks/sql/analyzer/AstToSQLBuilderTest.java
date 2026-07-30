@@ -263,4 +263,37 @@ public class AstToSQLBuilderTest {
                 "insert into t0 (v1, v2) values (1, 111), (2, 222)", SqlModeHelper.MODE_DEFAULT);
         Assertions.assertEquals("INSERT INTO `t0` (`v1`,`v2`) VALUES(?, ?)", AstToSQLBuilder.toDigest(stmt));
     }
+
+    @Test
+    public void testTemporaryPartitionQualifierIsPreserved() throws Exception {
+        // Temporary and formal partitions are separate namespaces. Dropping TEMPORARY on the way out
+        // makes the text name a different partition, and a view stores exactly this text: creating a
+        // view over a temporary partition used to succeed and then never resolve again.
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE tp_tbl (k date, v int)\n"
+                + "DUPLICATE KEY(k)\n"
+                + "PARTITION BY RANGE(k) (PARTITION p1 VALUES LESS THAN ('2020-01-01'))\n"
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        AnalyzeTestUtil.getStarRocksAssert()
+                .ddl("ALTER TABLE tp_tbl ADD TEMPORARY PARTITION tp1 VALUES LESS THAN ('2020-01-01')");
+
+        String temp = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("select * from tp_tbl temporary partition(tp1)",
+                        SqlModeHelper.MODE_DEFAULT));
+        String formal = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("select * from tp_tbl partition(p1)",
+                        SqlModeHelper.MODE_DEFAULT));
+        Assertions.assertTrue(temp.contains("TEMPORARY PARTITION (`tp1`)"), temp);
+        Assertions.assertFalse(formal.contains("TEMPORARY"), formal);
+
+        // The INSERT target carries the same qualifier, and losing it would redirect the write.
+        String insert = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("insert into tp_tbl temporary partition(tp1) select * from tp_tbl",
+                        SqlModeHelper.MODE_DEFAULT));
+        Assertions.assertTrue(insert.contains("TEMPORARY PARTITION (tp1)"), insert);
+
+        // Round trip: the serialized form must still resolve to the temporary partition.
+        StatementBase again = SqlParser.parse(temp, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Assertions.assertDoesNotThrow(() -> Analyzer.analyze(again, AnalyzeTestUtil.getConnectContext()),
+                () -> "deparsed form no longer analyzes: " + temp);
+    }
 }

@@ -401,6 +401,11 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
+                // Temporary and formal partitions are separate namespaces, so dropping the qualifier
+                // does not merely lose formatting: it names a different partition.
+                if (node.getPartitionNames().isTemp()) {
+                    sqlBuilder.append(" TEMPORARY");
+                }
                 sqlBuilder.append(" PARTITION (");
                 sqlBuilder.append(partitionNames.stream().map(c -> "`" + c + "`")
                         .collect(Collectors.joining(", ")));
