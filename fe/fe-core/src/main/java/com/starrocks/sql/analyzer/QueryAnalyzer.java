@@ -614,7 +614,11 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = tableRelation.getTable();
+                String catalogName = resolveTableName.getCatalog();
+                if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    table = resolveTable(tableRelation);
+                }
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
