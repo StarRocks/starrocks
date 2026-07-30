@@ -14,17 +14,12 @@
 
 package com.starrocks.planner;
 
-<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-=======
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
 import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.InsertPlanner;
@@ -34,19 +29,11 @@ import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-<<<<<<< HEAD
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.junit.jupiter.api.*;
-=======
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
-import mockit.Expectations;
-import mockit.Mocked;
-import org.junit.jupiter.api.Test;
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;

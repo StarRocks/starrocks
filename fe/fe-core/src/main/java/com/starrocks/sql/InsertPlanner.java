@@ -286,25 +286,6 @@ public class InsertPlanner {
             outputFullSchema = targetTable.getFullSchema();
         }
 
-<<<<<<< HEAD
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
-=======
-        if (targetTable.isIcebergTable()) {
-            boolean preserveRowLineage = targetTable instanceof IcebergTable
-                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
-            Set<String> columnsToFilter = preserveRowLineage
-                    ? IcebergTable.ICEBERG_META_COLUMNS.stream()
-                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
-                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
-                    .collect(Collectors.toSet())
-                    : IcebergTable.ICEBERG_META_COLUMNS;
-            outputBaseSchema = outputBaseSchema.stream().filter(col ->
-                    !columnsToFilter.contains(col.getName())).toList();
-            outputFullSchema = outputFullSchema.stream().filter(col ->
-                    !columnsToFilter.contains(col.getName())).toList();
-        }
->>>>>>> 90ddf9e954 ([Enhancement] Move INSERT external table auto-refresh out of the planner lock path (#73391))
-
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
             castLiteralToTargetColumnsType(insertStmt);
