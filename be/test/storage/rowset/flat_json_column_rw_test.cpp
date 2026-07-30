@@ -2875,7 +2875,8 @@ TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
             has_dict = true;
         }
     }
-    ASSERT_TRUE(has_dict) << "compression dict built no compression dictionary for the JSON column (top-level or any sub-column)";
+    ASSERT_TRUE(has_dict)
+            << "compression dict built no compression dictionary for the JSON column (top-level or any sub-column)";
 
     // Roundtrip: read every row back.
     {

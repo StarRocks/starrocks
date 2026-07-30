@@ -105,7 +105,8 @@ private:
     // Recurse a footer ColumnMetaPB, emitting one row per leaf (flat-JSON
     // sub-columns become leaves named by ColumnMetaPB.name, field 33).
     void _expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id, const std::string& node_name,
-                               bool node_use_compression_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
+                               bool node_use_compression_dict, int64_t table_id, int64_t partition_id,
+                               int64_t tablet_id);
 
     void _append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id, const std::string& column_name,
                                  bool use_compression_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);

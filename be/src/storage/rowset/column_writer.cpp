@@ -78,7 +78,8 @@
 namespace starrocks {
 
 ColumnWriterOptions::ColumnWriterOptions()
-        : data_page_size(config::data_page_size), compression_dict_sample_bytes(config::compression_dict_sample_bytes) {}
+        : data_page_size(config::data_page_size),
+          compression_dict_sample_bytes(config::compression_dict_sample_bytes) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -560,7 +561,8 @@ Status ScalarColumnWriter::write_data() {
         PagePointer compression_dict_pp;
         std::vector<Slice> compression_dict_body{Slice(_compression_dict_sample)};
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wfile,
-                                                        compression_dict_body, compression_dict_footer, &compression_dict_pp));
+                                                        compression_dict_body, compression_dict_footer,
+                                                        &compression_dict_pp));
         compression_dict_pp.to_proto(_opts.meta->mutable_compression_dict_page());
         if (_compression_dict_trained) {
             // Tell the reader to load these bytes as a full dictionary. Only set
@@ -700,7 +702,8 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
     // spread across many rows (that is what makes the dictionary a codebook of
     // frequent substrings rather than one contiguous chunk of data).
     if (!_deferred_pages.empty()) {
-        const size_t fragment = std::max<size_t>(256, static_cast<size_t>(config::compression_dict_train_fragment_bytes));
+        const size_t fragment =
+                std::max<size_t>(256, static_cast<size_t>(config::compression_dict_train_fragment_bytes));
         std::string sample_buf;
         std::vector<size_t> sample_sizes;
         for (const auto& deferred : _deferred_pages) {
@@ -712,7 +715,8 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
                 sample_sizes.push_back(n);
             }
         }
-        if (sample_buf.size() >= static_cast<size_t>(config::compression_dict_min_sample_bytes) && !sample_sizes.empty()) {
+        if (sample_buf.size() >= static_cast<size_t>(config::compression_dict_min_sample_bytes) &&
+            !sample_sizes.empty()) {
             auto dict_or = compression::ZstdCDict::train(Slice(sample_buf), sample_sizes,
                                                          static_cast<size_t>(config::compression_dict_max_size));
             if (dict_or.ok()) {
@@ -822,7 +826,7 @@ Status ScalarColumnWriter::finish_current_page() {
             // all-null first page has non-empty encoded_values (null rows go into
             // the page builder), guaranteeing no no-dict frame precedes the dict
             // page (format v2 puts null rows into the page builder, so even an
-        // all-null first page has non-empty encoded values).
+            // all-null first page has non-empty encoded values).
             DCHECK(_first_rowid != 0 || _curr_page_format == 2);
             size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.compression_dict_sample_bytes);
             _compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);

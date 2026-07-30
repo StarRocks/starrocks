@@ -224,13 +224,15 @@ Status SchemaCompressionDictStatsScanner::start(RuntimeState* state) {
     }
 #endif // __APPLE__
 
-    LOG(INFO) << strings::Substitute("compression_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4",
-                                     _param->table_id, _param->partition_id, _param->tablet_id,
-                                     _param->table != nullptr ? *_param->table : std::string(), _rows.size());
+    LOG(INFO) << strings::Substitute(
+            "compression_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4", _param->table_id,
+            _param->partition_id, _param->tablet_id, _param->table != nullptr ? *_param->table : std::string(),
+            _rows.size());
     return Status::OK();
 }
 
-void SchemaCompressionDictStatsScanner::_expand_local_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
+void SchemaCompressionDictStatsScanner::_expand_local_tablet(int64_t table_id, int64_t partition_id,
+                                                             int64_t tablet_id) {
     auto manager = StorageEngine::instance()->tablet_manager();
     if (manager == nullptr) {
         return;
@@ -253,7 +255,7 @@ void SchemaCompressionDictStatsScanner::_expand_local_tablet(int64_t table_id, i
 }
 
 bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSharedPtr& tablet, int64_t table_id,
-                                                             int64_t partition_id, int64_t tablet_id) {
+                                                                  int64_t partition_id, int64_t tablet_id) {
     auto schema = tablet->tablet_schema();
     if (schema == nullptr) {
         return false;
@@ -311,8 +313,9 @@ bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSh
 }
 
 void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id,
-                                                         const std::string& node_name, bool node_use_compression_dict,
-                                                         int64_t table_id, int64_t partition_id, int64_t tablet_id) {
+                                                              const std::string& node_name,
+                                                              bool node_use_compression_dict, int64_t table_id,
+                                                              int64_t partition_id, int64_t tablet_id) {
     if (meta.children_columns_size() > 0) {
         // Container column (e.g. a flat-JSON column). Emit one row per leaf
         // sub-column; do not emit the container itself. Flat-JSON sub-columns
@@ -335,8 +338,9 @@ void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB
 }
 
 void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id,
-                                                           const std::string& column_name, bool use_compression_dict,
-                                                           int64_t table_id, int64_t partition_id, int64_t tablet_id) {
+                                                                const std::string& column_name,
+                                                                bool use_compression_dict, int64_t table_id,
+                                                                int64_t partition_id, int64_t tablet_id) {
     DictStatsRow row;
     row.table_schema = _table_schema_of(table_id);
     row.table_name = _table_name_of(table_id);
@@ -348,7 +352,8 @@ void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMeta
     row.encoding = EncodingTypePB_Name(meta.encoding());
     row.compression = CompressionTypePB_Name(meta.compression());
     row.has_compression_dict = meta.has_compression_dict_page();
-    row.compression_dict_size = meta.has_compression_dict_page() ? static_cast<int64_t>(meta.compression_dict_page().size()) : 0;
+    row.compression_dict_size =
+            meta.has_compression_dict_page() ? static_cast<int64_t>(meta.compression_dict_page().size()) : 0;
 
     // Size mapping (documented).
     // UNCOMPRESSED_SIZE = total_mem_footprint (field 31): the in-memory /
@@ -369,7 +374,7 @@ void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMeta
 }
 
 void SchemaCompressionDictStatsScanner::_emit_schema_fallback_rows(const TabletSchema& schema, int64_t table_id,
-                                                              int64_t partition_id, int64_t tablet_id) {
+                                                                   int64_t partition_id, int64_t tablet_id) {
     // No footer available: emit one row per top-level schema column with the
     // footer-derived columns as NULL so nothing is fabricated.
     for (const auto& col : schema.columns()) {
