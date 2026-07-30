@@ -419,6 +419,38 @@ jobs:
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
           fi
 
+      - name: Report BE UT results to CI Metrics
+        if: always()
+        continue-on-error: true
+        env:
+          CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+          CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+        run: |
+          set -uo pipefail
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          # Gate: BE UT must have run in this parent run (BE UT has no XML; we read its job log).
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          BEUT=$(printf '%s' "$PJOBS" | jq -c '[.jobs[]|select(.name=="BE UT")][0] // {}')
+          CONCL=$(printf '%s' "$BEUT" | jq -r '.conclusion // "absent"')
+          if [ "$CONCL" != "success" ] && [ "$CONCL" != "failure" ]; then
+            echo "::notice::producer 'BE UT' did not run this attempt (conclusion=$CONCL); skip metrics report"
+            exit 0
+          fi
+          JOBID=$(printf '%s' "$BEUT" | jq -r '.id')
+          curl -fsSL -m 60 -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/jobs/${JOBID}/logs" -o be_ut_metrics.log \
+            || { echo "::warning::fetch BE UT job log failed (non-blocking)"; exit 0; }
+          rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
+          python3 ./ci-tool-metrics/bin/report_test_results.py --format gtest-log \
+            --test-type be-ut \
+            --run-id ${{ github.event.workflow_run.id }} \
+            --run-attempt ${{ github.event.workflow_run.run_attempt }} \
+            --api https://47.236.49.47:8080 --ca "$CA" \
+            --finished-at "${{ github.event.workflow_run.updated_at }}" \
+            be_ut_metrics.log || true
       - name: Merge BE Total Coverage
         id: merge
         if: >
