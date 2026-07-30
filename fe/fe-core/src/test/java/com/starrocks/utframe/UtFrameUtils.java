@@ -80,11 +80,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.hive.ReplayHiveCatalogMetadata;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
-<<<<<<< HEAD
-import com.starrocks.epack.persist.EditLogEPack;
-=======
 import com.starrocks.connector.iceberg.ReplayIcebergCatalogMetadata;
->>>>>>> a1f7a437e0f... [Enhancement] Capture and replay external-catalog iceberg/hive tables in query dump (#76936)
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
