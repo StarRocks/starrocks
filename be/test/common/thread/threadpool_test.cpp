@@ -1185,4 +1185,51 @@ TEST_F(ThreadPoolTest, TestTaskExceptionIsSwallowedWhenEnabled) {
     _pool->shutdown();
 }
 
+TEST_F(ThreadPoolTest, TestTaskBadAllocIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    ASSERT_TRUE(_pool->submit_func([]() { throw std::bad_alloc(); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+TEST_F(ThreadPoolTest, TestTaskUnknownExceptionIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    // Non-std::exception types take the catch(...) branch.
+    ASSERT_TRUE(_pool->submit_func([]() { throw 42; }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
 } // namespace starrocks
