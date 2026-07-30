@@ -49,6 +49,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TBrokerFD;
 import mockit.Mock;
 import mockit.MockUp;
@@ -81,8 +83,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -282,6 +286,171 @@ public class ClusterSnapshotTest {
 
         Assertions.assertEquals(1, writeFilePaths.size());
         Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    private static StorageVolume newS3StorageVolume(String id, String name, List<String> locations,
+            Map<String, String> authParams, String comment) throws DdlException {
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_REGION, "region");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.putAll(authParams);
+        return new StorageVolume(id, name, "S3", locations, params, true, comment);
+    }
+
+    private void mockStorageVolumes(StorageVolume builtinSv, StorageVolume dataSv) {
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public List<String> listStorageVolumeNames() {
+                return Lists.newArrayList(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, "data_sv",
+                        StorageVolumeMgr.BASE_STORAGE_VOLUME);
+            }
+
+            @Mock
+            public StorageVolume getStorageVolumeByName(String name) {
+                if (StorageVolumeMgr.BUILTIN_STORAGE_VOLUME.equals(name)) {
+                    return builtinSv;
+                }
+                if ("data_sv".equals(name)) {
+                    return dataSv;
+                }
+                return null;
+            }
+        };
+    }
+
+    @Test
+    public void testCollectStorageVolumeMetaInfos() throws Exception {
+        Map<String, String> defaultAuth = new HashMap<>();
+        defaultAuth.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        Map<String, String> creds = new HashMap<>();
+        creds.put(AWS_S3_ACCESS_KEY, "my-access-key");
+        creds.put(AWS_S3_SECRET_KEY, "my-secret-key");
+        StorageVolume builtinSv = newS3StorageVolume("0", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME,
+                Arrays.asList("s3://abc"), defaultAuth, "");
+        StorageVolume dataSv = newS3StorageVolume("1", "data_sv",
+                Arrays.asList("s3://data-bucket"), creds, "data sv");
+        mockStorageVolumes(builtinSv, dataSv);
+
+        List<StorageVolumeMetaInfo> infos = ClusterSnapshotUtils.collectStorageVolumeMetaInfos();
+
+        // __base_storage_volume__ is excluded; the other two are kept.
+        Assertions.assertEquals(2, infos.size());
+        Assertions.assertTrue(infos.stream().noneMatch(
+                i -> i.getName().equals(StorageVolumeMgr.BASE_STORAGE_VOLUME)));
+
+        // Only basic identity (name/type/locations) is recorded.
+        StorageVolumeMetaInfo data = infos.stream().filter(i -> i.getName().equals("data_sv"))
+                .findFirst().orElse(null);
+        Assertions.assertNotNull(data);
+        Assertions.assertTrue("S3".equalsIgnoreCase(data.getType()));
+        Assertions.assertEquals(Arrays.asList("s3://data-bucket"), data.getLocations());
+    }
+
+    @Test
+    public void testUploadEmbedsStorageVolumesInMeta() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        // Jumping straight to UPLOADING (no INITIALIZING) leaves the captured inventory null, so this
+        // exercises the live fallback path in writeSnapshotMetaFile.
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        Map<String, String> defaultAuth = new HashMap<>();
+        defaultAuth.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        Map<String, String> creds = new HashMap<>();
+        creds.put(AWS_S3_ACCESS_KEY, "my-access-key");
+        creds.put(AWS_S3_SECRET_KEY, "my-secret-key");
+        StorageVolume builtinSv = newS3StorageVolume("0", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME,
+                Arrays.asList("s3://abc"), defaultAuth, "");
+        StorageVolume dataSv = newS3StorageVolume("1", "data_sv",
+                Arrays.asList("s3://data-bucket"), creds, "data sv");
+        mockStorageVolumes(builtinSv, dataSv);
+
+        List<String> writeFilePaths = new ArrayList<>();
+        List<String> writtenContents = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writeFilePaths.add(destFilePath);
+                writtenContents.add(new String(data, StandardCharsets.UTF_8));
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writeFilePaths.size());
+        Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        String metaJson = writtenContents.get(0);
+
+        // The SV inventory is embedded (basic identity only), no credentials, base SV excluded.
+        Assertions.assertTrue(metaJson.contains("storageVolumes"));
+        Assertions.assertTrue(metaJson.contains("data_sv"));
+        Assertions.assertFalse(metaJson.contains("my-access-key"));
+        Assertions.assertFalse(metaJson.contains("my-secret-key"));
+        Assertions.assertFalse(metaJson.contains(StorageVolumeMgr.BASE_STORAGE_VOLUME));
+
+        // The meta round-trips as a ClusterSnapshot, with the SV inventory as a first-class field.
+        ClusterSnapshot parsed = GsonUtils.GSON.fromJson(metaJson, ClusterSnapshot.class);
+        Assertions.assertNotNull(parsed);
+        Assertions.assertEquals(job.getSnapshotName(), parsed.getSnapshotName());
+        Assertions.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, parsed.getStorageVolumeName());
+        Assertions.assertNotNull(parsed.getStorageVolumeMetaInfos());
+        Assertions.assertTrue(parsed.getStorageVolumeMetaInfos().stream()
+                .anyMatch(i -> i.getName().equals("data_sv")));
+
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testSnapshotMetaUsesCapturedStorageVolumes() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        // Inventory captured earlier (at INITIALIZING) and persisted on the snapshot.
+        job.getSnapshot().setStorageVolumeMetaInfos(Lists.newArrayList(
+                new StorageVolumeMetaInfo("captured_sv", "S3", Arrays.asList("s3://captured-bucket"))));
+
+        // A volume that only exists in the live state; it must NOT appear in the written meta.
+        Map<String, String> defaultAuth = new HashMap<>();
+        defaultAuth.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        StorageVolume builtinSv = newS3StorageVolume("0", StorageVolumeMgr.BUILTIN_STORAGE_VOLUME,
+                Arrays.asList("s3://abc"), defaultAuth, "");
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public List<String> listStorageVolumeNames() {
+                return Lists.newArrayList("live_only_sv");
+            }
+
+            @Mock
+            public StorageVolume getStorageVolumeByName(String name) {
+                return StorageVolumeMgr.BUILTIN_STORAGE_VOLUME.equals(name) ? builtinSv : null;
+            }
+        };
+
+        List<String> writtenContents = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writtenContents.add(new String(data, StandardCharsets.UTF_8));
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        String metaJson = writtenContents.get(0);
+        // The persisted (checkpoint-time) inventory is used, not the live state.
+        Assertions.assertTrue(metaJson.contains("captured_sv"));
+        Assertions.assertFalse(metaJson.contains("live_only_sv"));
+
         setAutomatedSnapshotOff(false);
     }
 

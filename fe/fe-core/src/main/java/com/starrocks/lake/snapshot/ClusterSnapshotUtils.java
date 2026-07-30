@@ -14,10 +14,13 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,6 +28,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotUtils {
@@ -119,7 +124,46 @@ public class ClusterSnapshotUtils {
     private static void writeSnapshotMetaFile(ClusterSnapshotJob job, String snapshotImagePath,
             Map<String, String> properties) throws StarRocksException {
         String metaFilePath = getSnapshotMetaFilePath(snapshotImagePath);
-        HdfsUtil.writeFile(GsonUtils.GSON.toJson(job.getSnapshot()).getBytes(StandardCharsets.UTF_8),
+
+        ClusterSnapshot snapshot = job.getSnapshot();
+        // The storage volume inventory is normally captured at INITIALIZING (consistent checkpoint
+        // point). Fall back to a live capture here for jobs persisted before that field existed
+        // (upgrade / replay of an in-flight job).
+        if (snapshot.getStorageVolumeMetaInfos() == null) {
+            snapshot.setStorageVolumeMetaInfos(collectStorageVolumeMetaInfos());
+        }
+
+        HdfsUtil.writeFile(GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8),
                 metaFilePath, properties);
+    }
+
+    // Record the basic identity (name/type/locations) of every storage volume defined in the
+    // (source) cluster so a cross-cluster restore can rebuild cluster_snapshot.yaml's storage_volumes
+    // without access to the source cluster. Credentials are intentionally not recorded: they are not
+    // needed to reconstruct the volume list and the operator supplies target-side credentials in the
+    // yaml. The internal base storage volume is excluded; external restore recreates it from the
+    // yaml's snapshot_storage_volume, not from this list.
+    static List<StorageVolumeMetaInfo> collectStorageVolumeMetaInfos() throws StarRocksException {
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        List<String> names;
+        try {
+            names = storageVolumeMgr.listStorageVolumeNames();
+        } catch (DdlException e) {
+            throw new StarRocksException("failed to list storage volumes for cluster snapshot meta", e);
+        }
+
+        List<StorageVolumeMetaInfo> metaInfos = Lists.newArrayList();
+        for (String name : names) {
+            if (name.equalsIgnoreCase(StorageVolumeMgr.BASE_STORAGE_VOLUME)) {
+                continue;
+            }
+            StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(name);
+            if (sv == null) {
+                continue;
+            }
+            metaInfos.add(new StorageVolumeMetaInfo(sv.getName(), sv.getType(),
+                    new ArrayList<>(sv.getLocations())));
+        }
+        return metaInfos;
     }
 }
