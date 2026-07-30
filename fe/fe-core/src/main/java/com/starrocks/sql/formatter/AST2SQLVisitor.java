@@ -497,7 +497,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     public String visitArrayExpr(ArrayExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
         Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        sb.append(type.toString());
+        // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
+        // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
+        // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
+        // the original did not have, which changes function overload resolution on the way back in.
+        if (type.equals(node.getType())) {
+            sb.append(type.toString());
+        }
         sb.append('[');
         sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
         sb.append(']');
