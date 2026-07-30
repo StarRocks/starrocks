@@ -177,35 +177,40 @@ jobs:
           data=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json baseRefName,headRefName,labels)
           echo "base_ref=$(echo "${data}" | jq -r '.baseRefName')" >> $GITHUB_OUTPUT
           echo "head_ref=$(echo "${data}" | jq -r '.headRefName')" >> $GITHUB_OUTPUT
-          echo "has_conflict=$(echo "${data}" | jq -r '([.labels[].name] | index("conflict")) != null')" >> $GITHUB_OUTPUT
+          # ci-backport-checker treats both 'conflict' and 'conflicts' as conflict labels.
+          echo "has_conflict=$(echo "${data}" | jq -r '([.labels[].name] | any(. == "conflict" or . == "conflicts"))')" >> $GITHUB_OUTPUT
 
+      # Arm native auto-merge for a fixup PR whose base is a backport branch
+      # (base mergify/bp) or a backport PR itself (head mergify/bp, no conflict label).
+      # `|| true` tolerates a PR that already had auto-merge enabled or is already mergeable.
       - name: AutoMerge
-        if: startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp')
+        if: >
+          startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp') ||
+          (startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') && steps.get_base_ref.outputs.has_conflict == 'false')
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
-          gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto
+          gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto || true
 
-      # Backport PR: head is a mergify/bp branch and its base is a release branch.
-      # celerdata has few people with write/approve access, so backports stall waiting
-      # for a human +1 (unlike sync PRs, which self-approve via APPROVE_PAT). Give the
-      # backport an automated +1 to satisfy the release-branch review requirement, then
-      # enable native auto-merge so it STILL waits on the required status checks.
-      # Gated on the absence of the 'conflict' label so dirty backports are never auto-approved.
+      # Backport PRs target a protected release branch and need a +1. celerdata has few
+      # reviewers, so (unlike sync PRs, which self-approve via APPROVE_PAT) they stall.
+      # Give the automated approval to fire the auto-merge armed above.
+      #  - Runs AFTER the arm step so --auto attaches while the PR is still blocked on
+      #    review; approving first would make the PR immediately mergeable and
+      #    `gh pr merge --auto` would then error with "Pull Request is not mergeable".
+      #  - Restricted to trusted commenters (OWNER/MEMBER/COLLABORATOR) so an arbitrary
+      #    commenter cannot make APPROVE_PAT bypass the human-review requirement.
+      #  - Excludes conflicted backports (both 'conflict' and 'conflicts' labels).
       - name: Auto approve backport PR
-        if: startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') && steps.get_base_ref.outputs.has_conflict == 'false'
+        if: >
+          startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') &&
+          steps.get_base_ref.outputs.has_conflict == 'false' &&
+          contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         uses: hmarr/auto-approve-action@v3
         with:
           pull-request-number: ${{ github.event.issue.number }}
           review-message: "Auto approved backport PR"
           github-token: ${{ secrets.APPROVE_PAT }}
-
-      - name: Enable automerge for backport PR
-        if: startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') && steps.get_base_ref.outputs.has_conflict == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-        run: |
-          gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto
 
   rerun:
     name: Rerun
