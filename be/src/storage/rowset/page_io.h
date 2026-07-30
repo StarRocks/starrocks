@@ -71,7 +71,7 @@ struct PageReadOptions {
     bool use_page_cache = true;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
-    // E4: per-column shared decompression dictionary. Null means "no shared
+    // per-column shared decompression dictionary. Null means "no shared
     // dict" -> decompression path is byte-for-byte unchanged. Index-page reads
     // and every existing caller leave this null.
     const compression::ZstdDDict* dict = nullptr;
@@ -95,8 +95,8 @@ public:
     // Compress `body' using `codec' into `compressed_body'.
     // The size of returned `compressed_body' is 0 when the body is not compressed, this
     // could happen when `codec' is null or space saving is less than `min_space_saving'.
-    // E4: when `cdict' is non-null (and `codec' is ZSTD) the body is compressed
-    // referencing that shared dictionary; existing callers pass null and are
+    // when `cdict' is non-null (and `codec' is ZSTD) the body is compressed
+    // referencing that compression dictionary; existing callers pass null and are
     // byte-for-byte unchanged.
     static Status compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
                                      const std::vector<Slice>& body, faststring* compressed_body,

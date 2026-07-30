@@ -29,12 +29,12 @@ CONF_mDouble(lz4_expected_compression_ratio, "2.1");
 
 CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 
-// E4: keep dictionary-loaded ZSTD decompression contexts warm in a small
+// Keep dictionary-loaded ZSTD decompression contexts warm in a small
 // thread-local set instead of borrowing from the shared pool (whose reset clears
 // the sticky refDDict, forcing the dictionary to be re-loaded into a cold context
-// once per page). Measured to remove ~85% of the dictionary read overhead on
-// full-column scans. Exposed as a switch so the optimization can be disabled in
+// once per page). Removes most of the dictionary read overhead on full-column
+// scans. Exposed as a switch so the optimization can be disabled in
 // production without a rollback, and so its effect can be A/B'd on one cluster.
-CONF_mBool(enable_shared_dict_ctx_cache, "true");
+CONF_mBool(enable_compression_dict_ctx_cache, "true");
 
 } // namespace starrocks::config

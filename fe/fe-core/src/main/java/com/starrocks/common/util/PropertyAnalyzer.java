@@ -139,8 +139,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
 
-    // E4: column-level shared ZSTD dictionary columns
-    public static final String PROPERTIES_SHARED_DICT_COLUMNS = "shared_dict_columns";
+    // column-level compression dictionary (a ZSTD dictionary) columns
+    public static final String PROPERTIES_COMPRESSION_DICT_COLUMNS = "compression_dict_columns";
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -1048,62 +1048,62 @@ public class PropertyAnalyzer {
         return bfColumns;
     }
 
-    // E4: analyze the "shared_dict_columns" property. Mirrors analyzeBloomFilterColumns, but:
+    // analyze the "compression_dict_columns" property. Mirrors analyzeBloomFilterColumns, but:
     //   - only CHAR/VARCHAR/STRING/JSON columns are supported;
     //   - only value columns are allowed (key columns are forbidden);
     //   - there is no fpp / compression companion property.
-    // Returns the set of column names that should use a shared ZSTD dictionary, or null if the
+    // Returns the set of column names that should use a compression dictionary (a ZSTD dictionary), or null if the
     // property is not present.
-    public static Set<String> analyzeSharedDictColumns(Map<String, String> properties, List<Column> columns)
+    public static Set<String> analyzeCompressionDictColumns(Map<String, String> properties, List<Column> columns)
             throws AnalysisException {
-        Set<String> sharedDictColumns = null;
-        if (properties != null && properties.containsKey(PROPERTIES_SHARED_DICT_COLUMNS)) {
-            sharedDictColumns = Sets.newHashSet();
-            String sharedDictColumnsStr = properties.get(PROPERTIES_SHARED_DICT_COLUMNS);
-            if (Strings.isNullOrEmpty(sharedDictColumnsStr)) {
-                return sharedDictColumns;
+        Set<String> compressionDictColumns = null;
+        if (properties != null && properties.containsKey(PROPERTIES_COMPRESSION_DICT_COLUMNS)) {
+            compressionDictColumns = Sets.newHashSet();
+            String compressionDictColumnsStr = properties.get(PROPERTIES_COMPRESSION_DICT_COLUMNS);
+            if (Strings.isNullOrEmpty(compressionDictColumnsStr)) {
+                return compressionDictColumns;
             }
 
-            String[] sharedDictColumnArr = sharedDictColumnsStr.split(COMMA_SEPARATOR);
+            String[] sharedDictColumnArr = compressionDictColumnsStr.split(COMMA_SEPARATOR);
             Set<String> sharedDictColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (String sharedDictColumn : sharedDictColumnArr) {
                 sharedDictColumn = sharedDictColumn.trim();
-                String finalSharedDictColumn = sharedDictColumn;
-                Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalSharedDictColumn))
+                String finalCompressionDictColumn = sharedDictColumn;
+                Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalCompressionDictColumn))
                         .findFirst()
                         .orElse(null);
                 if (column == null) {
                     throw new AnalysisException(
-                            String.format("Invalid shared dict column '%s': not exists", sharedDictColumn));
+                            String.format("Invalid compression dict column '%s': not exists", sharedDictColumn));
                 }
 
                 Type type = column.getType();
 
-                // shared dict only supports string(char/varchar/string) or json columns
+                // compression dict only supports string(char/varchar/string) or json columns
                 if (!type.isStringType() && !type.isJsonType()) {
                     throw new AnalysisException(String.format(
-                            "Invalid shared dict column '%s': unsupported type %s, "
+                            "Invalid compression dict column '%s': unsupported type %s, "
                                     + "only CHAR/VARCHAR/STRING/JSON are supported", sharedDictColumn, type));
                 }
 
-                // shared dict is only used in value columns, not key columns.
+                // compression dict is only used in value columns, not key columns.
                 if (column.isKey()) {
                     throw new AnalysisException(
-                            "Shared dict column only used in value columns. invalid column: " + sharedDictColumn);
+                            "Compression dict column only used in value columns. invalid column: " + sharedDictColumn);
                 }
 
                 if (sharedDictColumnSet.contains(sharedDictColumn)) {
-                    throw new AnalysisException(String.format("Duplicate shared dict column '%s'", sharedDictColumn));
+                    throw new AnalysisException(String.format("Duplicate compression dict column '%s'", sharedDictColumn));
                 }
 
                 sharedDictColumnSet.add(sharedDictColumn);
-                sharedDictColumns.add(column.getName());
+                compressionDictColumns.add(column.getName());
             }
 
-            properties.remove(PROPERTIES_SHARED_DICT_COLUMNS);
+            properties.remove(PROPERTIES_COMPRESSION_DICT_COLUMNS);
         }
 
-        return sharedDictColumns;
+        return compressionDictColumns;
     }
 
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {

@@ -603,11 +603,11 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
 }
 #endif
 
-// ===================== E4 shared-dict codec tests =====================
+// ===================== compression dict compression-dict codec tests =====================
 
 // Roundtrip: a body compressed referencing a CDict decodes correctly with the
 // matching DDict built from the same sample.
-TEST_F(BlockCompressionTest, E4_dict_roundtrip) {
+TEST_F(BlockCompressionTest, compression_dict_roundtrip) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
@@ -646,8 +646,9 @@ TEST_F(BlockCompressionTest, E4_dict_roundtrip) {
 
 // Reset-safety: a dict-bearing borrow must not leak its sticky refCDict to the
 // next borrower. Interleave dict/no-dict compresses; the no-dict output must
-// always equal a clean no-dict reference (the '命门' invariant, §5.2.5).
-TEST_F(BlockCompressionTest, E4_reset_safety_no_leak_to_next_borrow) {
+// always equal a clean no-dict reference (the reset-on-return rule that
+// prevents a dictionary leaking from one borrower to the next).
+TEST_F(BlockCompressionTest, dict_reset_safety_no_leak_to_next_borrow) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
     std::string sample(4096, 'x');
@@ -679,8 +680,8 @@ TEST_F(BlockCompressionTest, E4_reset_safety_no_leak_to_next_borrow) {
 
 // I5: a no-dict frame (dictID=0) decodes identically whether or not a
 // raw-content DDict is referenced. This is what makes mixed dict/no-dict pages
-// (raw pages, value-dict pages) in one E4 column safe on the read path.
-TEST_F(BlockCompressionTest, E4_nodict_frame_decodes_under_ddict_I5) {
+// (raw pages, value-dict pages) in one compression dict column safe on the read path.
+TEST_F(BlockCompressionTest, nodict_frame_decodes_under_ddict) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
@@ -708,7 +709,7 @@ TEST_F(BlockCompressionTest, E4_nodict_frame_decodes_under_ddict_I5) {
 
 // Contract: the dict overloads fail loudly (NotSupported) on a non-ZSTD codec
 // instead of silently producing undecodable bytes.
-TEST_F(BlockCompressionTest, E4_dict_overload_not_supported_on_non_zstd) {
+TEST_F(BlockCompressionTest, dict_overload_not_supported_on_non_zstd) {
     const BlockCompressionCodec* lz4 = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::LZ4, &lz4).ok());
     std::string body = generate_str(1000);
@@ -733,7 +734,7 @@ TEST_F(BlockCompressionTest, E4_dict_overload_not_supported_on_non_zstd) {
 //      by dictionary identity, and a stale entry must never be treated as a hit);
 //   2. it does not disturb the shared pool -- interleaved no-dict decompression
 //      still matches a clean reference.
-TEST_F(BlockCompressionTest, E4_dict_ctx_cache_multi_dict_and_pool_isolation) {
+TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 

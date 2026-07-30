@@ -58,8 +58,8 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
-    @SerializedName("sharedDictColumns")
-    private final Set<ColumnId> sharedDictColumnNames; // E4: columns using a shared ZSTD dictionary
+    @SerializedName("compressionDictColumns")
+    private final Set<ColumnId> sharedDictColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -130,7 +130,7 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
-    public Set<ColumnId> getSharedDictColumnNames() {
+    public Set<ColumnId> getCompressionDictColumnNames() {
         return sharedDictColumnNames;
     }
 
@@ -158,9 +158,9 @@ public class SchemaInfo {
             if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getColumnId())) {
                 tColumn.setIs_bloom_filter_column(true);
             }
-            // E4: use column-level shared ZSTD dictionary
+            // use column-level compression dictionary (a ZSTD dictionary)
             if (sharedDictColumnNames != null && sharedDictColumnNames.contains(column.getColumnId())) {
-                tColumn.setUse_shared_dict(true);
+                tColumn.setUse_compression_dict(true);
             }
             tColumns.add(tColumn);
         }
@@ -233,7 +233,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
-        private Set<ColumnId> sharedDictColumnNames; // E4
+        private Set<ColumnId> sharedDictColumnNames; // compression dict
         private TCompressionType compressionType;
         private int compressionLevel = -1;
         private TPrimaryKeyEncodingType primaryKeyEncodingType;
@@ -315,7 +315,7 @@ public class SchemaInfo {
             return this;
         }
 
-        public Builder setSharedDictColumnNames(Collection<ColumnId> sharedDictColumnNames) {
+        public Builder setCompressionDictColumnNames(Collection<ColumnId> sharedDictColumnNames) {
             Preconditions.checkState(this.sharedDictColumnNames == null);
             if (sharedDictColumnNames != null) {
                 this.sharedDictColumnNames = new HashSet<>(sharedDictColumnNames);
@@ -369,7 +369,7 @@ public class SchemaInfo {
                 .setIndexes(indexes)
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
-                .setSharedDictColumnNames(table.getSharedDictColumnIds())
+                .setCompressionDictColumnNames(table.getCompressionDictColumnIds())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())

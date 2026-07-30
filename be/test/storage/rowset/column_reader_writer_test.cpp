@@ -1119,16 +1119,16 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
     EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
-// E4 column-level shared dictionary: write a PLAIN ZSTD varchar column with
-// use_shared_dict, then verify (1) the shared-dict page was persisted and
+// compression dict column-level compression dictionary: write a PLAIN ZSTD varchar column with
+// use_compression_dict, then verify (1) the compression-dict page was persisted and
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
 // frame, subsequent dict pages, and any no-dict frames under I5).
-TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
-    const std::string fname = strings::Substitute("$0/test_e4_shared_dict_roundtrip.data", TEST_DIR);
+TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
+    const std::string fname = strings::Substitute("$0/test_compression_dict_roundtrip.data", TEST_DIR);
 
     const int N = 3000;
     // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
-    // so the shared dict is effective and values span multiple data pages.
+    // so the compression dict is effective and values span multiple data pages.
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
     slices.reserve(N);
@@ -1155,9 +1155,9 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
         writer_opts.meta->set_type(TYPE_VARCHAR);
         writer_opts.meta->set_length(1024 * 1024);
         writer_opts.meta->set_encoding(PLAIN_ENCODING);
-        writer_opts.meta->set_compression(starrocks::ZSTD); // E4 requires ZSTD
+        writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
         writer_opts.meta->set_is_nullable(true);
-        writer_opts.use_shared_dict = true; // enable E4
+        writer_opts.use_compression_dict = true; // enable compression dict
 
         TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -1169,9 +1169,9 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
         ASSERT_TRUE(wfile->close().ok());
     }
 
-    // (1) the shared-dict page must have been persisted.
-    ASSERT_TRUE(meta.has_shared_dict_page());
-    ASSERT_GT(meta.shared_dict_page().size(), 0u);
+    // (1) the compression-dict page must have been persisted.
+    ASSERT_TRUE(meta.has_compression_dict_page());
+    ASSERT_GT(meta.compression_dict_page().size(), 0u);
 
     // (2) read back and verify every value roundtrips.
     {
@@ -1205,22 +1205,22 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_roundtrip) {
     }
 }
 
-// E4 "train" mode (ZDICT-lite): the first pages are buffered uncompressed while a
+// compression dict "train" mode (ZDICT-lite): the first pages are buffered uncompressed while a
 // dictionary is trained from fragments spread across them, then flushed in order.
 // Pins that (1) a TRAINED dictionary page is emitted and flagged as such, and
 // (2) every row still roundtrips -- i.e. the deferred pages really did get
 // compressed and the reader loads a structured dictionary rather than raw bytes.
-TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_train_mode) {
-    auto saved_mode = config::shared_dict_build_mode;
-    auto saved_pages = config::shared_dict_train_pages;
-    config::shared_dict_build_mode = "train";
-    config::shared_dict_train_pages = 4; // keep the test small
+TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
+    std::string saved_mode = config::compression_dict_build_mode.value();
+    auto saved_pages = config::compression_dict_train_pages;
+    config::compression_dict_build_mode = "train";
+    config::compression_dict_train_pages = 4; // keep the test small
     DeferOp restore([&]() {
-        config::shared_dict_build_mode = saved_mode;
-        config::shared_dict_train_pages = saved_pages;
+        config::compression_dict_build_mode = saved_mode;
+        config::compression_dict_train_pages = saved_pages;
     });
 
-    const std::string fname = strings::Substitute("$0/test_e4_shared_dict_train.data", TEST_DIR);
+    const std::string fname = strings::Substitute("$0/test_e4_compression_dict_train.data", TEST_DIR);
     const int N = 4000;
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
@@ -1250,7 +1250,7 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_train_mode) {
         writer_opts.meta->set_compression(starrocks::ZSTD);
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
-        writer_opts.use_shared_dict = true;
+        writer_opts.use_compression_dict = true;
 
         TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -1262,11 +1262,11 @@ TEST_F(ColumnReaderWriterTest, test_e4_shared_dict_train_mode) {
         ASSERT_TRUE(wfile->close().ok());
     }
 
-    ASSERT_TRUE(meta.has_shared_dict_page());
-    ASSERT_GT(meta.shared_dict_page().size(), 0u);
+    ASSERT_TRUE(meta.has_compression_dict_page());
+    ASSERT_GT(meta.compression_dict_page().size(), 0u);
     // Training must have produced a structured dictionary, and the writer must
     // have recorded that so the reader loads it the same way.
-    ASSERT_TRUE(meta.shared_dict_trained());
+    ASSERT_TRUE(meta.compression_dict_trained());
 
     {
         auto segment = create_dummy_segment(fname);

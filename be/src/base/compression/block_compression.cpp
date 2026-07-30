@@ -721,12 +721,12 @@ public:
 
 namespace {
 
-// E4: dictionary-bound decompression contexts.
+// dictionary-bound decompression contexts.
 //
 // Page decompression normally borrows a ZSTD_DCtx from the shared pool, and the
 // pool's resetter runs ZSTD_DCtx_reset(reset_session_and_parameters) on return --
 // which per the ZSTD contract clears a sticky refDDict. That reset is what
-// guarantees no cross-talk between borrowers (see the shared-dict design), but it
+// guarantees no cross-talk between borrowers (see the compression-dict design), but it
 // also means a dictionary would have to be re-loaded into a cold context for
 // EVERY page. Measured on real data (56MB / 898 pages of a log column): a
 // dictionary costs nothing on decode when the context is reused (2334 vs 2287
@@ -848,7 +848,7 @@ public:
         return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2);
     }
 
-    // E4: same as above but referencing a per-column shared dictionary.
+    // same as above but referencing a per-column compression dictionary.
     Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
                     size_t uncompressed_size, faststring* compressed_body1, raw::RawString* compressed_body2,
                     const compression::ZstdCDict* cdict) const override {
@@ -858,7 +858,7 @@ public:
 
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
 
-    // E4: decompress a frame referencing a per-column shared dictionary.
+    // decompress a frame referencing a per-column compression dictionary.
     Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict) const override {
         return _decompress(input, output, ddict);
     }
@@ -883,7 +883,7 @@ private:
         // pool by reseting back to level = ZSTD_CLEVEL_DEFAULT(3).
         // What we should do here is simply set the level as we wanted.
         if (cdict != nullptr) {
-            // E4: reference the per-column shared dictionary. The compression
+            // reference the per-column compression dictionary. The compression
             // level is baked into the CDict, so we must NOT also set
             // ZSTD_c_compressionLevel here (that would be ignored / conflict).
             // The referenced CDict is sticky on the ctx but is cleared when the
@@ -1001,7 +1001,7 @@ private:
             output->size = 0;
         }
 
-        if (ddict != nullptr && config::enable_shared_dict_ctx_cache) {
+        if (ddict != nullptr && config::enable_compression_dict_ctx_cache) {
             // Dictionary path: use a thread-local context that already has this
             // dictionary loaded, so consecutive pages of a column do not each pay
             // to re-establish the dictionary session. See DictDCtxCache above.

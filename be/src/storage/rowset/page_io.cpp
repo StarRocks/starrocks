@@ -78,7 +78,7 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            // E4: ZSTD always uses the compression pool, so the shared-dict path
+            // ZSTD always uses the compression pool, so the compression-dict path
             // lives here. Non-null cdict references the per-column dictionary.
             // (ZstdBlockCompression ignores BlockCompressionOptions, so nothing
             // is lost by taking the cdict overload.)
@@ -269,7 +269,7 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    // E4: reference the per-column shared dictionary when present. A no-dict
+    // reference the per-column compression dictionary when present. A no-dict
     // frame decodes identically whether or not a raw-content DDict is referenced
     // (I5), so this is safe for raw pages and value-dict pages too.
     if (opts.dict != nullptr) {

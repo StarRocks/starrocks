@@ -71,7 +71,7 @@ StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vecto
     // ZDICT needs a meaningful amount of material; below this it reliably fails
     // (and a tiny dictionary would not pay for itself anyway).
     if (max_dict_size < kMinTrainedDictSize) {
-        return Status::InvalidArgument("shared dict max size too small to train");
+        return Status::InvalidArgument("compression dict max size too small to train");
     }
     std::string dict;
     dict.resize(max_dict_size);
@@ -98,7 +98,7 @@ StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vecto
     if (ZDICT_isError(written)) {
         // Common and benign: "src size is incorrect" / "Dictionary training
         // failed" when the samples are too few or too homogeneous. The caller
-        // degrades to no shared dict.
+        // degrades to no compression dict.
         return Status::InternalError(std::string("ZDICT training failed: ") + ZDICT_getErrorName(written));
     }
     dict.resize(written);

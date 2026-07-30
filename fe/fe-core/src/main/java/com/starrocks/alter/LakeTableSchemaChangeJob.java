@@ -141,11 +141,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
-    // E4: shared dict info
-    @SerializedName(value = "hasSharedDictChange")
-    private boolean hasSharedDictChange;
-    @SerializedName(value = "sharedDictColumns")
-    private Set<ColumnId> sharedDictColumns = null;
+    // compression dict info
+    @SerializedName(value = "hasCompressionDictChange")
+    private boolean hasCompressionDictChange;
+    @SerializedName(value = "compressionDictColumns")
+    private Set<ColumnId> compressionDictColumns = null;
 
     // alter index info
     @SerializedName(value = "indexChange")
@@ -239,9 +239,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.bfFpp = bfFpp;
     }
 
-    void setSharedDictInfo(boolean hasSharedDictChange, Set<ColumnId> sharedDictColumns) {
-        this.hasSharedDictChange = hasSharedDictChange;
-        this.sharedDictColumns = sharedDictColumns;
+    void setCompressionDictInfo(boolean hasCompressionDictChange, Set<ColumnId> compressionDictColumns) {
+        this.hasCompressionDictChange = hasCompressionDictChange;
+        this.compressionDictColumns = compressionDictColumns;
     }
 
     void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -452,7 +452,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
-                            .setSharedDictColumnNames(sharedDictColumns)
+                            .setCompressionDictColumnNames(compressionDictColumns)
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
                             .setSchemaHash(0)
@@ -1055,8 +1055,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
-            this.hasSharedDictChange = other.hasSharedDictChange;
-            this.sharedDictColumns = other.sharedDictColumns;
+            this.hasCompressionDictChange = other.hasCompressionDictChange;
+            this.compressionDictColumns = other.compressionDictColumns;
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
@@ -1229,9 +1229,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (hasBfChange) {
             table.setBloomFilterInfo(bfColumns, bfFpp);
         }
-        // E4: update shared dict columns
-        if (hasSharedDictChange) {
-            table.setSharedDictColumns(sharedDictColumns);
+        // update compression dict columns
+        if (hasCompressionDictChange) {
+            table.setCompressionDictColumns(compressionDictColumns);
         }
         // update index
         if (indexChange) {
