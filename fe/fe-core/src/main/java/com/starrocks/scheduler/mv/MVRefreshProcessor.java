@@ -136,10 +136,32 @@ public abstract class MVRefreshProcessor {
      * @param state      the state of the task run
      * @param execPlan   the execution plan for the task run
      * @param insertStmt the insert statement for the task run
+     * @param skipReason why no plan was produced; {@code null} unless the state is SKIPPED
      */
     public record ProcessExecPlan(Constants.TaskRunState state,
                                   ExecPlan execPlan,
-                                  InsertStmt insertStmt) {
+                                  InsertStmt insertStmt,
+                                  SkipReason skipReason) {
+
+        /**
+         * Why a task run produced no exec plan. SKIPPED alone cannot be reported as "up to date": only
+         * MV_UP_TO_DATE and SCOPE_UP_TO_DATE mean the data was checked and found fresh.
+         */
+        public enum SkipReason {
+            MV_UP_TO_DATE,
+            // The partitions the user asked for are fresh; others may still be stale.
+            SCOPE_UP_TO_DATE,
+            // Another refresh job owns the pinning, so this batch's partitions are left unrefreshed.
+            STALE_PINNED_BATCH
+        }
+
+        public static ProcessExecPlan success(ExecPlan execPlan, InsertStmt insertStmt) {
+            return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, execPlan, insertStmt, null);
+        }
+
+        public static ProcessExecPlan skipped(SkipReason skipReason) {
+            return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null, skipReason);
+        }
     }
 
     public MVRefreshProcessor(Database db, MaterializedView mv,

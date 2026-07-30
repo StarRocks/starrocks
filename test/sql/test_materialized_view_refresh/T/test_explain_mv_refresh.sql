@@ -23,12 +23,16 @@ trace times optimizer refresh materialized view test_mv1 force;
 trace times optimizer refresh materialized view test_mv1 with sync mode;
 trace logs optimizer refresh materialized view test_mv1 partition start ('2023-12-01') end ('2023-12-02');
 
+function: assert_query_contains("explain refresh materialized view test_mv1", "NO REFRESH NEEDED")
+
 INSERT INTO t1 VALUES 
   ('2023-12-01', 100),
   ('2023-12-01', 200),
   ('2023-12-02', 300),
   ('2023-12-02', 400),
   ('2023-12-03', 500);
+
+function: assert_query_not_contains("explain refresh materialized view test_mv1", "NO REFRESH NEEDED")
 
 function: assert_query_contains("explain refresh materialized view test_mv1", "test_mv1")
 function: assert_query_contains("explain refresh materialized view test_mv1 force", "test_mv1")
@@ -48,5 +52,17 @@ function: assert_query_contains("trace times optimizer refresh materialized view
 function: assert_query_contains("trace times optimizer refresh materialized view test_mv1 force", "Analyzer")
 function: assert_query_contains("trace times optimizer refresh materialized view test_mv1 with sync mode", "Analyzer")
 function: assert_query_contains("trace logs optimizer refresh materialized view test_mv1 partition start ('2023-12-01') end ('2023-12-02')", "t1")
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: assert_query_contains("explain refresh materialized view test_mv1", "NO REFRESH NEEDED: the materialized view is already up to date")
+function: assert_query_contains("explain verbose refresh materialized view test_mv1", "NO REFRESH NEEDED")
+function: assert_query_not_contains("explain refresh materialized view test_mv1 force", "NO REFRESH NEEDED")
+
+INSERT INTO t1 VALUES ('2023-12-04', 600);
+
+function: assert_query_contains("explain refresh materialized view test_mv1 partition start ('2023-12-01') end ('2023-12-02')", "NO REFRESH NEEDED: the requested partitions are already up to date")
+function: assert_query_not_contains("explain refresh materialized view test_mv1 partition start ('2023-12-01') end ('2023-12-02')", "the materialized view is already up to date")
+function: assert_query_not_contains("explain refresh materialized view test_mv1", "NO REFRESH NEEDED")
 
 
