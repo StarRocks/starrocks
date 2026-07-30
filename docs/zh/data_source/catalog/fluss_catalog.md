@@ -3,11 +3,11 @@ displayed_sidebar: docs
 description: "使用 Fluss catalog 查询 Apache Fluss 表中的数据。"
 ---
 
-import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
 # Fluss catalog
 
-<Beta />
+<Experimental />
 
 Fluss catalog 是一种 External Catalog，支持您无需将数据导入 StarRocks，即可查询 Apache Fluss 表。
 

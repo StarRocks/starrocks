@@ -63,6 +63,9 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, FlussPredicateContext> {
+    // StarRocks DATETIME supports up to microsecond precision.
+    private static final int MAX_SUPPORTED_TIMESTAMP_PRECISION = 6;
+
     private final PredicateBuilder builder;
     private final List<String> fieldNames;
     private final List<DataType> fieldTypes;
@@ -116,11 +119,10 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
 
     @Override
     public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, FlussPredicateContext context) {
-        String columnName = getColumnName(operator.getChild(0));
-        if (columnName == null) {
+        int idx = getPushdownColumnIndex(operator.getChild(0));
+        if (idx < 0) {
             return null;
         }
-        int idx = fieldNames.indexOf(columnName);
         if (operator.isNotNull()) {
             return builder.isNotNull(idx);
         } else {
@@ -130,11 +132,10 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
 
     @Override
     public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, FlussPredicateContext context) {
-        String columnName = getColumnName(operator.getChild(0));
-        if (columnName == null) {
+        int idx = getPushdownColumnIndex(operator.getChild(0));
+        if (idx < 0) {
             return null;
         }
-        int idx = fieldNames.indexOf(columnName);
         Object literal = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
         if (literal == null) {
             return null;
@@ -162,11 +163,10 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
 
     @Override
     public Predicate visitInPredicate(InPredicateOperator operator, FlussPredicateContext context) {
-        String columnName = getColumnName(operator.getChild(0));
-        if (columnName == null) {
+        int idx = getPushdownColumnIndex(operator.getChild(0));
+        if (idx < 0) {
             return null;
         }
-        int idx = fieldNames.indexOf(columnName);
         List<ScalarOperator> valuesOperatorList = operator.getListChildren();
         List<Object> literalValues = new ArrayList<>(valuesOperatorList.size());
         for (ScalarOperator valueOperator : valuesOperatorList) {
@@ -189,12 +189,11 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
 
     @Override
     public Predicate visitLikePredicateOperator(LikePredicateOperator operator, FlussPredicateContext context) {
-        String columnName = getColumnName(operator.getChild(0));
-        if (columnName == null) {
+        int idx = getPushdownColumnIndex(operator.getChild(0));
+        if (idx < 0) {
             return null;
         }
 
-        int idx = fieldNames.indexOf(columnName);
         if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
             if (operator.getChild(1).getType().isStringType()) {
                 Object objectLiteral = getLiteral(operator.getChild(1), fieldTypes.get(idx), context);
@@ -361,15 +360,27 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Fl
         }
     }
 
-    private String getColumnName(ScalarOperator operator) {
+    private int getPushdownColumnIndex(ScalarOperator operator) {
         if (operator == null) {
-            return null;
+            return -1;
         }
         String columnName = operator.accept(new ExtractColumnName(), null);
         if (columnName == null || columnName.isEmpty()) {
-            return null;
+            return -1;
         }
-        return columnName;
+        int idx = fieldNames.indexOf(columnName);
+        if (idx < 0 || isHighPrecisionTimestamp(fieldTypes.get(idx))) {
+            return -1;
+        }
+        return idx;
+    }
+
+    private static boolean isHighPrecisionTimestamp(DataType dataType) {
+        if (dataType instanceof TimestampType) {
+            return ((TimestampType) dataType).getPrecision() > MAX_SUPPORTED_TIMESTAMP_PRECISION;
+        }
+        return dataType instanceof LocalZonedTimestampType
+                && ((LocalZonedTimestampType) dataType).getPrecision() > MAX_SUPPORTED_TIMESTAMP_PRECISION;
     }
 
     private static class ExtractColumnName extends ScalarOperatorVisitor<String, Void> {

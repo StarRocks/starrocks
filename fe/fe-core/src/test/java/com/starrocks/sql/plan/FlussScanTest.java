@@ -279,7 +279,7 @@ public class FlussScanTest extends PlanTestBase {
                 new Column("region", StringType.STRING, true),
                 new Column("amount", IntegerType.INT, true),
                 new Column("category", StringType.STRING, true));
-        return new FlussTable(CATALOG, DB, tableName, schema, nativeTable(tableInfo), new Configuration());
+        return new FlussTable(CATALOG, DB, tableName, schema, tableInfo, new Configuration());
     }
 
     private static TableInfo tableInfo(String tableName, boolean partitioned) {
@@ -296,39 +296,6 @@ public class FlussScanTest extends PlanTestBase {
             descriptorBuilder.partitionedBy("category");
         }
         return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(), 1000L, 2000L);
-    }
-
-    private static org.apache.fluss.client.table.Table nativeTable(TableInfo tableInfo) {
-        return new org.apache.fluss.client.table.Table() {
-            @Override
-            public TableInfo getTableInfo() {
-                return tableInfo;
-            }
-
-            @Override
-            public org.apache.fluss.client.table.scanner.Scan newScan() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.lookup.Lookup newLookup() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.table.writer.Append newAppend() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.table.writer.Upsert newUpsert() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public void close() {
-            }
-        };
     }
 
     private static class FakeConnection implements Connection {

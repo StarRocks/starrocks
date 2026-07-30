@@ -234,6 +234,24 @@ public class FlussPredicateConverterTest {
     }
 
     @Test
+    public void testHighPrecisionTimestampNotPushedDown() {
+        RowType rowType = new RowType(List.of(
+                new DataField("ts", DataTypes.TIMESTAMP(9)),
+                new DataField("ts_ltz", DataTypes.TIMESTAMP_LTZ(9))));
+        FlussPredicateConverter converter = new FlussPredicateConverter(rowType, ZoneOffset.UTC);
+        ColumnRefOperator ts =
+                new ColumnRefOperator(0, com.starrocks.type.DateType.DATETIME, "ts", true, false);
+        ColumnRefOperator tsLtz =
+                new ColumnRefOperator(1, com.starrocks.type.DateType.DATETIME, "ts_ltz", true, false);
+        ConstantOperator value = ConstantOperator.createDatetime(
+                LocalDateTime.of(2026, 7, 8, 12, 13, 14, 123456000));
+
+        Assertions.assertNull(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, ts, value)));
+        Assertions.assertNull(converter.convert(new IsNullPredicateOperator(false, ts)));
+        Assertions.assertNull(converter.convert(new BinaryPredicateOperator(BinaryType.EQ, tsLtz, value)));
+    }
+
+    @Test
     public void testNotPredicate() {
         ScalarOperator pushable = new BinaryPredicateOperator(BinaryType.EQ, ID, ConstantOperator.createInt(11));
         ScalarOperator unsupported = new BinaryPredicateOperator(

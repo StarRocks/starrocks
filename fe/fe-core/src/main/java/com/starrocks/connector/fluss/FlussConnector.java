@@ -70,7 +70,7 @@ public class FlussConnector implements Connector {
     @Override
     public synchronized ConnectorMetadata getMetadata() {
         initConnection();
-        return new FlussMetadata(catalogName, hdfsEnvironment, this.connection, this.admin, catalogConf);
+        return new FlussMetadata(catalogName, hdfsEnvironment, this.admin, catalogConf);
     }
 
     private void initConnection() {

@@ -3,11 +3,11 @@ displayed_sidebar: docs
 description: "Fluss catalog を使用して Apache Fluss テーブルのデータをクエリします。"
 ---
 
-import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
 # Fluss catalog
 
-<Beta />
+<Experimental />
 
 Fluss catalog は、データを StarRocks にロードせずに Apache Fluss テーブルをクエリできる External Catalog です。
 

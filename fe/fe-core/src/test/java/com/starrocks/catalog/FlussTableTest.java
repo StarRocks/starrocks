@@ -22,8 +22,6 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableDescriptor;
@@ -56,22 +54,15 @@ public class FlussTableTest {
     }
 
     @Test
-    public void testBuildRuntimeConf(@Mocked org.apache.fluss.client.table.Table nativeFlussTable) {
+    public void testBuildRuntimeConf() {
         TableInfo tableInfo = tableInfo();
-        new Expectations() {
-            {
-                nativeFlussTable.getTableInfo();
-                result = tableInfo;
-            }
-        };
-
         Configuration catalogConf = new Configuration();
         catalogConf.setString(BOOTSTRAP_SERVERS, "catalog-host:9123");
         catalogConf.setString(FLUSS_CLIENT_ID, "sr-fe");
         catalogConf.setString(LAKE_WAREHOUSE, "oss://catalog-warehouse");
         catalogConf.setString(LAKE_METASTORE, "filesystem");
         catalogConf.setString("catalog.only", "catalog-value");
-        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), nativeFlussTable, catalogConf);
+        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), tableInfo, catalogConf);
 
         Configuration runtimeConf = table.buildRuntimeConf();
         Map<String, String> runtimeConfMap = runtimeConf.toMap();
@@ -85,15 +76,8 @@ public class FlussTableTest {
     }
 
     @Test
-    public void testToThrift(@Mocked org.apache.fluss.client.table.Table nativeFlussTable) throws Exception {
+    public void testToThrift() throws Exception {
         TableInfo tableInfo = tableInfo();
-        new Expectations() {
-            {
-                nativeFlussTable.getTableInfo();
-                result = tableInfo;
-            }
-        };
-
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setTimeZone("Asia/Shanghai");
@@ -105,7 +89,7 @@ public class FlussTableTest {
         catalogConf.setString(FLUSS_CLIENT_ID, "sr-fe");
         catalogConf.setString(LAKE_WAREHOUSE, "oss://catalog-warehouse");
         catalogConf.setString(LAKE_METASTORE, "filesystem");
-        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), nativeFlussTable, catalogConf);
+        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), tableInfo, catalogConf);
 
         TTableDescriptor descriptor = table.toThrift(null);
         Assertions.assertEquals(TTableType.FLUSS_TABLE, descriptor.getTableType());
@@ -130,16 +114,9 @@ public class FlussTableTest {
     }
 
     @Test
-    public void testPartitionColumnsAndIdentifiers(@Mocked org.apache.fluss.client.table.Table nativeFlussTable) {
+    public void testPartitionColumnsAndIdentifiers() {
         TableInfo tableInfo = tableInfo();
-        new Expectations() {
-            {
-                nativeFlussTable.getTableInfo();
-                result = tableInfo;
-            }
-        };
-
-        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), nativeFlussTable, new Configuration());
+        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), tableInfo, new Configuration());
         Assertions.assertEquals(Arrays.asList("dt"), table.getPartitionColumnNames());
         Assertions.assertEquals(Arrays.asList(new Column("dt", StringType.STRING, true)), table.getPartitionColumns());
         Assertions.assertEquals(Arrays.asList("id", "name", "dt"), table.getFieldNames());

@@ -3,11 +3,11 @@ displayed_sidebar: docs
 description: "Use a Fluss catalog to query data in Apache Fluss tables."
 ---
 
-import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 
 # Fluss catalog
 
-<Beta />
+<Experimental />
 
 A Fluss catalog is an external catalog that enables you to query Apache Fluss tables without loading data into StarRocks.
 

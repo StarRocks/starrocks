@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TFlussTable;
@@ -39,24 +38,23 @@ public class FlussTable extends Table {
     private String databaseName;
     private String tableName;
     private TableInfo tableInfo;
-    private String uuid;
     private List<String> partColumnNames;
     private List<String> flussFieldNames;
     // Catalog-level Fluss/lake options copied from CREATE EXTERNAL CATALOG
     private Configuration catalogConf;
-    private String tableNamePrefix = "";
+    private String tableNameSuffix = "";
 
     public FlussTable() {
         super(TableType.FLUSS);
     }
 
     public FlussTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                      org.apache.fluss.client.table.Table nativeFlussTable, Configuration catalogConf) {
+                      TableInfo tableInfo, Configuration catalogConf) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.FLUSS, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.tableInfo = nativeFlussTable.getTableInfo();
+        this.tableInfo = tableInfo;
         this.partColumnNames = tableInfo.getPartitionKeys();
         this.flussFieldNames = tableInfo.getSchema().getColumnNames();
         this.catalogConf = catalogConf;
@@ -94,11 +92,8 @@ public class FlussTable extends Table {
 
     @Override
     public String getUUID() {
-        if (Strings.isNullOrEmpty(this.uuid)) {
-            this.uuid = String.join(".", catalogName, databaseName, tableName,
-                    String.valueOf(tableInfo.getTableId()));
-        }
-        return this.uuid;
+        return String.join(".", catalogName, databaseName, tableName + tableNameSuffix,
+                String.valueOf(tableInfo.getTableId()));
     }
 
     @Override
@@ -158,16 +153,15 @@ public class FlussTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        String uuid = getUUID();
-        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+        return Joiner.on(":").join(name, getUUID());
     }
 
-    public void setTableNamePrefix(String prefix) {
-        this.tableNamePrefix = prefix;
+    public void setTableNameSuffix(String suffix) {
+        this.tableNameSuffix = suffix;
     }
 
-    public String getTableNamePrefix() {
-        return tableNamePrefix;
+    public String getTableNameSuffix() {
+        return tableNameSuffix;
     }
 
     @Override

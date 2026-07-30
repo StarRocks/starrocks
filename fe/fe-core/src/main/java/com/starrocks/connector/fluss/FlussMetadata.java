@@ -42,7 +42,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.Type;
-import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.initializer.BucketOffsetsRetrieverImpl;
 import org.apache.fluss.client.initializer.LatestOffsetsInitializer;
@@ -86,12 +85,11 @@ import static org.apache.fluss.flink.utils.LakeSourceUtils.createLakeSource;
 public class FlussMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(FlussMetadata.class);
 
-    private static final String LAKE_TABLE_SPLITTER = "$lake";
-    public static final String RT_TABLE_SPLITTER = "$rt";
+    private static final String LAKE_TABLE_SUFFIX = "$lake";
+    public static final String RT_TABLE_SUFFIX = "$rt";
     private static final String PRIMARY_KEY_READ_MODE_ERROR = "Fluss primary-key table does not support $lake or $rt " +
             "suffix; query the base table for merged primary-key view";
 
-    private final Connection connection;
     private final Admin admin;
 
     private final HdfsEnvironment hdfsEnvironment;
@@ -104,11 +102,9 @@ public class FlussMetadata implements ConnectorMetadata {
     // Catalog-level Fluss/lake options copied from CREATE EXTERNAL CATALOG.
     private final Configuration catalogConf;
 
-    public FlussMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Connection connection, Admin admin,
-                         Configuration catalogConf) {
+    public FlussMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Admin admin, Configuration catalogConf) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
-        this.connection = connection;
         this.admin = admin;
         this.catalogConf = catalogConf;
     }
@@ -229,14 +225,14 @@ public class FlussMetadata implements ConnectorMetadata {
                 fullSchema.add(column);
             }
             String comment = tableInfo.getComment().orElse("");
-            FlussTable table = new FlussTable(catalogName, dbName, realTblName, fullSchema,
-                    connection.getTable(flussIdentifier), catalogConf);
+            FlussTable table =
+                    new FlussTable(catalogName, dbName, realTblName, fullSchema, tableInfo, catalogConf);
             table.setComment(comment);
             if (hasLakeTableSuffix(tblName)) {
-                table.setTableNamePrefix(LAKE_TABLE_SPLITTER);
+                table.setTableNameSuffix(LAKE_TABLE_SUFFIX);
             }
             if (hasRtTableSuffix(tblName)) {
-                table.setTableNamePrefix(RT_TABLE_SPLITTER);
+                table.setTableNameSuffix(RT_TABLE_SUFFIX);
             }
             this.tables.put(cacheKey, table);
             return table;
@@ -262,10 +258,10 @@ public class FlussMetadata implements ConnectorMetadata {
     private String normalizeTableName(String tableName) {
         String realTableName = tableName;
         if (hasLakeTableSuffix(tableName)) {
-            realTableName = tableName.split("\\" + LAKE_TABLE_SPLITTER)[0];
+            realTableName = tableName.split("\\" + LAKE_TABLE_SUFFIX)[0];
         }
         if (hasRtTableSuffix(tableName)) {
-            realTableName = tableName.split("\\" + RT_TABLE_SPLITTER)[0];
+            realTableName = tableName.split("\\" + RT_TABLE_SUFFIX)[0];
         }
         return realTableName;
     }
@@ -275,11 +271,11 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     private boolean hasLakeTableSuffix(String tableName) {
-        return tableName.endsWith(LAKE_TABLE_SPLITTER);
+        return tableName.endsWith(LAKE_TABLE_SUFFIX);
     }
 
     private boolean hasRtTableSuffix(String tableName) {
-        return tableName.endsWith(RT_TABLE_SPLITTER);
+        return tableName.endsWith(RT_TABLE_SUFFIX);
     }
 
     @Override
@@ -363,11 +359,11 @@ public class FlussMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s",
                     catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
         }
-        if (flussTable.getTableNamePrefix().equals(LAKE_TABLE_SPLITTER)) {
+        if (flussTable.getTableNameSuffix().equals(LAKE_TABLE_SUFFIX)) {
             splits = splits.stream().filter(SourceSplitBase::isLakeSplit)
                     .collect(Collectors.toList());
         }
-        if (flussTable.getTableNamePrefix().equals(RT_TABLE_SPLITTER)) {
+        if (flussTable.getTableNameSuffix().equals(RT_TABLE_SUFFIX)) {
             splits = splits.stream().filter(sp -> sp instanceof LogSplit)
                     .collect(Collectors.toList());
         }
@@ -417,7 +413,7 @@ public class FlussMetadata implements ConnectorMetadata {
         }
         FlussTable flussTable = (FlussTable) table;
         long rowCount = Config.default_statistics_output_row_count;
-        if (flussTable.getTableNamePrefix().isEmpty()) {
+        if (flussTable.getTableNameSuffix().isEmpty()) {
             try {
                 TablePath tablePath = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
                 rowCount = admin.getTableStats(tablePath).get().getRowCount();

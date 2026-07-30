@@ -34,7 +34,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
-import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.exception.DatabaseNotExistException;
@@ -69,8 +68,6 @@ public class FlussMetadataTest {
     private static final long TABLE_ID = 42L;
 
     @Mocked
-    private Connection connection;
-    @Mocked
     private Admin admin;
 
     private FlussMetadata metadata;
@@ -79,7 +76,7 @@ public class FlussMetadataTest {
     public void setUp() {
         Configuration catalogConf = new Configuration();
         catalogConf.setString("bootstrap.servers", "localhost:9123");
-        metadata = new FlussMetadata(CATALOG, new HdfsEnvironment(), connection, admin, catalogConf);
+        metadata = new FlussMetadata(CATALOG, new HdfsEnvironment(), admin, catalogConf);
     }
 
     @Test
@@ -101,13 +98,10 @@ public class FlussMetadataTest {
     @Test
     public void testGetTable() {
         TableInfo tableInfo = tableInfo(true);
-        org.apache.fluss.client.table.Table nativeTable = nativeTable(tableInfo);
         new Expectations() {
             {
                 admin.getTableInfo(TablePath.of(DB, TABLE));
                 result = CompletableFuture.completedFuture(tableInfo);
-                connection.getTable(TablePath.of(DB, TABLE));
-                result = nativeTable;
             }
         };
 
@@ -139,23 +133,23 @@ public class FlussMetadataTest {
     @Test
     public void testGetTableWithLakeAndRt() {
         TableInfo tableInfo = tableInfo(false);
-        org.apache.fluss.client.table.Table nativeTable = nativeTable(tableInfo);
         new Expectations() {
             {
                 admin.getTableInfo(TablePath.of(DB, TABLE));
                 result = CompletableFuture.completedFuture(tableInfo);
-                connection.getTable(TablePath.of(DB, TABLE));
-                result = nativeTable;
             }
         };
 
         FlussTable lakeTable = (FlussTable) metadata.getTable(new ConnectContext(), DB, TABLE + "$lake");
         Assertions.assertEquals(TABLE, lakeTable.getCatalogTableName());
-        Assertions.assertEquals("$lake", lakeTable.getTableNamePrefix());
+        Assertions.assertEquals("$lake", lakeTable.getTableNameSuffix());
 
         FlussTable rtTable = (FlussTable) metadata.getTable(new ConnectContext(), DB, TABLE + "$rt");
         Assertions.assertEquals(TABLE, rtTable.getCatalogTableName());
-        Assertions.assertEquals("$rt", rtTable.getTableNamePrefix());
+        Assertions.assertEquals("$rt", rtTable.getTableNameSuffix());
+        Assertions.assertNotEquals(lakeTable.getUUID(), rtTable.getUUID());
+        Assertions.assertNotEquals(lakeTable.getTableIdentifier(), rtTable.getTableIdentifier());
+        Assertions.assertNotEquals(lakeTable, rtTable);
     }
 
     @Test
@@ -279,8 +273,8 @@ public class FlussMetadataTest {
                 Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals((double) Config.default_statistics_output_row_count, statistics.getOutputRowCount());
 
-        for (String tableNamePrefix : Arrays.asList("$lake", "$rt")) {
-            table = flussTable(tableInfo(false), tableNamePrefix);
+        for (String tableNameSuffix : Arrays.asList("$lake", "$rt")) {
+            table = flussTable(tableInfo(false), tableNameSuffix);
             statistics = metadata.getTableStatistics(null, table, Collections.emptyMap(),
                     Collections.emptyList(), null, -1, TvrTableSnapshot.empty());
             Assertions.assertEquals(
@@ -306,43 +300,10 @@ public class FlussMetadataTest {
         return remoteFileDesc.getFlussSplitsInfo().getFlussSplits();
     }
 
-    private static FlussTable flussTable(TableInfo tableInfo, String tableNamePrefix) {
-        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), nativeTable(tableInfo), new Configuration());
-        table.setTableNamePrefix(tableNamePrefix);
+    private static FlussTable flussTable(TableInfo tableInfo, String tableNameSuffix) {
+        FlussTable table = new FlussTable(CATALOG, DB, TABLE, schema(), tableInfo, new Configuration());
+        table.setTableNameSuffix(tableNameSuffix);
         return table;
-    }
-
-    private static org.apache.fluss.client.table.Table nativeTable(TableInfo tableInfo) {
-        return new org.apache.fluss.client.table.Table() {
-            @Override
-            public TableInfo getTableInfo() {
-                return tableInfo;
-            }
-
-            @Override
-            public org.apache.fluss.client.table.scanner.Scan newScan() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.lookup.Lookup newLookup() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.table.writer.Append newAppend() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public org.apache.fluss.client.table.writer.Upsert newUpsert() {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public void close() {
-            }
-        };
     }
 
     private static List<Column> schema() {
