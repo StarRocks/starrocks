@@ -685,6 +685,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、システムは Lake テーブルが関連トランザクションの結合トランザクションログパスを使用することを許可します。共有データクラスターでのみ利用可能です。
 - 導入時期：v3.3.7, v3.4.0, v3.5.0
 
+### `lake_vector_index_build_warehouse`
+
+- デフォルト：`default_warehouse`
+- タイプ：String
+- 単位：-
+- 変更可能：はい
+- 説明：共有データクラスタで非同期ベクターインデックス構築タスクを実行する Warehouse です。デフォルト以外の Warehouse 名を指定すると、ベクターインデックス構築をクエリおよびロードのワークロードから分離できます。`default_warehouse`、空の値、存在しない Warehouse、または利用できない Warehouse が指定された場合、StarRocks はテーブルに記録されたバックグラウンド Warehouse を使用し、最後にデフォルト Warehouse へフォールバックします。
+- 導入時期：v4.2.0
+
+### `lake_vi_build_load_tail_delay_ms`
+
+- デフォルト：300000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：はい
+- 説明：最新の保留バージョンがロードのみで、保留中の Compaction 生成物を含まない Tablet について、非同期ベクターインデックス構築をディスパッチするまでの遅延時間です。この期間内に新しい Compaction が到着した場合、そのバージョンを末尾とまとめて構築し、間もなく Compaction される Rowset に対する不要な構築を回避します。Compaction 生成物は常に直ちにディスパッチされます。非同期ベクターインデックスを持つ共有データテーブルでのみ有効です。
+- 導入時期：v4.2.0
+
 ### `lake_repair_metadata_fetch_max_version_batch_size`
 
 - デフォルト: 160
