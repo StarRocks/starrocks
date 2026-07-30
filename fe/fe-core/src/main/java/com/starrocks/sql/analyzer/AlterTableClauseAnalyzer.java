@@ -563,6 +563,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
+                }
                 sortKeyIdxes.add(idx);
             }
         }
