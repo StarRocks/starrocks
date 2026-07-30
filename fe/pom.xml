@@ -84,6 +84,7 @@ under the License.
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <bouncycastle.version>1.84</bouncycastle.version>
+        <thrift.version>0.24.0</thrift.version>
     </properties>
 
     <profiles>
@@ -452,7 +453,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.23.0</version>
+                <version>${thrift.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.apache.tomcat.embed</groupId>
