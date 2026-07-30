@@ -169,6 +169,23 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "expected inline DictDecode reproduced from the captured array global dict, plan:\n" + plan);
     }
 
+    // Column min/max captured from ColumnMinMaxMgr: without it, replay's manager has no BE to compute min/max, so
+    // the RewriteSimpleAggToMetaScanRule fold (MAX/MIN -> constant over UNION) would be lost. With the captured
+    // min/max seeded, replay reproduces the fold (max(v2)=99, min(v3)=30).
+    @Test
+    public void testMinMaxMetaScanReplay() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/min_max_meta_scan");
+        Assertions.assertTrue(getDumpInfoFromJson(dumpString).getTableColumnMinMaxMap()
+                        .getOrDefault("qd_minmax.mm", java.util.Collections.emptyMap()).containsKey("v2"),
+                "dump should carry the column_min_max for qd_minmax.mm");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString);
+        String plan = replayPair.second;
+        Assertions.assertTrue(plan.contains("0:UNION"),
+                "expected the MAX/MIN meta-scan fold (constant UNION) reproduced from the captured min/max, plan:\n" + plan);
+        Assertions.assertTrue(plan.contains("<-> 99") && plan.contains("<-> 30"),
+                "expected max(v2)=99 and min(v3)=30 folded to constants from the captured min/max, plan:\n" + plan);
+    }
+
     @Test
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));

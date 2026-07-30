@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -185,6 +186,22 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 for (String columnKey : columnDicts.keySet()) {
                     dumpInfo.addTableGlobalDict(tableKey, columnKey,
                             ColumnDict.fromJson(columnDicts.get(columnKey).getAsString()));
+                }
+            }
+        }
+        // column min/max captured for replay (meta-scan / group-by-compressed-key rewrites). Optional section
+        // (older dumps don't have it), guarded by has(); mirror of global_dict keyed db.table -> column.
+        if (dumpJsonObject.has("column_min_max")) {
+            JsonObject tableColumnMinMax = dumpJsonObject.getAsJsonObject("column_min_max");
+            for (String tableKey : tableColumnMinMax.keySet()) {
+                JsonObject columnMinMaxes = tableColumnMinMax.get(tableKey).getAsJsonObject();
+                for (String columnKey : columnMinMaxes.keySet()) {
+                    JsonObject minMax = columnMinMaxes.get(columnKey).getAsJsonObject();
+                    String min = minMax.has("min") && !minMax.get("min").isJsonNull()
+                            ? minMax.get("min").getAsString() : null;
+                    String max = minMax.has("max") && !minMax.get("max").isJsonNull()
+                            ? minMax.get("max").getAsString() : null;
+                    dumpInfo.addColumnMinMax(tableKey, columnKey, new IMinMaxStatsMgr.ColumnMinMax(min, max));
                 }
             }
         }

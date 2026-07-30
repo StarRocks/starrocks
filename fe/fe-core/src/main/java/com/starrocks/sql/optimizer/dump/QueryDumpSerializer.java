@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -262,6 +263,27 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         if (tableGlobalDict.size() > 0) {
             dumpJson.add("global_dict", tableGlobalDict);
+        }
+        // column min/max: captured so replay reproduces the meta-scan / group-by-compressed-key rewrites, which
+        // are otherwise lost offline (production ColumnMinMaxMgr has no BE -> no min/max). Keyed like
+        // column_statistics (db.table -> column). Not emitted on the desensitized path -- min/max are raw
+        // column data, like the global dict and histogram exclusions above.
+        JsonObject tableColumnMinMax = new JsonObject();
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                dumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            JsonObject columnMinMaxes = new JsonObject();
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                JsonObject minMax = new JsonObject();
+                minMax.addProperty("min", columnEntry.getValue().minValue());
+                minMax.addProperty("max", columnEntry.getValue().maxValue());
+                columnMinMaxes.add(columnEntry.getKey(), minMax);
+            }
+            if (columnMinMaxes.size() > 0) {
+                tableColumnMinMax.add(entry.getKey(), columnMinMaxes);
+            }
+        }
+        if (tableColumnMinMax.size() > 0) {
+            dumpJson.add("column_min_max", tableColumnMinMax);
         }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
