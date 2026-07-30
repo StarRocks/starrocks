@@ -108,13 +108,9 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-=======
-import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
->>>>>>> a1f7a437e0 ([Enhancement] Capture and replay external-catalog iceberg/hive tables in query dump (#76936))
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
