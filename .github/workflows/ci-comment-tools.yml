@@ -174,11 +174,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          base_ref=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json baseRefName | jq -r '.baseRefName')
-          echo "base_ref=${base_ref}" >> $GITHUB_OUTPUT
+          data=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json baseRefName,headRefName,labels)
+          echo "base_ref=$(echo "${data}" | jq -r '.baseRefName')" >> $GITHUB_OUTPUT
+          echo "head_ref=$(echo "${data}" | jq -r '.headRefName')" >> $GITHUB_OUTPUT
+          echo "has_conflict=$(echo "${data}" | jq -r '([.labels[].name] | index("conflict")) != null')" >> $GITHUB_OUTPUT
 
       - name: AutoMerge
         if: startsWith(steps.get_base_ref.outputs.base_ref, 'mergify/bp')
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          gh pr merge ${PR_NUMBER} -R ${{ github.repository }} -s --auto
+
+      # Backport PR: head is a mergify/bp branch and its base is a release branch.
+      # celerdata has few people with write/approve access, so backports stall waiting
+      # for a human +1 (unlike sync PRs, which self-approve via APPROVE_PAT). Give the
+      # backport an automated +1 to satisfy the release-branch review requirement, then
+      # enable native auto-merge so it STILL waits on the required status checks.
+      # Gated on the absence of the 'conflict' label so dirty backports are never auto-approved.
+      - name: Auto approve backport PR
+        if: startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') && steps.get_base_ref.outputs.has_conflict == 'false'
+        uses: hmarr/auto-approve-action@v3
+        with:
+          pull-request-number: ${{ github.event.issue.number }}
+          review-message: "Auto approved backport PR"
+          github-token: ${{ secrets.APPROVE_PAT }}
+
+      - name: Enable automerge for backport PR
+        if: startsWith(steps.get_base_ref.outputs.head_ref, 'mergify/bp') && steps.get_base_ref.outputs.has_conflict == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
