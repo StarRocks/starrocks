@@ -27,6 +27,15 @@ public class ClusterSnapshot {
         AUTOMATED, MANUAL, INCREMENTAL, AUTO_FULL
     }
 
+    // Serialized in lowercase to match the snapshot_scope vocabulary used by the ADMIN SET property
+    // and by cluster_snapshot.yaml, so restore tooling can copy the value straight through.
+    public enum SnapshotScope {
+        @SerializedName("local")
+        LOCAL,
+        @SerializedName("external")
+        EXTERNAL
+    }
+
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "snapshotName")
@@ -50,6 +59,10 @@ public class ClusterSnapshot {
     // the source cluster is unreachable. Serialized into snapshot_meta.json under "storageVolumes".
     @SerializedName(value = "storageVolumes")
     private List<StorageVolumeMetaInfo> storageVolumeMetaInfos;
+    // External or local cluster snapshot, captured when the job is created. Serialized into
+    // snapshot_meta.json under "scope" so restore tooling need not ask the source cluster.
+    @SerializedName(value = "scope")
+    private SnapshotScope scope;
 
     public ClusterSnapshot() {
     }
@@ -121,6 +134,14 @@ public class ClusterSnapshot {
 
     public void setStorageVolumeMetaInfos(List<StorageVolumeMetaInfo> storageVolumeMetaInfos) {
         this.storageVolumeMetaInfos = storageVolumeMetaInfos;
+    }
+
+    public SnapshotScope getScope() {
+        return scope;
+    }
+
+    public void setScope(SnapshotScope scope) {
+        this.scope = scope;
     }
 
     public TClusterSnapshotsItem getInfo() {

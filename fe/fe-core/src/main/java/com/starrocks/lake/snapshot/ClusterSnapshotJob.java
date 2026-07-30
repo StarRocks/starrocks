@@ -58,6 +58,7 @@ public class ClusterSnapshotJob implements Writable {
 
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         this.snapshot = createClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
+        this.snapshot.setScope(getSnapshotScope());
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
         this.detailInfo = "";
@@ -66,6 +67,12 @@ public class ClusterSnapshotJob implements Writable {
     protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         return new ClusterSnapshot(id, snapshotName, ClusterSnapshot.ClusterSnapshotType.AUTOMATED,
                     storageVolumeName, createdTimeMs, -1, 0, 0);
+    }
+
+    // Scope of the snapshots this kind of job produces. Single source of truth for the scope recorded
+    // in snapshot_meta.json, also used as the fallback for jobs persisted before the field existed.
+    protected ClusterSnapshot.SnapshotScope getSnapshotScope() {
+        return ClusterSnapshot.SnapshotScope.LOCAL;
     }
 
     public void setState(ClusterSnapshotJobState state) {
