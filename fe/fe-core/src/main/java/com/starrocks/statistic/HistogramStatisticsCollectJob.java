@@ -16,27 +16,18 @@ package com.starrocks.statistic;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.OriginStatement;
-import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -46,15 +37,22 @@ import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefixSize;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
+import static com.starrocks.statistic.HistogramStatisticsUtils.buildStatsTargetColumnNames;
+import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
+import static com.starrocks.statistic.HistogramStatisticsUtils.normalizeBucketsForHll;
+import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
+import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
-import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(HistogramStatisticsCollectJob.class);
@@ -201,7 +199,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                 long mcvSize, StatsConstants.HistogramCollectBucketNdvMode ndvMode) throws Exception {
         List<List<Expr>> rowsBuffer = new ArrayList<>();
         List<String> sqlBuffer = new ArrayList<>();
-        long bufferSize = batchInsertPrefixSize();
+        long bufferSize = batchInsertPrefixSize(HISTOGRAM_STATISTICS_TABLE_NAME);
         long bufferLimit = Math.max(1, Config.histogram_batch_insert_buffer_size);
 
         for (int i = 0; i < columnNames.size(); i++) {
@@ -211,23 +209,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     buildCollectMCV(db, table, mcvSize, columnName, sampleRatio), context, analyzeStatus);
             Map<String, String> mostCommonValues = buildMostCommonValues(mcv, sampleRatio);
 
-            String histogramQuery;
-            if (shouldSkipHistogramBuckets(columnType)) {
-                histogramQuery = buildQueryDefaultBucket(db, table, sampleRatio, mostCommonValues, columnName);
-            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
-                histogramQuery = buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
-                        columnType, false);
-            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.SAMPLE) {
-                histogramQuery = buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
-                        columnType, true);
-            } else {
-                List<TStatisticData> buckets = queryStatisticSync(
-                        buildCollectBucketsWithoutNdv(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
-                                columnType),
-                        context, analyzeStatus);
-                histogramQuery = buildQueryHistogramWithHllNdv(db, table,
-                        getSingleHistogramResult(buckets, columnName).histogram, columnName);
-            }
+            String histogramQuery = buildBatchedHistogramQuery(
+                    context, analyzeStatus, sampleRatio, bucketNum, ndvMode, mostCommonValues, columnName, columnType);
 
             String buckets = getSingleHistogramResult(
                     queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
@@ -238,7 +221,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
             if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
                 flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
-                bufferSize = batchInsertPrefixSize();
+                bufferSize = batchInsertPrefixSize(HISTOGRAM_STATISTICS_TABLE_NAME);
                 rowSize = utf8Length(rowSql);
             }
 
@@ -247,7 +230,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             bufferSize += rowSize;
             if (bufferSize >= bufferLimit) {
                 flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
-                bufferSize = batchInsertPrefixSize();
+                bufferSize = batchInsertPrefixSize(HISTOGRAM_STATISTICS_TABLE_NAME);
             }
 
             analyzeStatus.setProgress((i + 1) * 99L / columnNames.size());
@@ -257,6 +240,32 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
         analyzeStatus.setProgress(100);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+    }
+
+    private String buildBatchedHistogramQuery(
+            ConnectContext context, AnalyzeStatus analyzeStatus, double sampleRatio, long bucketNum,
+            StatsConstants.HistogramCollectBucketNdvMode ndvMode, Map<String, String> mostCommonValues,
+            String columnName, Type columnType) throws Exception {
+        if (shouldSkipHistogramBuckets(columnType)) {
+            return buildQueryDefaultBucket(db, table, sampleRatio, mostCommonValues, columnName);
+        }
+
+        if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
+            return buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                    columnType, false);
+        }
+
+        if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.SAMPLE) {
+            return buildQueryHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                    columnType, true);
+        }
+
+        List<TStatisticData> buckets = queryStatisticSync(
+                buildCollectBucketsWithoutNdv(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
+                        columnType),
+                context, analyzeStatus);
+        return buildQueryHistogramWithHllNdv(db, table,
+                normalizeBucketsForHll(getSingleHistogramResult(buckets, columnName).histogram), columnName);
     }
 
     private Map<String, String> buildMostCommonValues(List<TStatisticData> mcv, double sampleRatio) {
@@ -319,9 +328,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private String buildInsertIntoHistogramStatistics(String query) {
-        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
-                .map(ColumnDef::getName)
-                .collect(Collectors.toList());
+        List<String> targetColumnNames = buildStatsTargetColumnNames(HISTOGRAM_STATISTICS_TABLE_NAME);
         String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
         return "INSERT INTO " +
                 HISTOGRAM_STATISTICS_TABLE_NAME +
@@ -336,7 +343,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", quoteColumName);
-        context.put("columnNameStr", StringEscapeUtils.escapeSql(columnName));
+        context.put("columnNameStr", SqlUtils.escapeSqlString(columnName));
         context.put("dbId", database.getId());
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
@@ -349,21 +356,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         if (mcvJson == null) {
             context.put("mcv", "NULL");
         } else {
-            String escapedMcvJson = mcvJson.replace("'", "''");
-            context.put("mcv", "'" + escapedMcvJson + "'");
+            context.put("mcv", quoteSqlString(mcvJson));
         }
-    }
-
-    private String buildMcvJson(Map<String, String> mostCommonValues) {
-        if (mostCommonValues.isEmpty()) {
-            return null;
-        }
-
-        List<String> mcvList = new ArrayList<>();
-        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
-            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
-        }
-        return "[" + Joiner.on(",").join(mcvList) + "]";
     }
 
     private void addMcvExcludeToContext(VelocityContext context, Map<String, String> mostCommonValues, String columnName,
@@ -524,14 +518,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
     private TStatisticData getSingleHistogramResult(List<TStatisticData> results, String columnName)
             throws DdlException {
-        if (results.size() != 1) {
-            throw new DdlException("Expected exactly one histogram result for column " + columnName +
-                    ", but got " + results.size());
-        }
-        if (Strings.isNullOrEmpty(results.get(0).histogram)) {
-            throw new DdlException("Expected a non-empty histogram result for column " + columnName);
-        }
-        return results.get(0);
+        return HistogramStatisticsUtils.getSingleHistogramResult(results, columnName, "histogram");
     }
 
     private List<Expr> buildBatchInsertRow(String columnName, String buckets, String mcvJson) {
@@ -540,7 +527,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         row.add(new StringLiteral(columnName));
         row.add(new IntLiteral(db.getId(), IntegerType.BIGINT));
         row.add(new StringLiteral(db.getOriginName() + "." + table.getName()));
-        row.add(new StringLiteral(buckets));
+        row.add(buildBucketsLiteral(buckets));
         row.add(mcvJson == null ? new NullLiteral() : new StringLiteral(mcvJson));
         row.add(nowFn());
         return row;
@@ -552,7 +539,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         values.add(quoteSqlString(columnName));
         values.add(String.valueOf(db.getId()));
         values.add(quoteSqlString(db.getOriginName() + "." + table.getName()));
-        values.add(quoteSqlString(buckets));
+        values.add(buildBucketsSql(buckets));
         values.add(mcvJson == null ? "NULL" : quoteSqlString(mcvJson));
         values.add("NOW()");
         return "(" + String.join(", ", values) + ")";
@@ -564,41 +551,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             return;
         }
 
-        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
-                .map(ColumnDef::getName)
-                .collect(Collectors.toList());
-        String sql = buildBatchInsertPrefix() + String.join(", ", sqlBuffer) + ";";
-        QueryStatement queryStatement = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
-        TableRef tableRef = new TableRef(
-                QualifiedName.of(Lists.newArrayList(STATISTICS_DB_NAME, HISTOGRAM_STATISTICS_TABLE_NAME)),
-                null, NodePosition.ZERO);
-        InsertStmt insertStmt = new InsertStmt(tableRef, queryStatement);
-        insertStmt.setTargetColumnNames(targetColumnNames);
-        insertStmt.setOrigStmt(new OriginStatement(sql, 0));
-
-        collectStatisticSync(insertStmt, sql, context, analyzeStatus);
+        String sql = buildBatchInsertPrefix(HISTOGRAM_STATISTICS_TABLE_NAME) + String.join(", ", sqlBuffer) + ";";
+        collectStatisticSync(() -> createInsertStmt(HISTOGRAM_STATISTICS_TABLE_NAME, rowsBuffer, sql),
+                context, analyzeStatus);
         rowsBuffer.clear();
         sqlBuffer.clear();
-    }
-
-    private long batchInsertPrefixSize() {
-        return utf8Length(buildBatchInsertPrefix()) + 1;
-    }
-
-    private String buildBatchInsertPrefix() {
-        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME).stream()
-                .map(ColumnDef::getName)
-                .collect(Collectors.toList());
-        return "INSERT INTO " + STATISTICS_DB_NAME + "." + HISTOGRAM_STATISTICS_TABLE_NAME +
-                "(" + String.join(", ", targetColumnNames) + ") VALUES ";
-    }
-
-    private static String quoteSqlString(String value) {
-        return "'" + StringEscapeUtils.escapeSql(value) + "'";
-    }
-
-    private static long utf8Length(String value) {
-        return value.getBytes(StandardCharsets.UTF_8).length;
     }
 
     @Override

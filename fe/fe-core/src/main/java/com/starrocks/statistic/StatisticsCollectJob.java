@@ -58,6 +58,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public abstract class StatisticsCollectJob {
@@ -240,10 +241,12 @@ public abstract class StatisticsCollectJob {
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
             throws Exception {
-        collectStatisticSync(null, sql, context, analyzeStatus);
+        collectStatisticSync(
+                () -> SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable()),
+                context, analyzeStatus);
     }
 
-    protected void collectStatisticSync(StatementBase parsedStmt, String sql, ConnectContext context,
+    protected void collectStatisticSync(Supplier<StatementBase> statementSupplier, ConnectContext context,
                                         AnalyzeStatus analyzeStatus) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
@@ -252,15 +255,14 @@ public abstract class StatisticsCollectJob {
             // Calculate and set remaining timeout for this SQL task
             calculateAndSetRemainingTimeout(context, analyzeStatus);
 
+            StatementBase statement = statementSupplier.get();
+            String sql = statement.getOrigStmt().getOrigStmt();
             context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
             Stopwatch watch = Stopwatch.createStarted();
-            StatementBase statement = parsedStmt == null
-                    ? SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable())
-                    : parsedStmt;
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
 
             // set default session variables for stats context
