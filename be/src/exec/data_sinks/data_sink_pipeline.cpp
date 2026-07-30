@@ -281,7 +281,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
     } else if (typeid(*this) == typeid(RemoteScanResultSink)) {
         auto* remote_scan_result_sink = down_cast<RemoteScanResultSink*>(this);
         OpFactoryPtr op = std::make_shared<RemoteScanResultSinkOperatorFactory>(
-                context->next_operator_id(), remote_scan_result_sink->get_row_desc(),
+                context->next_operator_id(), remote_scan_result_sink->get_record_desc(),
                 remote_scan_result_sink->get_output_expr(), remote_scan_result_sink->get_sink());
 
         prev_operators.emplace_back(op);

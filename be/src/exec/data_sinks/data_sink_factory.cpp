@@ -87,7 +87,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (!thrift_sink.__isset.remote_scan_result_sink) {
             return Status::InternalError("Missing remote scan result sink.");
         }
-        *sink = std::make_unique<RemoteScanResultSink>(row_desc, output_exprs, thrift_sink.remote_scan_result_sink);
+        *sink = std::make_unique<RemoteScanResultSink>(record_desc, output_exprs, thrift_sink.remote_scan_result_sink);
         break;
     case TDataSinkType::MYSQL_TABLE_SINK: {
         if (!thrift_sink.__isset.mysql_table_sink) {

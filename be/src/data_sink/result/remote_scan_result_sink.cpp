@@ -18,9 +18,9 @@
 
 namespace starrocks {
 
-RemoteScanResultSink::RemoteScanResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& output_exprs,
+RemoteScanResultSink::RemoteScanResultSink(RecordDescriptor record_desc, const std::vector<TExpr>& output_exprs,
                                            TRemoteScanResultSink sink)
-        : _row_desc(row_desc),
+        : _record_desc(std::move(record_desc)),
           _t_output_expr(output_exprs),
           _sink(std::move(sink)),
           _profile(std::make_unique<RuntimeProfile>("RemoteScanResultSink")) {}

@@ -287,11 +287,11 @@ Status RemoteScanResultSinkOperator::publish_eos_once() {
     return _queue->put_eos();
 }
 
-RemoteScanResultSinkOperatorFactory::RemoteScanResultSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
+RemoteScanResultSinkOperatorFactory::RemoteScanResultSinkOperatorFactory(int32_t id, RecordDescriptor record_desc,
                                                                          std::vector<TExpr> t_output_expr,
                                                                          TRemoteScanResultSink sink)
         : OperatorFactory(id, "remote_scan_result_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-          _row_desc(row_desc),
+          _record_desc(std::move(record_desc)),
           _t_output_expr(std::move(t_output_expr)),
           _sink(std::move(sink)) {
     if (_sink.__isset.transport) {
@@ -313,7 +313,7 @@ Status RemoteScanResultSinkOperatorFactory::prepare(RuntimeState* state) {
     _prepare_id_to_col_name_map();
     _prepare_output_slot_ids();
     if (_transport == TStarRocksScanTransport::STARROCKS_ARROW_FLIGHT) {
-        RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
+        RETURN_IF_ERROR(convert_to_arrow_schema(_id_to_col_name, &_arrow_schema, _output_expr_ctxs));
     }
     if (_scan_token.empty()) {
         return Status::InvalidArgument("remote scan result sink missing scan token");
@@ -349,22 +349,14 @@ void RemoteScanResultSinkOperatorFactory::close(RuntimeState* state) {
 }
 
 void RemoteScanResultSinkOperatorFactory::_prepare_id_to_col_name_map() {
-    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
-        auto& slots = tuple_desc->slots();
-        int64_t tuple_id = tuple_desc->id();
-        for (auto slot : slots) {
-            int64_t slot_id = slot->id();
-            int64_t id = tuple_id << 32 | slot_id;
-            _id_to_col_name.emplace(id, slot->col_name());
-        }
+    for (const auto* slot : _record_desc.slots()) {
+        int64_t id = static_cast<int64_t>(slot->parent()) << 32 | slot->id();
+        _id_to_col_name.emplace(id, slot->col_name());
     }
 }
 
 void RemoteScanResultSinkOperatorFactory::_prepare_output_slot_ids() {
-    if (_row_desc.tuple_descriptors().empty()) {
-        return;
-    }
-    for (auto* slot : _row_desc.tuple_descriptors()[0]->slots()) {
+    for (const auto* slot : _record_desc.slots()) {
         _output_slot_ids.emplace_back(slot->id());
     }
 }

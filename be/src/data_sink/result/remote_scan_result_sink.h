@@ -35,20 +35,20 @@ class RuntimeState;
 // create_data_sink + decompose path as every other sink, instead of being special-cased.
 class RemoteScanResultSink : public DataSink {
 public:
-    RemoteScanResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& output_exprs,
+    RemoteScanResultSink(RecordDescriptor record_desc, const std::vector<TExpr>& output_exprs,
                          TRemoteScanResultSink sink);
     ~RemoteScanResultSink() override = default;
 
     Status open(RuntimeState* state) override { return Status::OK(); }
     RuntimeProfile* profile() override { return _profile.get(); }
 
-    const RowDescriptor& get_row_desc() const { return _row_desc; }
+    const RecordDescriptor& get_record_desc() const { return _record_desc; }
     const std::vector<TExpr>& get_output_expr() const { return _t_output_expr; }
     const TRemoteScanResultSink& get_sink() const { return _sink; }
 
 private:
+    const RecordDescriptor _record_desc;
     // Owned by the RuntimeState / plan, outlives this sink.
-    const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
     TRemoteScanResultSink _sink;
     std::unique_ptr<RuntimeProfile> _profile;

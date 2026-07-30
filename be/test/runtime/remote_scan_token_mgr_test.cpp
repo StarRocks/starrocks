@@ -126,7 +126,7 @@ TEST_F(RemoteScanTokenMgrTest, result_sink_factory_close_keeps_token_for_consume
     sink.__set_transport(TStarRocksScanTransport::STARROCKS_BRPC_CHUNK);
     sink.__set_scan_token("close-keeps-token");
     sink.__set_expire_ms(UnixMillis() + 60000);
-    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RowDescriptor(), {}, sink);
+    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RecordDescriptor(), {}, sink);
     ASSERT_TRUE(factory.prepare(&state).ok());
 
     std::string instance_token = sink.scan_token + ":" + print_id(fragment_instance_id);
@@ -157,7 +157,7 @@ TEST_F(RemoteScanTokenMgrTest, finished_result_sink_cancel_keeps_token_until_con
     sink.__set_transport(TStarRocksScanTransport::STARROCKS_BRPC_CHUNK);
     sink.__set_scan_token("finished-cancel-keeps-token");
     sink.__set_expire_ms(UnixMillis() + 60000);
-    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RowDescriptor(), {}, sink);
+    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RecordDescriptor(), {}, sink);
     ASSERT_TRUE(factory.prepare(&state).ok());
 
     auto first_operator = factory.create(1, 0);
@@ -197,7 +197,7 @@ TEST_F(RemoteScanTokenMgrTest, cancelled_before_finish_publishes_failure_not_cle
     sink.__set_transport(TStarRocksScanTransport::STARROCKS_BRPC_CHUNK);
     sink.__set_scan_token("cancel-before-finish");
     sink.__set_expire_ms(UnixMillis() + 60000);
-    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RowDescriptor(), {}, sink);
+    pipeline::RemoteScanResultSinkOperatorFactory factory(1, RecordDescriptor(), {}, sink);
     ASSERT_TRUE(factory.prepare(&state).ok());
 
     auto first_operator = factory.create(1, 0);

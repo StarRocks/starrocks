@@ -91,7 +91,7 @@ private:
 
 class RemoteScanResultSinkOperatorFactory final : public OperatorFactory {
 public:
-    RemoteScanResultSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc, std::vector<TExpr> t_output_expr,
+    RemoteScanResultSinkOperatorFactory(int32_t id, RecordDescriptor record_desc, std::vector<TExpr> t_output_expr,
                                         TRemoteScanResultSink sink);
     ~RemoteScanResultSinkOperatorFactory() override = default;
 
@@ -109,7 +109,7 @@ private:
     void _prepare_id_to_col_name_map();
     void _prepare_output_slot_ids();
 
-    const RowDescriptor _row_desc;
+    const RecordDescriptor _record_desc;
     std::vector<TExpr> _t_output_expr;
     TRemoteScanResultSink _sink;
     TStarRocksScanTransport::type _transport = TStarRocksScanTransport::STARROCKS_ARROW_FLIGHT;
