@@ -1,0 +1,79 @@
+-- name: test_ivm_alter_active_round_trip
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into t1 values
+  ('a', 1, '2023-12-01'),
+  ('b', 2, '2023-12-02'),
+  ('c', 3, '2023-12-03');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+
+-- ==============================================================
+-- Case 1: non-aggregate IVM MV, whose __ROW_ID__ is AUTO_INCREMENT and
+-- therefore absent from the defined query
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int > 1;
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_int;
+
+ALTER MATERIALIZED VIEW test_mv1 INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv1';
+ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv1';
+
+-- incremental refresh must keep working after the MV is re-activated
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('d', 4, '2023-12-04');
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_mv1 ORDER BY col_int;
+drop materialized view test_mv1;
+
+-- ==============================================================
+-- Case 2: aggregate IVM MV, whose __ROW_ID__ / __AGG_STATE_* columns are
+-- produced by the rewritten query
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv2
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT dt, SUM(col_int) AS s, COUNT(*) AS c FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+SELECT dt, s, c FROM test_mv2 ORDER BY dt;
+
+ALTER MATERIALIZED VIEW test_mv2 INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv2';
+ALTER MATERIALIZED VIEW test_mv2 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv2';
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 5, '2023-12-04');
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+SELECT dt, s, c FROM test_mv2 ORDER BY dt;
+drop materialized view test_mv2;
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

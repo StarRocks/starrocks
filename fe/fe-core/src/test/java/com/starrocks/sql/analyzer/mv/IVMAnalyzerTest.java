@@ -860,6 +860,72 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * The DDL rendered by {@code SHOW CREATE MATERIALIZED VIEW} is re-analyzed by
+     * {@code ALTER MATERIALIZED VIEW ... ACTIVE}, so its column list must pair with the
+     * defined query: no AUTO_INCREMENT {@code __ROW_ID__}, which the analyzer re-appends.
+     */
+    @Test
+    public void testAlterActiveRoundTripForAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_active_nonagg");
+            String createSql = mv.getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("(`id`, `data`, `date`)"),
+                    "AUTO_INCREMENT __ROW_ID__ must NOT be in the DDL column list, got: " + createSql);
+
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_nonagg INACTIVE");
+            assertFalse(mv.isActive());
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_nonagg ACTIVE");
+            assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+
+            Column rowIdCol = mv.getColumn(IvmOpUtils.COLUMN_ROW_ID);
+            assertNotNull(rowIdCol, "__ROW_ID__ must survive the active round trip");
+            assertTrue(rowIdCol.isAutoIncrement());
+        });
+    }
+
+    /** Same round trip with a partition column, which adds a PARTITION BY clause to the DDL. */
+    @Test
+    public void testAlterActiveRoundTripForPartitionedAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg_part "
+                + "REFRESH DEFERRED MANUAL "
+                + "PARTITION BY date "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t2` WHERE id > 1";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_active_nonagg_part");
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_nonagg_part INACTIVE");
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_nonagg_part ACTIVE");
+            assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+        });
+    }
+
+    /**
+     * An aggregate MV's {@code __ROW_ID__} and {@code __AGG_STATE_*} columns are produced by the
+     * rewritten query, so they stay in the DDL column list and the analyzer regenerates them.
+     */
+    @Test
+    public void testAlterActiveRoundTripForQueryComputedRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_agg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) AS s FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_active_agg");
+            String createSql = mv.getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("`" + IvmOpUtils.COLUMN_ROW_ID + "`"),
+                    "QUERY_COMPUTED __ROW_ID__ must stay in the DDL column list, got: " + createSql);
+
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_agg INACTIVE");
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_active_agg ACTIVE");
+            assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+        });
+    }
+
+    /**
      * Aggregate incremental MV (QUERY_COMPUTED): the INSERT uses positional form because the
      * schema has no AUTO_INCREMENT columns (contrast the non-agg case, which needs an explicit
      * column list to omit the storage-filled __ROW_ID__).
