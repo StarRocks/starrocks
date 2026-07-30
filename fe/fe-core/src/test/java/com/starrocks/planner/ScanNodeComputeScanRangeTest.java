@@ -175,6 +175,9 @@ public class ScanNodeComputeScanRangeTest {
                 new OlapScanNode(new PlanNodeId(2), desc, "OlapScanNode", olapTable.getBaseIndexMetaId());
         long partitionId = olapTable.getAllPartitionIds().get(0);
         scanNode.setSelectedPartitionIds(List.of(partitionId));
+        // No predicate -> empty column filters -> distributionPrune scans all tablets (a null filter map
+        // would NPE inside HashDistributionPruner).
+        scanNode.setColumnFilters(Maps.newHashMap());
 
         AtomicInteger invokeCounter = new AtomicInteger(0);
         new MockUp<StarClient>() {
