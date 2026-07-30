@@ -186,6 +186,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
+### ann_params
+
+* **描述**：指定近似最近邻（ANN）向量索引检索的查询参数。取值是键和值均为字符串的 JSON 对象字符串。HNSW 支持 `efsearch`；IVFPQ 支持 `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht` 和 `range_search_confidence`。可以在会话或单条语句中设置，例如 `SET ann_params = '{"efsearch":"256"}'` 或 `SET_VAR (ann_params='{"efsearch":"256"}')`。
+* **默认值**：`""`
+* **数据类型**：String
+* **作用域**：Session
+
 ### array_low_cardinality_optimize
 
 * **作用域**: Session
@@ -978,6 +985,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.4
 
+### enable_vector_index_refine
+
+* **描述**：是否基于原始向量重新计算量化向量索引返回候选项的精确距离，并重新排序。该变量适用于 IVFPQ 以及使用 `sq4`、`sq8` 或 `pq` 量化器的 HNSW 索引；对未量化的 HNSW 索引（`quantizer = flat`）无效。开启后可以提高结果准确性，但会增加 I/O 和计算开销。可以通过 `EXPLAIN` 中的 `Refine: ON/OFF` 确认是否生效。
+* **默认值**：`false`
+* **数据类型**：Boolean
+* **作用域**：Session
+
 ### enable_view_based_mv_rewrite
 
 * 描述：是否为基于逻辑视图创建的物化视图启用查询改写。如果此项设置为 `true`，则逻辑视图被用作统一节点进行查询改写，从而获得更好的性能。如果此项设置为 `false`，则系统将针对逻辑视图的查询展开变为针对物理表或物化视图的查询，然后进行改写。
@@ -1110,6 +1124,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1
 * 数据类型：Int
 * 引入版本：-
+
+### k_factor
+
+* **描述**：将查询的 `LIMIT` 乘以该值，得到每个 Segment 返回的向量索引候选数量。大于 `1` 的值可以提高多个 Segment 候选结果合并后的召回率，但会增加索引检索、内存和下游处理开销。最终候选数量至少为 `1`。
+* **默认值**：`1`
+* **数据类型**：Double
+* **作用域**：Session
 
 ### lake_bucket_assign_mode
 
@@ -1365,6 +1386,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
+
+### pq_refine_factor
+
+* **描述**：启用 `enable_vector_index_refine` 后，向量范围查询使用的额外候选倍率。该值在 `k_factor` 之后生效。增大该值可以在精确距离重排前提高召回率，但会增加索引检索、I/O 和距离计算开销。
+* **默认值**：`1`
+* **数据类型**：Double
+* **作用域**：Session
 
 ### query_cache_agg_cardinality_limit
 

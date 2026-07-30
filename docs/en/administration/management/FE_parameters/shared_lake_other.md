@@ -654,6 +654,15 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+### `lake_vector_index_build_warehouse`
+
+- Default: `default_warehouse`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Warehouse used to run asynchronous vector index build tasks in shared-data clusters. Set this item to a non-default warehouse name to isolate vector index builds from query and load workloads. If the configured warehouse is `default_warehouse`, empty, missing, or unavailable, StarRocks uses the table's recorded background warehouse and finally falls back to the default warehouse.
+- Introduced in: v4.2.0
+
 ### `lake_vi_build_load_tail_delay_ms`
 
 - Default: 300000
