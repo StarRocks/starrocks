@@ -34,6 +34,8 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
+
 #include <limits>
 #include <ostream>
 
@@ -51,6 +53,10 @@
 #include "gutil/sysinfo.h"
 
 namespace starrocks {
+
+namespace {
+bvar::Adder<int64_t> g_threadpool_task_exception_total("threadpool_task_exception_total");
+} // namespace
 
 using std::string;
 using strings::Substitute;
@@ -696,12 +702,15 @@ void ThreadPool::dispatch_thread() {
                 LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what()
                            << "\n"
                            << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
             } catch (const std::exception& e) {
                 LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
                            << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
             } catch (...) {
                 LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
                            << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
             }
         }
         current_thread->inc_finished_tasks();

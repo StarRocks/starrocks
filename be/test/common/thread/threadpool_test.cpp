@@ -17,6 +17,7 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
 #include <gflags/gflags_declare.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
@@ -70,6 +71,15 @@ DECLARE_int32(thread_inject_start_latency_ms);
 namespace starrocks {
 
 static const char* kDefaultPoolName = "test";
+
+// Our bvar lacks Variable::find_exposed; describe_exposed returns the Adder value.
+static int64_t threadpool_task_exception_total_value() {
+    const std::string desc = bvar::Variable::describe_exposed("threadpool_task_exception_total");
+    if (desc.empty()) {
+        return -1;
+    }
+    return std::stoll(desc);
+}
 
 class ThreadPoolTest : public ::testing::Test {
 public:
@@ -1157,6 +1167,9 @@ TEST_F(ThreadPoolTest, TestTaskExceptionIsSwallowedWhenEnabled) {
 
     std::atomic<int> ran_after_throw{0};
 
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
     // Serialized on a single worker thread, so the throwing task is guaranteed to run first.
     ASSERT_TRUE(_pool->submit_func([]() { throw std::runtime_error("injected in threadpool test"); }).ok());
     ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
@@ -1167,6 +1180,7 @@ TEST_F(ThreadPoolTest, TestTaskExceptionIsSwallowedWhenEnabled) {
     // The worker survived the throw and kept executing the queue.
     ASSERT_EQ(2, ran_after_throw.load());
     ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
 
     _pool->shutdown();
 }
