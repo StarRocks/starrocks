@@ -30,17 +30,23 @@ public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
     void SetUp() override {
+        _saved_brpc_max_connections_per_server = config::brpc_max_connections_per_server;
+        _saved_brpc_stub_expire_s = config::brpc_stub_expire_s;
+        config::brpc_max_connections_per_server = 1;
         _env._pipeline_timer = new pipeline::PipelineTimer();
         ASSERT_OK(_env._pipeline_timer->start());
     }
     void TearDown() override {
         delete _env._pipeline_timer;
         _env._pipeline_timer = nullptr;
-        config::brpc_stub_expire_s = 3600;
+        config::brpc_max_connections_per_server = _saved_brpc_max_connections_per_server;
+        config::brpc_stub_expire_s = _saved_brpc_stub_expire_s;
     }
 
 private:
     ExecEnv _env;
+    int32_t _saved_brpc_max_connections_per_server = 0;
+    int32_t _saved_brpc_stub_expire_s = 0;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
@@ -134,6 +140,55 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     sleep(2);
     auto stub3 = cache.get_http_stub(address);
     ASSERT_NE(*stub3, *stub1);
+}
+
+TEST_F(BrpcStubCacheTest, test_destructor_joins_inflight_cleanup_tasks) {
+    config::brpc_stub_expire_s = 1;
+    auto cache = std::make_unique<BrpcStubCache>(&_env);
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache->get_stub(address);
+    ASSERT_NE(nullptr, stub);
+
+    cache.reset();
+
+    auto cache2 = std::make_unique<BrpcStubCache>(&_env);
+    auto fresh_stub = cache2->get_stub(address);
+    ASSERT_NE(nullptr, fresh_stub);
+}
+
+TEST_F(BrpcStubCacheTest, test_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    BrpcStubCache cache(&_env);
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(address);
+        ASSERT_EQ(stub1, stub) << "stub must not be evicted while being accessed";
+    }
+}
+
+TEST_F(BrpcStubCacheTest, test_http_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    HttpBrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_http_stub(address);
+        ASSERT_NE(nullptr, *stub);
+        ASSERT_EQ(*stub1, *stub) << "http stub must not be evicted while being accessed";
+    }
 }
 
 } // namespace starrocks

@@ -56,8 +56,6 @@ public:
     void set_tid(TaskId tid) { _tid = tid; }
     TaskId tid() const { return _tid; }
 
-private:
-    // only call when unschedule == 1
     void waitUtilFinished();
 
 protected:
