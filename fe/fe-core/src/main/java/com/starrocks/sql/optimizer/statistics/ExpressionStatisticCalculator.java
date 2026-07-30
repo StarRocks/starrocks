@@ -1215,7 +1215,7 @@ public class ExpressionStatisticCalculator {
         private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
                                                          Type resultType) {
             final var histogram = dateStatistic.getHistogram();
-            if (histogram == null || histogram.getMCV() == null || histogram.getMCV().isEmpty()) {
+            if (histogram == null || histogram.getMCV().isEmpty()) {
                 return null;
             }
 
@@ -1383,7 +1383,7 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
+            if (condStat.getHistogram() == null) {
                 return null;
             }
 
@@ -1483,7 +1483,7 @@ public class ExpressionStatisticCalculator {
          */
         private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
             Histogram childHist = childStats == null ? null : childStats.getHistogram();
-            if (childHist == null || childHist.getMCV() == null || childHist.getMCV().isEmpty()) {
+            if (childHist == null || childHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 
@@ -1612,7 +1612,7 @@ public class ExpressionStatisticCalculator {
             ConstantOperator constOp = constOpOpt.get();
             ColumnStatistic baseStats = leftIsConst ? rightStats : leftStats;
             Histogram baseHist = baseStats == null ? null : baseStats.getHistogram();
-            if (baseHist == null || baseHist.getMCV() == null || baseHist.getMCV().isEmpty()) {
+            if (baseHist == null || baseHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 

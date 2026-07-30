@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.qe.ConnectContext;
@@ -33,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -229,7 +229,7 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
             double rowCount = Math.max(0.0, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
                     - estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
-                            .getOutputRowCount());
+                    .getOutputRowCount());
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                             .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
@@ -311,7 +311,7 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
                     newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
-                                    .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
+                            .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
                     .orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
@@ -487,10 +487,6 @@ public class BinaryPredicateStatisticCalculator {
 
     private static void estimateMcvToBucket(Map<String, Long> leftMcv, Map<String, Long> estimatedMcv,
                                             Histogram rightHistogram, double distinctValuesCount, Type dataType) {
-        if (rightHistogram.getBuckets() == null) {
-            return;
-        }
-
         for (Map.Entry<String, Long> entry : leftMcv.entrySet()) {
             if (estimatedMcv.containsKey(entry.getKey())) {
                 continue;
@@ -508,11 +504,12 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
+    @Nonnull
     private static List<Bucket> estimateBucketToBucket(Histogram leftHistogram, double leftColumnDistinctValue, Type dataTypeLeft,
                                                        Histogram rightHistogram, double rightColumnDistinctValue,
                                                        Type dataTypeRight) {
         if (leftHistogram == null || rightHistogram == null) {
-            return null;
+            return List.of();
         }
 
         // Intersecting two such placeholders bucket degenerate zero-count bucket that collapses the estimate to ~1/(L*R),
@@ -521,7 +518,7 @@ public class BinaryPredicateStatisticCalculator {
         List<Bucket> leftBuckets = withFiniteBounds(leftHistogram.getBuckets());
         List<Bucket> rightBuckets = withFiniteBounds(rightHistogram.getBuckets());
         if (leftBuckets.isEmpty() || rightBuckets.isEmpty()) {
-            return null;
+            return List.of();
         }
 
         // Assume the distinct values are uniformly distributed.
@@ -680,8 +677,8 @@ public class BinaryPredicateStatisticCalculator {
     }
 
     public static Optional<Histogram> updateHistWithLessThan(ColumnStatistic columnStatistic,
-                                                   Optional<ConstantOperator> constant,
-                                                   boolean containUpper) {
+                                                             Optional<ConstantOperator> constant,
+                                                             boolean containUpper) {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             return Optional.empty();
         }
