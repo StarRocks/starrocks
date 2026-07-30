@@ -12,21 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/lake_service_recoverable_stub.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 
-#include <utility>
+#include <memory>
 
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
 
-LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol,
-                                                         int64_t connection_group_seed)
-        : _endpoint(endpoint), _connection_group_seed(connection_group_seed), _protocol(std::move(protocol)) {}
+// RecoverableChannel intercepts every RPC call and wraps the user-supplied done
+// closure with a RecoverableClosure so that channel errors trigger an automatic
+// channel reset on the owning stub.
+class RecoverableChannel : public google::protobuf::RpcChannel {
+public:
+    explicit RecoverableChannel(PInternalService_RecoverableStub* owner) : _owner(owner) {}
 
-LakeService_RecoverableStub::~LakeService_RecoverableStub() = default;
+    void CallMethod(const google::protobuf::MethodDescriptor* method, google::protobuf::RpcController* controller,
+                    const google::protobuf::Message* request, google::protobuf::Message* response,
+                    google::protobuf::Closure* done) override {
+        google::protobuf::Closure* closure = done;
+        if (done != nullptr) {
+            closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
+                                                                                   controller, done);
+        }
+        _owner->stub()->CallMethod(method, controller, request, response, closure);
+    }
 
-Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group) {
+private:
+    PInternalService_RecoverableStub* _owner;
+};
+
+PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint,
+                                                                   std::string protocol, int64_t connection_group_seed)
+        : PInternalService_Stub(new RecoverableChannel(this), google::protobuf::Service::STUB_OWNS_CHANNEL),
+          _endpoint(endpoint),
+          _connection_group_seed(connection_group_seed),
+          _protocol(std::move(protocol)) {}
+
+PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
+
+Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {
         next_connection_group = _connection_group.load() + 1;
     }
@@ -53,31 +78,15 @@ Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group)
         LOG(WARNING) << "Fail to init channel " << _endpoint;
         return Status::InternalError("Fail to init channel");
     }
-    auto ptr = std::make_unique<LakeService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+    auto stub =
+            std::make_shared<PInternalService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
     std::unique_lock l(_mutex);
     if (next_connection_group == _connection_group.load() + 1) {
         // prevent the underlying _stub been reset again by the same epoch calls
         ++_connection_group;
-        _stub.reset(ptr.release());
+        _stub = std::move(stub);
     }
     return Status::OK();
-}
-
-void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcController* controller,
-                                                  const ::starrocks::PublishVersionRequest* request,
-                                                  ::starrocks::PublishVersionResponse* response,
-                                                  ::google::protobuf::Closure* done) {
-    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->publish_version(controller, request, response, closure);
-}
-
-void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* controller,
-                                          const ::starrocks::CompactRequest* request,
-                                          ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
-    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->compact(controller, request, response, closure);
 }
 
 } // namespace starrocks
