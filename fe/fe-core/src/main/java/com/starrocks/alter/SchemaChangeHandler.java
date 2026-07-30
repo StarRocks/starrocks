@@ -1243,7 +1243,16 @@ public class SchemaChangeHandler extends AlterHandler {
             columnId++;
         }
         if (olapTable.getKeysType() == KeysType.DUP_KEYS) {
-            // duplicate table has no limit in sort key columns
+            // A duplicate table's sort key has no key-order limit, but each column is still short-key
+            // encoded on the BE, so its type must have a key coder (JSON/complex/floating-point/
+            // metric/variant/TIME do not) -- otherwise the BE crashes on rewrite.
+            for (int sortKeyIdx : sortKeyIdxes) {
+                Column col = targetIndexSchema.get(sortKeyIdx);
+                if (!col.getType().canDistributedBy()) {
+                    throw new DdlException("Sort key column[" + col.getName() + "] type not supported: "
+                            + col.getType().toSql());
+                }
+            }
         } else if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
             // sort key column of primary key table has type limitation
             for (int sortKeyIdx : sortKeyIdxes) {
