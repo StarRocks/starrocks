@@ -566,8 +566,8 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_erase_wait_us");
         // Each subset is consumed by exactly one task, so hand it over by move.
         RETURN_IF_ERROR(parallel_reverse_lookup(
-                n, keys, old_values, subsets.size(),
-                [&subsets](size_t i) { return std::move(subsets[i]); }, parallel_worthwhile));
+                n, keys, old_values, subsets.size(), [&subsets](size_t i) { return std::move(subsets[i]); },
+                parallel_worthwhile));
     }
 
     // Flush only after every reverse lookup has finished: flush_memtable may merge a flushed memtable
