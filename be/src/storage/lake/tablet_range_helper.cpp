@@ -139,6 +139,24 @@ static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
 // byte-identical protos are not guaranteed even when the value is unchanged (e.g. an optional type or
 // variant_type field present on one side and defaulted on the other). Used to check that a trailing ADD
 // preserves the existing range prefix without spuriously rejecting an equivalent re-encoding.
+static Status validate_variant_type_shape(const VariantPB& value) {
+    if (!value.has_type()) {
+        return Status::OK();
+    }
+    const auto& type = value.type();
+    if (type.types_size() != 1) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must contain exactly one node, got {}", type.types_size()));
+    }
+    const auto& node = type.types(0);
+    if (static_cast<TTypeNodeType::type>(node.type()) != TTypeNodeType::SCALAR || !node.has_scalar_type()) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must be scalar (node_type={}, has_scalar_type={})", node.type(),
+                            node.has_scalar_type()));
+    }
+    return Status::OK();
+}
+
 static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const VariantPB& new_value) {
     if (old_value.variant_type() != new_value.variant_type()) {
         return false;
@@ -146,6 +164,8 @@ static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const 
     if (old_value.has_type() != new_value.has_type()) {
         return false;
     }
+    RETURN_IF_ERROR(validate_variant_type_shape(old_value));
+    RETURN_IF_ERROR(validate_variant_type_shape(new_value));
     if (old_value.has_type()) {
         const auto old_type = TypeDescriptor::from_protobuf(old_value.type());
         const auto new_type = TypeDescriptor::from_protobuf(new_value.type());
