@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -402,6 +403,7 @@ public class RemoveOrphanFilesProcedureTest {
         ManifestFile manifest = mock(ManifestFile.class);
         when(manifest.path()).thenReturn("s3://bucket/table/metadata/m1.avro");
         when(manifest.content()).thenReturn(ManifestContent.DATA);
+        when(manifest.copy()).thenReturn(manifest);
 
         DataFile dataFile = mock(DataFile.class);
         when(dataFile.location()).thenReturn("s3://bucket/table/data/file.parquet");
@@ -465,6 +467,7 @@ public class RemoveOrphanFilesProcedureTest {
         ManifestFile manifest = mock(ManifestFile.class);
         when(manifest.path()).thenReturn("s3://bucket/table/metadata/m-del.avro");
         when(manifest.content()).thenReturn(ManifestContent.DELETES);
+        when(manifest.copy()).thenReturn(manifest);
 
         DeleteFile deleteFile = mock(DeleteFile.class);
         when(deleteFile.location()).thenReturn("s3://bucket/table/data/delete-file.parquet");
@@ -529,6 +532,7 @@ public class RemoveOrphanFilesProcedureTest {
         ManifestFile manifest = mock(ManifestFile.class);
         when(manifest.path()).thenReturn(manifestPath);
         when(manifest.content()).thenReturn(ManifestContent.DATA);
+        when(manifest.copy()).thenReturn(manifest);
 
         ManifestReader<DataFile> manifestReader = mock(ManifestReader.class);
         when(manifestReader.select(any())).thenReturn(manifestReader);
@@ -814,11 +818,118 @@ public class RemoveOrphanFilesProcedureTest {
         }
     }
 
+    /**
+     * Covers the executor != null branch: with an executor present, the valid-file-set scan runs via
+     * Tasks.executeWith(...). A direct (same-thread) executor is used because Mockito static mocks are
+     * thread-local and would not be visible on a real pool's worker threads; true multi-threaded
+     * behavior is covered by the end-to-end auto-maintenance run. Three snapshots' manifests are read
+     * through the executor path and their data files must all land in the valid set, so only the
+     * unreferenced orphan is deleted.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testExecuteWithExecutorReadsAllManifests() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+
+        int n = 3;
+        java.util.List<Snapshot> snapshots = new java.util.ArrayList<>();
+        Map<ManifestFile, ManifestReader<DataFile>> readers = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            ManifestFile manifest = mock(ManifestFile.class);
+            when(manifest.path()).thenReturn("s3://bucket/table/metadata/m" + i + ".avro");
+            when(manifest.content()).thenReturn(ManifestContent.DATA);
+            when(manifest.copy()).thenReturn(manifest);
+
+            DataFile dataFile = mock(DataFile.class);
+            when(dataFile.location()).thenReturn("s3://bucket/table/data/data-" + i + ".parquet");
+
+            ManifestReader<DataFile> reader = mock(ManifestReader.class);
+            when(reader.select(any())).thenReturn(reader);
+            when(reader.iterator()).thenReturn(
+                    CloseableIterable.withNoopClose(Collections.singletonList(dataFile)).iterator());
+            readers.put(manifest, reader);
+
+            Snapshot snapshot = mock(Snapshot.class);
+            when(snapshot.manifestListLocation()).thenReturn(null);
+            when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.singletonList(manifest));
+            snapshots.add(snapshot);
+        }
+
+        FileIO fileIO = mock(FileIO.class);
+        Table table = mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshots.get(0));
+        when(table.snapshots()).thenReturn(snapshots);
+        when(table.io()).thenReturn(fileIO);
+
+        // listing: one unreferenced orphan + the three referenced data files (must survive)
+        java.util.List<LocatedFileStatus> listed = new java.util.ArrayList<>();
+        LocatedFileStatus orphan = mock(LocatedFileStatus.class);
+        when(orphan.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/orphan.parquet"));
+        when(orphan.getModificationTime()).thenReturn(1L);
+        when(orphan.getLen()).thenReturn(100L);
+        listed.add(orphan);
+        for (int i = 0; i < n; i++) {
+            LocatedFileStatus ref = mock(LocatedFileStatus.class);
+            when(ref.getPath()).thenReturn(new Path(TABLE_LOCATION + "/data/data-" + i + ".parquet"));
+            when(ref.getModificationTime()).thenReturn(1L);
+            listed.add(ref);
+        }
+
+        ExecutorService executor = com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService();
+        try (MockedStatic<ManifestFiles> mfStatic = mockStatic(ManifestFiles.class);
+                MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+                    .thenAnswer(inv -> readers.get(inv.getArgument(0)));
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = mock(FileSystem.class);
+            java.util.Iterator<LocatedFileStatus> it = listed.iterator();
+            RemoteIterator<LocatedFileStatus> iter = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    return it.next();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(iter);
+            when(mockFs.delete(any(Path.class), eq(false))).thenReturn(true);
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table, executor);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            // all three snapshots' data files were read through the executor path into the valid set,
+            // so only the unreferenced orphan is deleted.
+            verify(mockFs, Mockito.times(1)).delete(eq(new Path(TABLE_LOCATION + "/data/orphan.parquet")), eq(false));
+            for (int i = 0; i < n; i++) {
+                verify(mockFs, never()).delete(eq(new Path(TABLE_LOCATION + "/data/data-" + i + ".parquet")), eq(false));
+            }
+            assertEquals(1, context.stats().getOrphanFilesDetected());
+            assertEquals(1, context.stats().getOrphanFilesRemoved());
+        } finally {
+            executor.shutdown();
+        }
+    }
+
     private IcebergTableProcedureContext createContext(Table table) {
+        return createContext(table, null);
+    }
+
+    private IcebergTableProcedureContext createContext(Table table, ExecutorService executor) {
         IcebergHiveCatalog catalog = Mockito.mock(IcebergHiveCatalog.class);
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        return new IcebergTableProcedureContext(catalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause);
+        return new IcebergTableProcedureContext(catalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause, executor);
     }
 }

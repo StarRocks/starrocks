@@ -65,7 +65,11 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
     // Per-table timeout in seconds for maintenance tasks. Default 10 minutes.
     private static final long PER_TABLE_TIMEOUT_SECONDS = 600;
 
-    private static final int ICEBERG_PLAN_WORKER_THREAD_NUM = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
+    // Shared pool for the IO-bound plan/scan work (manifest reads) issued by maintenance tasks.
+    // Sized so that each maintenance worker gets ~4 plan threads on average for intra-table
+    // parallelism, capped at the core count and never below 4.
+    private static final int ICEBERG_PLAN_WORKER_THREAD_NUM =
+            Math.max(4, Math.min(MAINTENANCE_THREAD_NUM * 4, Runtime.getRuntime().availableProcessors()));
 
     private final ConcurrentHashMap<String, IcebergMaintenanceInfo> maintenanceInfoMap = new ConcurrentHashMap<>();
     private final ExecutorService maintenanceExecutor;
@@ -445,7 +449,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                                       HdfsEnvironment hdfsEnvironment, IcebergMaintenanceTaskStats stats) {
         // remove_orphan_files deletes files directly and never touches a transaction
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, null, hdfsEnvironment, null, null, null, stats);
+                catalog, table, null, null, hdfsEnvironment, null, null, icebergPlanWorkerExecutor, stats);
         RemoveOrphanFilesProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
     }
 

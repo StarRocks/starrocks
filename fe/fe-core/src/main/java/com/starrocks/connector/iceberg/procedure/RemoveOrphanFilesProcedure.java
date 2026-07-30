@@ -32,9 +32,9 @@ import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.ManifestReader;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.util.Tasks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,11 +44,12 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
 import static org.apache.iceberg.ReachableFileUtil.metadataFileLocations;
@@ -123,33 +124,49 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             location = table.location();
         }
 
-        Set<String> processedManifestFilePaths = new HashSet<>();
-        Set<String> validFileNames = new HashSet<>();
+        // A null executor (e.g. the manual ALTER path) makes the reads run sequentially in this
+        // thread; the auto-maintenance path passes a worker pool to read snapshots in parallel.
+        ExecutorService executor = context.executorService();
 
-        for (Snapshot snapshot : table.snapshots()) {
-            if (snapshot.manifestListLocation() != null) {
-                validFileNames.add(fileName(snapshot.manifestListLocation()));
-            }
+        // Collect the set of files still referenced by any snapshot.
+        Set<String> processedManifestFilePaths = ConcurrentHashMap.newKeySet();
+        Set<String> validFileNames = ConcurrentHashMap.newKeySet();
+        Set<ManifestFile> manifestsToRead = ConcurrentHashMap.newKeySet();
 
-            try (CloseableIterable<ManifestFile> manifests = IcebergUtil.readManifests(snapshot, table.io())) {
-                for (ManifestFile manifest : manifests) {
-                    if (!processedManifestFilePaths.add(manifest.path())) {
-                        continue;
+        // Phase 1 (parallel over snapshots): read each snapshot's manifest list, record manifest-list
+        // names and the deduplicated set of manifests.
+        parallelizable(table.snapshots(), executor)
+                .run(snapshot -> {
+                    if (snapshot.manifestListLocation() != null) {
+                        validFileNames.add(fileName(snapshot.manifestListLocation()));
                     }
+                    try (CloseableIterable<ManifestFile> manifests =
+                                 IcebergUtil.readManifests(snapshot, table.io())) {
+                        for (ManifestFile manifest : manifests) {
+                            if (processedManifestFilePaths.add(manifest.path())) {
+                                validFileNames.add(fileName(manifest.path()));
+                                manifestsToRead.add(manifest.copy());
+                            }
+                        }
+                    } catch (IOException e) {
+                        throw new StarRocksConnectorException(
+                                "Unable to read manifests for snapshot " + snapshot.snapshotId(), e);
+                    }
+                });
 
-                    validFileNames.add(fileName(manifest.path()));
-                    try (ManifestReader<? extends ContentFile<?>> manifestReader = readerForManifest(table, manifest)) {
+        // Phase 2 (parallel over manifests): read each unique manifest's content.
+        parallelizable(manifestsToRead, executor)
+                .run(manifest -> {
+                    try (ManifestReader<? extends ContentFile<?>> manifestReader =
+                                 readerForManifest(table, manifest)) {
                         for (ContentFile<?> contentFile : manifestReader) {
                             validFileNames.add(fileName(contentFile.location()));
                         }
                     } catch (IOException e) {
-                        throw new StarRocksConnectorException("Unable to list manifest file content from " + manifest.path(), e);
+                        throw new StarRocksConnectorException(
+                                "Unable to list manifest file content from " + manifest.path(), e);
                     }
-                }
-            } catch (IOException e) {
-                throw new StarRocksConnectorException("Unable to read manifests for snapshot " + snapshot.snapshotId(), e);
-            }
-        }
+                });
 
         metadataFileLocations(table, false).stream()
                 .map(IcebergUtil::fileName)
@@ -200,6 +217,14 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             return path;
         }
         return path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+    }
+
+    // Build a Tasks runner over the items; use the executor when present, otherwise run
+    // sequentially in the calling thread (a null executor means the caller did not opt into
+    // parallelism). Reads keep the default throwFailureWhenFinished (fail-fast).
+    private static <T> Tasks.Builder<T> parallelizable(Iterable<T> items, ExecutorService executor) {
+        Tasks.Builder<T> builder = Tasks.foreach(items);
+        return executor != null ? builder.executeWith(executor) : builder;
     }
 
     private ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
