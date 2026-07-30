@@ -47,18 +47,6 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 各テーブルは 1 つのベクターインデックスのみをサポートします。
 
-### 前提条件
-
-ベクターインデックスを作成する前に、FE 設定項目 `enable_experimental_vector` を `true` に設定して有効にする必要があります。
-
-次のステートメントを実行して動的に有効にします。
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-永続的に有効にするには、FE 設定ファイル `fe.conf` に `enable_experimental_vector = true` を追加し、FE を再起動する必要があります。
-
 ### ベクターインデックスの作成
 
 このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[Append vector index](#append-vector-index) を参照してください。
@@ -259,8 +247,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 ```
 
 ### ベクターインデックスを使用した ANNS の実行
-
-ベクター検索を実行する前に、FE 設定項目 `enable_experimental_vector` が `true` に設定されていることを確認してください。
 
 #### ベクターインデックスベースのクエリの要件
 
