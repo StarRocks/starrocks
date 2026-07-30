@@ -65,9 +65,6 @@ private:
 
     std::vector<ExprContext*> _local_partition_exprs;
 
-    // Cached descriptor for the materialized tuple. Assigned in Prepare().
-    TupleDescriptor* _materialized_tuple_desc;
-
     // True if the _limit comes from DEFAULT_ORDER_BY_LIMIT and option
     // ABORT_ON_DEFAULT_LIMIT_EXCEEDED is set.
     bool _abort_on_default_limit_exceeded = false;

@@ -178,7 +178,7 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
         // sink is not mysql result sink
         TPlanFragmentExecParams t_params;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state(), _common_request->data_sink, output_exprs, t_params,
-                                                   0, _source->row_desc(), &_sink));
+                                                   0, _source->record_desc(), &_sink));
     } else {
         bool is_binary_format = _common_request->is_binary_row;
         _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format, _results);

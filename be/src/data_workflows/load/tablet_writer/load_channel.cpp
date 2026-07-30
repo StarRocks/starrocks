@@ -128,8 +128,8 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
             _schema = std::make_shared<OlapTableSchemaParam>();
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
-        if (_row_desc == nullptr) {
-            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc());
+        if (_record_desc == nullptr) {
+            _record_desc = std::make_unique<RecordDescriptor>(_schema->tuple_desc());
         }
         auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
@@ -357,10 +357,10 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
     if (_has_chunk_meta.load(std::memory_order_acquire)) {
         return Status::OK();
     }
-    if (_row_desc == nullptr) {
+    if (_record_desc == nullptr) {
         return Status::InternalError(fmt::format("load channel not open yet, load id: {}", _load_id.to_string()));
     }
-    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
+    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_record_desc, pb_chunk);
     if (!res.ok()) return res.status();
     _chunk_meta = std::move(res).value();
     _has_chunk_meta.store(true, std::memory_order_release);

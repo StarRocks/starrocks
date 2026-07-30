@@ -35,8 +35,7 @@ std::string sink_type_name(TDataSinkType::type type) {
 } // namespace
 
 Status PipelineSinkBuilder::build(pipeline::PipelineBuilderContext* context, pipeline::OpFactories upstream,
-                                  const pipeline::UnifiedExecPlanFragmentParams& request,
-                                  const RowDescriptor& row_desc) {
+                                  const pipeline::UnifiedExecPlanFragmentParams& request) {
     const TDataSink& thrift_sink = request.output_sink();
 
     switch (thrift_sink.type) {

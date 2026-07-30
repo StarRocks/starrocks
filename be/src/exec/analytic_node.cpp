@@ -125,7 +125,7 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
     auto degree_of_parallelism = upstream_source_op->degree_of_parallelism();
 
     AnalytorFactoryPtr analytor_factory = std::make_shared<AnalytorFactory>(
-            degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc, _use_hash_based_partition);
+            degree_of_parallelism, _tnode, _result_tuple_desc, _use_hash_based_partition);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     ops_with_sink.emplace_back(

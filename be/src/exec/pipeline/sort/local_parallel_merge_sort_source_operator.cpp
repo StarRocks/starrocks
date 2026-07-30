@@ -155,7 +155,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
             }
             _mergers.push_back(std::make_unique<merge_path::MergePathCascadeMerger>(
                     _state->chunk_size(), degree_of_parallelism, sort_context->sort_exprs(), sort_context->sort_descs(),
-                    _tuple_desc, sort_context->topn_type(), sort_context->offset(), sort_context->limit(),
+                    _record_desc, sort_context->topn_type(), sort_context->offset(), sort_context->limit(),
                     chunk_providers, _late_materialize_mode));
         }
         return std::make_shared<LocalParallelMergeSortSourceOperator>(
@@ -166,7 +166,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
         DCHECK(chunks_sorter != nullptr);
         chunk_providers.emplace_back(chunk_provider_factory(chunks_sorter));
         _mergers.push_back(std::make_unique<merge_path::MergePathCascadeMerger>(
-                _state->chunk_size(), 1, sort_context->sort_exprs(), sort_context->sort_descs(), _tuple_desc,
+                _state->chunk_size(), 1, sort_context->sort_exprs(), sort_context->sort_descs(), _record_desc,
                 sort_context->topn_type(), sort_context->offset(), sort_context->limit(), chunk_providers));
         return std::make_shared<LocalParallelMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence,
                                                                       sort_context.get(), _is_gathered,

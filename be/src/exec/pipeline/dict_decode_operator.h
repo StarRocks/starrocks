@@ -26,7 +26,8 @@ class DictDecodeOperator final : public Operator {
 public:
     DictDecodeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::vector<int32_t>& encode_column_cids, std::vector<int32_t>& decode_column_cids,
-                       std::vector<TypeDescriptor*>& decode_column_types, std::vector<GlobalDictDecoderPtr>& decoders)
+                       std::vector<const TypeDescriptor*>& decode_column_types,
+                       std::vector<GlobalDictDecoderPtr>& decoders)
             : Operator(factory, id, "dict_decode", plan_node_id, false, driver_sequence),
               _encode_column_cids(encode_column_cids),
               _decode_column_cids(decode_column_cids),
@@ -59,7 +60,7 @@ public:
 private:
     const std::vector<int32_t>& _encode_column_cids;
     const std::vector<int32_t>& _decode_column_cids;
-    const std::vector<TypeDescriptor*>& _decode_column_types;
+    const std::vector<const TypeDescriptor*>& _decode_column_types;
     const std::vector<GlobalDictDecoderPtr>& _decoders;
 
     bool _is_finished = false;
@@ -70,7 +71,8 @@ class DictDecodeOperatorFactory final : public OperatorFactory {
 public:
     DictDecodeOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<int32_t>&& encode_column_cids,
                               std::vector<int32_t>&& decode_column_cids,
-                              std::vector<TypeDescriptor*>&& decode_column_types, std::vector<ExprContext*>&& expr_ctxs,
+                              std::vector<const TypeDescriptor*>&& decode_column_types,
+                              std::vector<ExprContext*>&& expr_ctxs,
                               std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>&& string_functions)
             : OperatorFactory(id, "dict_decode", plan_node_id),
               _encode_column_cids(std::move(encode_column_cids)),
@@ -92,7 +94,7 @@ public:
 private:
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<TypeDescriptor*> _decode_column_types;
+    std::vector<const TypeDescriptor*> _decode_column_types;
     std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;

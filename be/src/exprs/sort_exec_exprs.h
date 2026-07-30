@@ -19,7 +19,6 @@
 
 namespace starrocks {
 
-class RowDescriptor;
 class TSortInfo;
 
 // Helper class to Prepare() , Open() and Close() the ordering expressions used to perform
@@ -42,7 +41,7 @@ public:
                 ObjectPool* pool, RuntimeState* state);
 
     // prepare all expressions used for sorting and tuple materialization.
-    Status prepare(RuntimeState* state, const RowDescriptor& child_row_desc, const RowDescriptor& output_row_desc);
+    Status prepare(RuntimeState* state);
 
     // open all expressions used for sorting and tuple materialization.
     Status open(RuntimeState* state);
