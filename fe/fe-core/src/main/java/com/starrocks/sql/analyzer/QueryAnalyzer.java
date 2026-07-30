@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
@@ -61,14 +62,17 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -95,8 +99,10 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -136,6 +142,25 @@ public class QueryAnalyzer {
      */
     public void analyzeFilesOnly(StatementBase node) {
         new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
+    /**
+     * Pre-resolve external (non-internal catalog) relations without touching internal table metadata.
+     * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
+     * (e.g. JDBC external tables and JDBC native_query schema inference).
+     */
+    public void analyzeExternalTablesOnly(StatementBase node) {
+        analyzeExternalTablesOnly(node, false);
+    }
+
+    /**
+     * Pre-resolve external tables without touching internal table metadata.
+     * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
+     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
+     * internal meta-lock critical path.
+     */
+    public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
+        new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -261,7 +286,7 @@ public class QueryAnalyzer {
                 reAnalyzeExpressionBasedOnCurrentScope(childSelectRelation, scope, subquery.getGeneratedExprToColumnRef());
             }
             return null;
-        } 
+        }
 
         @Override
         public Void visitJoin(JoinRelation joinRelation, Scope scope) {
@@ -589,7 +614,11 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = tableRelation.getTable();
+                String catalogName = resolveTableName.getCatalog();
+                if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    table = resolveTable(tableRelation);
+                }
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
@@ -1699,6 +1728,166 @@ public class QueryAnalyzer {
             return node.getScope();
         }
 
+    }
+
+    /**
+     * A lightweight visitor that pre-resolves external (non-internal catalog) relations,
+     * so connector metadata fetch is done without holding PlannerMetaLock.
+     * Similar to TableCollector but inverts the logic: skips internal tables, pre-resolves external
+     * TableRelation and JDBC native_query table functions.
+     */
+    private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
+        private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
+        private final boolean refreshFilesystemExternalTables;
+
+        private ExternalTablesOnlyVisitor(boolean refreshFilesystemExternalTables) {
+            this.refreshFilesystemExternalTables = refreshFilesystemExternalTables;
+        }
+
+        public void process(StatementBase node) {
+            visit(node);
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                cteNameStack.push(collectCteNames(node.getCteRelations()));
+                try {
+                    return super.visitSelect(node, context);
+                } finally {
+                    cteNameStack.pop();
+                }
+            }
+            return super.visitSelect(node, context);
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (node.hasWithClause()) {
+                cteNameStack.push(collectCteNames(node.getCteRelations()));
+                try {
+                    return super.visitSetOp(node, context);
+                } finally {
+                    cteNameStack.pop();
+                }
+            }
+            return super.visitSetOp(node, context);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Void context) {
+            if (tableRelation.getTable() != null) {
+                return null;
+            }
+            TableName tableName = tableRelation.getName();
+            if (tableName == null) {
+                return null;
+            }
+
+            if (Strings.isNullOrEmpty(tableName.getDb()) && Strings.isNullOrEmpty(tableName.getCatalog())
+                    && isCteName(tableName.getTbl())) {
+                return null;
+            }
+
+            // Use session to fill in catalog/db (same approach as TableCollector.resolveTable)
+            String catalogName = tableName.getCatalog();
+            String dbName = tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalogName)) {
+                catalogName = session.getCurrentCatalog();
+            }
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = session.getDatabase();
+            }
+
+            if (catalogName == null || dbName == null) {
+                return null;
+            }
+
+            // Only pre-resolve external tables (non-internal catalog)
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+
+            // Pre-resolve external table using metadataMgr.getTable (returns null if not found)
+            // This approach:
+            // 1. Simplifies error handling (no try-catch needed)
+            // 2. Handles CTEs correctly (getTable returns null, main visitor handles them)
+            // 3. Pre-resolves real external tables (avoiding lock during RPC)
+            // Similar to TableCollector.resolveTable but inverts the logic (handles external tables only)
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+                if (table != null) {
+                    if (refreshFilesystemExternalTables && table.isExternalTableWithFileSystem()) {
+                        table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
+                    }
+                    // Validate constraints similar to resolveTable
+                    PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
+                    if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
+                        throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+                    }
+                    tableRelation.setTable(table);
+                }
+                // If table == null (CTE or non-existent table), leave it unresolved.
+                // The main visitor will handle it correctly.
+            }
+            return null;
+        }
+
+        private Table refreshFilesystemExternalTable(String catalogName, String dbName,
+                                                     TableName tableName, Table resolvedTable) {
+            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            return refreshedTable != null ? refreshedTable : resolvedTable;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            if (node.getRight() != null) {
+                visit(node.getRight(), context);
+            }
+            return null;
+        }
+
+        private Set<String> collectCteNames(List<CTERelation> cteRelations) {
+            Set<String> names = Sets.newHashSet();
+            for (CTERelation cteRelation : cteRelations) {
+                if (cteRelation.getName() != null) {
+                    names.add(cteRelation.getName());
+                }
+            }
+            return names;
+        }
+
+        private boolean isCteName(String name) {
+            if (cteNameStack.isEmpty()) {
+                return false;
+            }
+            for (Set<String> names : cteNameStack) {
+                if (names.contains(name)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     /**
