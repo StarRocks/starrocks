@@ -34,7 +34,8 @@ refresh_clause: "REFRESH"i (refresh_moment | refresh_type | (refresh_moment refr
 
 !refresh_type: async_scheme | "MANUAL"i | "INCREMENTAL"i
 
-async_scheme: "ASYNC"i ASYNC_DETAILS?
+// SCHEDULE keyword replaced ASYNC 4.1.1, use both for backwards compatibility
+async_scheme: ("ASYNC"i | "SCHEDULE"i) ASYNC_DETAILS?
 ASYNC_DETAILS: /[\s\S]+/ // Match any character including newlines
 
 %import common.CNAME
