@@ -676,8 +676,8 @@ Status TabletRangeHelper::validate_new_tablet_ranges(
     // 2. First range's lower bound must match the old tablet's lower bound.
     const auto& first = new_tablet_ranges[0];
     ASSIGN_OR_RETURN(bool first_lower_matches,
-                     tuple_bound_equal(first.has_lower_bound(), first.lower_bound(),
-                                       old_tablet_range.has_lower_bound(), old_tablet_range.lower_bound()));
+                     tuple_bound_equal(first.has_lower_bound(), first.lower_bound(), old_tablet_range.has_lower_bound(),
+                                       old_tablet_range.lower_bound()));
     if (!first_lower_matches) {
         return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound != old_tablet_range.lower_bound");
     }
@@ -688,8 +688,8 @@ Status TabletRangeHelper::validate_new_tablet_ranges(
     // 3. Last range's upper bound must match the old tablet's upper bound.
     const auto& last = new_tablet_ranges[new_tablet_ranges.size() - 1];
     ASSIGN_OR_RETURN(bool last_upper_matches,
-                     tuple_bound_equal(last.has_upper_bound(), last.upper_bound(),
-                                       old_tablet_range.has_upper_bound(), old_tablet_range.upper_bound()));
+                     tuple_bound_equal(last.has_upper_bound(), last.upper_bound(), old_tablet_range.has_upper_bound(),
+                                       old_tablet_range.upper_bound()));
     if (!last_upper_matches) {
         return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound != old_tablet_range.upper_bound");
     }
