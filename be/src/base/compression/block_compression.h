@@ -45,7 +45,7 @@
 
 namespace starrocks {
 
-// E4 column-level shared ZSTD dictionary handles. Forward-declared (defined in
+// compression dict column-level compression dictionary (a ZSTD dictionary) handles. Forward-declared (defined in
 // zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
 namespace compression {
 class ZstdCDict;
@@ -101,7 +101,7 @@ public:
         return compress(input, output, false, -1, nullptr, nullptr, options);
     }
 
-    // E4: compress `input` referencing a per-column shared ZSTD dictionary. The
+    // compress `input` referencing a per-column compression dictionary (a ZSTD dictionary). The
     // compression level is baked into the CDict. Only ZstdBlockCompression
     // overrides this; the base returns NotSupported so any accidental use on a
     // non-ZSTD codec fails loudly instead of writing undecodable bytes.
@@ -116,7 +116,7 @@ public:
     // output's size.
     virtual Status decompress(const Slice& input, Slice* output) const = 0;
 
-    // E4: decompress a frame referencing a per-column shared ZSTD dictionary.
+    // decompress a frame referencing a per-column compression dictionary (a ZSTD dictionary).
     // Only ZstdBlockCompression overrides this; the base returns NotSupported.
     virtual Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict) const {
         return Status::NotSupported("dict-based decompress is not supported by this codec");

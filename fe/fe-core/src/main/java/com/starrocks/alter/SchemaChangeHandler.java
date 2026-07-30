@@ -1807,36 +1807,36 @@ public class SchemaChangeHandler extends AlterHandler {
 
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
-        // property 2.5: shared dict columns (E4)
-        // eg. "shared_dict_columns" = "v1,v2"
-        Set<String> sharedDictColumns = null;
+        // property 2.5: compression dict columns (compression dict)
+        // eg. "compression_dict_columns" = "v1,v2"
+        Set<String> compressionDictColumns = null;
         try {
-            sharedDictColumns = PropertyAnalyzer.analyzeSharedDictColumns(propertyMap,
+            compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(propertyMap,
                     indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
 
-        boolean hasSharedDictChange = false;
-        Set<String> oriSharedDictColumns = olapTable.getSharedDictColumnNames();
-        if (sharedDictColumns != null) {
+        boolean hasCompressionDictChange = false;
+        Set<String> oriCompressionDictColumns = olapTable.getCompressionDictColumnNames();
+        if (compressionDictColumns != null) {
             // the property is specified in this ALTER statement
-            if (!sharedDictColumns.equals(oriSharedDictColumns)) {
-                hasSharedDictChange = true;
+            if (!compressionDictColumns.equals(oriCompressionDictColumns)) {
+                hasCompressionDictChange = true;
             }
         } else {
             // not specified, keep the existing set unchanged
-            sharedDictColumns = oriSharedDictColumns;
+            compressionDictColumns = oriCompressionDictColumns;
         }
 
-        if (sharedDictColumns != null && sharedDictColumns.isEmpty()) {
-            sharedDictColumns = null;
+        if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
+            compressionDictColumns = null;
         }
 
         Set<ColumnId> sharedDictColumnIds = null;
-        if (sharedDictColumns != null) {
+        if (compressionDictColumns != null) {
             sharedDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-            for (String columnName : sharedDictColumns) {
+            for (String columnName : compressionDictColumns) {
                 Column column = olapTable.getColumn(columnName);
                 if (column == null) {
                     throw new DdlException("can not find column by name: " + columnName);
@@ -1856,8 +1856,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
-                .withSharedDictColumns(sharedDictColumnIds)
-                .withSharedDictColumnsChanged(hasSharedDictChange)
+                .withCompressionDictColumns(sharedDictColumnIds)
+                .withCompressionDictColumnsChanged(hasCompressionDictChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
@@ -1912,15 +1912,15 @@ public class SchemaChangeHandler extends AlterHandler {
                 needAlter = true;
             }
 
-            // E4: shared dict columns change should also trigger a schema change on this index
-            if (!needAlter && hasSharedDictChange) {
+            // compression dict columns change should also trigger a schema change on this index
+            if (!needAlter && hasCompressionDictChange) {
                 for (Column alterColumn : alterSchema) {
                     String columnName = alterColumn.getName();
-                    boolean isOldSharedDictColumn = oriSharedDictColumns != null
-                            && oriSharedDictColumns.contains(columnName);
-                    boolean isNewSharedDictColumn = sharedDictColumns != null
-                            && sharedDictColumns.contains(columnName);
-                    if (isOldSharedDictColumn != isNewSharedDictColumn) {
+                    boolean isOldCompressionDictColumn = oriCompressionDictColumns != null
+                            && oriCompressionDictColumns.contains(columnName);
+                    boolean isNewCompressionDictColumn = compressionDictColumns != null
+                            && compressionDictColumns.contains(columnName);
+                    if (isOldCompressionDictColumn != isNewCompressionDictColumn) {
                         needAlter = true;
                         break;
                     }
@@ -4654,7 +4654,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .addColumns(entry.getValue())
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
-                    .setSharedDictColumnNames(schemaChangeData.getSharedDictColumns())
+                    .setCompressionDictColumnNames(schemaChangeData.getCompressionDictColumns())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
@@ -4753,8 +4753,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(schemaChangeData.getBloomFilterColumns(), schemaChangeData.getBloomFilterFpp())
                 .withBloomFilterColumnsChanged(schemaChangeData.isBloomFilterColumnsChanged())
-                .withSharedDictColumns(schemaChangeData.getSharedDictColumns())
-                .withSharedDictColumnsChanged(schemaChangeData.isSharedDictColumnsChanged())
+                .withCompressionDictColumns(schemaChangeData.getCompressionDictColumns())
+                .withCompressionDictColumnsChanged(schemaChangeData.isCompressionDictColumnsChanged())
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())

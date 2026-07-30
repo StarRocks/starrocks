@@ -217,8 +217,8 @@ enum TSchemaTableType {
 
     SCH_MATERIALIZED_VIEW_REFRESH_JOBS,
 
-    // E4: column-level shared ZSTD dictionary observability
-    SCH_COLUMN_DICT_STATS
+    // column-level compression dictionary (a ZSTD dictionary) observability
+    SCH_COMPRESSION_DICT_STATS
 }
 
 enum THdfsCompression {
@@ -278,8 +278,8 @@ struct TColumn {
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
     12: optional Types.TAggStateDesc agg_state_desc
-    // E4: column-level shared ZSTD dictionary (per-column enable flag).
-    13: optional bool use_shared_dict = false
+    // column-level compression dictionary (a ZSTD dictionary) (per-column enable flag).
+    13: optional bool use_compression_dict = false
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.

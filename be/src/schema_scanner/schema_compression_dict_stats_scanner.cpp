@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "schema_scanner/schema_column_dict_stats_scanner.h"
+#include "schema_scanner/schema_compression_dict_stats_scanner.h"
 
 #include "column/nullable_column.h"
 #include "common/system/master_info.h"
@@ -36,7 +36,7 @@
 namespace starrocks {
 
 // clang-format off
-SchemaScanner::ColumnDesc SchemaColumnDictStatsScanner::_s_columns[] = {
+SchemaScanner::ColumnDesc SchemaCompressionDictStatsScanner::_s_columns[] = {
         //   name,               type,                                              size,           is_null
         {"TABLE_SCHEMA",      TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   false},
         {"TABLE_NAME",        TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   false},
@@ -46,31 +46,31 @@ SchemaScanner::ColumnDesc SchemaColumnDictStatsScanner::_s_columns[] = {
         {"COLUMN_NAME",       TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   false},
         {"ENCODING",          TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   true},
         {"COMPRESSION",       TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   true},
-        {"USE_SHARED_DICT",   TypeDescriptor::from_logical_type(TYPE_BOOLEAN),      sizeof(bool),    false},
-        {"HAS_SHARED_DICT",   TypeDescriptor::from_logical_type(TYPE_BOOLEAN),      sizeof(bool),    true},
-        {"SHARED_DICT_SIZE",  TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
+        {"USE_COMPRESSION_DICT",   TypeDescriptor::from_logical_type(TYPE_BOOLEAN),      sizeof(bool),    false},
+        {"HAS_COMPRESSION_DICT",   TypeDescriptor::from_logical_type(TYPE_BOOLEAN),      sizeof(bool),    true},
+        {"COMPRESSION_DICT_SIZE",  TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
         {"DATA_SIZE",         TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
         {"UNCOMPRESSED_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
         {"COMPRESSION_RATIO", TypeDescriptor::from_logical_type(TYPE_DOUBLE),       sizeof(double),  true},
 };
 // clang-format on
 
-SchemaColumnDictStatsScanner::SchemaColumnDictStatsScanner()
+SchemaCompressionDictStatsScanner::SchemaCompressionDictStatsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaColumnDictStatsScanner::~SchemaColumnDictStatsScanner() = default;
+SchemaCompressionDictStatsScanner::~SchemaCompressionDictStatsScanner() = default;
 
-std::string SchemaColumnDictStatsScanner::_table_schema_of(int64_t table_id) const {
+std::string SchemaCompressionDictStatsScanner::_table_schema_of(int64_t table_id) const {
     auto it = _table_id_to_schema.find(table_id);
     return it != _table_id_to_schema.end() ? it->second : std::string();
 }
 
-std::string SchemaColumnDictStatsScanner::_table_name_of(int64_t table_id) const {
+std::string SchemaCompressionDictStatsScanner::_table_name_of(int64_t table_id) const {
     auto it = _table_id_to_name.find(table_id);
     return it != _table_id_to_name.end() ? it->second : std::string();
 }
 
-std::set<int64_t> SchemaColumnDictStatsScanner::_resolve_requested_table_ids() {
+std::set<int64_t> SchemaCompressionDictStatsScanner::_resolve_requested_table_ids() {
     std::set<int64_t> table_ids;
     // No TABLE_NAME predicate was pushed down: nothing to resolve by name.
     if (_param->table == nullptr || _param->table->empty()) {
@@ -93,7 +93,7 @@ std::set<int64_t> SchemaColumnDictStatsScanner::_resolve_requested_table_ids() {
     return table_ids;
 }
 
-Status SchemaColumnDictStatsScanner::start(RuntimeState* state) {
+Status SchemaCompressionDictStatsScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
@@ -143,7 +143,7 @@ Status SchemaColumnDictStatsScanner::start(RuntimeState* state) {
     // TABLE_SCHEMA) or a TABLET_ID equality predicate.
     if (!has_tablet_predicate && !has_table_predicate) {
         return Status::NotSupported(
-                "information_schema.column_dict_stats requires a `tablet_id = <id>` or "
+                "information_schema.compression_dict_stats requires a `tablet_id = <id>` or "
                 "`table_name = '<name>'` (optionally with `table_schema = '<db>'`) equality predicate; "
                 "a full-database scan is not allowed because it opens a segment footer per tablet.");
     }
@@ -224,13 +224,13 @@ Status SchemaColumnDictStatsScanner::start(RuntimeState* state) {
     }
 #endif // __APPLE__
 
-    LOG(INFO) << strings::Substitute("column_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4",
+    LOG(INFO) << strings::Substitute("compression_dict_stats scan table_id:$0 partition:$1 tablet:$2 table_name:$3 #rows:$4",
                                      _param->table_id, _param->partition_id, _param->tablet_id,
                                      _param->table != nullptr ? *_param->table : std::string(), _rows.size());
     return Status::OK();
 }
 
-void SchemaColumnDictStatsScanner::_expand_local_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
+void SchemaCompressionDictStatsScanner::_expand_local_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
     auto manager = StorageEngine::instance()->tablet_manager();
     if (manager == nullptr) {
         return;
@@ -252,17 +252,17 @@ void SchemaColumnDictStatsScanner::_expand_local_tablet(int64_t table_id, int64_
     }
 }
 
-bool SchemaColumnDictStatsScanner::_try_expand_local_footers(const TabletSharedPtr& tablet, int64_t table_id,
+bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSharedPtr& tablet, int64_t table_id,
                                                              int64_t partition_id, int64_t tablet_id) {
     auto schema = tablet->tablet_schema();
     if (schema == nullptr) {
         return false;
     }
 
-    // unique_id -> (column name, use_shared_dict) for top-level columns.
+    // unique_id -> (column name, use_compression_dict) for top-level columns.
     std::unordered_map<uint32_t, std::pair<std::string, bool>> uid_to_col;
     for (const auto& col : schema->columns()) {
-        uid_to_col.emplace(col.unique_id(), std::make_pair(std::string(col.name()), col.use_shared_dict()));
+        uid_to_col.emplace(col.unique_id(), std::make_pair(std::string(col.name()), col.use_compression_dict()));
     }
 
     std::vector<RowsetSharedPtr> rowsets;
@@ -292,17 +292,17 @@ bool SchemaColumnDictStatsScanner::_try_expand_local_footers(const TabletSharedP
             any_segment = true;
             for (const auto& col_meta : footer.columns()) {
                 std::string node_name;
-                bool node_use_shared_dict = false;
+                bool node_use_compression_dict = false;
                 auto it = uid_to_col.find(col_meta.unique_id());
                 if (it != uid_to_col.end()) {
                     node_name = it->second.first;
-                    node_use_shared_dict = it->second.second;
+                    node_use_compression_dict = it->second.second;
                 } else if (col_meta.has_name() && !col_meta.name().empty()) {
                     node_name = col_meta.name();
                 } else {
                     node_name = strings::Substitute("__uid_$0", col_meta.unique_id());
                 }
-                _expand_footer_column(col_meta, seg_id, node_name, node_use_shared_dict, table_id, partition_id,
+                _expand_footer_column(col_meta, seg_id, node_name, node_use_compression_dict, table_id, partition_id,
                                       tablet_id);
             }
         }
@@ -310,14 +310,14 @@ bool SchemaColumnDictStatsScanner::_try_expand_local_footers(const TabletSharedP
     return any_segment;
 }
 
-void SchemaColumnDictStatsScanner::_expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id,
-                                                         const std::string& node_name, bool node_use_shared_dict,
+void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id,
+                                                         const std::string& node_name, bool node_use_compression_dict,
                                                          int64_t table_id, int64_t partition_id, int64_t tablet_id) {
     if (meta.children_columns_size() > 0) {
         // Container column (e.g. a flat-JSON column). Emit one row per leaf
         // sub-column; do not emit the container itself. Flat-JSON sub-columns
         // carry their own name in ColumnMetaPB.name (field 33) and inherit the
-        // parent column's use_shared_dict flag.
+        // parent column's use_compression_dict flag.
         for (int i = 0; i < meta.children_columns_size(); ++i) {
             const ColumnMetaPB& child = meta.children_columns(i);
             std::string child_name;
@@ -326,16 +326,16 @@ void SchemaColumnDictStatsScanner::_expand_footer_column(const ColumnMetaPB& met
             } else {
                 child_name = strings::Substitute("$0.$1", node_name, i);
             }
-            _expand_footer_column(child, segment_id, child_name, node_use_shared_dict, table_id, partition_id,
+            _expand_footer_column(child, segment_id, child_name, node_use_compression_dict, table_id, partition_id,
                                   tablet_id);
         }
         return;
     }
-    _append_footer_leaf_row(meta, segment_id, node_name, node_use_shared_dict, table_id, partition_id, tablet_id);
+    _append_footer_leaf_row(meta, segment_id, node_name, node_use_compression_dict, table_id, partition_id, tablet_id);
 }
 
-void SchemaColumnDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id,
-                                                           const std::string& column_name, bool use_shared_dict,
+void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id,
+                                                           const std::string& column_name, bool use_compression_dict,
                                                            int64_t table_id, int64_t partition_id, int64_t tablet_id) {
     DictStatsRow row;
     row.table_schema = _table_schema_of(table_id);
@@ -344,11 +344,11 @@ void SchemaColumnDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& m
     row.tablet_id = tablet_id;
     row.segment_id = segment_id;
     row.column_name = column_name;
-    row.use_shared_dict = use_shared_dict;
+    row.use_compression_dict = use_compression_dict;
     row.encoding = EncodingTypePB_Name(meta.encoding());
     row.compression = CompressionTypePB_Name(meta.compression());
-    row.has_shared_dict = meta.has_shared_dict_page();
-    row.shared_dict_size = meta.has_shared_dict_page() ? static_cast<int64_t>(meta.shared_dict_page().size()) : 0;
+    row.has_compression_dict = meta.has_compression_dict_page();
+    row.compression_dict_size = meta.has_compression_dict_page() ? static_cast<int64_t>(meta.compression_dict_page().size()) : 0;
 
     // Size mapping (documented).
     // UNCOMPRESSED_SIZE = total_mem_footprint (field 31): the in-memory /
@@ -358,7 +358,7 @@ void SchemaColumnDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& m
     // total_mem_footprint here too would look like a real compressed size and
     // silently read as "compression ratio 1.0". NULL says "not available".
     // Consequently COMPRESSION_RATIO is NULL as well.
-    // TODO(E4): to make DATA_SIZE/COMPRESSION_RATIO real, accumulate the
+    // TODO(compression dict): to make DATA_SIZE/COMPRESSION_RATIO real, accumulate the
     // per-column compressed page bytes at write time into ColumnMetaPB (a new
     // field), or sum the column's data-page pointer sizes via its ordinal index.
     row.uncompressed_size = static_cast<int64_t>(meta.total_mem_footprint());
@@ -368,7 +368,7 @@ void SchemaColumnDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& m
     _rows.push_back(std::move(row));
 }
 
-void SchemaColumnDictStatsScanner::_emit_schema_fallback_rows(const TabletSchema& schema, int64_t table_id,
+void SchemaCompressionDictStatsScanner::_emit_schema_fallback_rows(const TabletSchema& schema, int64_t table_id,
                                                               int64_t partition_id, int64_t tablet_id) {
     // No footer available: emit one row per top-level schema column with the
     // footer-derived columns as NULL so nothing is fabricated.
@@ -380,20 +380,20 @@ void SchemaColumnDictStatsScanner::_emit_schema_fallback_rows(const TabletSchema
         row.tablet_id = tablet_id;
         row.segment_id = std::nullopt;
         row.column_name = std::string(col.name());
-        row.use_shared_dict = col.use_shared_dict();
-        // encoding / compression / has_shared_dict / *_size / ratio stay NULL.
+        row.use_compression_dict = col.use_compression_dict();
+        // encoding / compression / has_compression_dict / *_size / ratio stay NULL.
         _rows.push_back(std::move(row));
     }
 }
 
-void SchemaColumnDictStatsScanner::_expand_lake_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
+void SchemaCompressionDictStatsScanner::_expand_lake_tablet(int64_t table_id, int64_t partition_id, int64_t tablet_id) {
 #ifndef __APPLE__
     auto lake_manager = StorageEnv::GetInstance()->lake_tablet_manager();
     if (lake_manager == nullptr) {
         return;
     }
-    // TODO(E4): read shared-data segment footers to fill ENCODING / COMPRESSION /
-    // HAS_SHARED_DICT / SHARED_DICT_SIZE / *_SIZE for lake tablets. This needs
+    // TODO(compression dict): read shared-data segment footers to fill ENCODING / COMPRESSION /
+    // HAS_COMPRESSION_DICT / COMPRESSION_DICT_SIZE / *_SIZE for lake tablets. This needs
     // bundle-file-offset aware segment loading through the lake segment loader
     // (see reference: reading a lake segment outside the standard loader needs
     // bundle_file_offset), which cannot be validated here. Until then, lake
@@ -406,7 +406,7 @@ void SchemaColumnDictStatsScanner::_expand_lake_tablet(int64_t table_id, int64_t
 #endif // __APPLE__
 }
 
-Status SchemaColumnDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
+Status SchemaCompressionDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     const DictStatsRow& row = _rows[_cur_idx];
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
@@ -466,13 +466,13 @@ Status SchemaColumnDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 9: {
-            bool v = row.use_shared_dict;
+            bool v = row.use_compression_dict;
             fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&v);
             break;
         }
         case 10: {
-            if (row.has_shared_dict.has_value()) {
-                bool v = row.has_shared_dict.value();
+            if (row.has_compression_dict.has_value()) {
+                bool v = row.has_compression_dict.value();
                 fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&v);
             } else {
                 down_cast<NullableColumn*>(column)->append_nulls(1);
@@ -480,8 +480,8 @@ Status SchemaColumnDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 11: {
-            if (row.shared_dict_size.has_value()) {
-                int64_t v = row.shared_dict_size.value();
+            if (row.compression_dict_size.has_value()) {
+                int64_t v = row.compression_dict_size.value();
                 fill_column_with_slot<TYPE_BIGINT>(column, (void*)&v);
             } else {
                 down_cast<NullableColumn*>(column)->append_nulls(1);
@@ -522,7 +522,7 @@ Status SchemaColumnDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status SchemaColumnDictStatsScanner::get_next(ChunkPtr* chunk, bool* eos) {
+Status SchemaCompressionDictStatsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("call this before initial.");
     }

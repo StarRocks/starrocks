@@ -2809,20 +2809,20 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
 }
 
-// E4 regression guard: a flat-JSON column written with ZSTD + use_shared_dict
-// must actually build a shared dictionary. This pins the fix for the bug where a
+// compression dict regression guard: a flat-JSON column written with ZSTD + use_compression_dict
+// must actually build a compression dictionary. This pins the fix for the bug where a
 // fresh child ColumnMetaPB carried compression_level=0, making
-// get_block_compression_codec(ZSTD, 0) == nullptr so the E4 sampling gate (which
+// get_block_compression_codec(ZSTD, 0) == nullptr so the compression dict sampling gate (which
 // requires a non-null codec) never fired for JSON columns.
-TEST_F(FlatJsonColumnRWTest, testE4SharedDictOnFlatJson) {
+TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-    const std::string fname = TEST_DIR + "/test_e4_shared_dict_flat_json.data";
+    const std::string fname = TEST_DIR + "/test_e4_compression_dict_flat_json.data";
     auto segment = create_dummy_segment(fs, fname);
 
     // Rows with a stable extractable "role" and a large per-row "content" string
     // (~2KB) so whichever sub-column (or the remain blob) holds it is a PLAIN
-    // string past the shared-dict sample gate.
+    // string past the compression-dict sample gate.
     const int N = 300;
     auto write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
@@ -2839,7 +2839,7 @@ TEST_F(FlatJsonColumnRWTest, testE4SharedDictOnFlatJson) {
 
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    writer_opts.use_shared_dict = true; // enable E4
+    writer_opts.use_compression_dict = true; // enable compression dict
 
     TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
     {
@@ -2850,7 +2850,7 @@ TEST_F(FlatJsonColumnRWTest, testE4SharedDictOnFlatJson) {
         writer_opts.meta->set_type(TYPE_JSON);
         writer_opts.meta->set_length(0);
         writer_opts.meta->set_encoding(DEFAULT_ENCODING);
-        writer_opts.meta->set_compression(starrocks::ZSTD); // E4 requires ZSTD
+        writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
         // Mimic segment_writer, which stamps the table compression_level (default
         // -1). Without this the child metas would inherit level 0 and resolve to a
         // null ZSTD codec -- exactly the bug this test guards.
@@ -2866,16 +2866,16 @@ TEST_F(FlatJsonColumnRWTest, testE4SharedDictOnFlatJson) {
         ASSERT_TRUE(wfile->close().ok());
     }
 
-    // E4 built a shared dictionary somewhere for this JSON column -- either on the
+    // compression dict built a compression dictionary somewhere for this JSON column -- either on the
     // top-level blob (non-flat fallback) or on a flat string/JSON sub-column.
-    bool has_dict = _meta->has_shared_dict_page() && _meta->shared_dict_page().size() > 0;
+    bool has_dict = _meta->has_compression_dict_page() && _meta->compression_dict_page().size() > 0;
     for (int i = 0; i < _meta->children_columns_size() && !has_dict; i++) {
         const auto& child = _meta->children_columns(i);
-        if (child.has_shared_dict_page() && child.shared_dict_page().size() > 0) {
+        if (child.has_compression_dict_page() && child.compression_dict_page().size() > 0) {
             has_dict = true;
         }
     }
-    ASSERT_TRUE(has_dict) << "E4 built no shared dictionary for the JSON column (top-level or any sub-column)";
+    ASSERT_TRUE(has_dict) << "compression dict built no compression dictionary for the JSON column (top-level or any sub-column)";
 
     // Roundtrip: read every row back.
     {

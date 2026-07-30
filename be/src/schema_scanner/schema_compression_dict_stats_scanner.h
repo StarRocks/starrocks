@@ -32,13 +32,13 @@ class TabletSchema;
 class ColumnMetaPB;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
-// information_schema.column_dict_stats
+// information_schema.compression_dict_stats
 //
-// E4 (column-level shared ZSTD dictionary) observability. Produces one row per
+// compression dict (column-level compression dictionary (a ZSTD dictionary)) observability. Produces one row per
 // (tablet, segment, column / flat-JSON sub-column). For every matching tablet
 // the scanner opens each segment footer and reads the per-column ColumnMetaPB
-// to surface the encoding, compression and the E4 shared-dictionary state
-// (ColumnMetaPB.shared_dict_page, field 35).
+// to surface the encoding, compression and the compression dict compression-dictionary state
+// (ColumnMetaPB.compression_dict_page, field 35).
 //
 // Because opening one footer per segment is expensive, the scanner REQUIRES a
 // scope predicate: either a TABLE_NAME (optionally with TABLE_SCHEMA) equality
@@ -50,10 +50,10 @@ using TabletSharedPtr = std::shared_ptr<Tablet>;
 // encrypted / bundled segments), the scanner degrades to one row per top-level
 // tablet-schema column with the footer-derived columns emitted as NULL, so that
 // no subtly-wrong value is ever surfaced.
-class SchemaColumnDictStatsScanner : public SchemaScanner {
+class SchemaCompressionDictStatsScanner : public SchemaScanner {
 public:
-    SchemaColumnDictStatsScanner();
-    ~SchemaColumnDictStatsScanner() override;
+    SchemaCompressionDictStatsScanner();
+    ~SchemaCompressionDictStatsScanner() override;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
@@ -68,11 +68,11 @@ private:
         int64_t tablet_id{0};
         std::optional<int64_t> segment_id;
         std::string column_name;
-        bool use_shared_dict{false}; // from the tablet schema (always known)
+        bool use_compression_dict{false}; // from the tablet schema (always known)
         std::optional<std::string> encoding;
         std::optional<std::string> compression;
-        std::optional<bool> has_shared_dict;
-        std::optional<int64_t> shared_dict_size;
+        std::optional<bool> has_compression_dict;
+        std::optional<int64_t> compression_dict_size;
         std::optional<int64_t> data_size;
         std::optional<int64_t> uncompressed_size;
         std::optional<double> compression_ratio;
@@ -105,10 +105,10 @@ private:
     // Recurse a footer ColumnMetaPB, emitting one row per leaf (flat-JSON
     // sub-columns become leaves named by ColumnMetaPB.name, field 33).
     void _expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id, const std::string& node_name,
-                               bool node_use_shared_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
+                               bool node_use_compression_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
 
     void _append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id, const std::string& column_name,
-                                 bool use_shared_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
+                                 bool use_compression_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
 
     // table_id -> (table_schema, table_name), built from the tables-config RPC.
     std::string _table_schema_of(int64_t table_id) const;

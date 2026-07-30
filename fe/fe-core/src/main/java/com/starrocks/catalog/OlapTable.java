@@ -238,9 +238,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
-    // E4: columns that use a column-level shared ZSTD dictionary
-    @SerializedName(value = "sharedDictColumns")
-    protected Set<ColumnId> sharedDictColumns;
+    // columns that use a column-level compression dictionary (a ZSTD dictionary)
+    @SerializedName(value = "compressionDictColumns")
+    protected Set<ColumnId> compressionDictColumns;
 
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
@@ -320,7 +320,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
-        this.sharedDictColumns = null;
+        this.compressionDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -352,7 +352,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
-        this.sharedDictColumns = null;
+        this.compressionDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -404,11 +404,11 @@ public class OlapTable extends Table {
         } else {
             olapTable.bfColumns = null;
         }
-        if (sharedDictColumns != null) {
-            olapTable.sharedDictColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-            olapTable.sharedDictColumns.addAll(sharedDictColumns);
+        if (compressionDictColumns != null) {
+            olapTable.compressionDictColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.compressionDictColumns.addAll(compressionDictColumns);
         } else {
-            olapTable.sharedDictColumns = null;
+            olapTable.compressionDictColumns = null;
         }
 
         olapTable.keysType = this.keysType;
@@ -452,8 +452,8 @@ public class OlapTable extends Table {
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
         }
-        if (this.sharedDictColumns != null) {
-            olapTable.sharedDictColumns = Sets.newHashSet(this.sharedDictColumns);
+        if (this.compressionDictColumns != null) {
+            olapTable.compressionDictColumns = Sets.newHashSet(this.compressionDictColumns);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -1603,17 +1603,17 @@ public class OlapTable extends Table {
         }
     }
 
-    public Set<ColumnId> getSharedDictColumnIds() {
-        return sharedDictColumns;
+    public Set<ColumnId> getCompressionDictColumnIds() {
+        return compressionDictColumns;
     }
 
-    public Set<String> getSharedDictColumnNames() {
-        if (sharedDictColumns == null) {
+    public Set<String> getCompressionDictColumnNames() {
+        if (compressionDictColumns == null) {
             return null;
         }
 
         Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (ColumnId columnId : sharedDictColumns) {
+        for (ColumnId columnId : compressionDictColumns) {
             Column column = idToColumn.get(columnId);
             if (column == null) {
                 LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
@@ -1628,8 +1628,8 @@ public class OlapTable extends Table {
         }
     }
 
-    public void setSharedDictColumns(Set<ColumnId> sharedDictColumns) {
-        this.sharedDictColumns = sharedDictColumns;
+    public void setCompressionDictColumns(Set<ColumnId> compressionDictColumns) {
+        this.compressionDictColumns = compressionDictColumns;
     }
 
     public List<Index> getCopiedIndexes() {
@@ -3056,10 +3056,10 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
 
-        // shared dict columns (E4)
-        Set<String> sharedDictColumnNames = getSharedDictColumnNames();
+        // compression dict columns (compression dict)
+        Set<String> sharedDictColumnNames = getCompressionDictColumnNames();
         if (sharedDictColumnNames != null && !sharedDictColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_SHARED_DICT_COLUMNS, Joiner.on(", ").join(sharedDictColumnNames));
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, Joiner.on(", ").join(sharedDictColumnNames));
         }
 
         // colocate group

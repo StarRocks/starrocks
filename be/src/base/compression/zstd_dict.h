@@ -32,7 +32,7 @@ typedef struct ZSTD_DDict_s ZSTD_DDict;
 
 namespace starrocks::compression {
 
-// RAII wrapper around a ZSTD compression dictionary (E4 column-level shared
+// RAII wrapper around a ZSTD compression dictionary (compression dict column-level shared
 // dictionary). Built from a raw-content sample with a baked-in compression
 // level. Held by the writer and passed per-page into the codec via
 // ZSTD_CCtx_refCDict; never enters the shared context pool.
@@ -40,7 +40,7 @@ class ZstdCDict {
 public:
     // Build a CDict from `dict_bytes`, baking `level` (level == -1 falls back to
     // ZSTD_CLEVEL_DEFAULT). Returns an error Status on failure; the caller
-    // degrades to "no shared dict for this column" and must never fail the
+    // degrades to "no compression dict for this column" and must never fail the
     // segment flush.
     //
     // `trained` selects how the bytes are interpreted:
@@ -50,13 +50,13 @@ public:
     //   true  -> ZSTD_dct_auto: `dict_bytes` is a ZDICT-trained dictionary whose
     //            header and entropy tables must be honored.
     // The read side must use the SAME interpretation (persisted as
-    // ColumnMetaPB.shared_dict_trained).
+    // ColumnMetaPB.compression_dict_trained).
     static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& dict_bytes, int level, bool trained = false);
 
     // Train a dictionary of at most `max_dict_size` bytes from `samples`
     // (concatenated in `sample_buf`, with per-sample lengths in `sample_sizes`)
     // via ZDICT_trainFromBuffer. On success returns the dictionary BYTES, which
-    // the caller persists in the shared-dict page and feeds back into create()
+    // the caller persists in the compression-dict page and feeds back into create()
     // with trained=true.
     static StatusOr<std::string> train(const Slice& sample_buf, const std::vector<size_t>& sample_sizes,
                                        size_t max_dict_size);
@@ -77,8 +77,8 @@ private:
 // per-page into the codec via ZSTD_DCtx_refDDict.
 class ZstdDDict {
 public:
-    // Build a DDict from the bytes of the shared-dict page. `trained` must match
-    // what the writer used (ColumnMetaPB.shared_dict_trained); see ZstdCDict.
+    // Build a DDict from the bytes of the compression-dict page. `trained` must match
+    // what the writer used (ColumnMetaPB.compression_dict_trained); see ZstdCDict.
     // ZSTD copies the bytes internally, so the page handle may be released
     // afterward.
     static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& dict_bytes, bool trained = false);

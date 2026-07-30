@@ -25,25 +25,25 @@ import com.starrocks.type.TypeFactory;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-// E4 (column-level shared ZSTD dictionary) observability.
+// compression dict (column-level compression dictionary (a ZSTD dictionary)) observability.
 //
 // One row per (tablet, segment, column / flat-JSON sub-column). Because the BE
 // scanner opens per-segment footers to fill the dictionary/encoding/size
 // columns, this table REQUIRES a TABLE_NAME (optionally with TABLE_SCHEMA) or a
 // TABLET_ID equality predicate; a full-database scan is rejected by the BE
-// scanner. See SchemaColumnDictStatsScanner (BE) for the enforcement.
+// scanner. See SchemaCompressionDictStatsScanner (BE) for the enforcement.
 //
 // NOTE: every column is created via builder().column(name, type), which marks
 // the column NULLABLE. The footer-derived columns (SEGMENT_ID, ENCODING,
-// COMPRESSION, HAS_SHARED_DICT, SHARED_DICT_SIZE, DATA_SIZE, UNCOMPRESSED_SIZE,
+// COMPRESSION, HAS_COMPRESSION_DICT, COMPRESSION_DICT_SIZE, DATA_SIZE, UNCOMPRESSED_SIZE,
 // COMPRESSION_RATIO) are emitted as NULL by the BE when the segment footer
 // cannot be read (e.g. shared-data / lake tablets, primary-key tablets, or
 // encrypted / bundled segments) so that no subtly-wrong value is ever surfaced.
-public class ColumnDictStatsSystemTable {
-    public static final String NAME = "column_dict_stats";
+public class CompressionDictStatsSystemTable {
+    public static final String NAME = "compression_dict_stats";
 
     public static SystemTable create() {
-        return new SystemTable(SystemId.COLUMN_DICT_STATS_ID,
+        return new SystemTable(SystemId.COMPRESSION_DICT_STATS_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
@@ -55,12 +55,12 @@ public class ColumnDictStatsSystemTable {
                         .column("COLUMN_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("ENCODING", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .column("COMPRESSION", TypeFactory.createVarcharType(NAME_CHAR_LEN))
-                        .column("USE_SHARED_DICT", BooleanType.BOOLEAN)
-                        .column("HAS_SHARED_DICT", BooleanType.BOOLEAN)
-                        .column("SHARED_DICT_SIZE", IntegerType.BIGINT)
+                        .column("USE_COMPRESSION_DICT", BooleanType.BOOLEAN)
+                        .column("HAS_COMPRESSION_DICT", BooleanType.BOOLEAN)
+                        .column("COMPRESSION_DICT_SIZE", IntegerType.BIGINT)
                         .column("DATA_SIZE", IntegerType.BIGINT)
                         .column("UNCOMPRESSED_SIZE", IntegerType.BIGINT)
                         .column("COMPRESSION_RATIO", FloatType.DOUBLE)
-                        .build(), TSchemaTableType.SCH_COLUMN_DICT_STATS);
+                        .build(), TSchemaTableType.SCH_COMPRESSION_DICT_STATS);
     }
 }

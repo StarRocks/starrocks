@@ -340,18 +340,18 @@ public class OlapTableFactory implements AbstractTableFactory {
 
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
 
-                // E4: analyze shared dict columns
-                Set<String> sharedDictColumns = PropertyAnalyzer.analyzeSharedDictColumns(properties, baseSchema);
-                if (sharedDictColumns != null && sharedDictColumns.isEmpty()) {
-                    sharedDictColumns = null;
+                // analyze compression dict columns
+                Set<String> compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(properties, baseSchema);
+                if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
+                    compressionDictColumns = null;
                 }
                 Set<ColumnId> sharedDictColumnIds = null;
-                if (sharedDictColumns != null && !sharedDictColumns.isEmpty()) {
+                if (compressionDictColumns != null && !compressionDictColumns.isEmpty()) {
                     sharedDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
                     sharedDictColumnIds.addAll(
-                            sharedDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                            compressionDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
                 }
-                table.setSharedDictColumns(sharedDictColumnIds);
+                table.setCompressionDictColumns(sharedDictColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
