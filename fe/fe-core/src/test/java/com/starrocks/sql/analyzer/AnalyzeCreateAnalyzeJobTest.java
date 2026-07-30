@@ -147,6 +147,8 @@ public class AnalyzeCreateAnalyzeJobTest {
                 return Lists.newArrayList(data);
             }
         };
+        UtFrameUtils.mockQueryExecute(() -> {
+        });
         UtFrameUtils.mockDML();
 
         OlapTable table = (OlapTable) starRocksAssert.getTable("db", "tbl1");
@@ -164,7 +166,7 @@ public class AnalyzeCreateAnalyzeJobTest {
         Assertions.assertEquals(
                 List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
                         "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
-                        "histogram_bucket_num=128}"),
+                                "histogram_bucket_num=128}"),
                 jobDesc.subList(1, jobDesc.size() - 3));
 
         // trigger the job
@@ -176,14 +178,15 @@ public class AnalyzeCreateAnalyzeJobTest {
             jobId = jobDesc.get(0);
             Assertions.assertEquals(
                     List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
-                            "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
-                            "histogram_bucket_num=128}",
+                            "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, " +
+                                    "histogram_mcv_size=100, histogram_bucket_num=128}",
                             "FINISH"),
                     jobDesc.subList(1, jobDesc.size() - 2));
         }
 
         // drop analyze
         starRocksAssert.ddl("drop analyze " + jobId);
+
     }
 
     @Test
