@@ -1346,7 +1346,7 @@ public class Config extends ConfigBase {
      * Default spark dpp version
      */
     @ConfField
-    public static String spark_dpp_version = "4.1";
+    public static String spark_dpp_version = "4.1.4";
     /**
      * Default spark load timeout
      */
