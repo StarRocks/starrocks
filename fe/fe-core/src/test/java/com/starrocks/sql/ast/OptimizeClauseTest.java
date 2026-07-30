@@ -15,7 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -33,17 +34,17 @@ public class OptimizeClauseTest {
 
     @Test
     public void testToSqlWithPartitionNames() {
-        PartitionRef partitionRef = new PartitionRef(
-                Lists.newArrayList("p1", "p2"), false, NodePosition.ZERO);
-        OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionRef, null);
+        PartitionNames partitionNames = new PartitionNames(
+                false, Lists.newArrayList("p1", "p2"), NodePosition.ZERO);
+        OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionNames, null);
         Assertions.assertEquals("PARTITIONS (p1, p2)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithEmptyPartitionNames() {
-        PartitionRef partitionRef = new PartitionRef(
-                Lists.newArrayList(), false, NodePosition.ZERO);
-        OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionRef, null);
+        PartitionNames partitionNames = new PartitionNames(
+                false, Lists.newArrayList(), NodePosition.ZERO);
+        OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionNames, null);
         // empty partition names should not add anything
         Assertions.assertEquals("", clause.toSql());
     }
@@ -173,8 +174,8 @@ public class OptimizeClauseTest {
 
     @Test
     public void testToSqlWithAllFields() {
-        PartitionRef partitionRef = new PartitionRef(
-                Lists.newArrayList("p1"), false, NodePosition.ZERO);
+        PartitionNames partitionNames = new PartitionNames(
+                false, Lists.newArrayList("p1"), NodePosition.ZERO);
         KeysDesc keysDesc = new KeysDesc(KeysType.DUP_KEYS, Lists.newArrayList("col1"));
         HashDistributionDesc distributionDesc = new HashDistributionDesc(10, Lists.newArrayList("col1"));
         OptimizeRange range = new OptimizeRange(
@@ -183,7 +184,7 @@ public class OptimizeClauseTest {
                 NodePosition.ZERO);
 
         OptimizeClause clause = new OptimizeClause(
-                keysDesc, null, distributionDesc, null, partitionRef, range);
+                keysDesc, null, distributionDesc, null, partitionNames, range);
         clause.setSortKeys(Lists.newArrayList("col2"));
 
         Assertions.assertEquals(

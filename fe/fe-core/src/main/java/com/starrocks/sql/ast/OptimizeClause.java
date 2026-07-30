@@ -15,14 +15,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.OrderByElement;
-=======
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.util.SqlUtils;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> 7e9b5d45e4 ([BugFix] Fix Operation column showing memory address in SHOW ALTER TABLE OPTIMIZE (#75948))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -131,28 +128,6 @@ public class OptimizeClause extends AlterTableClause {
 
     public void setTableOptimize(boolean tableOptimize) {
         isTableOptimize = tableOptimize;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
-        }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
-        if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
-        }
-        if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
-        }
-        if (range != null) {
-            sb.append(range.toString());
-        }
-        return sb.toString();
     }
 
     @Override
