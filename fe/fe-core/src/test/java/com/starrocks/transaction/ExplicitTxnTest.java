@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -309,6 +310,82 @@ public class ExplicitTxnTest {
             Assertions.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
         Assertions.assertEquals(1, activationCount.get());
+    }
+
+    @Test
+    public void testRejectedFirstStatementDoesNotStrandTransaction() throws IOException, DdlException {
+        // A rejected first DML of an explicit transaction must not leave the transaction bound to a
+        // database it was never registered in. registerExplicitTransactionState sets dbId before the
+        // fallible upsert and restores it on failure; without that restore, getDbId() stays non-zero,
+        // every later statement skips registration, and COMMIT then fails against a transaction the
+        // DatabaseTransactionMgr never registered. Nothing else covers that restore, so this pins it.
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<String, String>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        context.setExecutionId(new TUniqueId(6, 7));
+        context.setLastQueryId(new UUID(8L, 9L));
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+
+        ExplicitTxnState explicitTxnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getExplicitTxnState(context.getTxnId());
+        TransactionState transactionState = explicitTxnState.getTransactionState();
+        // Precondition: an explicit txn is not bound to a db until its first DML registers it.
+        Assertions.assertEquals(0, transactionState.getDbId());
+
+        int savedPerDb = Config.max_running_txn_num_per_db;
+        try {
+            // Force the first-DML registration (upsertTransactionState) to be rejected.
+            Config.max_running_txn_num_per_db = 0;
+            TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+        } finally {
+            Config.max_running_txn_num_per_db = savedPerDb;
+        }
+
+        Assertions.assertTrue(context.getState().isError());
+        // The rejected first statement must leave the txn unbound (dbId reset), so a later statement can
+        // re-attempt registration instead of silently skipping it forever.
+        Assertions.assertEquals(0, transactionState.getDbId());
     }
 
     @Test
