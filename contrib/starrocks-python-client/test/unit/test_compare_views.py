@@ -170,6 +170,54 @@ class TestAutogenerateViews:
         assert isinstance(op, DropViewOp)
         eq_(op.view_name, 'my_test_view')
 
+    # ========================================================================
+    # Multiple MetaData Tests
+    # ========================================================================
+
+    def test_create_views_from_multiple_metadata(self):
+        """CREATE: metadata is a list of 2+ MetaData, union is compared."""
+        upgrade_ops = ops.UpgradeOps([])
+        self.mock_inspector.get_view_names.return_value = []
+        m1 = MetaData()
+        View('view_from_base_a', m1, definition='SELECT 1')
+        m2 = MetaData()
+        View('view_from_base_b', m2, definition='SELECT 2')
+        self.mock_autogen_context.metadata = [m1, m2]
+        _autogen_for_views(self.mock_autogen_context, upgrade_ops, [None])
+
+        eq_(len(upgrade_ops.ops), 2)
+        created_names = sorted(
+            op.view_name for op in upgrade_ops.ops
+            if isinstance(op, CreateViewOp)
+        )
+        eq_(created_names, ['view_from_base_a', 'view_from_base_b'])
+
+    def test_duplicate_view_key_across_metadata_warns(self):
+        """Duplicate view key across MetaData objects emits a warning."""
+        import warnings
+
+        upgrade_ops = ops.UpgradeOps([])
+        self.mock_inspector.get_view_names.return_value = []
+        m1 = MetaData()
+        View('dup_view', m1, definition='SELECT 1')
+        m2 = MetaData()
+        View('dup_view', m2, definition='SELECT 2')
+        self.mock_autogen_context.metadata = [m1, m2]
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _autogen_for_views(self.mock_autogen_context, upgrade_ops, [None])
+
+            dup_warnings = [x for x in w if "Duplicate" in str(x.message)]
+            eq_(len(dup_warnings), 1)
+
+            # Last definition wins
+            eq_(len(upgrade_ops.ops), 1)
+            op = upgrade_ops.ops[0]
+            assert isinstance(op, CreateViewOp)
+            eq_(op.view_name, 'dup_view')
+            eq_(op.definition, 'SELECT 2')
+
 
 class TestCompareView:
     """Test compare_view function directly (without full autogen flow).
