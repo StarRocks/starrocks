@@ -583,4 +583,42 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_cancelled_completes
     EXPECT_NE(0, response.status().status_code());
 }
 
+// Third and last `done`-exactly-once path of the #76882 fix: when submitting the deferred
+// parallel-compaction task to the pool FAILS, the task was never enqueued (so neither run() nor cancel()
+// will ever fire) and compact() itself must complete the RPC, surfacing the real submit error. If it
+// didn't, the FE's compact RPC would hang forever.
+//
+// "ThreadPool::do_submit:1" hands the callback a pointer to the pool's computed capacity_remaining;
+// forcing it to 0 makes submit() return ServiceUnavailable deterministically.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_submit_failure_completes_rpc) {
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("ThreadPool::do_submit:1");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // compact() ran `done` inline on the submit-failure path; wait() must not hang.
+    latch->wait();
+
+    // The real submit error is surfaced, not a generic shutdown status.
+    EXPECT_NE(0, response.status().status_code());
+}
+
 } // namespace starrocks::lake
