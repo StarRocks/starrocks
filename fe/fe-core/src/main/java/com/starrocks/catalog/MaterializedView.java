@@ -1270,6 +1270,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // partitions): treat as outdated rather than trusting the staleness window, otherwise the MV
         // could serve rows removed from the base table. On a normal timeline the base timestamp is >=
         // what the MV absorbed, so this guard fires only on a genuine regression, for every connector.
+        // LIMITATION (multi-base-table MVs with mixed timestamp units): both operands are GLOBAL
+        // scalars -- maxBaseTableRefreshTimestamp() is the latest real instant across tables (each
+        // table normalized to epoch millis), while getLastRefreshTime() is a native-unit max
+        // dominated by the base table with the numerically largest raw value (e.g. Iceberg micros
+        // over Hive seconds), so the two can reflect DIFFERENT tables and a rollback of the
+        // unit-dominant table may be masked by another table whose real instant is later.
+        // Single-table and same-unit multi-table MVs are unaffected. This pre-existing
+        // global-scalar limitation (#75924) is tracked for a per-base-table check in #77023.
         if (baseRefreshTimestampMillis < lastRefreshTimeMillis) {
             LOG.debug("MV is outdated because base tables' refresh timestamp {} regressed below MV's "
                             + "lastRefreshTime {}",
