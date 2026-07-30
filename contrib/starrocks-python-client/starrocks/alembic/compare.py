@@ -1117,7 +1117,19 @@ def _compare_mv_refresh(
         if val is None:
             return None
         # Collapse whitespace and compare case-insensitively
-        return " ".join(str(val).split()).upper()
+        normalized = " ".join(str(val).split()).upper()
+        # IMMEDIATE is not rendered in SHOW CREATE, so drop
+        if normalized.startswith("IMMEDIATE "):
+            normalized = normalized[len("IMMEDIATE "):]
+        # SCHEDULE keyword replaced ASYNC 4.1.1, replace with ASYNC for backwards compatibility 
+        for moment_prefix in ("", "DEFERRED "):
+            keyword = moment_prefix + "SCHEDULE"
+            if normalized.startswith(keyword):
+                normalized = moment_prefix + "ASYNC" + normalized[len(keyword):]
+                break
+        # Normalize START("...") (SHOW CREATE) vs START('...') (metadata) quote styles.
+        normalized = normalized.replace('"', "'")
+        return normalized
 
     conn_refresh_raw = conn_mv_attributes.get(TableInfoKey.REFRESH)
     meta_refresh_raw = meta_mv_attributes.get(TableInfoKey.REFRESH)
@@ -1252,6 +1264,7 @@ def _compare_mv(
         support_change_override=AlterMVEnablement.DISTRIBUTED_BY,
         ddl_object="MATERIALIZED VIEW",
         object_label="Materialized view",
+        skip_when_meta_unset=True,
     )
     _compare_table_order_by(
         upgrade_ops.ops,
@@ -1695,6 +1708,7 @@ def _compare_table_distribution(
     support_change_override: Optional[bool] = None,
     ddl_object: str = "TABLE",
     object_label: str = "Table",
+    skip_when_meta_unset: bool = False,
 ) -> None:
     """Compare distribution changes and add AlterTableDistributionOp if needed."""
     conn_distribution = conn_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
@@ -1709,6 +1723,11 @@ def _compare_table_distribution(
                 DeprecationWarning,
             )
             meta_distribution = starrocks_distribution
+
+    # For materialized views, if the distribution is undefined, it is auto-assigned, but appears in SHOW CREATE
+    # Should be skipped because the auto-assign is not managed by user
+    if meta_distribution is None and skip_when_meta_unset:
+        return
 
     if isinstance(conn_distribution, str):
         conn_distribution = StarRocksTableDefinitionParser.parse_distribution(conn_distribution)
