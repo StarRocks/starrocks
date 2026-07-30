@@ -114,8 +114,7 @@ void RuntimeFilterProbeDescriptor::close(RuntimeState* state) {
     }
 }
 
-void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc,
-                                                          ExprContext* new_probe_expr_ctx) {
+void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, ExprContext* new_probe_expr_ctx) {
     // close old probe expr
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.

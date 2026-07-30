@@ -348,7 +348,6 @@ protected:
     std::string _filter_row_group_path_3 =
             "./be/test/formats/parquet/test_data/file_read_test_filter_row_group_update_rf.parquet";
 
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;

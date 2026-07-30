@@ -189,6 +189,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ann_params
+
+* **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
+* **デフォルト**: `""`
+* **データ型**: String
+* **スコープ**: Session
+
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
@@ -956,6 +963,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データタイプ**: boolean
 * **導入バージョン**: v3.2.4
 
+### enable_vector_index_refine
+
+* **説明**: 量子化ベクターインデックスが返した候補について、元のベクトルから正確な距離を再計算し、再順位付けするかどうかを指定します。IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスに適用されます。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。有効にすると結果の精度が向上する可能性がありますが、I/O と計算コストが増加します。`EXPLAIN` の `Refine: ON/OFF` で有効かどうかを確認できます。
+* **デフォルト**: `false`
+* **データ型**: Boolean
+* **スコープ**: Session
+
 ### enable_view_based_mv_rewrite
 
 * **説明**: ビューに基づくマテリアライズドビューのクエリ書き換えを有効にするかどうか。この項目が `true` に設定されている場合、ビューは統一されたノードとして使用され、クエリのパフォーマンスを向上させるために自身に対するクエリを書き換えます。この項目が `false` に設定されている場合、システムはビューに対するクエリを物理テーブルまたはマテリアライズドビューに対するクエリに書き換えます。
@@ -1076,6 +1090,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1
 * **データ型**: Int
 * **導入バージョン**: -
+
+### k_factor
+
+* **説明**: クエリの `LIMIT` にこの値を掛け、各 Segment が返すベクターインデックス候補数を決定します。`1` より大きい値は、複数 Segment の候補をマージした後の再現率を向上させる可能性がありますが、インデックス検索、メモリ、および後続処理のコストが増加します。最終的な候補数は少なくとも `1` に調整されます。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### lake_bucket_assign_mode
 
@@ -1318,6 +1339,13 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
   * `never`: データをキャッシュしません。
 * **デフォルト**: auto
 * **導入バージョン**: v3.3.2
+
+### pq_refine_factor
+
+* **説明**: `enable_vector_index_refine` を有効にしたベクター範囲検索で使用する追加の候補倍率です。`k_factor` の後に適用されます。値を大きくすると、正確な距離による再順位付け前の再現率が向上する可能性がありますが、インデックス検索、I/O、および距離計算のコストが増加します。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### query_cache_agg_cardinality_limit
 

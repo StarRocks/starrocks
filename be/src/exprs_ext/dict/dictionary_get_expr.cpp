@@ -38,14 +38,15 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     }
 
     for (auto& column : columns) {
-        if (column->has_null()) {
+        if (column->has_null() && ColumnHelper::count_nulls(column) > 0) {
             return Status::InternalError("invalid parameter for dictionary_get function: get NULL paramenter");
         }
         if (column->is_constant()) {
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, std::move(column), size);
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column.get());
+            column = nullable_column->data_column();
         }
     }
 

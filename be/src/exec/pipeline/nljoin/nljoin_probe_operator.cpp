@@ -809,18 +809,14 @@ OperatorExecStatsSnapshot NLJoinProbeOperator::exec_stats_snapshot() const {
     return snapshot;
 }
 
-void NLJoinProbeOperatorFactory::_init_row_desc() {
-    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _probe_column_count++;
-        }
+void NLJoinProbeOperatorFactory::_init_col_types() {
+    for (auto* slot : _left_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _probe_column_count++;
     }
-    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _build_column_count++;
-        }
+    for (auto* slot : _right_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _build_column_count++;
     }
 }
 
@@ -836,7 +832,7 @@ Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     // Unref is called in _cross_join_context->decr_prober, when call probe operators have called decr_prober.
     _cross_join_context->ref();
 
-    _init_row_desc();
+    _init_col_types();
 
     RETURN_IF_ERROR(ExprExecutor::prepare(_common_expr_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_common_expr_ctxs, state));
