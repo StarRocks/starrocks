@@ -1015,6 +1015,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 org.apache.commons.collections4.CollectionUtils.isNotEmpty(
                         insert.getTargetPartitionNames().getPartitionNames())) {
             List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+            // Same namespace distinction as in the FROM clause: without the qualifier this names a
+            // formal partition, i.e. a different write target.
+            if (insert.getTargetPartitionNames().isTemp()) {
+                sb.append("TEMPORARY ");
+            }
             sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
         }
 
