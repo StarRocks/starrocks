@@ -147,6 +147,35 @@ jobs:
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
 
+      - name: Report test results to CI Metrics
+        if: always()
+        continue-on-error: true
+        env:
+          CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+          CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+        run: |
+          set -uo pipefail
+          # Gate: only report if the producer job actually ran in THIS parent run.
+          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
+          # stale XML from an earlier push, which must not be stamped onto this run.
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="FE UT")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
+            echo "::notice::producer 'FE UT' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
+            exit 0
+          fi
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
+          python3 ./ci-tool-metrics/bin/report_test_results.py \
+            --test-type fe-ut \
+            --run-id ${{ github.event.workflow_run.id }} \
+            --run-attempt ${{ github.event.workflow_run.run_attempt }} \
+            --api https://47.236.49.47:8080 --ca "$CA" \
+            --finished-at "${{ github.event.workflow_run.updated_at }}" \
+            ./fe/fe-core/target/surefire-reports/*.xml || true
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
         id: publish_report
@@ -481,6 +510,35 @@ jobs:
               --module "Java-Extensions"
           fi
 
+      - name: Report test results to CI Metrics
+        if: always()
+        continue-on-error: true
+        env:
+          CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+          CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+        run: |
+          set -uo pipefail
+          # Gate: only report if the producer job actually ran in THIS parent run.
+          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
+          # stale XML from an earlier push, which must not be stamped onto this run.
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="BE UT")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
+            echo "::notice::producer 'BE UT' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
+            exit 0
+          fi
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
+          python3 ./ci-tool-metrics/bin/report_test_results.py \
+            --test-type java-ext \
+            --run-id ${{ github.event.workflow_run.id }} \
+            --run-attempt ${{ github.event.workflow_run.run_attempt }} \
+            --api https://47.236.49.47:8080 --ca "$CA" \
+            --finished-at "${{ github.event.workflow_run.updated_at }}" \
+            ./java-extensions/xml_dir/*.xml || true
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
         id: publish_report
@@ -557,6 +615,35 @@ jobs:
           cd .actions/nose-report-action
           git clone https://github.com/StarRocks/action-junit-report.git .
 
+      - name: Report test results to CI Metrics
+        if: always()
+        continue-on-error: true
+        env:
+          CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+          CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+        run: |
+          set -uo pipefail
+          # Gate: only report if the producer job actually ran in THIS parent run.
+          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
+          # stale XML from an earlier push, which must not be stamped onto this run.
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="SQL-Tester")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
+            echo "::notice::producer 'SQL-Tester' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
+            exit 0
+          fi
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
+          python3 ./ci-tool-metrics/bin/report_test_results.py \
+            --test-type sql-tester \
+            --run-id ${{ github.event.workflow_run.id }} \
+            --run-attempt ${{ github.event.workflow_run.run_attempt }} \
+            --api https://47.236.49.47:8080 --ca "$CA" \
+            --finished-at "${{ github.event.workflow_run.updated_at }}" \
+            sql-tester-result/*.xml || true
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
         if: steps.prepare-tools.outcome == 'success'
@@ -601,6 +688,35 @@ jobs:
           cd .actions/nose-report-action
           git clone https://github.com/StarRocks/action-junit-report.git .
 
+      - name: Report test results to CI Metrics
+        if: always()
+        continue-on-error: true
+        env:
+          CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+          CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+        run: |
+          set -uo pipefail
+          # Gate: only report if the producer job actually ran in THIS parent run.
+          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
+          # stale XML from an earlier push, which must not be stamped onto this run.
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="ADMIT TEST")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
+            echo "::notice::producer 'ADMIT TEST' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
+            exit 0
+          fi
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
+          python3 ./ci-tool-metrics/bin/report_test_results.py \
+            --test-type admit \
+            --run-id ${{ github.event.workflow_run.id }} \
+            --run-attempt ${{ github.event.workflow_run.run_attempt }} \
+            --api https://47.236.49.47:8080 --ca "$CA" \
+            --finished-at "${{ github.event.workflow_run.updated_at }}" \
+            admit-result/*.xml || true
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
         if: steps.prepare-tools.outcome == 'success'
