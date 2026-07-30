@@ -318,6 +318,13 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
 
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning: a zero gram size would otherwise make the loop below read past
+    // the end of the UTF-8 offset vector.
+    if (index_gram_num == 0) {
+        return false;
+    }
+
     auto gram_num_column = fn_ctx->get_constant_column(2);
     if (gram_num_column != nullptr) {
         size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);

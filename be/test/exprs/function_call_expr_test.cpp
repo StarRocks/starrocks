@@ -457,4 +457,32 @@ TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
     ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
+TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, "legacy-ngram-index");
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext expr_context(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&expr_context};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 0;
+
+    // A legacy schema without gram_num must leave the page unpruned.
+    auto bf = make_bf_with_cyrillic_lowered_trigrams();
+    EXPECT_TRUE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
 } // namespace starrocks

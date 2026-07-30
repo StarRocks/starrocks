@@ -165,6 +165,23 @@ protected:
     OlapReaderStatistics _stats;
 };
 
+TEST_F(BloomFilterIndexReaderWriterTest, test_ngram_zero_gram_num_is_inactive) {
+    BloomFilterOptions bf_options;
+    bf_options.use_ngram = true;
+    bf_options.gram_num = 0;
+
+    std::unique_ptr<BloomFilterIndexWriter> writer;
+    ASSERT_OK(BloomFilterIndexWriter::create(bf_options, get_type_info(TYPE_VARCHAR), &writer));
+
+    const std::string value = "legacy-ngram-index";
+    const Slice slice(value);
+    writer->add_values(&slice, 1);
+
+    // A legacy schema without gram_num must not generate zero-length grams or
+    // allocate index values. It is intentionally treated as an inactive index.
+    ASSERT_EQ(0, writer->size());
+}
+
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {
     size_t num = 1024 * 3 - 1;
     int* val = new int[num];
