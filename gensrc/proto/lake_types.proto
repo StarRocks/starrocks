@@ -429,7 +429,7 @@ message TxnLogPB {
         // Parallel to `dels_meta` (index by del_id): the tombstone (delete row) count of each del
         // file, recorded at write time. Carried through to DelfileWithRowsetId.num_rows so the
         // cloud-native PK index can account tombstone volume toward its rebuild-rows threshold.
-        // Absent (size != dels_meta_size) means no del carries a count; such del files count as 0.
+        // If del_num_rows_size() < dels_meta_size(), missing entries are treated as 0.
         repeated int64 del_num_rows = 23;
     }
 
