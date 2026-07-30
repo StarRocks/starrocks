@@ -350,6 +350,20 @@ public class OptExternalPartitionPruner {
                                     table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
                 }
 
+                // For the query dump, capture the FULL (unfiltered) partition name list so replay can
+                // reproduce the true denominator in partitions=X/Y. The list used for pruning above may
+                // already be value-filtered, which would collapse the denominator to the pruned count.
+                if (context.getDumpInfo() != null) {
+                    List<String> allPartitionNames =
+                            effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)
+                                    ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                                            table.getCatalogName(), table.getCatalogDBName(),
+                                            table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
+                                    : partitionNames;
+                    context.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(),
+                            table.getCatalogTableName()).setPartitionNames(allPartitionNames);
+                }
+
                 List<PartitionKey> keys = new ArrayList<>();
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
