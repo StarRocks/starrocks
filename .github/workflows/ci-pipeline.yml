@@ -1507,3 +1507,97 @@ jobs:
         run: |
           rm -f $CONF_FILE
           rm -rf ${{ github.workspace }}/*
+
+  # Phase 0: report run + jobs metrics to CI Metrics API (non-blocking, TLS)
+  report-metrics:
+    runs-on: [self-hosted, quick]
+    name: Report Run Metrics
+    # Depend on Teardown and the terminal/leaf jobs so this runs truly last (accurate finished_at).
+    needs:
+      - basic-checker
+      - be-architecture
+      - repo-handbook
+      - schema-compatibility
+      - be-ut
+      - clang-tidy
+      - fe-ut
+      - fe-codestyle-check
+      - build
+      - SQL-Tester
+      - admit
+      - restart-fe-after-admit
+      - restart-be-after-admit
+      - Teardown
+    if: always()
+    continue-on-error: true
+    timeout-minutes: 5
+    env:
+      METRICS_BASE: https://47.236.49.47:8080
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+      RUN_API: https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+    steps:
+      - name: Report run + jobs to CI Metrics API
+        run: |
+          set -uo pipefail
+          # Write the self-signed CA to a temp file for curl --cacert to validate the metrics TLS cert.
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
+          printf '%s' "$CI_METRICS_CA" > "$CA"
+          # Run queue/start time (self lookup; --fail lets HTTP errors fall back).
+          info=$(curl -fsS -m 10 -H "Authorization: Bearer ${{ github.token }}" \
+                 -H "Accept: application/vnd.github+json" "$RUN_API") || info='{}'
+          queued=$(printf '%s' "$info"  | jq -r '.created_at // empty')
+          started=$(printf '%s' "$info" | jq -r '.run_started_at // empty')
+
+          # Full jobs list: used both for L2 and to derive the overall result
+          # (covers every job in the run, not just the listed needs).
+          jobs_json=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+                      -H "Accept: application/vnd.github+json" "$RUN_API/jobs?per_page=100") \
+                      || jobs_json='{"jobs":[]}'
+
+          # Overall result: any failure/timed_out -> failure; else any cancelled -> cancelled; else success.
+          # Only consider completed jobs (excludes this job itself, still in_progress). skipped/neutral = pass.
+          result=$(printf '%s' "$jobs_json" | jq -r '
+            [ .jobs[] | select(.conclusion != null) | .conclusion ] as $c
+            | if ($c | any(. == "failure" or . == "timed_out" or . == "startup_failure")) then "failure"
+              elif ($c | any(. == "cancelled")) then "cancelled"
+              else "success" end')
+
+          # finished_at: max completed_at across all finished jobs (true wrap-up time, incl. teardown).
+          finished=$(printf '%s' "$jobs_json" | jq -r '[ .jobs[].completed_at | select(. != null) ] | max // empty')
+          [ -z "$finished" ] && finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # ---- L1: report run ----
+          run_payload=$(jq -cn \
+            --argjson run_id ${{ github.run_id }} \
+            --argjson attempt ${{ github.run_attempt }} \
+            --arg pipeline "ci-pipeline" --arg trigger "pr" \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            --argjson pr ${{ github.event.number }} \
+            --arg prurl "${{ github.event.pull_request.html_url }}" \
+            --arg branch "${{ github.base_ref }}" \
+            --arg queued "$queued" --arg started "$started" \
+            --arg finished "$finished" --arg result "$result" \
+            '[{run_id:$run_id, run_attempt:$attempt, pipeline_name:$pipeline,
+               trigger_type:$trigger, commit_sha:$sha, pr_number:$pr, pr_url:$prurl,
+               branch:$branch, queued_at:$queued, started_at:$started,
+               finished_at:$finished, result:$result}]')
+          curl -fsS -m 15 --cacert "$CA" -X POST "$METRICS_BASE/ingest/runs" \
+            -H "Authorization: Bearer ${{ secrets.CI_METRICS_TOKEN }}" \
+            -H "Content-Type: application/json" -d "$run_payload" \
+            || echo "::warning::CI metrics run report failed (non-blocking)"
+
+          # ---- L2: report jobs (stage derived server-side from job name; only completed jobs) ----
+          jobs_payload=$(printf '%s' "$jobs_json" | jq -c \
+            --argjson run_id ${{ github.run_id }} \
+            --argjson attempt ${{ github.run_attempt }} '
+            [ .jobs[]
+              | select(.completed_at != null)
+              | {run_id:$run_id, run_attempt:$attempt, job_id:.id, job_name:.name,
+                 result:(.conclusion // "skipped"), started_at:.started_at,
+                 finished_at:.completed_at, runner_class:.runner_name} ]')
+          if [ "$(printf '%s' "$jobs_payload" | jq 'length')" -gt 0 ]; then
+            curl -fsS -m 15 --cacert "$CA" -X POST "$METRICS_BASE/ingest/jobs" \
+              -H "Authorization: Bearer ${{ secrets.CI_METRICS_TOKEN }}" \
+              -H "Content-Type: application/json" -d "$jobs_payload" \
+              || echo "::warning::CI metrics jobs report failed (non-blocking)"
+          fi
