@@ -1584,3 +1584,442 @@ vectorized_functions = [
     # ai functions
     [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
 ]
+
+# Reference documentation for the functions above, keyed by function name.
+#
+# Keyed by name rather than by signature id on purpose: one doc page covers
+# every overload of a name. 'bitand' is five signatures but one page, and
+# 'reverse' is eighteen spanning both the string and array id ranges.
+#
+# Rendered into docs/<lang>/sql-reference/sql-functions/<category>/<name>.md by
+# gen_function_docs.py. This payload is inert with respect to gen_functions.py:
+# it does not affect the generated FE Java or BE .inc files.
+#
+#   category        required, the docs/ subdirectory holding the page
+#   description     required, one plain-text sentence under 160 chars
+#   syntax          required, the call form
+#   arguments       [(name, types, description)]
+#   parameters_note prose qualifying the arguments as a group
+#   returned_value  (types, description)
+#   usage_notes     [str], rendered as a bullet list
+#   examples        [(caption, query, result)]
+#
+# Example results are the output StarRocks actually prints; keep them aligned
+# with the query above them.
+function_docs = {
+    # ---------------------------------------------------------------- bit ---
+    'bitand': {
+        'category': 'bit-functions',
+        'description': 'Returns the bitwise AND of two numeric expressions.',
+        'syntax': 'bitand(x, y)',
+        'arguments': [
+            ('x', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The left operand.'),
+            ('y', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The right operand.'),
+        ],
+        'parameters_note': '> `x` and `y` must agree in data type.',
+        'returned_value': ('Same as `x`',
+                           'The bitwise AND of `x` and `y`. If either argument is NULL, the result is NULL.'),
+        'examples': [
+            ('', 'SELECT bitand(3, 0);',
+             '+--------------+\n'
+             '| bitand(3, 0) |\n'
+             '+--------------+\n'
+             '|            0 |\n'
+             '+--------------+'),
+        ],
+    },
+    'bitor': {
+        'category': 'bit-functions',
+        'description': 'Returns the bitwise OR of two numeric expressions.',
+        'syntax': 'bitor(x, y)',
+        'arguments': [
+            ('x', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The left operand.'),
+            ('y', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The right operand.'),
+        ],
+        'parameters_note': '> `x` and `y` must agree in data type.',
+        'returned_value': ('Same as `x`',
+                           'The bitwise OR of `x` and `y`. If either argument is NULL, the result is NULL.'),
+        'examples': [
+            ('', 'SELECT bitor(3, 0);',
+             '+-------------+\n'
+             '| bitor(3, 0) |\n'
+             '+-------------+\n'
+             '|           3 |\n'
+             '+-------------+'),
+        ],
+    },
+    'bitxor': {
+        'category': 'bit-functions',
+        'description': 'Returns the bitwise XOR of two numeric expressions.',
+        'syntax': 'bitxor(x, y)',
+        'arguments': [
+            ('x', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The left operand.'),
+            ('y', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The right operand.'),
+        ],
+        'parameters_note': '> `x` and `y` must agree in data type.',
+        'returned_value': ('Same as `x`',
+                           'The bitwise XOR of `x` and `y`. If either argument is NULL, the result is NULL.'),
+        'examples': [
+            ('', 'SELECT bitxor(3, 0);',
+             '+--------------+\n'
+             '| bitxor(3, 0) |\n'
+             '+--------------+\n'
+             '|            3 |\n'
+             '+--------------+'),
+        ],
+    },
+    'bitnot': {
+        'category': 'bit-functions',
+        'description': 'Returns the bitwise negation of a numeric expression.',
+        'syntax': 'bitnot(x)',
+        'arguments': [
+            ('x', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The value to negate.'),
+        ],
+        'returned_value': ('Same as `x`',
+                           'The bitwise negation of `x`. If `x` is NULL, the result is NULL.'),
+        'examples': [
+            ('', 'SELECT bitnot(3);',
+             '+-----------+\n'
+             '| bitnot(3) |\n'
+             '+-----------+\n'
+             '|        -4 |\n'
+             '+-----------+'),
+        ],
+    },
+    'bit_shift_left': {
+        'category': 'bit-functions',
+        'description': 'Shifts the binary representation of a numeric expression to the left by a '
+                       'specified number of bits.',
+        'syntax': 'bit_shift_left(value, shift)',
+        'arguments': [
+            ('value', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The value or numeric expression to shift.'),
+            ('shift', 'BIGINT', 'The number of bits to shift.'),
+        ],
+        'returned_value': ('Same as `value`', 'The shifted value.'),
+        'usage_notes': [
+            'If any input parameter is NULL, NULL is returned.',
+            'If `shift` is less than 0, 0 is returned.',
+            'Shifting a `value` by `0` always results in the original `value`.',
+            'Shifting `0` by a `shift` always results in `0`.',
+            'If the data type of `value` is numeric but not an integer, that value is cast to an integer.',
+            'If the data type of `value` is a string, the value is cast to an integer if possible. '
+            'For example, the string "2.3" is cast to 2. If the value cannot be cast to an integer, '
+            'it is treated as NULL.',
+        ],
+        'examples': [
+            ('Shift an integer.', 'SELECT bit_shift_left(2, 1);',
+             '+----------------------+\n'
+             '| bit_shift_left(2, 1) |\n'
+             '+----------------------+\n'
+             '|                    4 |\n'
+             '+----------------------+'),
+            ('A non-integer numeric value is cast to an integer first.',
+             'SELECT bit_shift_left(2.2, 1);',
+             '+------------------------+\n'
+             '| bit_shift_left(2.2, 1) |\n'
+             '+------------------------+\n'
+             '|                      4 |\n'
+             '+------------------------+'),
+            ('A string is cast to an integer if possible.',
+             'SELECT bit_shift_left("2", 1);',
+             "+------------------------+\n"
+             "| bit_shift_left('2', 1) |\n"
+             "+------------------------+\n"
+             "|                      4 |\n"
+             "+------------------------+"),
+            ('The high bit is unchanged, so the sign is preserved.',
+             'SELECT bit_shift_left(-2, 1);',
+             '+-----------------------+\n'
+             '| bit_shift_left(-2, 1) |\n'
+             '+-----------------------+\n'
+             '|                    -4 |\n'
+             '+-----------------------+'),
+        ],
+    },
+    'bit_shift_right': {
+        'category': 'bit-functions',
+        'description': 'Shifts the binary representation of a numeric expression to the right by a '
+                       'specified number of bits, preserving the sign.',
+        'syntax': 'bit_shift_right(value, shift)',
+        'arguments': [
+            ('value', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The value or numeric expression to shift.'),
+            ('shift', 'BIGINT', 'The number of bits to shift.'),
+        ],
+        'returned_value': ('Same as `value`', 'The shifted value.'),
+        'usage_notes': [
+            'If any input parameter is NULL, NULL is returned.',
+            'If `shift` is less than 0, 0 is returned.',
+            'Shifting a `value` by `0` always results in the original `value`.',
+            'Shifting `0` by a `shift` always results in `0`.',
+            'If the data type of `value` is numeric but not an integer, that value is cast to an integer.',
+            'If the data type of `value` is a string, the value is cast to an integer if possible. '
+            'For example, the string "2.3" is cast to 2. If the value cannot be cast to an integer, '
+            'it is treated as NULL.',
+        ],
+        'examples': [
+            ('Shift an integer.', 'SELECT bit_shift_right(2, 1);',
+             '+-----------------------+\n'
+             '| bit_shift_right(2, 1) |\n'
+             '+-----------------------+\n'
+             '|                     1 |\n'
+             '+-----------------------+'),
+            ('A non-integer numeric value is cast to an integer first.',
+             'SELECT bit_shift_right(2.2, 1);',
+             '+-------------------------+\n'
+             '| bit_shift_right(2.2, 1) |\n'
+             '+-------------------------+\n'
+             '|                       1 |\n'
+             '+-------------------------+'),
+            ('A string is cast to an integer if possible.',
+             'SELECT bit_shift_right("2", 1);',
+             "+-------------------------+\n"
+             "| bit_shift_right('2', 1) |\n"
+             "+-------------------------+\n"
+             "|                       1 |\n"
+             "+-------------------------+"),
+            ('The sign bit is used as the high bit, so a negative value stays negative.',
+             'SELECT bit_shift_right(-2, 1);',
+             '+------------------------+\n'
+             '| bit_shift_right(-2, 1) |\n'
+             '+------------------------+\n'
+             '|                     -1 |\n'
+             '+------------------------+'),
+        ],
+    },
+    'bit_shift_right_logical': {
+        'category': 'bit-functions',
+        'description': 'Shifts the binary representation of a numeric expression to the right by a '
+                       'specified number of bits, without preserving the sign.',
+        'syntax': 'bit_shift_right_logical(value, shift)',
+        'arguments': [
+            ('value', 'TINYINT, SMALLINT, INT, BIGINT, LARGEINT',
+             'The value or numeric expression to shift.'),
+            ('shift', 'BIGINT', 'The number of bits to shift.'),
+        ],
+        'returned_value': ('Same as `value`', 'The shifted value.'),
+        'usage_notes': [
+            'If any input parameter is NULL, NULL is returned.',
+            'If `shift` is less than 0, 0 is returned.',
+            'Shifting a `value` by `0` always results in the original `value`.',
+            'Shifting `0` by a `shift` always results in `0`.',
+            'If the data type of `value` is numeric but not an integer, that value is cast to an integer.',
+            'If the data type of `value` is a string, the value is cast to an integer if possible. '
+            'For example, the string "2.3" is cast to 2. If the value cannot be cast to an integer, '
+            'it is treated as NULL.',
+        ],
+        'examples': [
+            ('Shift an integer.', 'SELECT bit_shift_right_logical(2, 1);',
+             '+-------------------------------+\n'
+             '| bit_shift_right_logical(2, 1) |\n'
+             '+-------------------------------+\n'
+             '|                             1 |\n'
+             '+-------------------------------+'),
+            ('A non-integer numeric value is cast to an integer first.',
+             'SELECT bit_shift_right_logical(2.2, 1);',
+             '+---------------------------------+\n'
+             '| bit_shift_right_logical(2.2, 1) |\n'
+             '+---------------------------------+\n'
+             '|                               1 |\n'
+             '+---------------------------------+'),
+            ('A string is cast to an integer if possible.',
+             'SELECT bit_shift_right_logical("2", 1);',
+             "+---------------------------------+\n"
+             "| bit_shift_right_logical('2', 1) |\n"
+             "+---------------------------------+\n"
+             "|                               1 |\n"
+             "+---------------------------------+"),
+            ('0 is appended to the high bit regardless of sign, so a negative value becomes positive.',
+             "SELECT bit_shift_right_logical(CAST('-2' AS INT), 1);",
+             "+-----------------------------------------------+\n"
+             "| bit_shift_right_logical(CAST('-2' AS INT), 1) |\n"
+             "+-----------------------------------------------+\n"
+             "|                                    2147483647 |\n"
+             "+-----------------------------------------------+"),
+        ],
+    },
+    # ------------------------------------------------------------- string ---
+    'lpad': {
+        'category': 'string-functions',
+        'description': 'Left-pads a string with a pad string to reach the specified length.',
+        'syntax': 'lpad(str, len [, pad])',
+        'arguments': [
+            ('str', 'VARCHAR', 'The string to pad.'),
+            ('len', 'INT',
+             'The length of the return value, measured in characters rather than bytes.'),
+            ('pad', 'VARCHAR',
+             'Optional. The characters to add in front of `str`. Defaults to spaces.'),
+        ],
+        'returned_value': (
+            'VARCHAR',
+            'A string of length `len`. If `len` is greater than the length of `str`, `pad` is repeated in '
+            'front of `str` until the result is `len` characters long. If `len` is less than the length of '
+            '`str`, the result is truncated to `len` characters.'),
+        'examples': [
+            ('Pad a string up to the requested length.',
+             'SELECT lpad("hi", 5, "xy");',
+             "+---------------------+\n"
+             "| lpad('hi', 5, 'xy') |\n"
+             "+---------------------+\n"
+             "| xyxhi               |\n"
+             "+---------------------+"),
+            ('A length shorter than the string truncates it.',
+             'SELECT lpad("hi", 1, "xy");',
+             "+---------------------+\n"
+             "| lpad('hi', 1, 'xy') |\n"
+             "+---------------------+\n"
+             "| h                   |\n"
+             "+---------------------+"),
+            ('Without `pad`, spaces are used.',
+             'SELECT lpad("hi", 5);',
+             "+--------------------+\n"
+             "| lpad('hi', 5, ' ') |\n"
+             "+--------------------+\n"
+             "|    hi              |\n"
+             "+--------------------+"),
+        ],
+    },
+    'locate': {
+        'category': 'string-functions',
+        'description': 'Returns the 1-based character position of a substring within a string.',
+        'syntax': 'locate(substr, str [, pos])',
+        'arguments': [
+            ('substr', 'VARCHAR', 'The substring to find.'),
+            ('str', 'VARCHAR', 'The string to search.'),
+            ('pos', 'INT',
+             'Optional. The 1-based character position at which to start searching.'),
+        ],
+        'returned_value': (
+            'INT',
+            'The position of the first occurrence of `substr` in `str`, counting from 1 and measured in '
+            'characters. Returns 0 if `substr` is not found.'),
+        'examples': [
+            ('Find a substring.',
+             "SELECT locate('bar', 'foobarbar');",
+             "+----------------------------+\n"
+             "| locate('bar', 'foobarbar') |\n"
+             "+----------------------------+\n"
+             "|                          4 |\n"
+             "+----------------------------+"),
+            ('A substring that is not present returns 0.',
+             "SELECT locate('xbar', 'foobar');",
+             "+--------------------------+\n"
+             "| locate('xbar', 'foobar') |\n"
+             "+--------------------------+\n"
+             "|                        0 |\n"
+             "+--------------------------+"),
+            ('Start searching at a given position.',
+             "SELECT locate('bar', 'foobarbar', 5);",
+             "+-------------------------------+\n"
+             "| locate('bar', 'foobarbar', 5) |\n"
+             "+-------------------------------+\n"
+             "|                             7 |\n"
+             "+-------------------------------+"),
+        ],
+    },
+    'concat': {
+        'category': 'string-functions',
+        'description': 'Concatenates multiple strings into a single string.',
+        'syntax': 'concat(str, ...)',
+        'arguments': [
+            ('str', 'VARCHAR',
+             'The strings to concatenate. This function accepts a variable number of arguments.'),
+        ],
+        'returned_value': ('VARCHAR',
+                           'The concatenated string. If any argument is NULL, the result is NULL.'),
+        'examples': [
+            ('Concatenate two strings.',
+             'SELECT concat("a", "b");',
+             "+------------------+\n"
+             "| concat('a', 'b') |\n"
+             "+------------------+\n"
+             "| ab               |\n"
+             "+------------------+"),
+            ('Concatenate three strings.',
+             'SELECT concat("a", "b", "c");',
+             "+-----------------------+\n"
+             "| concat('a', 'b', 'c') |\n"
+             "+-----------------------+\n"
+             "| abc                   |\n"
+             "+-----------------------+"),
+            ('A NULL argument makes the whole result NULL.',
+             'SELECT concat("a", null, "c");',
+             "+------------------------+\n"
+             "| concat('a', NULL, 'c') |\n"
+             "+------------------------+\n"
+             "| NULL                   |\n"
+             "+------------------------+"),
+        ],
+    },
+    'split': {
+        'category': 'string-functions',
+        'description': 'Splits a string by a delimiter and returns the resulting parts as an ARRAY.',
+        'syntax': 'split(content, delimiter)',
+        'arguments': [
+            ('content', 'VARCHAR', 'The string to split.'),
+            ('delimiter', 'VARCHAR', 'The separator to split on.'),
+        ],
+        'returned_value': ('ARRAY<VARCHAR>', 'The parts of `content`, in order.'),
+        'examples': [
+            ('Split on a single character.',
+             'SELECT split("a,b,c", ",");',
+             "+---------------------+\n"
+             "| split('a,b,c', ',') |\n"
+             "+---------------------+\n"
+             '| ["a","b","c"]       |\n'
+             "+---------------------+"),
+            ('Split on a multi-character delimiter.',
+             'SELECT split("a,b,c", ",b,");',
+             "+-----------------------+\n"
+             "| split('a,b,c', ',b,') |\n"
+             "+-----------------------+\n"
+             '| ["a","c"]             |\n'
+             "+-----------------------+"),
+            ('An empty delimiter splits into individual characters.',
+             'SELECT split("abc", "");',
+             "+------------------+\n"
+             "| split('abc', '') |\n"
+             "+------------------+\n"
+             '| ["a","b","c"]    |\n'
+             "+------------------+"),
+        ],
+    },
+    'reverse': {
+        'category': 'string-functions',
+        'description': 'Reverses a string or array.',
+        'syntax': 'reverse(param)',
+        'arguments': [
+            ('param', 'VARCHAR, CHAR, ARRAY', 'The string or array to reverse.'),
+        ],
+        'parameters_note':
+            'Only one-dimensional arrays are supported, and array elements cannot be of the DECIMAL type. '
+            'The supported array element types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, '
+            'FLOAT, DOUBLE, VARCHAR, DECIMALV2, DATETIME, DATE, and JSON. **JSON is supported from 2.5.**',
+        'returned_value': ('Same as `param`',
+                           'The characters of the string, or the elements of the array, in reverse order.'),
+        'examples': [
+            ('Reverse a string.',
+             "SELECT reverse('hello');",
+             "+------------------+\n"
+             "| reverse('hello') |\n"
+             "+------------------+\n"
+             "| olleh            |\n"
+             "+------------------+"),
+            ('Reverse an array.',
+             'SELECT reverse([4, 1, 5, 8]);',
+             '+-----------------------+\n'
+             '| reverse([4, 1, 5, 8]) |\n'
+             '+-----------------------+\n'
+             '| [8,5,1,4]             |\n'
+             '+-----------------------+'),
+        ],
+    },
+}
