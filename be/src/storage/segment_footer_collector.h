@@ -15,7 +15,7 @@
 #pragma once
 
 #include <cstdint>
-#include <utility>
+#include <string>
 #include <vector>
 
 #include "gen_cpp/segment.pb.h"
@@ -24,6 +24,16 @@
 namespace starrocks {
 
 class Tablet;
+
+// One segment of one rowset. `segment_id` is only unique within `rowset_id`,
+// because segment numbering restarts at zero for every rowset -- together they
+// name the segment file on disk (`<rowset_id>_<segment_id>.dat`), so a consumer
+// that reports per-segment rows must carry both to keep them distinguishable.
+struct VisibleSegmentFooter {
+    std::string rowset_id;
+    int64_t segment_id;
+    SegmentFooterPB footer;
+};
 
 // Read the footer of every segment currently visible in `tablet`, so callers that
 // only need segment metadata (column encoding, compression, page pointers) do not
@@ -34,7 +44,7 @@ class Tablet;
 // Best effort by design: a segment that cannot be opened or parsed (encrypted,
 // bundled, or already vacuumed) is skipped rather than failing the whole call, so
 // a metadata query degrades to fewer rows instead of an error. Returns the
-// (segment id, footer) pairs actually read, in rowset then segment order.
-std::vector<std::pair<int64_t, SegmentFooterPB>> collect_visible_segment_footers(const std::shared_ptr<Tablet>& tablet);
+// segments actually read, in rowset then segment order.
+std::vector<VisibleSegmentFooter> collect_visible_segment_footers(const std::shared_ptr<Tablet>& tablet);
 
 } // namespace starrocks

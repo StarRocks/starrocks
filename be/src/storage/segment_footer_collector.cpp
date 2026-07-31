@@ -21,9 +21,8 @@
 
 namespace starrocks {
 
-std::vector<std::pair<int64_t, SegmentFooterPB>> collect_visible_segment_footers(
-        const std::shared_ptr<Tablet>& tablet) {
-    std::vector<std::pair<int64_t, SegmentFooterPB>> footers;
+std::vector<VisibleSegmentFooter> collect_visible_segment_footers(const std::shared_ptr<Tablet>& tablet) {
+    std::vector<VisibleSegmentFooter> footers;
     if (tablet == nullptr) {
         return footers;
     }
@@ -51,7 +50,7 @@ std::vector<std::pair<int64_t, SegmentFooterPB>> collect_visible_segment_footers
                 !parsed.ok()) {
                 continue;
             }
-            footers.emplace_back(seg_id, std::move(footer));
+            footers.emplace_back(VisibleSegmentFooter{rs->rowset_id().to_string(), seg_id, std::move(footer)});
         }
     }
     return footers;

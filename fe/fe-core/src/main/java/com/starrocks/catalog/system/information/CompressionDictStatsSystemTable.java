@@ -27,7 +27,9 @@ import static com.starrocks.catalog.system.SystemTable.builder;
 
 // compression dict (column-level compression dictionary (a ZSTD dictionary)) observability.
 //
-// One row per (tablet, segment, column / flat-JSON sub-column). Because the BE
+// One row per (tablet, rowset, segment, column / flat-JSON sub-column). Segment
+// ids restart at zero in every rowset, so ROWSET_ID is part of what identifies a
+// row: filtering or grouping on SEGMENT_ID alone mixes unrelated segments. Because the BE
 // scanner opens per-segment footers to fill the dictionary/encoding/size
 // columns, this table REQUIRES a TABLE_NAME (optionally with TABLE_SCHEMA) or a
 // TABLET_ID equality predicate; a full-database scan is rejected by the BE
@@ -61,6 +63,7 @@ public class CompressionDictStatsSystemTable {
                         .column("DATA_SIZE", IntegerType.BIGINT)
                         .column("UNCOMPRESSED_SIZE", IntegerType.BIGINT)
                         .column("COMPRESSION_RATIO", FloatType.DOUBLE)
+                        .column("ROWSET_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_COMPRESSION_DICT_STATS);
     }
 }

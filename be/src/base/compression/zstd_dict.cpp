@@ -41,6 +41,11 @@ namespace starrocks::compression {
 // ZDICT_DICTSIZE_MIN lives in zdict.h's static-linking-only section; keep our own
 // floor so this file does not depend on that block.
 static constexpr size_t kMinTrainedDictSize = 4096;
+// The requested size is allocated up front, once per column per segment, so an
+// absurd value would be an allocation failure on a flush or compaction thread
+// rather than the documented "give up and write without a dict". Cap it well
+// above any size that pays for itself (measurements plateaued below 128KB).
+static constexpr size_t kMaxTrainedDictSize = 16 * 1024 * 1024;
 
 StatusOr<std::unique_ptr<ZstdCDict>> ZstdCDict::create(const Slice& dict_bytes, int level, bool trained) {
     if (dict_bytes.size == 0) {
@@ -72,6 +77,9 @@ StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vecto
     // (and a tiny dictionary would not pay for itself anyway).
     if (max_dict_size < kMinTrainedDictSize) {
         return Status::InvalidArgument("compression dict max size too small to train");
+    }
+    if (max_dict_size > kMaxTrainedDictSize) {
+        return Status::InvalidArgument("compression dict max size too large to train");
     }
     std::string dict;
     dict.resize(max_dict_size);
