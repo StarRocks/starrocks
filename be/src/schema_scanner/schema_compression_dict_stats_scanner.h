@@ -76,6 +76,9 @@ private:
         std::optional<int64_t> data_size;
         std::optional<int64_t> uncompressed_size;
         std::optional<double> compression_ratio;
+        // Segment ids restart at zero in every rowset, so SEGMENT_ID alone does not
+        // identify a segment within a tablet; ROWSET_ID is what makes the row unique.
+        std::optional<std::string> rowset_id;
     };
 
     Status fill_chunk(ChunkPtr* chunk);
@@ -104,12 +107,13 @@ private:
 
     // Recurse a footer ColumnMetaPB, emitting one row per leaf (flat-JSON
     // sub-columns become leaves named by ColumnMetaPB.name, field 33).
-    void _expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id, const std::string& node_name,
-                               bool node_use_compression_dict, int64_t table_id, int64_t partition_id,
-                               int64_t tablet_id);
+    void _expand_footer_column(const ColumnMetaPB& meta, const std::string& rowset_id, int64_t segment_id,
+                               const std::string& node_name, bool node_use_compression_dict, int64_t table_id,
+                               int64_t partition_id, int64_t tablet_id);
 
-    void _append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id, const std::string& column_name,
-                                 bool use_compression_dict, int64_t table_id, int64_t partition_id, int64_t tablet_id);
+    void _append_footer_leaf_row(const ColumnMetaPB& meta, const std::string& rowset_id, int64_t segment_id,
+                                 const std::string& column_name, bool use_compression_dict, int64_t table_id,
+                                 int64_t partition_id, int64_t tablet_id);
 
     // table_id -> (table_schema, table_name), built from the tables-config RPC.
     std::string _table_schema_of(int64_t table_id) const;

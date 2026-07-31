@@ -715,10 +715,13 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
                 sample_sizes.push_back(n);
             }
         }
-        if (sample_buf.size() >= static_cast<size_t>(config::compression_dict_min_sample_bytes) &&
-            !sample_sizes.empty()) {
-            auto dict_or = compression::ZstdCDict::train(Slice(sample_buf), sample_sizes,
-                                                         static_cast<size_t>(config::compression_dict_max_size));
+        // Both are mutable and operator-supplied: a negative value would widen into
+        // a huge size_t, and the dict size drives an allocation on this flush path.
+        const int32_t min_sample_bytes = std::max(0, config::compression_dict_min_sample_bytes);
+        const int32_t max_dict_size = config::compression_dict_max_size;
+        if (max_dict_size > 0 && sample_buf.size() >= static_cast<size_t>(min_sample_bytes) && !sample_sizes.empty()) {
+            auto dict_or =
+                    compression::ZstdCDict::train(Slice(sample_buf), sample_sizes, static_cast<size_t>(max_dict_size));
             if (dict_or.ok()) {
                 auto cdict_or = compression::ZstdCDict::create(Slice(dict_or.value()), _effective_compression_level(),
                                                                /*trained=*/true);

@@ -50,6 +50,7 @@ SchemaScanner::ColumnDesc SchemaCompressionDictStatsScanner::_s_columns[] = {
         {"DATA_SIZE",         TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
         {"UNCOMPRESSED_SIZE", TypeDescriptor::from_logical_type(TYPE_BIGINT),       sizeof(int64_t), true},
         {"COMPRESSION_RATIO", TypeDescriptor::from_logical_type(TYPE_DOUBLE),       sizeof(double),  true},
+        {"ROWSET_ID",         TypeDescriptor::create_varchar_type(sizeof(Slice)),   sizeof(Slice),   true},
 };
 // clang-format on
 
@@ -269,7 +270,7 @@ bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSh
     // metadata it gets back.
     const auto footers = collect_visible_segment_footers(tablet);
     bool any_segment = false;
-    for (const auto& [seg_id, footer] : footers) {
+    for (const auto& [rowset_id, seg_id, footer] : footers) {
         any_segment = true;
         for (const auto& col_meta : footer.columns()) {
             std::string node_name;
@@ -283,15 +284,15 @@ bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSh
             } else {
                 node_name = strings::Substitute("__uid_$0", col_meta.unique_id());
             }
-            _expand_footer_column(col_meta, seg_id, node_name, node_use_compression_dict, table_id, partition_id,
-                                  tablet_id);
+            _expand_footer_column(col_meta, rowset_id, seg_id, node_name, node_use_compression_dict, table_id,
+                                  partition_id, tablet_id);
         }
     }
     return any_segment;
 }
 
-void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB& meta, int64_t segment_id,
-                                                              const std::string& node_name,
+void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB& meta, const std::string& rowset_id,
+                                                              int64_t segment_id, const std::string& node_name,
                                                               bool node_use_compression_dict, int64_t table_id,
                                                               int64_t partition_id, int64_t tablet_id) {
     if (meta.children_columns_size() > 0) {
@@ -307,16 +308,17 @@ void SchemaCompressionDictStatsScanner::_expand_footer_column(const ColumnMetaPB
             } else {
                 child_name = strings::Substitute("$0.$1", node_name, i);
             }
-            _expand_footer_column(child, segment_id, child_name, node_use_compression_dict, table_id, partition_id,
-                                  tablet_id);
+            _expand_footer_column(child, rowset_id, segment_id, child_name, node_use_compression_dict, table_id,
+                                  partition_id, tablet_id);
         }
         return;
     }
-    _append_footer_leaf_row(meta, segment_id, node_name, node_use_compression_dict, table_id, partition_id, tablet_id);
+    _append_footer_leaf_row(meta, rowset_id, segment_id, node_name, node_use_compression_dict, table_id, partition_id,
+                            tablet_id);
 }
 
-void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& meta, int64_t segment_id,
-                                                                const std::string& column_name,
+void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMetaPB& meta, const std::string& rowset_id,
+                                                                int64_t segment_id, const std::string& column_name,
                                                                 bool use_compression_dict, int64_t table_id,
                                                                 int64_t partition_id, int64_t tablet_id) {
     DictStatsRow row;
@@ -325,6 +327,7 @@ void SchemaCompressionDictStatsScanner::_append_footer_leaf_row(const ColumnMeta
     row.partition_id = partition_id;
     row.tablet_id = tablet_id;
     row.segment_id = segment_id;
+    row.rowset_id = rowset_id;
     row.column_name = column_name;
     row.use_compression_dict = use_compression_dict;
     row.encoding = EncodingTypePB_Name(meta.encoding());
@@ -493,6 +496,15 @@ Status SchemaCompressionDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
             if (row.compression_ratio.has_value()) {
                 double v = row.compression_ratio.value();
                 fill_column_with_slot<TYPE_DOUBLE>(column, (void*)&v);
+            } else {
+                down_cast<NullableColumn*>(column)->append_nulls(1);
+            }
+            break;
+        }
+        case 15: {
+            if (row.rowset_id.has_value()) {
+                Slice v = Slice(row.rowset_id.value());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
             } else {
                 down_cast<NullableColumn*>(column)->append_nulls(1);
             }
