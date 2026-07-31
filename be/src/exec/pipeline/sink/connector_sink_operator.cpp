@@ -109,17 +109,16 @@ bool ConnectorSinkOperator::is_finished() const {
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
-    // Decrement the counter unconditionally so the parallelism bookkeeping stays correct
-    // even when finish() fails below. Only the last sinker reports — and only after finish()
-    // succeeds, so a fallible commit doesn't claim the one-shot audit-reported marker before
-    // the cancellation path gets a chance to call report_audit_statistics_on_failure().
+
+    Status st = _connector_sink->finish();
+
+    // Decrement the counter unconditionally so the parallelism bookkeeping stays correct even when finish() fails.
     const bool is_last_sinker = _num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1;
-    RETURN_IF_ERROR(_connector_sink->finish());
-    if (is_last_sinker) {
+    if (st.ok() && is_last_sinker) {
         _fragment_context->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
                                                                                                 state->fragment_ctx());
     }
-    return Status::OK();
+    return st;
 }
 
 bool ConnectorSinkOperator::pending_finish() const {
