@@ -147,8 +147,6 @@ static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
     return DatumVariant(type_info, datum);
 }
 
-<<<<<<< HEAD
-=======
 // Whether two range-bound values are the SAME sort-key value, comparing semantically (variant kind,
 // logical type, and decoded value) rather than by raw proto bytes. The FE re-encodes a reprojected
 // range's leading Variants -- and a reshard persists boundary Variants through a different path -- so
@@ -204,7 +202,6 @@ static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const 
     return type_info->cmp(old_datum, new_datum) == 0;
 }
 
->>>>>>> f715f55023 ([BugFix] Compare range-colocate split bounds by value, not serialized bytes (#76968))
 StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                               const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
                                                               const TabletSchemaCSPtr& current_schema) {
