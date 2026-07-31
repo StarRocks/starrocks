@@ -83,6 +83,8 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         formats::IcebergDeletionVectorReader dv(formats::IcebergDeletionVectorReaderOptions{
                 .descriptor = *_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor,
                 .fs = _scanner_ctx->fs,
+                .datacache_options = _scanner_ctx->datacache_options,
+                .candidate_node = _scanner_ctx->scan_range->candidate_node,
                 .runtime_profile = _scanner_ctx->profile.runtime_profile,
         });
         RETURN_IF_ERROR(dv.fill_row_indexes(_skip_rows_ctx));

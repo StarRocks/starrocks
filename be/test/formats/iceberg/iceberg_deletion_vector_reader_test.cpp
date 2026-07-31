@@ -21,7 +21,13 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "cache/datacache.h"
+#include "cache/disk_cache/test_cache_utils.h"
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
+#include "common/config_cache_fwd.h"
 #include "common/runtime_profile.h"
+#include "formats/file_input_stream.h"
 #include "fs/fs.h"
 #include "gutil/endian.h"
 
@@ -268,5 +274,183 @@ TEST_F(IcebergDeletionVectorReaderFillTest, FillRowIndexesReadError) {
     EXPECT_FALSE(st.ok());
     EXPECT_EQ(nullptr, skip_ctx->deletion_bitmap);
 }
+
+// With datacache off no DataCache section is published, so the profile matches the pre-cache shape.
+TEST_F(IcebergDeletionVectorReaderFillTest, NoDataCacheSectionWhenCacheDisabled) {
+    auto blob = make_blob({5, 6});
+    std::string path = write_file("dv_no_cache.puffin", blob);
+
+    RuntimeProfile profile("IcebergDVNoCache");
+    IcebergDeletionVectorReader reader(make_options(path, 0, static_cast<int64_t>(blob.size()), 2, &profile));
+    auto skip_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(reader.fill_row_indexes(skip_ctx));
+
+    EXPECT_EQ(2, skip_ctx->deletion_bitmap->get_cardinality());
+    EXPECT_NE(nullptr, profile.get_counter("IcebergDVReadBytes"));
+    EXPECT_EQ(nullptr, profile.get_counter("IcebergDV_DataCacheReadCounter"));
+    EXPECT_EQ(nullptr, profile.get_counter("IcebergDV_DataCacheWriteCounter"));
+}
+
+// The DV read sets no io_ranges, so the shared buffer never coalesces and every read is direct.
+TEST_F(IcebergDeletionVectorReaderFillTest, DvOpenModeReadsDirectlyWithoutSharedBuffer) {
+    auto blob = make_blob({1, 2, 3});
+    std::string path = write_file("dv_direct_io.puffin", blob);
+
+    FormatScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
+    const FileInputStreamOptions options{.fs = FileSystem::Default(),
+                                         .file_path = path,
+                                         .file_size = static_cast<int64_t>(blob.size()),
+                                         .fs_stats = &fs_stats,
+                                         .app_stats = &app_stats};
+    ASSIGN_OR_ABORT(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+
+    std::vector<uint8_t> buffer(blob.size());
+    ASSERT_OK(file->read_at_fully(0, buffer.data(), static_cast<int64_t>(blob.size())));
+    EXPECT_EQ(blob, buffer);
+    EXPECT_EQ(0, shared_buffered_input_stream->shared_io_count());
+    EXPECT_EQ(0, shared_buffered_input_stream->shared_io_bytes());
+    EXPECT_EQ(1, shared_buffered_input_stream->direct_io_count());
+    EXPECT_EQ(static_cast<int64_t>(blob.size()), shared_buffered_input_stream->direct_io_bytes());
+}
+
+#ifdef WITH_STARCACHE
+
+// Reads through a real block cache so populate/hit counters reflect actual cache traffic.
+class IcebergDeletionVectorReaderCacheTest : public IcebergDeletionVectorReaderFillTest {
+protected:
+    void SetUp() override {
+        IcebergDeletionVectorReaderFillTest::SetUp();
+        auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
+        _block_cache = TestCacheUtils::create_cache(cache_options);
+        ASSERT_NE(nullptr, _block_cache);
+        DataCache::GetInstance()->set_block_cache(_block_cache);
+    }
+
+    void TearDown() override {
+        DataCache::GetInstance()->set_block_cache(nullptr);
+        _block_cache.reset();
+        IcebergDeletionVectorReaderFillTest::TearDown();
+    }
+
+    // puffin_file_size <= 0 leaves thrift field 6 unset, which makes the reader probe the size itself.
+    static IcebergDeletionVectorReaderOptions make_cache_options(const std::string& path, int64_t offset, int64_t size,
+                                                                 int64_t record_count, int64_t puffin_file_size,
+                                                                 RuntimeProfile* runtime_profile) {
+        TIcebergDeletionVectorDescriptor descriptor;
+        descriptor.puffin_file_path = path;
+        descriptor.content_offset = offset;
+        descriptor.content_size_in_bytes = size;
+        descriptor.record_count = record_count;
+        descriptor.referenced_data_file = "data.parquet";
+        if (puffin_file_size > 0) {
+            descriptor.__set_puffin_file_size_in_bytes(puffin_file_size);
+        }
+        return IcebergDeletionVectorReaderOptions{
+                .descriptor = std::move(descriptor),
+                .fs = FileSystem::Default(),
+                .datacache_options = DataCacheOptions{.enable_datacache = true, .enable_populate_datacache = true},
+                .runtime_profile = runtime_profile,
+        };
+    }
+
+    static int64_t counter_value(RuntimeProfile& profile, const std::string& name) {
+        auto* counter = profile.get_counter(name);
+        EXPECT_NE(nullptr, counter) << "missing counter " << name;
+        return counter == nullptr ? -1 : counter->value();
+    }
+
+    std::shared_ptr<BlockCache> _block_cache;
+};
+
+// The first read of a puffin file misses the cache and populates exactly one block.
+TEST_F(IcebergDeletionVectorReaderCacheTest, FirstReadPopulatesCache) {
+    auto blob = make_blob({3, 7, 42});
+    std::string path = write_file("dv_cache_populate.puffin", blob);
+    const auto blob_size = static_cast<int64_t>(blob.size());
+
+    RuntimeProfile profile("IcebergDVCachePopulate");
+    IcebergDeletionVectorReader reader(make_cache_options(path, 0, blob_size, 3, blob_size, &profile));
+    auto skip_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(reader.fill_row_indexes(skip_ctx));
+
+    EXPECT_EQ(3, skip_ctx->deletion_bitmap->get_cardinality());
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheReadCounter"));
+    EXPECT_EQ(1, counter_value(profile, "IcebergDV_DataCacheWriteCounter"));
+    EXPECT_EQ(blob_size, counter_value(profile, "IcebergDV_DataCacheWriteBytes"));
+    // No candidate node is configured here, so the peer path must stay untouched. All five peer
+    // counters are asserted so the section keeps parity with the MOR_/DV_ DataCache sections.
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheReadPeerCounter"));
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheReadPeerBytes"));
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheReadPeerTimer"));
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheSkipReadPeerCounter"));
+    EXPECT_EQ(0, counter_value(profile, "IcebergDV_DataCacheSkipReadPeerBytes"));
+}
+
+// Two blobs of one puffin file share a cache block, so the second reader hits what the first wrote.
+TEST_F(IcebergDeletionVectorReaderCacheTest, SecondBlobOfSamePuffinHitsCache) {
+    auto blob0 = make_blob({1, 2});
+    auto blob1 = make_blob({100, 200, 300});
+    std::vector<uint8_t> file;
+    file.insert(file.end(), blob0.begin(), blob0.end());
+    file.insert(file.end(), blob1.begin(), blob1.end());
+    std::string path = write_file("dv_cache_two_blobs.puffin", file);
+    const auto file_size = static_cast<int64_t>(file.size());
+
+    RuntimeProfile first_profile("IcebergDVCacheFirst");
+    IcebergDeletionVectorReader first(
+            make_cache_options(path, 0, static_cast<int64_t>(blob0.size()), 2, file_size, &first_profile));
+    auto first_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(first.fill_row_indexes(first_ctx));
+    EXPECT_EQ(2, first_ctx->deletion_bitmap->get_cardinality());
+    EXPECT_EQ(1, counter_value(first_profile, "IcebergDV_DataCacheWriteCounter"));
+
+    RuntimeProfile second_profile("IcebergDVCacheSecond");
+    IcebergDeletionVectorReader second(make_cache_options(path, static_cast<int64_t>(blob0.size()),
+                                                          static_cast<int64_t>(blob1.size()), 3, file_size,
+                                                          &second_profile));
+    auto second_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(second.fill_row_indexes(second_ctx));
+
+    // to_array writes into the caller's storage, so it must be sized up front.
+    std::vector<uint64_t> actual(second_ctx->deletion_bitmap->get_cardinality());
+    second_ctx->deletion_bitmap->to_array(actual);
+    std::vector<uint64_t> expected = {100, 200, 300};
+    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(1, counter_value(second_profile, "IcebergDV_DataCacheReadCounter"));
+    EXPECT_EQ(0, counter_value(second_profile, "IcebergDV_DataCacheWriteCounter"));
+}
+
+// An unset puffin size falls back to a size probe; the derived size keeps the cache key identical,
+// so a later reader carrying thrift field 6 still hits what the first reader populated.
+TEST_F(IcebergDeletionVectorReaderCacheTest, UnsetPuffinSizeSharesCacheKey) {
+    auto blob = make_blob({11, 22, 33, 44});
+    std::string path = write_file("dv_cache_no_size.puffin", blob);
+    const auto blob_size = static_cast<int64_t>(blob.size());
+
+    RuntimeProfile probe_profile("IcebergDVCacheProbe");
+    IcebergDeletionVectorReader probing(
+            make_cache_options(path, 0, blob_size, 4, /*puffin_file_size=*/-1, &probe_profile));
+    auto probe_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(probing.fill_row_indexes(probe_ctx));
+    EXPECT_EQ(4, probe_ctx->deletion_bitmap->get_cardinality());
+    EXPECT_EQ(1, counter_value(probe_profile, "IcebergDV_DataCacheWriteCounter"));
+
+    RuntimeProfile sized_profile("IcebergDVCacheSized");
+    IcebergDeletionVectorReader sized(make_cache_options(path, 0, blob_size, 4, blob_size, &sized_profile));
+    auto sized_ctx = std::make_shared<SkipRowsContext>();
+    ASSERT_OK(sized.fill_row_indexes(sized_ctx));
+
+    std::vector<uint64_t> actual(sized_ctx->deletion_bitmap->get_cardinality());
+    sized_ctx->deletion_bitmap->to_array(actual);
+    std::vector<uint64_t> expected = {11, 22, 33, 44};
+    EXPECT_EQ(expected, actual);
+    EXPECT_EQ(1, counter_value(sized_profile, "IcebergDV_DataCacheReadCounter"));
+    EXPECT_EQ(0, counter_value(sized_profile, "IcebergDV_DataCacheWriteCounter"));
+}
+
+#endif // WITH_STARCACHE
 
 } // namespace starrocks::formats

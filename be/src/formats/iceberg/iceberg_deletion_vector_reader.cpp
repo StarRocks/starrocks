@@ -17,8 +17,11 @@
 #include <cstring>
 #include <vector>
 
+#include "cache/scan/cache_input_stream.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/runtime_profile.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/file_input_stream.h"
 #include "formats/puffin/deletion_vector_format.h"
 #include "fs/fs.h"
 #include "gutil/endian.h"
@@ -101,10 +104,32 @@ Status IcebergDeletionVectorReader::fill_row_indexes(const SkipRowsContextPtr& s
     int64_t offset = descriptor.content_offset;
     int64_t size = descriptor.content_size_in_bytes;
 
+    // Declared before the streams: the input-stream wrappers hold raw pointers to these stats.
+    FormatScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<CacheInputStream> cache_input_stream;
+
     std::vector<uint8_t> buffer(size);
     {
         SCOPED_RAW_TIMER(&_build_stats.read_ns);
-        ASSIGN_OR_RETURN(auto file, _options.fs->new_random_access_file(path));
+        const FileInputStreamOptions options{
+                .fs = _options.fs,
+                .file_path = path,
+                // FE ships the puffin length; without it the helper probes the size itself.
+                .file_size = descriptor.__isset.puffin_file_size_in_bytes ? descriptor.puffin_file_size_in_bytes : -1,
+                .fs_stats = &fs_stats,
+                .app_stats = &app_stats,
+                .datacache_options = _options.datacache_options};
+        // A DV blob is one exact contiguous range, so no io_ranges are set: the shared buffer
+        // stays pass-through and only the DataCache layer wraps the read.
+        ASSIGN_OR_RETURN(auto file,
+                         create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+        if (cache_input_stream != nullptr) {
+            // Lets a local miss fall back to the node that cache select warmed, as the main data
+            // stream does.
+            cache_input_stream->set_peer_cache_node(_options.candidate_node);
+        }
         RETURN_IF_ERROR(file->read_at_fully(offset, buffer.data(), size));
         _build_stats.read_bytes += size;
     }
@@ -117,12 +142,13 @@ Status IcebergDeletionVectorReader::fill_row_indexes(const SkipRowsContextPtr& s
     }
     skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(res.value());
     if (_options.runtime_profile != nullptr) {
-        update_counter(_options.runtime_profile);
+        update_counter(_options.runtime_profile, cache_input_stream);
     }
     return Status::OK();
 }
 
-void IcebergDeletionVectorReader::update_counter(RuntimeProfile* parent_profile) {
+void IcebergDeletionVectorReader::update_counter(RuntimeProfile* parent_profile,
+                                                 const std::shared_ptr<CacheInputStream>& cache_input_stream) {
     static const char* kSection = "IcebergDeletionVector";
     ADD_COUNTER(parent_profile, kSection, TUnit::NONE);
     RuntimeProfile::Counter* read_bytes =
@@ -140,6 +166,56 @@ void IcebergDeletionVectorReader::update_counter(RuntimeProfile* parent_profile)
     COUNTER_UPDATE(crc_time, _build_stats.checksum_ns);
     COUNTER_UPDATE(build_count, _build_stats.build_count);
     COUNTER_UPDATE(cardinality, _build_stats.cardinality);
+
+    if (cache_input_stream == nullptr) {
+        return;
+    }
+    static const char* kCacheSection = "IcebergDV_DataCache";
+    ADD_CHILD_COUNTER(parent_profile, kCacheSection, TUnit::NONE, kSection);
+    RuntimeProfile::Counter* cache_read_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_read_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_mem_bytes = ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadMemBytes",
+                                                                      TUnit::BYTES, "IcebergDV_DataCacheReadBytes");
+    RuntimeProfile::Counter* cache_read_disk_bytes = ADD_CHILD_COUNTER(
+            parent_profile, "IcebergDV_DataCacheReadDiskBytes", TUnit::BYTES, "IcebergDV_DataCacheReadBytes");
+    RuntimeProfile::Counter* cache_read_timer =
+            ADD_CHILD_TIMER(parent_profile, "IcebergDV_DataCacheReadTimer", kCacheSection);
+    RuntimeProfile::Counter* cache_write_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheWriteCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_write_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheWriteBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadPeerCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheReadPeerBytes", TUnit::BYTES, kCacheSection);
+    RuntimeProfile::Counter* cache_read_peer_timer =
+            ADD_CHILD_TIMER(parent_profile, "IcebergDV_DataCacheReadPeerTimer", kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_peer_counter =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadPeerCounter", TUnit::UNIT, kCacheSection);
+    RuntimeProfile::Counter* cache_skip_read_peer_bytes =
+            ADD_CHILD_COUNTER(parent_profile, "IcebergDV_DataCacheSkipReadPeerBytes", TUnit::BYTES, kCacheSection);
+
+    const CacheInputStream::Stats& cache_stats = cache_input_stream->stats();
+    COUNTER_UPDATE(cache_read_counter, cache_stats.read_block_cache_count);
+    COUNTER_UPDATE(cache_read_bytes, cache_stats.read_block_cache_bytes);
+    COUNTER_UPDATE(cache_read_mem_bytes, cache_stats.read_mem_cache_bytes);
+    COUNTER_UPDATE(cache_read_disk_bytes, cache_stats.read_disk_cache_bytes);
+    COUNTER_UPDATE(cache_read_timer, cache_stats.read_block_cache_ns);
+    COUNTER_UPDATE(cache_write_counter, cache_stats.write_block_cache_count);
+    COUNTER_UPDATE(cache_write_bytes, cache_stats.write_block_cache_bytes);
+    COUNTER_UPDATE(cache_skip_read_counter, cache_stats.skip_read_cache_count);
+    COUNTER_UPDATE(cache_skip_read_bytes, cache_stats.skip_read_cache_bytes);
+    COUNTER_UPDATE(cache_read_peer_counter, cache_stats.read_peer_cache_count);
+    COUNTER_UPDATE(cache_read_peer_bytes, cache_stats.read_peer_cache_bytes);
+    COUNTER_UPDATE(cache_read_peer_timer, cache_stats.read_peer_cache_ns);
+    COUNTER_UPDATE(cache_skip_read_peer_counter, cache_stats.skip_read_peer_cache_count);
+    COUNTER_UPDATE(cache_skip_read_peer_bytes, cache_stats.skip_read_peer_cache_bytes);
 }
 
 } // namespace starrocks::formats

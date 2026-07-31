@@ -39,6 +39,7 @@ private:
     Status _fetch_parquet();
     Status _fetch_textfile();
     Status _fetch_iceberg_delete_files();
+    Status _fetch_iceberg_deletion_vector();
     Status _create_input_stream();
     Status _write_entire_file(const std::string& file_path, size_t file_size);
     static Status _write_disk_ranges(std::shared_ptr<SharedBufferedInputStream>& shared_input_stream,

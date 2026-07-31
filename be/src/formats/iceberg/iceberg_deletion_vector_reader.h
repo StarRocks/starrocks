@@ -18,8 +18,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
+#include "cache/cache_options.h"
 #include "common/statusor.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
@@ -27,6 +29,7 @@
 
 namespace starrocks {
 
+class CacheInputStream;
 class RuntimeProfile;
 
 namespace formats {
@@ -43,6 +46,9 @@ struct IcebergDVBuildStats {
 struct IcebergDeletionVectorReaderOptions {
     TIcebergDeletionVectorDescriptor descriptor;
     FileSystem* fs = nullptr;
+    DataCacheOptions datacache_options;
+    // "host:port" of the node that likely cached this puffin already; empty disables peer reads.
+    std::string candidate_node;
     RuntimeProfile* runtime_profile = nullptr;
 };
 
@@ -62,7 +68,7 @@ public:
                                                        IcebergDVBuildStats* stats);
 
 private:
-    void update_counter(RuntimeProfile* parent_profile);
+    void update_counter(RuntimeProfile* parent_profile, const std::shared_ptr<CacheInputStream>& cache_input_stream);
 
     const IcebergDeletionVectorReaderOptions _options;
     IcebergDVBuildStats _build_stats;

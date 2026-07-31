@@ -16,16 +16,24 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
+#include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "connector/hive/scanner/hdfs_scanner_orc.h"
 #include "connector/hive/scanner/hdfs_scanner_parquet.h"
+#include "formats/file_input_stream.h"
+#include "formats/iceberg/iceberg_deletion_vector_reader.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
@@ -154,4 +162,162 @@ TEST_F(CacheSelectScannerTest, TestUnknowFormat) {
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.is_end_of_file());
 }
+
+#ifdef WITH_STARCACHE
+
+// Cache select must also warm the puffin file backing a V3 deletion vector, otherwise the data
+// file is cached but the DV blob is still fetched remotely on the first query.
+class CacheSelectScannerDvTest : public CacheSelectScannerTest {
+public:
+    void SetUp() override {
+        CacheSelectScannerTest::SetUp();
+        _test_dir = "./cache_select_dv_test_" + std::to_string(::getpid());
+        std::filesystem::create_directories(_test_dir);
+        auto cache_options = TestCacheUtils::create_simple_options(config::datacache_block_size, 50 * MB);
+        _block_cache = TestCacheUtils::create_cache(cache_options);
+        ASSERT_NE(nullptr, _block_cache);
+        DataCache::GetInstance()->set_block_cache(_block_cache);
+    }
+
+    void TearDown() override {
+        DataCache::GetInstance()->set_block_cache(nullptr);
+        _block_cache.reset();
+        if (std::filesystem::exists(_test_dir)) {
+            std::filesystem::remove_all(_test_dir);
+        }
+        CacheSelectScannerTest::TearDown();
+    }
+
+protected:
+    std::string _write_file(const std::string& name, const std::string& contents) {
+        std::string path = _test_dir + "/" + name;
+        ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(path));
+        CHECK_OK(wf->append(Slice(contents)));
+        CHECK_OK(wf->close());
+        return path;
+    }
+
+    // Runs cache select over a text data file that carries the given DV descriptor.
+    void _run_cache_select(const std::string& data_file, TIcebergDeletionVectorDescriptor* dv_descriptor) {
+        SlotDesc slot_desc[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+        auto scanner = std::make_shared<CacheSelectScanner>();
+        auto* range = _create_scan_range(data_file, 0, 0, THdfsFileFormat::TEXT);
+        auto* tuple_desc = _create_tuple_desc(slot_desc);
+        auto* ctx = _create_ctx(data_file, range, tuple_desc);
+        ctx->datacache_options = DataCacheOptions{
+                .enable_datacache = true, .enable_cache_select = true, .enable_populate_datacache = true};
+        if (dv_descriptor != nullptr) {
+            ctx->table_specific.iceberg_deletion_vector_descriptor =
+                    std::make_shared<TIcebergDeletionVectorDescriptor>(*dv_descriptor);
+        }
+
+        ASSERT_OK(scanner->init(_runtime_state, ctx));
+        ASSERT_OK(scanner->open(_runtime_state));
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        auto status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.is_end_of_file()) << status.message();
+        scanner->close();
+    }
+
+    std::string _test_dir;
+    std::shared_ptr<BlockCache> _block_cache;
+};
+
+TEST_F(CacheSelectScannerDvTest, WarmsPuffinFile) {
+    // The fixture hardcodes a 10-byte scan range, so the data file must be exactly that long.
+    const std::string data_file = _write_file("data.txt", "0123456789");
+    const std::string puffin_contents(4096, 'p');
+    const std::string puffin_file = _write_file("dv.puffin", puffin_contents);
+
+    TIcebergDeletionVectorDescriptor dv;
+    dv.puffin_file_path = puffin_file;
+    dv.content_offset = 0;
+    dv.content_size_in_bytes = static_cast<int64_t>(puffin_contents.size());
+    dv.record_count = 1;
+    dv.referenced_data_file = data_file;
+    dv.__set_puffin_file_size_in_bytes(static_cast<int64_t>(puffin_contents.size()));
+
+    _run_cache_select(data_file, &dv);
+
+    // Read the puffin range back through the same stack the query path uses: it must hit the
+    // block that cache select populated.
+    FormatScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_stream;
+    std::shared_ptr<CacheInputStream> cache_stream;
+    const formats::FileInputStreamOptions options{.fs = FileSystem::Default(),
+                                                  .file_path = puffin_file,
+                                                  .file_size = static_cast<int64_t>(puffin_contents.size()),
+                                                  .fs_stats = &fs_stats,
+                                                  .app_stats = &app_stats,
+                                                  .datacache_options = DataCacheOptions{.enable_datacache = true}};
+    ASSIGN_OR_ABORT(auto file, formats::create_random_access_file(shared_stream, cache_stream, options));
+    std::string read_back(puffin_contents.size(), '\0');
+    ASSERT_OK(file->read_at_fully(0, read_back.data(), static_cast<int64_t>(read_back.size())));
+
+    EXPECT_EQ(puffin_contents, read_back);
+    EXPECT_GT(cache_stream->stats().read_block_cache_count, 0);
+    EXPECT_EQ(0, cache_stream->stats().write_block_cache_count);
+}
+
+// A puffin larger than io_coalesce_read_max_buffer_size must be warmed through several bounded
+// ranges rather than one oversized SharedBuffer. The threshold is lowered so a small fixture
+// exercises the split path.
+TEST_F(CacheSelectScannerDvTest, SplitsOversizedPuffinIntoBoundedRanges) {
+    const int32_t saved = config::io_coalesce_read_max_buffer_size;
+    config::io_coalesce_read_max_buffer_size = 1024;
+    DeferOp restore([&]() { config::io_coalesce_read_max_buffer_size = saved; });
+
+    const std::string data_file = _write_file("data_split.txt", "0123456789");
+    // 4 KB against a 1 KB cap => 4 ranges.
+    const std::string puffin_contents(4096, 'p');
+    const std::string puffin_file = _write_file("dv_split.puffin", puffin_contents);
+
+    TIcebergDeletionVectorDescriptor dv;
+    dv.puffin_file_path = puffin_file;
+    dv.content_offset = 0;
+    dv.content_size_in_bytes = static_cast<int64_t>(puffin_contents.size());
+    dv.record_count = 1;
+    dv.referenced_data_file = data_file;
+    dv.__set_puffin_file_size_in_bytes(static_cast<int64_t>(puffin_contents.size()));
+
+    _run_cache_select(data_file, &dv);
+
+    // Every byte must still be cached and readable back through the query-path stack.
+    FormatScannerStats fs_stats;
+    FormatScannerStats app_stats;
+    std::shared_ptr<SharedBufferedInputStream> shared_stream;
+    std::shared_ptr<CacheInputStream> cache_stream;
+    const formats::FileInputStreamOptions options{.fs = FileSystem::Default(),
+                                                  .file_path = puffin_file,
+                                                  .file_size = static_cast<int64_t>(puffin_contents.size()),
+                                                  .fs_stats = &fs_stats,
+                                                  .app_stats = &app_stats,
+                                                  .datacache_options = DataCacheOptions{.enable_datacache = true}};
+    ASSIGN_OR_ABORT(auto file, formats::create_random_access_file(shared_stream, cache_stream, options));
+    std::string read_back(puffin_contents.size(), '\0');
+    ASSERT_OK(file->read_at_fully(0, read_back.data(), static_cast<int64_t>(read_back.size())));
+
+    EXPECT_EQ(puffin_contents, read_back);
+    EXPECT_GT(cache_stream->stats().read_block_cache_count, 0);
+    EXPECT_EQ(0, cache_stream->stats().write_block_cache_count);
+}
+
+// Older FEs leave the puffin length unset; cache select must skip the DV instead of failing.
+TEST_F(CacheSelectScannerDvTest, SkipsPuffinWithoutFileSize) {
+    const std::string data_file = _write_file("data_no_size.txt", "0123456789");
+    const std::string puffin_file = _write_file("dv_no_size.puffin", std::string(128, 'q'));
+
+    TIcebergDeletionVectorDescriptor dv;
+    dv.puffin_file_path = puffin_file;
+    dv.content_offset = 0;
+    dv.content_size_in_bytes = 128;
+    dv.record_count = 1;
+    dv.referenced_data_file = data_file;
+
+    _run_cache_select(data_file, &dv);
+}
+
+#endif // WITH_STARCACHE
+
 } // namespace starrocks

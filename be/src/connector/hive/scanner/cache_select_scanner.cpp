@@ -73,6 +73,11 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
         RETURN_IF_ERROR(_fetch_iceberg_delete_files());
     }
 
+    // handle iceberg deletion vector
+    if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
+        RETURN_IF_ERROR(_fetch_iceberg_deletion_vector());
+    }
+
     return Status::EndOfFile("");
 }
 
@@ -232,6 +237,19 @@ Status CacheSelectScanner::_fetch_iceberg_delete_files() {
     return Status::OK();
 }
 
+// A puffin file aggregates the deletion vectors of many data files, so warming the whole file
+// covers every scan range that references it.
+Status CacheSelectScanner::_fetch_iceberg_deletion_vector() {
+    const auto& descriptor = *_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor;
+    if (!descriptor.__isset.puffin_file_size_in_bytes || descriptor.puffin_file_size_in_bytes <= 0) {
+        // Older FEs do not ship the puffin length; the query path populates the cache on its own.
+        VLOG(2) << "cache select skips iceberg deletion vector without puffin file size: "
+                << descriptor.puffin_file_path;
+        return Status::OK();
+    }
+    return _write_entire_file(descriptor.puffin_file_path, descriptor.puffin_file_size_in_bytes);
+}
+
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
     formats::FileInputStreamOptions options{};
     options.fs = _scanner_ctx->fs;
@@ -246,8 +264,15 @@ Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size
     ASSIGN_OR_RETURN(auto dummy_file,
                      formats::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
 
+    // Bound each range: an oversized one is kept as a single SharedBuffer, whose first read
+    // reserves the whole file. The reader paths split the same way.
     std::vector<DiskRange> disk_ranges{};
-    disk_ranges.emplace_back(0, file_size);
+    const int64_t max_range_size = config::io_coalesce_read_max_buffer_size;
+    for (int64_t offset = 0; offset < static_cast<int64_t>(file_size);) {
+        const int64_t length = std::min(max_range_size, static_cast<int64_t>(file_size) - offset);
+        disk_ranges.emplace_back(offset, length);
+        offset += length;
+    }
 
     return _write_disk_ranges(shared_buffered_input_stream, cache_input_stream, disk_ranges);
 }
