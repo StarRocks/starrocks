@@ -307,8 +307,6 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     expr_context.close(&_runtime_state);
 }
 
-<<<<<<< HEAD
-=======
 // ---------------------------------------------------------------------------
 // ngram_bloom_filter pushdown helper: validates needle, lowers it via the
 // ICU/ASCII path matching the writer, and probes the bloom filter. These
@@ -492,5 +490,4 @@ TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
     ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
->>>>>>> 5adaae44a8 ([BugFix] Guard legacy NGRAMBF indexes without gram_num (#76989))
 } // namespace starrocks
