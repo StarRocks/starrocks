@@ -132,7 +132,9 @@ CONF_mInt32(compression_dict_train_pages, "32");
 // large ones.
 CONF_mInt32(compression_dict_train_fragment_bytes, "4096");
 
-// Maximum dictionary size. 64KB, not the 110KiB zstd-CLI convention: measured on
+// "train" mode only: maximum dictionary size ("sample" mode is bounded by
+// compression_dict_sample_bytes instead). A non-positive value disables training.
+// 64KB, not the 110KiB zstd-CLI convention: measured on
 // a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
 // 112KB and 256KB on EVERY column, because the dictionary is a codebook of
 // frequent substrings whose returns diminish fast while its own bytes are stored
