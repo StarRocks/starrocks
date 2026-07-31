@@ -174,10 +174,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(FATAL) << "brpc_timer_max_wakeup_interval_ms must be greater than or equal to 0";
     }
     // Set these process-wide gflags before Daemon or PlatformEnv can start a TimerThread.
-    bthread::FLAGS_brpc_timer_heap_sweep_min_size =
-            static_cast<uint32_t>(config::brpc_timer_heap_sweep_min_size);
-    bthread::FLAGS_brpc_timer_max_wakeup_interval_ms =
-            static_cast<uint32_t>(config::brpc_timer_max_wakeup_interval_ms);
+    bthread::FLAGS_brpc_timer_heap_sweep_min_size = static_cast<uint32_t>(config::brpc_timer_heap_sweep_min_size);
+    bthread::FLAGS_brpc_timer_max_wakeup_interval_ms = static_cast<uint32_t>(config::brpc_timer_max_wakeup_interval_ms);
 
     int start_step = 1;
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
