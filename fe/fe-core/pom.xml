@@ -906,6 +906,16 @@ under the License.
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-compression</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
             <artifactId>flight-core</artifactId>
         </dependency>
         <dependency>
