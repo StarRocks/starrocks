@@ -53,6 +53,10 @@ public:
 
     static void release_instance();
 
+#ifdef BE_TEST
+    static void reinitialize_for_test();
+#endif
+
     // Return true if trace is enabled.
     bool is_enabled() const;
 
