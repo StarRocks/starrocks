@@ -1129,6 +1129,11 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
     const int N = 3000;
     // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
     // so the compression dict is effective and values span multiple data pages.
+    // Every value must be DISTINCT: a varchar column goes through
+    // StringColumnWriter, which speculates the encoding from the data and would
+    // pick DICT_ENCODING for a repeating set, and the sample-mode dictionary is
+    // only built for PLAIN_ENCODING (dictionary-encoded values are already
+    // deduplicated, so a compression dictionary would buy nothing).
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
     slices.reserve(N);
@@ -1136,7 +1141,7 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
         strs[i] = strings::Substitute(
                 R"({"role":"assistant","parts":[{"type":"text","content":"hello world message number $0 with )"
                 R"(shared scaffolding that repeats across rows"}]})",
-                i % 200);
+                i);
         slices.emplace_back(strs[i]);
     }
 
@@ -1156,6 +1161,14 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
         writer_opts.meta->set_length(1024 * 1024);
         writer_opts.meta->set_encoding(PLAIN_ENCODING);
         writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
+        // Mimic segment_writer, which stamps the table compression_level (default
+        // -1). Leaving it at the proto default 0 makes get_block_compression_codec
+        // resolve ZSTD via ZstdBlockCompression::instance(0), which returns nullptr
+        // for any level outside [1,22] -- the column would then be written
+        // uncompressed and the compression-dict gate (which requires a non-null
+        // ZSTD codec) could never fire. Same stamp as the sibling
+        // test_compression_dict_train_mode / testCompressionDictOnFlatJson tests.
+        writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
         writer_opts.use_compression_dict = true; // enable compression dict
 
@@ -1168,6 +1181,11 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
         ASSERT_TRUE(writer->write_ordinal_index().ok());
         ASSERT_TRUE(wfile->close().ok());
     }
+
+    // Assert the speculated encoding first: if it ever stops being PLAIN the
+    // dictionary assertion below would fail for a reason that has nothing to do
+    // with the dictionary itself.
+    ASSERT_EQ(PLAIN_ENCODING, meta.encoding());
 
     // (1) the compression-dict page must have been persisted.
     ASSERT_TRUE(meta.has_compression_dict_page());
@@ -1225,11 +1243,19 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
     slices.reserve(N);
+    // Every value must be DISTINCT, for the same reason as
+    // test_compression_dict_roundtrip: StringColumnWriter speculates the encoding
+    // from the data, and a repeating set makes it pick DICT_ENCODING. Under
+    // DICT_ENCODING the whole column collapses into a single ~800-byte page of
+    // dict codes, which is below config::compression_dict_min_sample_bytes (1024),
+    // so training is skipped and no dictionary page is ever emitted. Distinct
+    // values keep the column PLAIN and spread it over enough pages for the
+    // trainer to see many fragments (this test wants "the first pages", plural).
     for (int i = 0; i < N; i++) {
         strs[i] = strings::Substitute(
                 R"({"role":"assistant","parts":[{"type":"text","content":"shared scaffolding tokens repeated )"
                 R"(across rows so a dictionary can be trained, row $0"}]})",
-                i % 250);
+                i);
         slices.emplace_back(strs[i]);
     }
     auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
