@@ -1152,7 +1152,7 @@ public class LakePublishBatchTest {
         return commitInfos;
     }
 
-    // Begins + commits `count` transactions on TABLE_AGG_OFF (alternating the two tablet halves so a >1 batch
+    // Begins + commits `count` transactions on the given table (alternating the two tablet halves so a >1 batch
     // forms across all partitions), returning their visibility waiters.
     private List<VisibleStateWaiter> beginAndCommitBatch(Database db, Table table, int count,
             List<TabletCommitInfo> transTablets1, List<TabletCommitInfo> transTablets2, String labelPrefix)
