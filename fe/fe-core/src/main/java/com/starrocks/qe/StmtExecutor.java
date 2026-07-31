@@ -522,7 +522,12 @@ public class StmtExecutor {
         // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
         if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
             long lastPrintTime = -1L;
-            long timeoutMs = Math.max(1L, Config.thrift_rpc_timeout_ms);
+            // Bound by the statement's own execution budget: a legitimately slow activation (journal
+            // replay catch-up) can take minutes, and an RPC-scale bound (thrift_rpc_timeout_ms = 10s)
+            // failed statements that would have succeeded by waiting as long as their owner allowed.
+            // A failed activation no longer strands the waiter either way - it exits the process.
+            long timeoutMs = Math.max(1L, context != null
+                    ? context.getExecTimeout() * 1000L : Config.thrift_rpc_timeout_ms);
             long deadlineMs = System.currentTimeMillis() + timeoutMs;
             while (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
                 try {

@@ -1405,7 +1405,9 @@ public class EditLog {
     private void enterGate() {
         synchronized (editLogFenceLock) {
             if (!gateOpen) {
-                throw new EditLogException("leader WAL gate is closed, submit log is not allowed");
+                throw new EditLogException("leader WAL gate is closed, submit log is not allowed "
+                        + "(this FE is demoting or not the active leader; retry, the statement will be "
+                        + "routed to the new leader)");
             }
             inFlight++;
         }

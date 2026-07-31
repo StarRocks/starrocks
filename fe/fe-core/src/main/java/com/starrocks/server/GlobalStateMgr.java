@@ -2059,6 +2059,10 @@ public class GlobalStateMgr {
             return;
         }
         long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // One deadline for the whole seal: the drain and the writer close SHARE the configured budget
+        // (previously each got the full value, so feType could stay LEADER for up to 2x the config while
+        // statements neither forward nor succeed - the zombie-leader window).
+        long deadlineMs = System.currentTimeMillis() + timeoutMs;
         // The WAL admission gate was already closed by beginLeaderDemotion (demotion stage 1). Flip the
         // writer out of RUNNING so a commit failure/interrupt during the drain is a graceful abort rather
         // than a process exit.
@@ -2069,7 +2073,7 @@ public class GlobalStateMgr {
             editLog.awaitWalDrained(timeoutMs);
         }
         // Stop the writer daemon and take the committed watermark; the queue is asserted empty here.
-        long watermark = journalWriter.close(timeoutMs);
+        long watermark = journalWriter.close(Math.max(1L, deadlineMs - System.currentTimeMillis()));
         long current = replayedJournalId.get();
         if (watermark > current) {
             replayedJournalId.set(watermark);

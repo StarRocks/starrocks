@@ -393,9 +393,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
         long publishTimeoutMillis = timeoutMillis - stopWatch.getTime();
-        if (publishTimeoutMillis < 0) {
-            // here commit transaction successfully cost too much time to cause publisTimeoutMillis is less than zero,
-            // so we just return false to indicate publish timeout
+        if (publishTimeoutMillis <= 0) {
+            // The commit consumed the whole budget. Exactly 0 must ALSO fail here: the historical
+            // contract for a zero wait was latch.await(0) = return immediately, and letting 0 reach
+            // awaitVisibleAfterCommit would invert it into an unbounded poll-until-visible wait.
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
