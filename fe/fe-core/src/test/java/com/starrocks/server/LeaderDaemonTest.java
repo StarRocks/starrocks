@@ -351,6 +351,35 @@ public class LeaderDaemonTest {
     }
 
     @Test
+    public void testRunningWorkerIsVisibleToTheGate() throws Exception {
+        // Positive side of the gate: a worker that has not exited must be VISIBLE via
+        // getRunningInstances (the negative side - fresh pools not flagged - is covered below).
+        TestGlobalStateMgr gsm = activeLeader();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        LeaderDaemon d = new LeaderDaemon("gate-positive-test", 5L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return gsm;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() throws InterruptedException {
+                entered.countDown();
+                release.await();
+            }
+        };
+        d.start();
+        Assertions.assertTrue(entered.await(3, TimeUnit.SECONDS));
+        Assertions.assertTrue(LeaderDaemon.getRunningInstances().stream().anyMatch(x -> x == d),
+                "a running worker must be visible to the re-activation cleanliness gate");
+        release.countDown();
+        stopAndAwait(d);
+        Assertions.assertFalse(LeaderDaemon.getRunningInstances().stream().anyMatch(x -> x == d),
+                "a stopped worker must deregister");
+    }
+
+    @Test
     public void testFindLeaderSessionStragglersIgnoresFreshRunningPools() {
         // Regression: a freshly-constructed (running, never-shut-down) leader-session pool must NOT be
         // flagged as a straggler by the re-activation gate. The gate keys on isShutdown()-but-not-

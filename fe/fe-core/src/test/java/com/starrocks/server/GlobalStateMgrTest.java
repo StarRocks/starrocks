@@ -56,6 +56,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogException;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -409,6 +410,31 @@ public class GlobalStateMgrTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    public void testExecuteLeaderDemotionStagesEndToEndEffects() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), false);
+        globalStateMgr.setEditLog(editLog);
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(107L); // opens the WAL gate
+        globalStateMgr.setReplayedJournalIdForTest(10L);
+        globalStateMgr.setJournalWriterForTest(new StubJournalWriter(12L));
+
+        globalStateMgr.executeLeaderDemotionStages(FrontendNodeType.FOLLOWER);
+
+        // Combined effect of the six stages, in their load-bearing order: admission + lease dropped
+        // and the WAL gate closed (stage 1), watermark advanced onto replayedJournalId (stage 3),
+        // feType flipped (stage 5), role INACTIVE with no pending target (stage 6).
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(FrontendNodeType.FOLLOWER, globalStateMgr.getFeType());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
+        Assertions.assertEquals(12L, globalStateMgr.getReplayedJournalId());
+        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+        Assertions.assertThrows(EditLogException.class, () -> editLog.logJsonObject((short) 1, "x"),
+                "the WAL gate must be closed after demotion");
     }
 
     private static GlobalStateMgr createActiveLeaderForDemotionTest() {

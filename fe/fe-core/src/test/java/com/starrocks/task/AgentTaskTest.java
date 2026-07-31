@@ -49,6 +49,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -511,6 +512,26 @@ public class AgentTaskTest {
         Assertions.assertEquals(0, l.getCount());
         Assertions.assertFalse(l.getStatus().ok());
         Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
+    public void testBatchTaskRunSkipsDispatchWhenDisallowed() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isAgentTaskDispatchDisallowed() {
+                return true;
+            }
+
+            @Mock
+            public NodeMgr getNodeMgr() {
+                throw new IllegalStateException("dispatch fence must return before touching cluster info");
+            }
+        };
+        AgentBatchTask batch = new AgentBatchTask();
+        batch.addTask(createReplicaTask);
+        // The pre-loop dispatch fence must exit before any backend lookup or submit_tasks RPC -
+        // this is the check that actually blocks destructive stale-session RPCs during demotion.
+        Assertions.assertDoesNotThrow(batch::run);
     }
 
     @Test
