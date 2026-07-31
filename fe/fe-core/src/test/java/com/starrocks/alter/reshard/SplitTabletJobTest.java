@@ -64,7 +64,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -783,29 +782,33 @@ public class SplitTabletJobTest {
                 }
             };
 
-            AtomicReference<Set<Long>> cleared = new AtomicReference<>();
+            AtomicReference<List<List<Long>>> cleared = new AtomicReference<>();
             AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
             AtomicInteger calls = new AtomicInteger();
             new MockUp<StarOSAgent>() {
                 @Mock
-                public void clearPlacementPreference(Set<Long> shardIds) {
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) {
                     // Capture only; assert outside the mock so a binding failure cannot hide a
                     // failed assertion.
                     calls.incrementAndGet();
-                    cleared.set(new HashSet<>(shardIds));
+                    cleared.set(new ArrayList<>(preferenceMembers));
                     stateAtCall.set(splitJob.getJobState());
                 }
             };
 
-            Set<Long> expected = new HashSet<>();
+            List<List<Long>> expected = new ArrayList<>();
             for (ReshardingPhysicalPartition partition : splitJob.getReshardingPhysicalPartitions().values()) {
                 for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
                     for (ReshardingTablet tablet : index.getReshardingTablets()) {
-                        expected.addAll(tablet.getNewTabletIds());
+                        for (long oldId : tablet.getOldTabletIds()) {
+                            for (long newId : tablet.getNewTabletIds()) {
+                                expected.add(List.of(oldId, newId));
+                            }
+                        }
                     }
                 }
             }
-            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce new tablet ids");
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce preference members");
 
             splitJob.runCleaningJob();
 
@@ -846,7 +849,7 @@ public class SplitTabletJobTest {
             AtomicInteger calls = new AtomicInteger();
             new MockUp<StarOSAgent>() {
                 @Mock
-                public void clearPlacementPreference(Set<Long> shardIds) throws DdlException {
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) throws DdlException {
                     calls.incrementAndGet();
                     throw new DdlException("simulated StarOS failure");
                 }

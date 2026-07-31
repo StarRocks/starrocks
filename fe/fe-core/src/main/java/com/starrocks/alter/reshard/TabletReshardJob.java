@@ -28,9 +28,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -353,19 +353,28 @@ public abstract class TabletReshardJob implements Writable {
      */
     protected void clearPlacementPreference(
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        Set<Long> newTabletIds = new HashSet<>();
+        // Name the members of each preference group rather than just the new shards: StarOS needs to
+        // know which preference is meant, since a new shard here becomes the pin target of the next
+        // reshard on the same tablet. Every (superseded, new) combination of a resharding tablet is
+        // exactly one preference, which reproduces what createShardsForSplit/ForMerge established --
+        // a split pins each child to its one parent, a merge pins the one output to each source.
+        List<List<Long>> preferenceMembers = new ArrayList<>();
         for (ReshardingPhysicalPartition partition : reshardingPhysicalPartitions.values()) {
             for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
                 for (ReshardingTablet tablet : index.getReshardingTablets()) {
-                    newTabletIds.addAll(tablet.getNewTabletIds());
+                    for (long oldTabletId : tablet.getOldTabletIds()) {
+                        for (long newTabletId : tablet.getNewTabletIds()) {
+                            preferenceMembers.add(List.of(oldTabletId, newTabletId));
+                        }
+                    }
                 }
             }
         }
-        if (newTabletIds.isEmpty()) {
+        if (preferenceMembers.isEmpty()) {
             return;
         }
         try {
-            GlobalStateMgr.getCurrentState().getStarOSAgent().clearPlacementPreference(newTabletIds);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().clearPlacementPreference(preferenceMembers);
         } catch (Exception e) {
             // Log the throwable, not just its message: this catch is broad enough to swallow a
             // programming error (an NPE would otherwise be recorded as a bare "null"), and the job
