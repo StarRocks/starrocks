@@ -396,7 +396,9 @@ Status SchemaCompressionDictStatsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     const DictStatsRow& row = _rows[_cur_idx];
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
-        if (slot_id < 1 || slot_id > 14) {
+        // Derived from _s_columns rather than hardcoded, so adding a column cannot
+        // leave the guard behind and reject the slot its own case handles.
+        if (slot_id < 1 || slot_id > _column_num) {
             return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
         }
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
