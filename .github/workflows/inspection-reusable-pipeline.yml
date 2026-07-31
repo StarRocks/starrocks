@@ -27,7 +27,7 @@ on:
         description: "LINUX DISTRO"
         required: true
         type: string
-        default: "centos7"
+        default: "rocky9"
       SYSTEM_TEST_MODE:
         description: "SYSTEM TEST MODE"
         required: false
