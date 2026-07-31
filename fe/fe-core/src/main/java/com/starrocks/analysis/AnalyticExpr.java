@@ -152,7 +152,7 @@ public class AnalyticExpr extends Expr {
                     this.skewHint = hint;
                     this.skewColumn = skewColumn;
                     this.skewValues = skewValues;
-                } else if (HintNode.HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(hint)) {
+                } else if (HINT_ANALYTIC_MERGE_SORT.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.forceMergeSort = true;
                 } else {
