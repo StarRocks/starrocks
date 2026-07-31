@@ -263,10 +263,9 @@ public class HeartbeatMgrTest {
         Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
         Assertions.assertTrue(before.isTerminated(),
                 "previous executor must be terminated after onStopped() awaits drain");
-        // Reference is kept (not nulled); start() rebuilds on isShutdown() so reuse is safe.
-        Assertions.assertSame(before, mgr.executor,
-                "executor reference is retained after successful drain");
-        Assertions.assertNotNull(mgr.executor);
+        // Nulled after the drain for consistency with the other pool-owning daemons
+        // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
+        Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
     }
 
     @Test

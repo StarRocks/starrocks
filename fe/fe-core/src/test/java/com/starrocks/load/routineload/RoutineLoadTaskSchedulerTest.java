@@ -103,7 +103,7 @@ public class RoutineLoadTaskSchedulerTest {
 
     @Test
     public void testRunOneCycle(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob1,
-                                @Injectable KafkaRoutineLoadJob routineLoadJob) {
+                                @Injectable KafkaRoutineLoadJob routineLoadJob) throws InterruptedException {
 
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 100L);

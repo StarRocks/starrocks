@@ -116,6 +116,8 @@ public class HeartbeatMgr extends LeaderDaemon {
         // clear isRunning until the in-flight heartbeat RPCs return (the re-activation gate reads
         // isRunning as the single quiescence signal). start() rebuilds the pool on re-election.
         shutdownNowAndAwaitTermination("HeartbeatMgr.executor", executor);
+        // Null for consistency with the other pool-owning daemons; start() lazily rebuilds either way.
+        executor = null;
     }
 
     public void setLeader(int clusterId, String token, long epoch) {

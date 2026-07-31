@@ -196,6 +196,12 @@ public abstract class LeaderDaemon {
         requestStop(interruptOnStop());
     }
 
+    /**
+     * Contract note: the interrupt below is sent AFTER the stop flag/notify/onStopRequested, so it can
+     * land at any later point of the worker's exit path, INCLUDING inside onStopped(). Every onStopped()
+     * implementation must therefore tolerate a pending interrupt (the standard pattern clears it with
+     * Thread.interrupted() before awaiting pool termination, see shutdownNowAndAwaitTermination).
+     */
     private void requestStop(boolean interruptWorker) {
         if (!isStopRequested.compareAndSet(false, true)) {
             return;
@@ -238,6 +244,13 @@ public abstract class LeaderDaemon {
             if (intervalMs > 0) {
                 try {
                     synchronized (stopSignal) {
+                        // Re-check INSIDE the monitor: requestStop() sets the flag and notifies under
+                        // stopSignal, so a notify landing between the flag check above and this wait()
+                        // would otherwise be lost - delaying the stop of an interrupt-unsafe daemon
+                        // (interruptOnStop() == false, e.g. CheckpointController) by a full interval.
+                        if (isStopRequested.get()) {
+                            break;
+                        }
                         stopSignal.wait(intervalMs);
                     }
                 } catch (InterruptedException ie) {
@@ -262,8 +275,13 @@ public abstract class LeaderDaemon {
         } catch (Throwable th) {
             LOG.warn("{} onStopped failed", name, th);
         }
-        isRunning.set(false);
+        // Deregister BEFORE clearing isRunning: start() CASes on isRunning and then re-adds this
+        // singleton, so the old order let a preempted dying worker's late remove() delete the NEW
+        // worker's registration (same identity), hiding the daemon from the re-activation cleanliness
+        // gate for the whole next leader session. Between remove and set(false) the worker has already
+        // run onStopped() (pools drained), so the gate missing it in that instant is harmless.
         RUNNING_INSTANCES.remove(this);
+        isRunning.set(false);
     }
 
     protected void runOneCycle() throws InterruptedException {

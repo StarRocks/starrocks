@@ -1302,10 +1302,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
      * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
      *
      * shutdownNow() interrupts the publish/delete-txnlog workers, then awaitTermination
-     * blocks boundedly so a re-elected leader does not race the old pool against the
-     * publishingTransactionIds dedup set. On successful drain the executor reference is
-     * nulled so the next call to {@link #getTaskExecutor()} rebuilds a fresh pool; on
-     * timeout the reference is kept so the restart guard in {@link #start()} bails out.
+     * waits (with no deadline) until they actually terminate, so isRunning is never cleared
+     * while a worker is alive. The executor references are then nulled so the next call to
+     * {@link #getTaskExecutor()} rebuilds a fresh pool on re-election.
      */
     @Override
     protected void onStopped() {
@@ -1324,14 +1323,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
         if (publishingLakeTransactionsBatchTableId != null) {
             publishingLakeTransactionsBatchTableId.clear();
         }
-    }
-
-    @Override
-    public synchronized void start() {
-        // The re-activation cleanliness gate verifies the previous pools terminated before start() runs;
-        // onStopped() nulls the executor fields after they terminate so the getters lazily rebuild fresh
-        // pools on re-election. No restart guard here.
-        super.start();
     }
 
     // Transactions that can be published in a batch for a partition of a shadow index

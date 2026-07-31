@@ -118,9 +118,13 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     }
 
     @Override
-    protected void runAfterLeaseValid() {
+    protected void runAfterLeaseValid() throws InterruptedException {
         try {
             process();
+        } catch (InterruptedException e) {
+            // Rethrow so the LeaderDaemon loop's interrupt handling breaks promptly on stop; the
+            // catch(Throwable) below would otherwise swallow it and dead-letter process()'s rethrow.
+            throw e;
         } catch (Throwable e) {
             LOG.warn("Failed to process one round of RoutineLoadTaskScheduler", e);
         }

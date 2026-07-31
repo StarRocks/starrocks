@@ -181,8 +181,16 @@ public class CheckpointController extends LeaderDaemon {
         // stale targets. workerNodeName / workerSelectedTime / journalId / result /
         // clusterSnapshotInfo are per-round volatile fields naturally overwritten by
         // the next createImage() call - no need to clear here.
-        nodesToPushImage.clear();
-        lastFailedTime.clear();
+        // Under RW_LOCK like every other accessor of these plain collections: the cluster-snapshot
+        // scheduler drives this controller inline from its own worker thread, which can run
+        // concurrently with this daemon's onStopped.
+        RW_LOCK.writeLock().lock();
+        try {
+            nodesToPushImage.clear();
+            lastFailedTime.clear();
+        } finally {
+            RW_LOCK.writeLock().unlock();
+        }
     }
 
     /**
@@ -356,7 +364,16 @@ public class CheckpointController extends LeaderDaemon {
                 + "&image_format_version=" + imageFormatVersion;
         try {
             MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir,
-                    conn -> inFlightConnection = conn);
+                    conn -> {
+                        // Publish-point self-check: a stop landing between the worker's last
+                        // isStopRequested() poll and this publication would find inFlightConnection
+                        // still null in onStopRequested() and disconnect nothing. requestStop sets the
+                        // flag BEFORE onStopRequested, so checking it here covers both orders.
+                        inFlightConnection = conn;
+                        if (isStopRequested()) {
+                            conn.disconnect();
+                        }
+                    });
         } finally {
             inFlightConnection = null;
         }
@@ -505,7 +522,16 @@ public class CheckpointController extends LeaderDaemon {
                     + "&for_global_state=" + belongToGlobalStateMgr
                     + "&image_format_version=" + formatVersion.toString();
             try {
-                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> inFlightConnection = conn);
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
+                    // Publish-point self-check (see downloadImage): without it, a stop landing in the
+                    // check-then-publish gap leaves this worker blocked on a socket read for up to
+                    // PUT_TIMEOUT_SECOND (an hour) with no interrupt possible (interruptOnStop is
+                    // false), keeping isRunning true and tripping the re-activation gate into exit.
+                    inFlightConnection = conn;
+                    if (isStopRequested()) {
+                        conn.disconnect();
+                    }
+                });
 
                 LOG.info("push image successfully, url = {}", url);
                 if (MetricRepo.hasInit) {
@@ -544,6 +570,10 @@ public class CheckpointController extends LeaderDaemon {
                 idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
                 conn = (HttpURLConnection) idURL.openConnection();
                 inFlightConnection = conn;
+                if (isStopRequested()) {
+                    // Publish-point self-check, same as downloadImage/pushImage.
+                    conn.disconnect();
+                }
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
                 String idString = conn.getHeaderField("id");

@@ -129,7 +129,7 @@ public class RoutineLoadSchedulerTest {
     }
 
     @Test
-    public void testEmptyTaskQueue(@Injectable RoutineLoadMgr routineLoadManager) {
+    public void testEmptyTaskQueue(@Injectable RoutineLoadMgr routineLoadManager) throws InterruptedException {
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         new Expectations() {
             {
