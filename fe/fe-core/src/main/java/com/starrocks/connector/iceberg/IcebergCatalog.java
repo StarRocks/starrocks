@@ -253,6 +253,17 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
+    /**
+     * Check if this catalog uses vended credentials for table access.
+     * When vended credentials are used, caching tables may cause issues
+     * because credentials expire before the cache TTL.
+     *
+     * @return true if vended credentials are enabled
+     */
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
+
     default String defaultTableLocation(Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
