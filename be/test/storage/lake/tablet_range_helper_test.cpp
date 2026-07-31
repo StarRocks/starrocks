@@ -1001,6 +1001,85 @@ TEST(TabletRangeHelperTest, validate_new_tablet_ranges_happy_path_unbounded_pare
     ASSERT_TRUE(s.ok()) << s;
 }
 
+namespace {
+
+// Re-encodes a bound the way FE serializes it: PScalarType::len is left unset for
+// non-string types (TypeSerializer.scalarTypeToProtobuf), whereas BE's
+// TypeDescriptor::to_protobuf always sets it. Same declared type, different bytes.
+static TuplePB as_fe_encoded_tuple(TuplePB tuple_pb) {
+    for (int i = 0; i < tuple_pb.values_size(); ++i) {
+        tuple_pb.mutable_values(i)->mutable_type()->mutable_types(0)->mutable_scalar_type()->clear_len();
+    }
+    return tuple_pb;
+}
+
+// [lower, upper) with FE-encoded bounds. nullopt skips the corresponding bound.
+static TabletRangePB make_fe_encoded_int_range_pb(std::optional<int32_t> lower, std::optional<int32_t> upper) {
+    TabletRangePB r;
+    if (lower.has_value()) {
+        *r.mutable_lower_bound() = as_fe_encoded_tuple(make_int_tuple_pb(*lower));
+        r.set_lower_bound_included(true);
+    }
+    if (upper.has_value()) {
+        *r.mutable_upper_bound() = as_fe_encoded_tuple(make_int_tuple_pb(*upper));
+        r.set_upper_bound_included(false);
+    }
+    return r;
+}
+
+} // namespace
+
+// Regression: the endpoint checks must compare a bound's value, not its serialized bytes.
+// A bounded parent's range is written by BE (PScalarType::len set) while the new-tablet
+// ranges arrive from FE (len unset), so a byte-level comparison rejected every alignment
+// split of an already-split tablet. The rejection fell back to an identical tablet, so the
+// layout never changed, the range-colocate group never re-stabilised, and the size-driven
+// split stayed blocked behind the unstable-group guard.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_accepts_fe_encoded_bounds_on_bounded_parent) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(0, 50), make_fe_encoded_int_range_pb(50, 100)});
+    // Guard the premise: the two encodings really are byte-distinct, so this case would
+    // have been rejected before the fix.
+    ASSERT_NE(parent.upper_bound().SerializeAsString(),
+              ranges.Get(ranges.size() - 1).upper_bound().SerializeAsString());
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_TRUE(s.ok()) << s;
+}
+
+// The relaxation covers the encoding only: a genuinely different endpoint value is still
+// rejected, so malformed FE input cannot slip a non-tiling split through.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_fe_encoded_last_upper_value_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(0, 50), make_fe_encoded_int_range_pb(50, 99)});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound != old_tablet_range.upper_bound"));
+}
+
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_fe_encoded_first_lower_value_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    auto ranges = as_pb_list({make_fe_encoded_int_range_pb(1, 50), make_fe_encoded_int_range_pb(50, 100)});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("first.lower_bound != old_tablet_range.lower_bound"));
+}
+
+// A tuple arity mismatch must not read as equality now that the comparison walks positions
+// instead of delegating to whole-message equality.
+TEST(TabletRangeHelperTest, validate_new_tablet_ranges_arity_mismatch_rejected) {
+    TabletRangePB parent = make_int_range_pb(0, 100);
+    TabletRangePB only = make_int_range_pb(0, 100);
+    // Give the child's upper bound a second value so its arity no longer matches the parent's.
+    *only.mutable_upper_bound()->add_values() = make_int_tuple_pb(7).values(0);
+    auto ranges = as_pb_list({only});
+    auto s = TabletRangeHelper::validate_new_tablet_ranges(parent, ranges);
+    ASSERT_FALSE(s.ok());
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
+    ASSERT_THAT(s.to_string(), testing::HasSubstr("last.upper_bound != old_tablet_range.upper_bound"));
+}
+
 // =============================================================================
 // validate_range_structural / validate_range_transition: schema-aware validators
 // for the metadata-only trailing sort-key ADD.
