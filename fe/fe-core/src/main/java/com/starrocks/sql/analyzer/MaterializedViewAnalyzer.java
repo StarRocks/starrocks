@@ -604,8 +604,17 @@ public class MaterializedViewAnalyzer {
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }
-                for (ColWithComment colWithComment : colWithComments) {
-                    FeNameFormat.checkColumnName(colWithComment.getColName());
+                for (int i = 0; i < colWithComments.size(); ++i) {
+                    String colName = colWithComments.get(i).getColName();
+                    // An IVM MV's re-parsed DDL lists the internal columns this analyzer generated
+                    // (__ROW_ID__, __AGG_STATE_*), whose names may hold characters a user-typed name
+                    // may not -- e.g. __AGG_STATE_count(*). Exempt only a name identical to the one
+                    // generated for that position, so a user-authored name is still checked.
+                    if (rowIdStrategy != null && IvmOpUtils.isIvmInternalColumn(colName)
+                            && colName.equals(columnNames.get(i))) {
+                        continue;
+                    }
+                    FeNameFormat.checkColumnName(colName);
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();

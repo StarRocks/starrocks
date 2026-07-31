@@ -916,18 +916,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Backtick-quoted schema columns in <strong>query projection order</strong>, excluding
-     * columns the storage engine fills in itself (AUTO_INCREMENT / generated). Sort-key
-     * reorder may permute schema order; the INSERT column list must still match the query's
-     * SELECT order so values line up correctly.
+     * Schema columns in <strong>query projection order</strong>, excluding columns the storage
+     * engine fills in itself (AUTO_INCREMENT / generated). Sort-key reorder may permute schema
+     * order; a column list paired with the defined query must follow the query's SELECT order
+     * so values line up correctly.
      */
-    private String queryProducedColumnList() {
+    private List<Column> queryProducedColumns() {
         // getOrderedOutputColumns(true) returns query-output-order columns, already excluding
         // generated (via baseSchemaWithoutGeneratedColumn) and AUTO_INCREMENT columns (which
         // are marked NO_QUERY_OUTPUT in queryOutputIndices). Defensive !isAutoIncrement
         // filter covers the identity-queryOutputIndices edge case.
         return getOrderedOutputColumns(true).stream()
                 .filter(col -> !col.isAutoIncrement())
+                .collect(Collectors.toList());
+    }
+
+    private String queryProducedColumnList() {
+        return queryProducedColumns().stream()
                 .map(col -> "`" + col.getName() + "`")
                 .collect(Collectors.joining(", "));
     }
@@ -1959,19 +1964,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
 
-        // NOTE: only output non-generated columns.
-        // Start with query-output order (preserves user's ORDER BY reorder effect), then
-        // append schema columns not produced by the query (e.g. AUTO_INCREMENT __ROW_ID__
-        // on non-aggregate IVM). Match the pre-existing behavior of showing hidden columns
-        // like __ROW_ID__ / __AGG_STATE__ in the DDL.
-        List<Column> orderedColumns = new ArrayList<>(getOrderedOutputColumns(true));
-        Set<String> alreadyIncluded = orderedColumns.stream()
-                .map(Column::getName)
-                .collect(Collectors.toSet());
-        getBaseSchemaWithoutGeneratedColumn().stream()
-                .filter(col -> !alreadyIncluded.contains(col.getName()))
-                .forEach(orderedColumns::add);
-        for (Column column : orderedColumns) {
+        // NOTE: only output non-generated columns, in query-output order.
+        // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
+        // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
+        // non-aggregate IVM) itself — listing those here breaks the round trip.
+        for (Column column : queryProducedColumns()) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
