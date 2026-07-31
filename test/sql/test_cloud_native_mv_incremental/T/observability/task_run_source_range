@@ -1,0 +1,68 @@
+-- name: test_ivm_source_range_dup_base @cloud
+-- On an internal base table the TVR endpoints are bookmark ids, so imvSourceTimestampRange only
+-- resolves if a bookmark id translates back to a commit time. Recorded endpoints are epoch millis;
+-- the oracle is the base table's own VISIBLE_VERSION_TIME, so they match on the second prefix.
+CREATE TABLE base_obs_sr (
+    k INT, v INT
+) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_obs_sr VALUES (1, 10), (2, 20);
+CREATE MATERIALIZED VIEW mv_obs_sr
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM base_obs_sr;
+-- First refresh establishes the PCT baseline and records no IVM source range.
+REFRESH MATERIALIZED VIEW mv_obs_sr WITH SYNC MODE;
+[UC]START_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_sr';
+INSERT INTO base_obs_sr VALUES (3, 30);
+REFRESH MATERIALIZED VIEW mv_obs_sr WITH SYNC MODE;
+[UC]END_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_sr';
+SELECT k, v FROM mv_obs_sr ORDER BY k;
+SELECT COUNT(*) AS incremental_runs_with_timestamp_range FROM information_schema.task_runs WHERE (EXTRA_MESSAGE LIKE '%mv_obs_sr%' OR DEFINITION LIKE '%mv_obs_sr%') AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceTimestampRange":{"default_catalog.${db[0]}.base_obs_sr":{"start":"${START_TS}', '%","end":"${END_TS}', '%');
+-- Same window keyed the same way, as bookmark ids.
+SELECT COUNT(*) AS incremental_runs_with_version_range FROM information_schema.task_runs WHERE (EXTRA_MESSAGE LIKE '%mv_obs_sr%' OR DEFINITION LIKE '%mv_obs_sr%') AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE '%"imvSourceVersionRange":{"default_catalog.${db[0]}.base_obs_sr":{"start":"%","end":"%';
+DROP MATERIALIZED VIEW mv_obs_sr;
+
+-- name: test_ivm_source_range_agg_base @cloud
+CREATE TABLE base_obs_agg (
+    k INT, s BIGINT SUM
+) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO base_obs_agg VALUES (1, 10), (2, 20);
+CREATE MATERIALIZED VIEW mv_obs_agg
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(s) AS total FROM base_obs_agg GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_obs_agg WITH SYNC MODE;
+[UC]START_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_agg';
+INSERT INTO base_obs_agg VALUES (1, 5), (3, 30);
+REFRESH MATERIALIZED VIEW mv_obs_agg WITH SYNC MODE;
+[UC]END_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_agg';
+SELECT k, total FROM mv_obs_agg ORDER BY k;
+SELECT COUNT(*) AS incremental_runs_with_timestamp_range FROM information_schema.task_runs WHERE (EXTRA_MESSAGE LIKE '%mv_obs_agg%' OR DEFINITION LIKE '%mv_obs_agg%') AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceTimestampRange":{"default_catalog.${db[0]}.base_obs_agg":{"start":"${START_TS}', '%","end":"${END_TS}', '%');
+DROP MATERIALIZED VIEW mv_obs_agg;
+
+-- name: test_ivm_source_range_pk_base @cloud
+-- PRIMARY KEY + CDC goes through the retractable refresh path, unlike the two cases above.
+CREATE TABLE base_obs_pk (
+    id INT NOT NULL, v BIGINT
+) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO base_obs_pk VALUES (1, 10), (2, 20), (3, 30);
+CREATE MATERIALIZED VIEW mv_obs_pk
+DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, v FROM base_obs_pk;
+REFRESH MATERIALIZED VIEW mv_obs_pk WITH SYNC MODE;
+[UC]START_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_pk';
+DELETE FROM base_obs_pk WHERE id = 1;
+UPDATE base_obs_pk SET v = 99 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_obs_pk WITH SYNC MODE;
+[UC]END_TS=SELECT cast(unix_timestamp(max(VISIBLE_VERSION_TIME)) as varchar) FROM information_schema.partitions_meta WHERE DB_NAME = '${db[0]}' AND TABLE_NAME = 'base_obs_pk';
+SELECT id, v FROM mv_obs_pk ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id, v FROM mv_obs_pk EXCEPT SELECT id, v FROM base_obs_pk) t;
+SELECT COUNT(*) AS incremental_runs_with_timestamp_range FROM information_schema.task_runs WHERE (EXTRA_MESSAGE LIKE '%mv_obs_pk%' OR DEFINITION LIKE '%mv_obs_pk%') AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceTimestampRange":{"default_catalog.${db[0]}.base_obs_pk":{"start":"${START_TS}', '%","end":"${END_TS}', '%');
+DROP MATERIALIZED VIEW mv_obs_pk;

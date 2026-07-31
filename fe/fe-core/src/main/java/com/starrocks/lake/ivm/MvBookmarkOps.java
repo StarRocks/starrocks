@@ -35,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Bookmark-side glue for IVM-on-Lake: lifecycle operations on Lake bookmarks
@@ -103,6 +104,16 @@ public final class MvBookmarkOps {
                         "to-snapshot bookmark not found: db=" + dbId + ", table=" + tableId
                                 + ", id=" + toSnapshotInclusive.getSnapshotId()));
         return BookmarkChangeTvrAdapter.toTvrTraits(base, head);
+    }
+
+    /**
+     * Commit time in epoch millis of the state {@code bookmarkId} pins. Empty once the bookmark has
+     * been reclaimed, which happens to every endpoint but the newest two.
+     */
+    public static Optional<Long> resolveCommitTimeMillis(long dbId, long tableId, long bookmarkId) {
+        BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        return bookmarkManager.findBookmarkById(dbId, tableId, bookmarkId)
+                .flatMap(Bookmark::getMaxVisibleVersionTimeMs);
     }
 
     /** Release every bookmark {@code mv} pins on its internal-catalog base tables. */

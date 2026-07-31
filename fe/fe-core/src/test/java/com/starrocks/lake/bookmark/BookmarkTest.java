@@ -56,5 +56,14 @@ public class BookmarkTest {
 
         assertEquals(2, b.getLogicalPartitionCount());
         assertEquals(3, b.getPhysicalPartitionCount());
+
+        assertEquals(Optional.of(1200L), b.getMaxVisibleVersionTimeMs());
+    }
+
+    @Test
+    public void testMaxVisibleVersionTimeMsWithoutPartitions() {
+        Bookmark b = new Bookmark(1L, 2L, 30L, 9999L, new HashMap<>());
+
+        assertEquals(Optional.empty(), b.getMaxVisibleVersionTimeMs());
     }
 }

@@ -143,6 +143,17 @@ public final class Bookmark {
                 .map(PhysicalPartitionMeta::getVisibleVersion);
     }
 
+    /**
+     * Time of the table state this bookmark captured, unlike {@link #getBookmarkTimeMs()} which is
+     * when the bookmark itself was created.
+     */
+    public Optional<Long> getMaxVisibleVersionTimeMs() {
+        return partitionsMeta.values().stream()
+                .flatMap(inner -> inner.values().stream())
+                .map(PhysicalPartitionMeta::getVisibleVersionTimeMs)
+                .max(Long::compare);
+    }
+
     public int getLogicalPartitionCount() {
         return partitionsMeta.size();
     }

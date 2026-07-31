@@ -17,6 +17,8 @@ package com.starrocks.server;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -33,6 +35,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +45,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link LocalMetastore}'s IVM-on-Lake bookmark glue:
- * {@code acquireTvrSnapshot}, {@code listTableDeltaTraits}, plus the bookmark
+ * {@code acquireTvrSnapshot}, {@code listTableDeltaTraits},
+ * {@code getVersionCommitTimeMillis}, plus the bookmark
  * release on MV / DB drop. Builds on {@link BookmarkTestBase}'s shared
  * mini-cluster — pure dispatch-level coverage, end-to-end IVM refresh is
  * covered elsewhere.
@@ -167,6 +171,59 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
         assertTrue(traits.get(0).isAppendOnly());
     }
 
+    /* ---------- getVersionCommitTimeMillis ---------- */
+
+    @Test
+    public void testGetVersionCommitTimeMillis_returnsNewestPartitionVisibleVersionTime() throws Exception {
+        long tableId = createDefaultTable();
+        setVisibleVersionTimes(tableId, List.of(1_700_000_000_000L, 1_700_000_005_000L));
+        long bookmarkId = bookmarkManager()
+                .create(dbId, tableId, BookmarkHolder.forMv(new MvId(dbId, 9006L))).getBookmarkId();
+
+        assertEquals(Optional.of(1_700_000_005_000L),
+                localMetastore().getVersionCommitTimeMillis(DB_NAME, getTableById(tableId), bookmarkId));
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillis_keepsBookmarkTimeAfterTableAdvances() throws Exception {
+        long tableId = createDefaultTable();
+        setVisibleVersionTimes(tableId, List.of(1_700_000_000_000L, 1_700_000_001_000L));
+        long bookmarkId = bookmarkManager()
+                .create(dbId, tableId, BookmarkHolder.forMv(new MvId(dbId, 9007L))).getBookmarkId();
+
+        setVisibleVersionTimes(tableId, List.of(1_800_000_000_000L, 1_800_000_001_000L));
+
+        assertEquals(Optional.of(1_700_000_001_000L),
+                localMetastore().getVersionCommitTimeMillis(DB_NAME, getTableById(tableId), bookmarkId));
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillis_releasedBookmarkIsEmpty() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkHolder holder = BookmarkHolder.forMv(new MvId(dbId, 9008L));
+        long bookmarkId = bookmarkManager().create(dbId, tableId, holder).getBookmarkId();
+        bookmarkManager().releaseReference(dbId, tableId, bookmarkId, holder.getHolderId());
+
+        assertEquals(Optional.empty(),
+                localMetastore().getVersionCommitTimeMillis(DB_NAME, getTableById(tableId), bookmarkId));
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillis_nonLakeTableIsEmpty() {
+        assertEquals(Optional.empty(),
+                localMetastore().getVersionCommitTimeMillis(DB_NAME, new OlapTable(), 1L));
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillis_unknownDbIsEmpty() throws Exception {
+        long tableId = createDefaultTable();
+        long bookmarkId = bookmarkManager()
+                .create(dbId, tableId, BookmarkHolder.forMv(new MvId(dbId, 9009L))).getBookmarkId();
+
+        assertEquals(Optional.empty(),
+                localMetastore().getVersionCommitTimeMillis("no_such_db", getTableById(tableId), bookmarkId));
+    }
+
     /* ---------- drop hooks ---------- */
 
     @Test
@@ -185,6 +242,16 @@ public class LocalMetastoreLakeBookmarkTest extends BookmarkTestBase {
     }
 
     /* ---------- helpers ---------- */
+
+    private void setVisibleVersionTimes(long tableId, List<Long> times) {
+        OlapTable table = (OlapTable) localMetastore().getDb(dbId).getTable(tableId);
+        int i = 0;
+        for (Partition partition : table.getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                physicalPartition.setVisibleVersion(physicalPartition.getVisibleVersion(), times.get(i++));
+            }
+        }
+    }
 
     private String createMvOver(String inDb, long baseTableId) throws Exception {
         OlapTable base = (OlapTable) localMetastore().getDb(inDb).getTable(baseTableId);

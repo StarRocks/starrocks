@@ -6025,4 +6025,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         return MvBookmarkOps.computeDeltaTraits(db.getId(), table.getId(), fromSnapshotExclusive, toSnapshotInclusive);
     }
+
+    /**
+     * {@code version} is a bookmark id here, not an Iceberg-style snapshot id: the internal
+     * catalog's TVR version space is the Lake bookmark id space.
+     */
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            return Optional.empty();
+        }
+        Database db = getDb(dbName);
+        if (db == null) {
+            return Optional.empty();
+        }
+        return MvBookmarkOps.resolveCommitTimeMillis(db.getId(), table.getId(), version);
+    }
 }
