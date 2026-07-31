@@ -32,6 +32,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -47,6 +48,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -64,6 +66,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -719,6 +722,40 @@ public class SplitTabletJobTest {
             }
         }
         return result;
+    }
+
+    @Test
+    public void testRunCleaningCancelsPreviousCompactions() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        splitJob.endTransactionId = 5000L;
+
+        Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
+        AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                    Set<Long> includePartitionIds) {
+                includePartitionIdsArg.set(includePartitionIds);
+                return ignoredCompactionTxnIds;
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+                    Set<Long> excludeTransactionIds) {
+                excludeTxnIdsArg.set(excludeTransactionIds);
+                return false;
+            }
+        };
+
+        // The cleaning phase cancels the previous compactions on the resharded partitions and forwards
+        // the returned ignored txn ids to the wait; while the wait is unsatisfied the job stays CLEANING.
+        splitJob.runCleaningJob();
+        Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+        Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {

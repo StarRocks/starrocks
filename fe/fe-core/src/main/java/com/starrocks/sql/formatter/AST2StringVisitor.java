@@ -772,14 +772,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         return sqlBuilder.toString();
     }
 
-    @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    /**
+     * Renders the bare {@code VALUES (...), (...)} list, without the parentheses that
+     * {@link #visitValues} wraps around it for derived-table position.
+     */
+    protected String visitValueRows(ValuesRelation node) {
         StringBuilder sqlBuilder = new StringBuilder();
-        if (node.isNullValues()) {
-            return null;
-        }
-
-        sqlBuilder.append("(VALUES");
+        sqlBuilder.append("VALUES");
         List<String> values = new ArrayList<>();
         for (int i = 0; i < node.getRows().size(); ++i) {
             StringBuilder rowBuilder = new StringBuilder();
@@ -791,7 +790,20 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             values.add(rowBuilder.toString());
         }
         sqlBuilder.append(Joiner.on(", ").join(values));
-        sqlBuilder.append(")");
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        StringBuilder sqlBuilder = new StringBuilder();
+        if (node.isNullValues()) {
+            return null;
+        }
+
+        // Parenthesized: reaching a ValuesRelation through the generic relation path means it sits in
+        // derived-table position, as in `FROM (VALUES (1), (2)) t`. The INSERT source position wants the
+        // bare list instead and goes through visitInsertSource().
+        sqlBuilder.append("(").append(visitValueRows(node)).append(")");
         if (node.getAlias() != null) {
             sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
@@ -1008,6 +1020,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 org.apache.commons.collections4.CollectionUtils.isNotEmpty(
                         insert.getTargetPartitionNames().getPartitionNames())) {
             List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+            // Same namespace distinction as in the FROM clause: without the qualifier this names a
+            // formal partition, i.e. a different write target.
+            if (insert.getTargetPartitionNames().isTemp()) {
+                sb.append("TEMPORARY ");
+            }
             sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
         }
 
@@ -1024,9 +1041,28 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         // source
         if (insert.getQueryStatement() != null) {
-            sb.append(visit(insert.getQueryStatement()));
+            sb.append(visitInsertSource(insert.getQueryStatement(), context));
         }
         return sb.toString();
+    }
+
+    /**
+     * INSERT takes a bare {@code VALUES (...), (...)} list as its source; the parenthesized form
+     * {@link #visitValues} emits for derived-table position does not parse here.
+     */
+    protected String visitInsertSource(QueryStatement queryStatement, Void context) {
+        QueryRelation relation = queryStatement.getQueryRelation();
+        // Anything the generic path decorates the relation with (CTEs, alias, ORDER BY, LIMIT) falls back
+        // to visitQueryStatement so those clauses are not dropped.
+        if (relation instanceof ValuesRelation
+                && !relation.hasWithClause()
+                && relation.getAlias() == null
+                && !relation.hasOrderByClause()
+                && relation.getLimit() == null
+                && !((ValuesRelation) relation).isNullValues()) {
+            return visitValueRows((ValuesRelation) relation);
+        }
+        return visit(queryStatement);
     }
 
     protected void visitInsertLabel(String label, StringBuilder sb) {

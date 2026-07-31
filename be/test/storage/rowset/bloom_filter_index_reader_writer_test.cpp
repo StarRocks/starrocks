@@ -165,6 +165,19 @@ protected:
     OlapReaderStatistics _stats;
 };
 
+TEST_F(BloomFilterIndexReaderWriterTest, test_ngram_zero_gram_num_is_rejected) {
+    BloomFilterOptions bf_options;
+    bf_options.use_ngram = true;
+    bf_options.gram_num = 0;
+
+    std::unique_ptr<BloomFilterIndexWriter> writer;
+    Status status = BloomFilterIndexWriter::create(bf_options, get_type_info(TYPE_VARCHAR), &writer);
+
+    // Do not silently write an empty index for malformed legacy metadata.
+    ASSERT_TRUE(status.is_invalid_argument()) << status;
+    ASSERT_EQ(nullptr, writer);
+}
+
 TEST_F(BloomFilterIndexReaderWriterTest, test_int) {
     size_t num = 1024 * 3 - 1;
     int* val = new int[num];

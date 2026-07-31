@@ -75,7 +75,7 @@ In actual business scenarios, data volume and data distribution affect the memor
 
     create table test_uv(
     dt date,
-    id int
+    id int,
     uv_set hll hll_union)
     distributed by hash(id);
 

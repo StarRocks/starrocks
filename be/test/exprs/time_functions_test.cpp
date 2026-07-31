@@ -4493,12 +4493,12 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeNonFragmentLocalScope) {
 
         auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
-        Status prepare_status =
-                TimeFunctions::unixtime_to_datetime_prepare(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok());
 
         Status close_status =
-                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(close_status.ok());
 
         delete fn_ctx;

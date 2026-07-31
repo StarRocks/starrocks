@@ -229,13 +229,16 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         del_sst_info = FileInfo{std::move(sst_name), sst_filesize, std::move(sst_encryption_meta)};
     }
     {
-        // Use _dels_mutex to protect _dels concurrenctly append by multiple threads. Append the del file and
-        // its tombstone sstable together so _del_ssts stays index-aligned with _dels. Always append a
+        // Use _dels_mutex to protect _dels concurrently appended by multiple threads. Append the del file
+        // and its tombstone sstable together so _del_ssts stays index-aligned with _dels. Always append a
         // del_ssts entry (an empty FileInfo when no sstable was built) to keep the parallel arrays aligned.
         std::lock_guard lg(_dels_mutex);
         _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
-        // Keep _del_op_offsets positionally aligned with _dels.
+        // Keep _del_op_offsets and _del_num_rows positionally aligned with _dels. The tombstone
+        // count is recorded here (rather than on FileInfo) so it stays a del-specific stat, mirroring
+        // how op_offset is carried; it is later accounted toward the PK index rebuild-rows threshold.
         _del_op_offsets.emplace_back(op_offset);
+        _del_num_rows.emplace_back(static_cast<int64_t>(deletes.size()));
         _del_ssts.emplace_back(std::move(del_sst_info));
         _del_sst_ranges.emplace_back(std::move(del_sst_range));
     }

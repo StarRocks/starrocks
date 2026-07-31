@@ -31,7 +31,6 @@ public:
     ~TableFunctionNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status reset(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;

@@ -26,7 +26,7 @@ JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx) {
     if (ctx == nullptr) {
         return nullptr;
     }
-    return reinterpret_cast<JavaUDAFUniqueContext*>(ctx->get_function_state(FunctionContext::THREAD_LOCAL));
+    return reinterpret_cast<JavaUDAFUniqueContext*>(ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
 
 void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx) {
@@ -37,7 +37,7 @@ void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniq
     if (old_ctx != nullptr) {
         delete old_ctx;
     }
-    ctx->set_function_state(FunctionContext::THREAD_LOCAL, udaf_ctx.release());
+    ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, udaf_ctx.release());
 }
 
 void clear_java_udaf_states(FunctionContext* ctx) {
@@ -61,7 +61,7 @@ void destroy_java_udaf_context(FunctionContext* ctx) {
     }
 
     clear_java_udaf_states(ctx);
-    ctx->set_function_state(FunctionContext::THREAD_LOCAL, nullptr);
+    ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, nullptr);
     delete udaf_ctx;
 }
 

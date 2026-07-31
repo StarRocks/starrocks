@@ -5857,7 +5857,106 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
+// The reported data loss: a reshard-consumed tablet whose own metadata has already been vacuumed away
+// keeps only a txn log, so BE cannot tell it was range-distributed and used to delete the data files that
+// log references -- files the split children are still reading. FE knows from the table definition and
+// says so, which is what has to stop the deletion now.
 // NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_keeps_txnlog_data_when_fe_says_range) {
+    const std::string shared = "00000000011259e4_33dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared);
+
+    // Tablet 900 has NO metadata left -- only a lingering split txn log referencing the shared file.
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 7000,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {"filename": "00000000011259e4_33dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}
+                    ]
+                }
+            }
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    request.set_is_range_distribution(true);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // The data file survives; the txn log itself belongs to the dropped tablet and goes.
+    EXPECT_TRUE(file_exist(shared));
+    EXPECT_FALSE(file_exist(txn_log_filename(900, 7000)));
+}
+
+// Same shape, but the table is not range-distributed: the data must still be deleted, so the new flag
+// cannot be a blanket "keep everything".
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_deletes_txnlog_data_when_fe_says_not_range) {
+    const std::string owned = "00000000011459e4_77dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(owned);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 7001,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {"filename": "00000000011459e4_77dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}
+                    ]
+                }
+            }
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    request.set_is_range_distribution(false);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(owned));
+    EXPECT_FALSE(file_exist(txn_log_filename(900, 7001)));
+}
+
+// An older FE does not send the field at all. BE then falls back to what it did before: the answer comes
+// from the dropped tablet's own metadata, and a tablet that still carries a range keeps its data.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_absent_flag_falls_back_to_metadata) {
+    const std::string shared = "00000000011559e4_88dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 2,
+            "range": {},
+            "rowsets": [
+                {"segment_metas": [{"filename": "00000000011559e4_88dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}]}
+            ]
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    // is_range_distribution deliberately not set.
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_TRUE(file_exist(shared));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(900, 2)));
+}
+
 TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_metadata_data_files) {
     // Simulate deleting old range distribution tablets after tablet split.
     // The latest metadata contains data files (segments, delvecs, sstables, del files, dcg files)

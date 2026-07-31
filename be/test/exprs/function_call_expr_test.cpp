@@ -457,4 +457,41 @@ TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
     ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
+TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, "legacy-ngram-index");
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext expr_context(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&expr_context};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+    std::unique_ptr<BloomFilter> bf;
+    ASSERT_OK(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+    ASSERT_OK(bf->init(16, 0.05, HashStrategyPB::HASH_MURMUR3_X64_64));
+
+    // Populate the expression-local cache from a valid rowset first. The
+    // empty bloom filter makes the valid 3-gram probe reject the page.
+    EXPECT_FALSE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    // A later legacy rowset must still leave the page unpruned, rather than
+    // using the ngrams cached for the earlier valid rowset.
+    opts.index_gram_num = 0;
+    EXPECT_TRUE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
 } // namespace starrocks
