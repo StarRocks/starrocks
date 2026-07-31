@@ -371,6 +371,27 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
+<<<<<<< HEAD
+=======
+### enable_rpc_compress_overflow_skip
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: シリアライズされた chunk のサイズが圧縮コーデックの最大入力サイズを超えた場合の動作を制御します。`true`（デフォルト）に設定すると、StarRocks は警告ログを記録して圧縮をスキップし、非圧縮のままデータを送信します。`false` に設定すると、StarRocks は `InternalError` を返して RPC を中断します。
+- 導入バージョン: -
+
+### enable_threadpool_catch_task_exception
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 動的に変更可能: はい
+- 説明: ThreadPool のワーカースレッドが、タスクがスローした例外を飲み込んで次のタスクの実行を続けるかどうかを指定します。`false`（デフォルト）に設定すると、タスク本体を囲む catch 句が存在しないため、タスクからエスケープした例外はハンドラーを見つけられず、スローされた地点で BE プロセスを終了させます。`true` に設定すると、例外は ERROR レベルでログに記録され、プロセス全体のメトリクス [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) が加算され、ワーカースレッドは次のタスクに進むため、プロセスは存続します。ただし、ワーカースレッドが存続することはタスクが例外安全であることを意味しません。タスクが `DeferOp` またはデストラクターから完了を通知し、結果を記録する文がスキップされた場合、未設定の `Status` は OK として読み取られるため、待機側はそのタスクを成功と見なします。この場合、障害はエラーではなく誤った結果を生成します。クラッシュループを緩和する必要がある場合にのみ `true` に設定し、該当する障害がサイレントになることを想定してください。
+- 導入バージョン: v4.2.0
+
+>>>>>>> 546210a3be ([BugFix] Do not swallow task exceptions in ThreadPool by default (#76863))
 ### ssl_private_key_path
 
 - デフォルト: An empty string
