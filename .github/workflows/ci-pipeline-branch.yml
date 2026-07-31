@@ -255,7 +255,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [centos7, ubuntu, rocky9]
+        linux: [rocky9, ubuntu]
     steps:
       - name: clean
         run: |
@@ -296,7 +296,7 @@ jobs:
     if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
-      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      rocky9_image_cache_id: ${{ steps.info.outputs.rocky9_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
       - name: Download Thirdparty Artifact
@@ -323,7 +323,7 @@ jobs:
           # `continue-on-error: true`, silent upload-artifact failures, and
           # empty image_cache.info files.
           missing=()
-          for platform in centos7 ubuntu; do
+          for platform in rocky9 ubuntu; do
             f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
             if [[ ! -s "$f" ]]; then
               missing+=("${platform}")
@@ -338,12 +338,12 @@ jobs:
         id: info
         run: |
           if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
-            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-rocky9/image_cache.info")
+            echo "rocky9_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
             image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           else
-            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "rocky9_image_cache_id=" >> $GITHUB_OUTPUT
             echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
           fi
 
@@ -355,6 +355,8 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.rocky9_image_cache_id }}
+      LINUX_DISTRO: rocky9
     steps:
       - name: BRANCH INFO
         id: branch
@@ -369,10 +371,10 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+              export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID
@@ -498,6 +500,8 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+      LINUX_DISTRO: ubuntu
     steps:
       - name: clean
         run: |
@@ -518,12 +522,11 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}"
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: Clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID
