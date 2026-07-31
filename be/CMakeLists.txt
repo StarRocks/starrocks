@@ -192,6 +192,7 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_GLIBC_COMPAT "Build starrocks_be with the glibc compatibility shim, so it runs on hosts with an older glibc than the build image's" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
 option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
