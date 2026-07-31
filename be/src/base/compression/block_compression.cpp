@@ -45,7 +45,6 @@
 #include "base/compression/lzo_decompressor_registry.h"
 #include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
-#include "common/config_compression_fwd.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 
@@ -859,8 +858,9 @@ public:
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
 
     // decompress a frame referencing a per-column compression dictionary.
-    Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict) const override {
-        return _decompress(input, output, ddict);
+    Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict,
+                      bool use_ctx_cache = true) const override {
+        return _decompress(input, output, ddict, use_ctx_cache);
     }
 
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
@@ -991,7 +991,8 @@ private:
         return Status::OK();
     }
 
-    Status _decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict = nullptr) const {
+    Status _decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict = nullptr,
+                       bool use_ctx_cache = true) const {
         if (output->data == nullptr) {
             // We may pass a NULL 0-byte output buffer but some zstd versions
             // demand a valid pointer:
@@ -1001,7 +1002,7 @@ private:
             output->size = 0;
         }
 
-        if (ddict != nullptr && config::enable_compression_dict_ctx_cache) {
+        if (ddict != nullptr && use_ctx_cache) {
             // Dictionary path: use a thread-local context that already has this
             // dictionary loaded, so consecutive pages of a column do not each pay
             // to re-establish the dictionary session. See DictDCtxCache above.
