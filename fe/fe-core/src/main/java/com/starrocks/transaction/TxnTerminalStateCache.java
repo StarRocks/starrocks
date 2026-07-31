@@ -116,6 +116,9 @@ class TxnTerminalStateCache {
     }
 
     private void insert(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
+        // Apply the current config first: a runtime reduction of the cap only evicts one entry per
+        // insert via removeEldestEntry, so drain any excess here; if disabled, clear outright.
+        trimToCapacity();
         if (Config.transaction_terminal_state_cache_num <= 0) {
             return;
         }
@@ -142,21 +145,32 @@ class TxnTerminalStateCache {
      * byTxnId, so nothing is retained outside it.
      */
     synchronized List<Record> snapshot() {
+        trimToCapacity(); // never serialize more than the configured cap into the image
         return new ArrayList<>(byTxnId.values());
     }
 
     /**
-     * @return the cached outcome for {@code txnId}, or null if absent or too old.
+     * @return the cached outcome for {@code txnId}, or null if absent or too old. An expired (or
+     * disabled-cache) record is pruned on access rather than left to occupy capacity and evict still
+     * valid entries after byTxnId.get touches it to most-recently-used.
      */
     synchronized Record getByTxnId(long txnId) {
         Record r = byTxnId.get(txnId);
-        return valid(r) ? r : null;
+        if (r == null) {
+            return null;
+        }
+        if (!valid(r)) {
+            removeRecord(r);
+            return null;
+        }
+        return r;
     }
 
     /**
      * @return the latest cached outcome for {@code label}, or null if absent or too old. Resolving
      * through byTxnId.get touches the record in the LRU, so an actively label-queried outcome stays
-     * resident under the single capacity rather than aging out as if unused.
+     * resident under the single capacity rather than aging out as if unused. An expired record (or a
+     * dangling label pointer) is pruned on access.
      */
     synchronized Record getByLabel(String label) {
         Long txnId = labelToTxnId.get(label);
@@ -164,7 +178,15 @@ class TxnTerminalStateCache {
             return null;
         }
         Record r = byTxnId.get(txnId);
-        return valid(r) ? r : null;
+        if (r == null) {
+            labelToTxnId.remove(label); // dangling pointer; should not happen, prune defensively
+            return null;
+        }
+        if (!valid(r)) {
+            removeRecord(r);
+            return null;
+        }
+        return r;
     }
 
     private boolean valid(Record r) {
@@ -185,5 +207,31 @@ class TxnTerminalStateCache {
 
     synchronized int size() {
         return byTxnId.size();
+    }
+
+    // Remove a record from the id store and drop its label pointer iff the pointer targets it (a newer
+    // txn reusing the same label keeps its own pointer). Mirrors removeEldestEntry's cleanup.
+    private void removeRecord(Record r) {
+        byTxnId.remove(r.txnId);
+        Long mapped = labelToTxnId.get(r.label);
+        if (mapped != null && mapped == r.txnId) {
+            labelToTxnId.remove(r.label);
+        }
+    }
+
+    // Bring the cache into line with the current config: clear everything when disabled, otherwise
+    // evict the eldest (least-recently-used) entries until size <= cap. removeEldestEntry only trims
+    // one entry per insert, so a runtime reduction of the cap needs this proactive drain.
+    private void trimToCapacity() {
+        int capacity = Config.transaction_terminal_state_cache_num;
+        if (capacity <= 0) {
+            byTxnId.clear();
+            labelToTxnId.clear();
+            return;
+        }
+        while (byTxnId.size() > capacity) {
+            Record eldest = byTxnId.values().iterator().next(); // access-order: eldest first
+            removeRecord(eldest);
+        }
     }
 }

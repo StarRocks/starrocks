@@ -192,4 +192,40 @@ public class TxnTerminalStateCacheTest {
         assertEquals(0, cache.size());
         assertNull(cache.getByTxnId(1L));
     }
+
+    // Reducing the cap at runtime must drain the cache down to the new bound (not stay high, evicting
+    // only one per insert), so the cache and the image snapshot honor the reduced configuration.
+    @Test
+    public void testRuntimeCapReductionDrainsToNewCap() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        for (long i = 0; i < 100; i++) {
+            cache.put(terminalTxn(i, "l" + i, TransactionStatus.VISIBLE, now));
+        }
+        assertEquals(100, cache.size());
+
+        Config.transaction_terminal_state_cache_num = 10; // shrink at runtime
+        cache.put(terminalTxn(999L, "l999", TransactionStatus.VISIBLE, now));
+        assertEquals(10, cache.size());
+        assertTrue(cache.snapshot().size() <= 10);
+    }
+
+    // An entry that was valid on admission but has since aged past label_keep_max_second must be pruned
+    // on access, not just reported absent, so it stops occupying capacity and evicting valid entries.
+    @Test
+    public void testExpiredRecordPrunedOnAccess() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        cache.put(terminalTxn(1L, "a", TransactionStatus.VISIBLE, now - 100_000L)); // 100s old, still valid
+        assertEquals(1, cache.size());
+
+        Config.label_keep_max_second = 10; // now the 100s-old record is past the window
+        assertNull(cache.getByTxnId(1L));  // expired -> pruned, not just hidden
+        assertEquals(0, cache.size());
+        assertNull(cache.getByLabel("a")); // label pointer pruned too
+    }
 }
