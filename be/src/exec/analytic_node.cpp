@@ -109,8 +109,8 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         // but the same partitioning and order by clauses. So only interpolate when DOP == 1; otherwise run the
         // analytic directly on the parallel streams, which is correct.
         if (upstream_source_op->degree_of_parallelism() == 1) {
-            ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
-                                                                                    ops_with_sink, _partition_exprs);
+            ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(
+                    runtime_state(), id(), ops_with_sink, _partition_exprs);
         }
     } else if (_use_hash_based_partition) {
         bool has_outer_join_child =
