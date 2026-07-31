@@ -223,8 +223,8 @@ Status OlapScanTabletAdaptor::init_read_columns(const std::vector<SlotDescriptor
     return init_read_schema(_tablet_schema, slots, &_read_schema);
 }
 
-auto OlapScanTabletAdaptor::get_iterator(int64_t rssid,
-                                         SparseRange<rowid_t> row_id_range) -> StatusOr<ChunkIteratorPtr> {
+auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row_id_range)
+        -> StatusOr<ChunkIteratorPtr> {
     RowsetSharedPtr target;
     int32_t segment_id;
 
@@ -325,8 +325,8 @@ Status LakeScanTabletAdaptor::init_read_columns(const std::vector<SlotDescriptor
     return init_read_schema(_tablet_schema, slots, &_read_schema);
 }
 
-auto LakeScanTabletAdaptor::get_iterator(int64_t rssid,
-                                         SparseRange<rowid_t> row_id_range) -> StatusOr<ChunkIteratorPtr> {
+auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row_id_range)
+        -> StatusOr<ChunkIteratorPtr> {
     if (rssid < 0 || rssid > std::numeric_limits<uint32_t>::max()) {
         return Status::InternalError(fmt::format("invalid lake rssid:{}", rssid));
     }
