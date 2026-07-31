@@ -15,6 +15,7 @@
 #include "storage/lake/compaction_scheduler.h"
 
 #include <atomic>
+#include <system_error>
 #include <thread>
 
 #include "base/bthreads/util.h"
@@ -606,6 +607,59 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_submit_failure_comp
 
     // The real submit error is surfaced, not a generic shutdown status.
     EXPECT_NE(0, response.status().status_code());
+}
+
+// Once the IO-heavy task creation is offloaded to `_threads`, an exception escaping it stops being a crash
+// and becomes a silent hang: ThreadPool::dispatch_thread only logs an escaping exception (it does not run
+// the runnable's cancel()), compact() has already released the ClosureGuard, and ~CompactionTaskCallback()
+// does not run `done`. Nothing would ever complete the RPC, so the FE would block until its compact timeout.
+//
+// Inject the #76882 exception itself -- std::system_error("Resource deadlock avoided"), what a pthread rwlock
+// returning EDEADLK raises through std::shared_mutex -- into create_parallel_tasks() and assert the RPC still
+// completes. process_parallel_compaction() must absorb it and fall back to normal compaction, which keeps one
+// finish_task() per tablet id and therefore still runs `done`. Both handlers are exercised: the std::exception
+// one and the catch-all that covers a foreign exception thrown through the same call.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes_rpc) {
+    struct ForeignException {};
+
+    for (bool foreign : {false, true}) {
+        std::atomic<bool> injected{false};
+        auto* sync_point = SyncPoint::GetInstance();
+        sync_point->SetCallBack(
+                "CompactionScheduler::process_parallel_compaction:create_parallel_tasks", [&](void* /*arg*/) {
+                    injected.store(true);
+                    if (foreign) {
+                        throw ForeignException{};
+                    }
+                    throw std::system_error(std::make_error_code(std::errc::resource_deadlock_would_occur),
+                                            "Resource deadlock avoided");
+                });
+        sync_point->EnableProcessing();
+        SCOPED_CLEANUP({
+            sync_point->ClearCallBack("CompactionScheduler::process_parallel_compaction:create_parallel_tasks");
+            sync_point->DisableProcessing();
+        });
+
+        auto txn_id = next_id();
+        auto latch = std::make_shared<CountDownLatch>(1);
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(_tablet_metadata->id());
+        request.set_timeout_ms(60 * 1000);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        auto* parallel_config = request.mutable_parallel_config();
+        parallel_config->set_enable_parallel(true);
+        parallel_config->set_max_parallel_per_tablet(3);
+        parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+        auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+        _compaction_scheduler.compact(nullptr, &request, &response, cb);
+        // The exception was absorbed into the fallback path, which completes the RPC; wait() must not hang.
+        latch->wait();
+
+        EXPECT_TRUE(injected.load());
+    }
 }
 
 } // namespace starrocks::lake
