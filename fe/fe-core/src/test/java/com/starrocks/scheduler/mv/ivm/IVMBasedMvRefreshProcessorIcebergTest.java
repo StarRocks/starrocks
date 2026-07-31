@@ -1490,6 +1490,29 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     /**
+     * A run skipped because no base table changed must still record the window: every delta is a
+     * point range, which is the evidence that the bookmark had caught up with the base table head.
+     */
+    @Test
+    public void testImvSourceVersionRangeRecordedOnSkippedRun() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        // Live version equal to the seeded baseline, so the delta is (0, 0] and the run is skipped.
+        advanceTableVersionTo(0L);
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        Assertions.assertEquals(Map.of("start", "0", "end", "0"),
+                extraMessage.getImvSourceVersionRange().get("iceberg0.unpartitioned_db.t0"),
+                "a skipped run should record start == end, got: "
+                        + extraMessage.getImvSourceVersionRange());
+    }
+
+    /**
      * When IVM planning fails after the TVR deltas were staged and the hybrid processor falls
      * back to PCT, the task run must not keep source ranges from the abandoned IVM attempt.
      */
