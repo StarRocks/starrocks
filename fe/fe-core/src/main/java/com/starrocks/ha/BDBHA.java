@@ -39,13 +39,13 @@ import com.google.common.collect.Lists;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.Get;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationResult;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.ReadOptions;
 import com.sleepycat.je.rep.MasterStateException;
-import com.sleepycat.je.rep.MasterTransferFailureException;
 import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationGroup;
@@ -165,9 +165,14 @@ public class BDBHA implements HAProtocol {
             LOG.info("transfer leader to {} (force={}, timeoutMs={}) succeeded, new master is {}",
                     nodeName, force, timeoutMs, winner);
             return winner;
-        } catch (MasterTransferFailureException | UnknownMasterException e) {
+        } catch (DatabaseException | IllegalStateException | IllegalArgumentException e) {
+            // Broader than the two declared checked exceptions on purpose: transferMaster also surfaces
+            // unchecked JE failures - notably MemberNotFoundException when the target was just ADDed and
+            // its membership is not quorum-acked yet (isAlive()/role pre-checks all pass in that window) -
+            // which would otherwise reach the user as raw JE text with no logging or context.
             LOG.warn("failed to transfer leader to {} (force={})", nodeName, force, e);
-            throw new RuntimeException("failed to transfer leader to " + nodeName + ": " + e.getMessage(), e);
+            throw new RuntimeException("failed to transfer leader to " + nodeName + ": " + e.getMessage()
+                    + " (the current leader is unchanged; retry after the target is fully joined and caught up)", e);
         }
     }
 

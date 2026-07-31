@@ -48,6 +48,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -165,11 +166,21 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitTransferLeaderClause(TransferLeaderClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                if (RunMode.isSharedDataMode()) {
+                    // Graceful in-place demotion is not supported in shared-data mode (StarMgr writes its
+                    // own journal outside the WAL fence); the transfer would succeed but the old leader
+                    // would exit and restart instead of demoting in place. Reject up front with the
+                    // manual alternative rather than surprise the operator with a process restart.
+                    throw new DdlException("ALTER SYSTEM TRANSFER LEADER is not supported in shared-data mode; "
+                            + "to transfer leadership, restart the current leader FE to trigger an election");
+                }
                 String host = clause.getHost();
                 int port = clause.getPort();
                 Frontend target = null;
                 for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null)) {
-                    if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
+                    // NetUtils.isSameIP instead of bare equals so non-canonical IP text still matches
+                    // (e.g. IPv6 "::1" vs "0:0:0:0:0:0:0:1"), consistent with DROP FOLLOWER's lookup.
+                    if (NetUtils.isSameIP(fe.getHost(), host) && fe.getEditLogPort() == port) {
                         target = fe;
                         break;
                     }

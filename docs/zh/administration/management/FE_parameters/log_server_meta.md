@@ -1471,7 +1471,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否动态: 是
 - 描述: Follower 激活成为 Leader 时,等待其元数据回放(replay)线程排空并停止的超时时间,之后该节点才开始作为 Leader 写 journal。若回放线程在该时间内仍未停止(例如某个回放 applier 卡在一把拿不到的锁上),FE 进程会被终止以进行干净重启;因为在 replayer 仍在 apply journal 条目时激活为 Leader 会导致双重 apply、损坏元数据。追平到最新元数据是由后续的 journal replay 单独完成的,不受该超时约束。
-- 引入版本: v4.1
+- 引入版本: v4.2.0
 
 ### `leader_demotion_drain_timeout_sec`
 
@@ -1480,7 +1480,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否动态: 是
 - 描述: Leader 降级期间,用于封存并停止 journal writer、以及等待在途的 leader WAL apply 排空的超时时间。若在该时间内无法完成 journal writer 的封存,降级阶段会失败并终止 FE 进程以进行干净重启,以防旧 leader 的写绕过 WAL-apply fence。当降级时封存 journal writer 或排空在途 apply 所需时间超出默认值时,可调大该值。
-- 引入版本: v4.1
+- 引入版本: v4.2.0
 
 ### `lock_checker_interval_second`
 

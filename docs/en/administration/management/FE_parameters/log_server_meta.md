@@ -1472,7 +1472,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Timeout for a follower activating as leader to wait for its metadata replay thread to drain and stop before the node starts writing the journal. If the replay thread does not stop within this time (for example, a replay applier pinned on a lock it cannot acquire), the FE process is terminated for a clean restart, because activating as leader while the replayer is still applying journal entries would double-apply and corrupt metadata. Catching up to the latest metadata happens separately during journal replay and is not bounded by this timeout.
-- Introduced in: v4.1
+- Introduced in: v4.2.0
 
 ### `leader_demotion_drain_timeout_sec`
 
@@ -1481,7 +1481,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Timeout used during leader demotion to seal and stop the journal writer and to wait for in-flight leader WAL applies to drain. If the journal writer cannot be sealed within this time, the demotion stage fails and the FE process is terminated for a clean restart, rather than let a stale leader's write slip past the WAL-apply fence. Increase this if sealing the journal writer or draining in-flight applies routinely needs more than the default during demotion.
-- Introduced in: v4.1
+- Introduced in: v4.2.0
 
 ### `lock_checker_interval_second`
 

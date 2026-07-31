@@ -1463,7 +1463,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：秒
 - 変更可能：Yes
 - 説明：Follower が Leader に昇格する際、ノードが journal の書き込みを開始する前に、メタデータ回放（replay）スレッドが排出されて停止するのを待つタイムアウト時間です。この時間内に回放スレッドが停止しない場合（例えば、回放 applier が取得できないロックで停止している場合）、FE プロセスはクリーンな再起動のために終了されます。replayer がまだ journal エントリを適用している間に Leader として昇格すると、二重適用が発生してメタデータが破損するためです。最新のメタデータへの追随は journal replay 中に別途行われ、このタイムアウトの制約は受けません。
-- 導入時期：v4.1
+- 導入時期：v4.2.0
 
 ### `leader_demotion_drain_timeout_sec`
 
@@ -1472,7 +1472,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：秒
 - 変更可能：Yes
 - 説明：Leader の降格中に、journal writer を封印（seal）して停止し、進行中の leader WAL 適用が排出されるのを待つために使用されるタイムアウト時間です。この時間内に journal writer を封印できない場合、古い Leader の書き込みが WAL 適用フェンスをすり抜けるのを許す代わりに、降格ステージは失敗し、FE プロセスがクリーンな再起動のために終了されます。降格時に journal writer の封印や進行中の適用の排出に既定値を超える時間が恒常的にかかる場合は、この値を大きくしてください。
-- 導入時期：v4.1
+- 導入時期：v4.2.0
 
 ### `lock_checker_interval_second`
 
