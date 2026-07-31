@@ -312,6 +312,24 @@ This topic introduces the following types of BE configurations:
 - Description: The expire time of bRPC stub cache. The default value is 60 minutes.
 - Introduced in: -
 
+### brpc_timer_heap_sweep_min_size
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum number of tasks in bRPC `TimerThread`'s internal heap that makes the heap eligible for a sweep of unscheduled tasks. The valid range is `[1, 2147483647]`. To amortize the scan cost, bRPC also waits until the heap reaches roughly twice its current sweep baseline. The baseline is reset after a sweep and follows the heap down as tasks run. A sweep returns task slots to the bRPC pool for reuse, which can limit further memory growth but does not guarantee a reduction in process RSS. Larger values reduce sweep frequency but can retain more transient memory.
+- Introduced in: -
+
+### brpc_timer_max_wakeup_interval_ms
+
+- Default: 0
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The maximum time that bRPC `TimerThread` sleeps while timers are pending in its internal heap before it gets an opportunity to drain timer buckets and evaluate a conditional sweep. The valid range is `[0, 2147483647]`. `0` disables periodic wakeups and retains the default behavior of sleeping until the nearest task's run time. A positive value provides more frequent reclamation opportunities for timers with far-future deadlines, but it does not guarantee that task slots are reclaimed within the configured interval because the sweep threshold and growth conditions still apply. Because this setting is process-wide, smaller positive values can increase wakeups and CPU usage across all bRPC `TimerThread` instances.
+- Introduced in: -
+
 ### compress_rowbatches
 
 - Default: true

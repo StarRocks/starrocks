@@ -200,7 +200,8 @@ BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.17.0.tar.gz"
 BRPC_NAME=brpc-1.17.0.tar.gz
 BRPC_SOURCE=brpc-1.17.0
 BRPC_MD5SUM="ee7813601503f3509a4e69d527bac007"
-BRPC_STARROCKS_PATCH_REVISION=2
+BRPC_STARROCKS_PATCH_REVISION=3
+BRPC_STARROCKS_REVISION="${BRPC_SOURCE}-starrocks-${BRPC_STARROCKS_PATCH_REVISION}"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"

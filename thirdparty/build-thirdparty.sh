@@ -799,7 +799,7 @@ build_leveldb() {
 }
 
 # brpc
-BRPC_INSTALL_REVISION="${BRPC_SOURCE}-starrocks-${BRPC_STARROCKS_PATCH_REVISION}"
+BRPC_INSTALL_REVISION="$BRPC_STARROCKS_REVISION"
 BRPC_INSTALL_MARK="${TP_INSTALL_DIR}/.brpc-install-revision"
 
 brpc_install_is_current() {

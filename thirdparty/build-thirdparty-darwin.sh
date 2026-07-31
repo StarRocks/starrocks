@@ -777,7 +777,7 @@ build_leveldb() {
 }
 
 build_brpc() {
-    local brpc_install_revision="${BRPC_SOURCE}-starrocks-${BRPC_STARROCKS_PATCH_REVISION}"
+    local brpc_install_revision="${BRPC_STARROCKS_REVISION}"
     local brpc_install_mark="${TP_INSTALL_DIR}/.brpc-install-revision"
 
     if [[ "${CLEAN:-0}" -eq 0 &&
