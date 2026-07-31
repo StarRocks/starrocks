@@ -56,7 +56,7 @@ This topic introduces the following types of BE configurations:
 - Type: Long
 - Unit: Rows
 - Is mutable: Yes
-- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded. The row count includes segment rows plus the tombstone (delete) rows recorded in del files, so a delete-heavy workload that produces a few large del files also counts toward this threshold; del files written by older versions that did not record a row count contribute 0.
 - Introduced in: -
 
 ### download_buffer_size

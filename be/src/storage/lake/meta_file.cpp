@@ -261,6 +261,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         // Freshly created del file: stamp its creation version so lake vacuum can retain it by its
         // own version after it is later transferred onto a higher-versioned compaction output rowset.
         del_file_with_rid.set_version(rowset->version());
+        // Carry the tombstone count (parallel to dels_meta, index by del_id) so it can be accounted
+        // toward the PK index rebuild-rows threshold. Absent/misaligned means "not recorded" -> 0.
+        if (del_id < op_write.del_num_rows_size()) {
+            del_file_with_rid.set_num_rows(op_write.del_num_rows(del_id));
+        }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
     // if rowset don't contain segment files, still inc next_rowset_id
@@ -1031,7 +1036,7 @@ bool is_primary_key(const TabletMetadata& metadata) {
 
 void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
-                                 const std::vector<int64_t>& del_op_offsets) {
+                                 const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1082,6 +1087,7 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
         _pending_rowset_data.dels.emplace_back(dels[i]);
         const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
         _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
+        _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
@@ -1142,6 +1148,11 @@ Status MetaFileBuilder::set_final_rowset() {
         del_file_with_rid.set_shared(del.shared());
         // Freshly created del file: stamp its creation version (see apply_opwrite).
         del_file_with_rid.set_version(rowset->version());
+        // Carry the tombstone count (parallel to dels) so it can be accounted toward the PK index
+        // rebuild-rows threshold. The writer always provides a count (0 when a del carries none).
+        if (i < _pending_rowset_data.del_num_rows.size()) {
+            del_file_with_rid.set_num_rows(_pending_rowset_data.del_num_rows[i]);
+        }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
 
@@ -1185,15 +1196,19 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
     // signed value where < 0 means "not recorded" (absent array or kUnknownDelOpOffset).
     std::vector<FileMetaPB> dels;
     std::vector<int64_t> del_op_offsets;
+    std::vector<int64_t> del_num_rows;
     dels.reserve(op_write.dels_meta_size());
     del_op_offsets.reserve(op_write.dels_meta_size());
+    del_num_rows.reserve(op_write.dels_meta_size());
     for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
         dels.emplace_back(op_write.dels_meta(del_id));
         del_op_offsets.push_back(del_op_offset_or_unset(op_write, del_id));
+        // Parallel to dels_meta; a del not carrying a recorded count contributes 0.
+        del_num_rows.push_back(del_id < op_write.del_num_rows_size() ? op_write.del_num_rows(del_id) : 0);
     }
 
     // Accumulate into pending rowset
-    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_op_offsets);
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_op_offsets, del_num_rows);
 }
 
 } // namespace starrocks::lake
