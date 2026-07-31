@@ -94,6 +94,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
         // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
         batchTask = null;
+        // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
+        // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
+        // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
+        // non-cancellable exception (checkNotNull), sticking the job until its global timeout.
+        physicalPartitionIndexMap.clear();
     }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,

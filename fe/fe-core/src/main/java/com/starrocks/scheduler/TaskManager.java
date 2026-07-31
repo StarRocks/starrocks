@@ -141,6 +141,7 @@ public class TaskManager implements MemoryTrackable {
             if (dispatchScheduler.isShutdown()) {
                 dispatchScheduler = Executors.newScheduledThreadPool(1);
             }
+            taskRunManager.getTaskRunExecutor().rebuildIfShutdown();
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
@@ -188,7 +189,7 @@ public class TaskManager implements MemoryTrackable {
      *
      * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
      *                  or negative means do not wait (the demotion path). The budget is split
-     *                  across the two pools.
+     *                  across the three pools.
      */
     public void stop(long timeoutMs) {
         if (!isStart.compareAndSet(true, false)) {
@@ -206,6 +207,11 @@ public class TaskManager implements MemoryTrackable {
         periodFutureMap.clear();
         periodScheduler.shutdownNow();
         dispatchScheduler.shutdownNow();
+        // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
+        // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
+        // the next leader's re-driven run of the same task or rewrite the archived status object that
+        // clearUnfinishedTaskRun journals as FAILED on re-election.
+        taskRunManager.getTaskRunExecutor().shutdownNow();
         if (timeoutMs > 0L) {
             long deadline = System.currentTimeMillis() + timeoutMs;
             try {
@@ -217,6 +223,10 @@ public class TaskManager implements MemoryTrackable {
                 if (!dispatchScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
                     LOG.warn("TaskManager dispatchScheduler did not terminate within drain timeout");
                 }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!taskRunManager.getTaskRunExecutor().awaitTermination(remaining)) {
+                    LOG.warn("TaskManager taskRunPool did not terminate within drain timeout");
+                }
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 LOG.warn("Interrupted while waiting for TaskManager schedulers to terminate");
@@ -225,16 +235,18 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
-     * Whether either leader-session scheduler was shut down by a previous demotion but has not finished
-     * terminating - i.e. a straggler dispatch iteration from the previous leader session is still running.
-     * Read by the re-activation cleanliness gate (TaskManager is not a LeaderDaemon, so it has no isRunning
-     * to cover its pools); a fresh/running scheduler is not shut down and so is not a straggler. taskRunPool
-     * is intentionally never stopped on demotion (running MV-refresh / INSERT task runs are re-driven by
-     * the next leader), so it is excluded here.
+     * Whether any leader-session pool was shut down by a previous demotion but has not finished
+     * terminating - i.e. a straggler from the previous leader session is still running. Read by the
+     * re-activation cleanliness gate (TaskManager is not a LeaderDaemon, so it has no isRunning to
+     * cover its pools); a fresh/running pool is not shut down and so is not a straggler. Covers the
+     * two schedulers AND the task-run pool: an MV-refresh / INSERT task run surviving demotion would
+     * race the next leader's re-driven run of the same task and mutate the archived status object
+     * that clearUnfinishedTaskRun already journaled as FAILED.
      */
     public boolean schedulersStoppedButNotTerminated() {
         return (periodScheduler.isShutdown() && !periodScheduler.isTerminated())
-                || (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated());
+                || (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated())
+                || taskRunManager.getTaskRunExecutor().stoppedButNotTerminated();
     }
 
     private void registerPeriodicalTask() {

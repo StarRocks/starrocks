@@ -183,7 +183,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         } catch (Throwable t) {
             LOG.warn("clear double-write partitions failed on leader handoff, job: {}", jobId, t);
         }
-        // optimizeClause deliberately kept - see OptimizeJobV2.resetTransientState().
+        // optimizeClause must be DROPPED, unlike OptimizeJobV2: that class may keep it because a re-run
+        // self-cancels on the TaskManager task-name collision, but OnlineOptimizeJobV2 never registers
+        // TaskManager tasks (it executeSql()s the rewrite INSERT directly), so a kept clause would re-run
+        // the same INSERT into a temp partition that already holds the previous run's committed rows and
+        // then swap DOUBLED data into the user partition. Nulling it makes the re-elected leader behave
+        // exactly like a restarted FE (the field is not @SerializedName): runWaitingTxnJob sees the null
+        // clause and self-cancels, cleaning up the temp partitions.
+        optimizeClause = null;
     }
 
     public List<Long> getTmpPartitionIds() {
@@ -343,11 +350,20 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("transfer optimize job {} state to {}", jobId, this.jobState);
     }
 
-    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName) {
+    private void enableDoubleWritePartition(Database db, OlapTable tbl, String sourcePartitionName, String tempPartitionName)
+            throws AlterCancelException {
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            Preconditions.checkState(tbl.getState() == OlapTableState.OPTIMIZE);
+            if (tbl.getState() != OlapTableState.OPTIMIZE) {
+                // Reachable after an in-place leader handoff: onFinished() flips the table to NORMAL in
+                // memory BEFORE journaling the finish, so a demotion in that window leaves a re-elected
+                // leader with a WAITING_TXN/RUNNING job against a NORMAL table. Cancel the job cleanly
+                // (run() only catches AlterCancelException) instead of throwing IllegalStateException,
+                // which would leave it stuck until the global timeout.
+                throw new AlterCancelException("table " + tbl.getName() + " state is " + tbl.getState()
+                        + " (expected OPTIMIZE), the optimize job cannot resume after leader handoff");
+            }
             Partition temp = tbl.getPartition(tempPartitionName, true);
             if (temp != null) {
                 Preconditions.checkState(temp.getSubPartitions().size() == 1);

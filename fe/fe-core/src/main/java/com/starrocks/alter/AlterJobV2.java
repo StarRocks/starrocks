@@ -239,15 +239,16 @@ public abstract class AlterJobV2 implements Writable {
      * discarded in-memory-only progress (the deliberately unlogged WAITING_TXN -&gt; RUNNING
      * transitions) and leader-session transients (batch tasks, latches, futures). An in-place
      * leader demote / re-elect cycle keeps the very same objects alive, so this hook performs
-     * that normalization explicitly. Invoked from AlterHandler at BOTH ends of the cycle:
-     * onStopped() (demotion - release stale futures early) and start() (activation - guarantee
-     * every job is normalized before the first scheduling cycle dispatches it, regardless of
-     * how the previous session stopped). Idempotent, so running it at both ends is safe.
+     * that normalization explicitly. Invoked from AlterHandler.onStopped() during demotion
+     * (start() deliberately does not reset: the re-activation cleanliness gate guarantees the
+     * previous session's worker already ran onStopped before start() can run). Idempotent.
      *
-     * Synchronized on the job: run() and cancel() use the same monitor, so a straggling user
-     * cancel or a finish-callback thread surviving the executor's shutdownNow() cannot
-     * interleave with the reset. Final states are left untouched. Must NOT write to the
-     * journal - on the demotion side it is already sealed when this runs.
+     * Synchronized on the job: run() uses the same monitor, so a scheduling cycle cannot
+     * interleave with the reset. cancel()'s isCancelling flag and latch countDown are
+     * deliberately OUTSIDE the monitor, so a reset may clear a not-yet-processed user cancel;
+     * that matches a genuine restart (the flags are not persisted) and the user simply retries
+     * the CANCEL. Final states are left untouched. Must NOT write to the journal - it is
+     * already sealed when this runs.
      */
     public synchronized void resetToLastDurableState() {
         if (jobState.isFinalState()) {
@@ -264,9 +265,13 @@ public abstract class AlterJobV2 implements Writable {
      * Subclass hook for {@link #resetToLastDurableState()}: map in-memory-only job states back
      * to their last durable predecessor and recreate/clear leader-session transients (batch
      * tasks, latches, flags, futures). Runs under the job monitor with the journal sealed.
+     *
+     * Abstract on purpose - an empty default let subclasses miss the hook silently (a job family
+     * whose rewrite re-runs after a leader handoff can DUPLICATE user data, see
+     * OnlineOptimizeJobV2). Every concrete job must state its reset explicitly; an intentionally
+     * empty implementation must say why in a comment.
      */
-    protected void resetTransientState() {
-    }
+    protected abstract void resetTransientState();
 
     public void setComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
