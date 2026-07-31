@@ -268,7 +268,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         std::vector<uint32_t> sorted_source_rowids;
         std::vector<uint32_t> unsorted_upt_rowids;
         // Sort source rowid -> upt rowid pairs by source rowid.
-        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, nullptr);
+        RETURN_IF_ERROR(split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, nullptr));
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
 
         // When condition update is enabled, compare the condition column value in

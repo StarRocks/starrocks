@@ -432,10 +432,15 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // 1. sorted_source_rowids: sorted source rowids
 // 2. unsorted_upt_rowids: unsorted upt rowids
 // If container is not provided, we will just push back the rowids without alignment.
-void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
-                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
-    // rowid_pairs MUST be sorted already
-    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), RowidPairsCompFn));
+Status split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                         std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
+    for (size_t i = 1; i < rowid_pairs.size(); ++i) {
+        if (UNLIKELY(rowid_pairs[i - 1].first >= rowid_pairs[i].first)) {
+            return Status::Corruption(
+                    strings::Substitute("source rowids must be strictly increasing, previous:$0 current:$1",
+                                        rowid_pairs[i - 1].first, rowid_pairs[i].first));
+        }
+    }
     for (const auto& each : rowid_pairs) {
         if (container == nullptr) {
             // If container is not provided, we just push back the rowids.
@@ -452,6 +457,7 @@ void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<u
             unsorted_upt_rowids->push_back(each.second);
         }
     }
+    return Status::OK();
 }
 
 // read from upt files and update rows in source chunk.
@@ -480,7 +486,7 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         std::vector<uint32_t> sorted_source_rowids;
         std::vector<uint32_t> unsorted_upt_rowids;
         // split rowid_pairs into sorted_source_rowids and unsorted_upt_rowids
-        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
+        RETURN_IF_ERROR(split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container));
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
         // fetch upt rows from upt_chunk
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());

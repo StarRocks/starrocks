@@ -21,6 +21,8 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
@@ -245,6 +247,88 @@ static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t 
         }
     }
     return m[src_rss_id];
+}
+
+TEST_F(RowsetColumnUpdateStateTest, deduplicate_source_rowids) {
+    ColumnPartialUpdateState state;
+    state.src_rss_rowids = {
+            (uint64_t{2} << 32) | 7, // update row 0
+            (uint64_t{1} << 32) | 9, // update row 1
+            (uint64_t{2} << 32) | 7, // duplicate source rowid
+            (uint64_t{2} << 32) | 3, // update row 3
+            (uint64_t{1} << 32) | 9, // duplicate source rowid
+            UINT64_MAX,              // update row 5 is an insert
+    };
+
+    state.build_rss_rowid_to_update_rowid(0);
+
+    const auto& rssid1 = state.rss_rowid_to_update_rowid.at(1);
+    ASSERT_EQ(1, rssid1.size());
+    EXPECT_EQ(9, rssid1[0].first);
+    EXPECT_TRUE(rssid1[0].second == 1 || rssid1[0].second == 4);
+
+    const auto& rssid2 = state.rss_rowid_to_update_rowid.at(2);
+    ASSERT_EQ(2, rssid2.size());
+    EXPECT_EQ(3, rssid2[0].first);
+    EXPECT_EQ(3, rssid2[0].second);
+    EXPECT_EQ(7, rssid2[1].first);
+    EXPECT_TRUE(rssid2[1].second == 0 || rssid2[1].second == 2);
+    EXPECT_EQ(std::vector<uint32_t>({5}), state.insert_rowids);
+    EXPECT_TRUE(is_rowid_pairs_ordered(state.rss_rowid_to_update_rowid));
+}
+
+TEST_F(RowsetColumnUpdateStateTest, split_rowid_pairs_validates_source_rowid_order) {
+    std::vector<uint32_t> source_rowids;
+    std::vector<uint32_t> upt_rowids;
+
+    auto st = split_rowid_pairs({{1, 0}, {1, 1}}, &source_rowids, &upt_rowids, nullptr);
+    EXPECT_TRUE(st.is_corruption()) << st;
+
+    st = split_rowid_pairs({{2, 0}, {1, 1}}, &source_rowids, &upt_rowids, nullptr);
+    EXPECT_TRUE(st.is_corruption()) << st;
+
+    StreamChunkContainer container{.start_rowid = 10, .end_rowid = 20};
+    st = split_rowid_pairs({{5, 0}, {12, 1}, {18, 2}, {25, 3}}, &source_rowids, &upt_rowids, &container);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ(std::vector<uint32_t>({2, 8}), source_rowids);
+    EXPECT_EQ(std::vector<uint32_t>({1, 2}), upt_rowids);
+}
+
+TEST_F(RowsetColumnUpdateStateTest, deduplicate_variable_length_update_indexes) {
+    ColumnPartialUpdateState state;
+    state.src_rss_rowids = {0, 0};
+    state.build_rss_rowid_to_update_rowid(0);
+
+    std::vector<uint32_t> source_rowids;
+    std::vector<uint32_t> upt_rowids;
+    auto st = split_rowid_pairs(state.rss_rowid_to_update_rowid.at(0), &source_rowids, &upt_rowids, nullptr);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_EQ(std::vector<uint32_t>({0}), source_rowids);
+    ASSERT_EQ(1, upt_rowids.size());
+    ASSERT_LT(upt_rowids[0], 2);
+
+    auto source_binary = BinaryColumn::create();
+    source_binary->append_datum(Datum("old"));
+    auto upt_binary = BinaryColumn::create();
+    upt_binary->append_datum(Datum("first"));
+    upt_binary->append_datum(Datum("first"));
+    auto selected_binary = BinaryColumn::create();
+    selected_binary->append_selective(*upt_binary, upt_rowids.data(), 0, upt_rowids.size());
+    source_binary->update_rows(*selected_binary, source_rowids.data());
+    EXPECT_EQ("first", source_binary->get(0).get_slice());
+
+    auto source_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    source_array->append_datum(Datum(DatumArray{Datum("old")}));
+    auto upt_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    upt_array->append_datum(Datum(DatumArray{Datum("first")}));
+    upt_array->append_datum(Datum(DatumArray{Datum("first")}));
+    auto selected_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    selected_array->append_selective(*upt_array, upt_rowids.data(), 0, upt_rowids.size());
+    source_array->update_rows(*selected_array, source_rowids.data());
+
+    const auto result = source_array->get(0).get_array();
+    ASSERT_EQ(1, result.size());
+    EXPECT_EQ("first", result[0].get_slice());
 }
 
 TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {

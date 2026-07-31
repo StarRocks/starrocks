@@ -110,6 +110,12 @@ struct ColumnPartialUpdateState {
             if (!std::is_sorted(each.second.begin(), each.second.end(), RowidPairsCompFn)) {
                 std::sort(each.second.begin(), each.second.end(), RowidPairsCompFn);
             }
+
+            // Column::update_rows requires source rowids to be strictly increasing. Keep one update row when
+            // duplicate source rowids are found.
+            each.second.erase(std::unique(each.second.begin(), each.second.end(),
+                                          [](const RowidPairs& a, const RowidPairs& b) { return a.first == b.first; }),
+                              each.second.end());
         }
 #ifndef BE_TEST
         src_rss_rowids.clear();
@@ -269,8 +275,8 @@ private:
     std::map<string, string> _column_to_expr_value;
 };
 
-void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
-                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container);
+Status split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                         std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container);
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {
     os << o.to_string();
