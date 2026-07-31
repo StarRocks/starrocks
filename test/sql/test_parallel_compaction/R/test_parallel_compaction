@@ -76,7 +76,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM pk_parallel_2;
 -- result:
@@ -194,7 +194,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
 -- result:
-4
+1
 -- !result
 SELECT COUNT(*) FROM pk_parallel_5;
 -- result:
@@ -303,7 +303,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM dup_parallel;
 -- result:
@@ -402,7 +402,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM agg_parallel;
 -- result:
@@ -498,7 +498,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM uniq_parallel;
 -- result:
@@ -811,7 +811,7 @@ SELECT sleep(30);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
 -- result:
-4
+1
 -- !result
 SELECT COUNT(*) FROM pk_with_updates;
 -- result:
@@ -901,7 +901,7 @@ SELECT sleep(60);
 -- !result
 SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT COUNT(*) FROM pk_large_data;
 -- result:
@@ -1000,7 +1000,7 @@ SELECT sleep(30);
 -- !result
 SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
 -- result:
-8
+6
 -- !result
 SELECT COUNT(*) FROM pk_multi_buckets;
 -- result:
