@@ -134,7 +134,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_tiny.dat");
         segment_meta->set_size(100);
     }
-    builder.add_rowset(rs_tiny, {}, {}, {}, {});
+    builder.add_rowset(rs_tiny, {}, {}, {}, {}, {});
 
     RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
     rs_large.set_num_rows(10000);
@@ -146,7 +146,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_large.dat");
         segment_meta->set_size(50000);
     }
-    builder.add_rowset(rs_large, {}, {}, {}, {});
+    builder.add_rowset(rs_large, {}, {}, {}, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
 
@@ -818,6 +818,137 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(118, metadata->next_rowset_id());
 }
 
+<<<<<<< HEAD
+=======
+// apply_opwrite path: op_write.del_num_rows (parallel to dels_meta) is recorded into
+// DelfileWithRowsetId.num_rows; del files without a recorded count leave num_rows unset.
+TEST_F(MetaFileTest, test_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write.add_dels_meta()->set_name("d1.del");
+    op_write.add_dels_meta()->set_name("d2.del");
+    op_write.add_dels_meta()->set_name("d3.del");
+    // del_num_rows is parallel to dels_meta; the third is left unrecorded on purpose.
+    op_write.add_del_num_rows(40);
+    op_write.add_del_num_rows(60);
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(3, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        total += rowset.del_files(i).num_rows(); // absent reads as 0
+    }
+    EXPECT_EQ(100, total); // 40 + 60 + 0
+    EXPECT_TRUE(rowset.del_files(0).has_num_rows());
+    EXPECT_FALSE(rowset.del_files(2).has_num_rows());
+}
+
+// batch path: op_write.del_num_rows is carried through batch_apply_opwrite/set_final_rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_del_num_rows(70);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s2.dat");
+    op_write2.add_dels_meta()->set_name("d2.del");
+    op_write2.add_del_num_rows(30);
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        ASSERT_TRUE(rowset.del_files(i).has_num_rows());
+        total += rowset.del_files(i).num_rows();
+    }
+    EXPECT_EQ(100, total); // 70 + 30
+}
+
+// The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
+// FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
+// carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
+TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
+    const int64_t tablet_id = 31003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    {
+        // Replaced by a rewrite that recorded an owner: refreshed to the FileInfo's value.
+        auto* replaced = rowset->add_segment_metas();
+        replaced->set_filename("partial0.dat");
+        replaced->add_vector_index_ids(100);
+        // Replaced by a rewrite without vector indexes: the stale pre-set owner must be cleared.
+        auto* stale_owner = rowset->add_segment_metas();
+        stale_owner->set_filename("partial1.dat");
+        stale_owner->add_vector_index_ids(100);
+        stale_owner->set_segment_vector_index_uid(7777);
+        // Not replaced: carried verbatim.
+        auto* untouched = rowset->add_segment_metas();
+        untouched->set_filename("untouched.dat");
+        untouched->add_vector_index_ids(100);
+        untouched->set_segment_vector_index_uid(9999);
+    }
+
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite0;
+    rewrite0.path = "rewrite0.dat";
+    rewrite0.size = 1024;
+    rewrite0.vector_index_ids.push_back(100);
+    rewrite0.segment_vector_index_uid = tablet_id;
+    replace_segments[0] = rewrite0;
+    SegmentFileInfo rewrite1; // no ids, no owner
+    rewrite1.path = "rewrite1.dat";
+    rewrite1.size = 2048;
+    replace_segments[1] = rewrite1;
+
+    builder.apply_opwrite(op_write, replace_segments, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& written = metadata->rowsets(0);
+    ASSERT_EQ(3, written.segment_metas_size());
+    EXPECT_EQ("rewrite0.dat", written.segment_metas(0).filename());
+    ASSERT_TRUE(written.segment_metas(0).has_segment_vector_index_uid());
+    EXPECT_EQ(tablet_id, written.segment_metas(0).segment_vector_index_uid());
+    EXPECT_EQ("rewrite1.dat", written.segment_metas(1).filename());
+    EXPECT_EQ(0, written.segment_metas(1).vector_index_ids_size());
+    EXPECT_FALSE(written.segment_metas(1).has_segment_vector_index_uid());
+    ASSERT_TRUE(written.segment_metas(2).has_segment_vector_index_uid());
+    EXPECT_EQ(9999, written.segment_metas(2).segment_vector_index_uid());
+}
+
+>>>>>>> 4c9227d17f ([Enhancement] Count del-file tombstone rows toward cloud-native PK index rebuild-rows threshold (#76222))
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     const int64_t tablet_id = 31002;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
