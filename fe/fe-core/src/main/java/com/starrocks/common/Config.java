@@ -1354,6 +1354,8 @@ public class Config extends ConfigBase {
      * publish paths: a partition that already published successfully is skipped, and a partition that recently
      * failed is not re-attempted until this interval has elapsed since its last failure. Only failed partitions
      * are affected; a partition that publishes on its first attempt is never delayed.
+     * Exception: file-bundling tables always re-publish already-successful partitions (the carry-forward is
+     * idempotent on the BE), so the skip does not apply to them; only this failure backoff does.
      */
     @ConfField(mutable = true)
     public static long lake_publish_version_retry_interval_ms = 1000;

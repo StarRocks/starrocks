@@ -1148,7 +1148,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // single-transaction and batch publish paths.
     @VisibleForTesting
     static boolean partitionInBackoff(long versionTime, long now, long retryIntervalMs) {
-        return versionTime < 0 && now < Math.abs(versionTime) + retryIntervalMs;
+        // Clamp a misconfigured negative interval to 0: the config is mutable, and a negative value
+        // would push the deadline before the failure time and disable backoff entirely, hot-looping
+        // retries -- the opposite of the "minimum interval" semantics.
+        long interval = Math.max(0, retryIntervalMs);
+        return versionTime < 0 && now < Math.abs(versionTime) + interval;
     }
 
     private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,

@@ -16,13 +16,14 @@ package com.starrocks.transaction;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for the pure per-partition sticky-retry decision helpers shared by the single-transaction and batch
  * lake publish paths. versionTime sentinel: 0 = never run, &gt; 0 = last publish succeeded at that
- * time, &lt; 0 = last publish failed at |versionTime|.
+ * time, &lt; 0 = last publish failed at abs(versionTime) (the failure time is stored negated).
  */
 public class PublishVersionDaemonStickyRetryTest {
 
@@ -61,5 +62,18 @@ public class PublishVersionDaemonStickyRetryTest {
     public void testBackoffZeroInterval() {
         // interval 0 -> never backed off (retry on the next cycle)
         assertFalse(PublishVersionDaemon.partitionInBackoff(-5_000, 5_000, 0));
+    }
+
+    @Test
+    public void testBackoffNegativeIntervalClampedToZero() {
+        // The interval is a mutable config; a misconfigured negative value is clamped to 0 (the
+        // documented minimum) rather than shrinking the backoff window below the failure time. So a
+        // negative interval must behave exactly like interval 0 for every `now`.
+        for (long now : new long[] {4_999, 5_000, 5_001}) {
+            assertEquals(PublishVersionDaemon.partitionInBackoff(-5_000, now, 0),
+                    PublishVersionDaemon.partitionInBackoff(-5_000, now, -1));
+            assertEquals(PublishVersionDaemon.partitionInBackoff(-5_000, now, 0),
+                    PublishVersionDaemon.partitionInBackoff(-5_000, now, -1_000_000));
+        }
     }
 }
