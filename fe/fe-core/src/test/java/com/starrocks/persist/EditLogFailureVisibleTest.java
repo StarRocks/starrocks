@@ -91,19 +91,18 @@ public class EditLogFailureVisibleTest {
     }
 
     @Test
-    public void testInterruptedWaitHoldsFenceUntilTaskResolves() throws Exception {
-        // A leader-only thread pool shutdownNow() during demotion interrupts a worker mid-logEdit. The write
-        // may still be queued and commit later, so the interrupt must NOT release the WAL fence early -- else
-        // demotion's awaitWalDrained() could see inFlight == 0 and seal the writer ahead of the in-flight write.
+    public void testInterruptedWaitStillAppliesAfterCommit() throws Exception {
+        // An interrupt (pool shutdownNow, query kill) must NOT abandon the wait: the write may still commit,
+        // and leaving early would skip the in-memory apply, permanently diverging this node's memory from its
+        // own journal. The waiter keeps waiting, applies after the commit, and re-asserts the interrupt flag.
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue, true);
+        AtomicBoolean applied = new AtomicBoolean(false);
+        AtomicBoolean interruptRestored = new AtomicBoolean(false);
 
         Thread writer = new Thread(() -> {
-            try {
-                editLog.logJsonObject((short) 1, "payload");
-            } catch (Throwable ignore) {
-                // interrupted below; the write stays queued
-            }
+            editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true));
+            interruptRestored.set(Thread.currentThread().isInterrupted());
         });
         writer.setDaemon(true);
         writer.start();
@@ -112,29 +111,33 @@ public class EditLogFailureVisibleTest {
         Assertions.assertNotNull(task);
         Assertions.assertEquals(1, editLog.inFlightForTest());
 
-        // Interrupt the waiting writer; it leaves logEdit (waitForCommit throws) but the task is still queued.
+        // Interrupt the waiting writer: it must keep waiting (task not settled) with the fence still held.
         writer.interrupt();
+        Thread.sleep(200L);
+        Assertions.assertTrue(writer.isAlive(), "waiter must keep waiting through the interrupt");
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+        Assertions.assertFalse(applied.get());
+
+        // The JournalWriter commits; the waiter applies, releases the fence and restores the interrupt flag.
+        task.markSucceed();
         writer.join(5000);
         Assertions.assertFalse(writer.isAlive());
-
-        // Fence is still held: the interrupt did not release it while the write is in flight.
-        Assertions.assertEquals(1, editLog.inFlightForTest());
-
-        // The JournalWriter eventually commits the queued task; only then is the fence released.
-        task.markSucceed();
+        Assertions.assertTrue(applied.get(), "apply must run after the commit despite the interrupt");
+        Assertions.assertTrue(interruptRestored.get(), "interrupt flag must be re-asserted on exit");
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 
     @Test
-    public void testInterruptedWaitReleasesFenceIfTaskAlreadyAborted() throws Exception {
-        // If the task already resolved (e.g. writer aborted it) by the time the interrupted caller reaches the
-        // handoff, setOnDone runs the release immediately so the fence does not leak.
+    public void testInterruptedWaitUnblocksOnAbort() throws Exception {
+        // The uninterruptible wait is bounded by settlement, not forever: an abort settles the task, so an
+        // interrupted waiter exits with EditLogException (no apply) and the fence releases.
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(queue, true);
+        AtomicBoolean applied = new AtomicBoolean(false);
 
         Thread writer = new Thread(() -> {
             try {
-                editLog.logJsonObject((short) 1, "payload");
+                editLog.logJsonObject((short) 1, "payload", obj -> applied.set(true));
             } catch (Throwable ignore) {
                 // aborted below
             }
@@ -144,9 +147,57 @@ public class EditLogFailureVisibleTest {
 
         JournalTask task = queue.poll(5, TimeUnit.SECONDS);
         Assertions.assertNotNull(task);
+        writer.interrupt();
         task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "journal writer closed"));
         writer.join(5000);
         Assertions.assertFalse(writer.isAlive());
+        Assertions.assertFalse(applied.get(), "an aborted write must not apply");
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    // ---- submitLogNoWait: the split submit-here-wait-later path ----
+
+    @Test
+    public void testSubmitLogNoWaitRejectedWhenGateClosed() {
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), false);
+        Assertions.assertThrows(EditLogException.class,
+                () -> editLog.submitLogNoWait((short) 1, new Writable() {
+                    @Override
+                    public void write(DataOutput out) throws IOException {
+                        Text.writeString(out, "x");
+                    }
+                }));
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+    }
+
+    @Test
+    public void testSubmitLogNoWaitHoldsFenceUntilSettle() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(queue, true);
+        JournalTask task = editLog.submitLogNoWait((short) 1, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, "x");
+            }
+        });
+        // The caller has not waited yet; the fence must be held until the writer settles the task.
+        Assertions.assertEquals(1, editLog.inFlightForTest());
+        task.markSucceed();
+        Assertions.assertEquals(0, editLog.inFlightForTest());
+        // The deferred wait completes normally.
+        EditLog.waitForCommit(task);
+    }
+
+    @Test
+    public void testSubmitLogNoWaitSerializeFailureReleasesFence() {
+        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(4), true);
+        Assertions.assertThrows(SerializeException.class,
+                () -> editLog.submitLogNoWait((short) 1, new Writable() {
+                    @Override
+                    public void write(DataOutput out) throws IOException {
+                        throw new IOException("boom");
+                    }
+                }));
         Assertions.assertEquals(0, editLog.inFlightForTest());
     }
 

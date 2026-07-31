@@ -1429,10 +1429,13 @@ public class EditLog {
     }
 
     /**
-     * Wait until every admitted write's journal commit + apply has finished (inFlight -> 0). Called by
-     * demotion (GlobalStateMgr.sealJournalWriter) AFTER closeWalGate and BEFORE sealing the writer, so the
-     * writer is still alive to consume in-flight submits. FATAL on timeout: the caller lets the exception
-     * propagate to a clean process restart, because proceeding could leave a not-yet-consumed task orphaned.
+     * Wait until every admitted write has fully resolved (inFlight -> 0). Called by demotion
+     * (GlobalStateMgr.sealJournalWriter) AFTER closeWalGate and BEFORE sealing the writer, so the writer is
+     * still alive to consume in-flight submits. inFlight covers commit + apply on the normal path
+     * (logEditGated holds the fence across the apply, and waitForCommit is uninterruptible so a caller can
+     * never leave with its apply skipped); the one case that resolves WITHOUT a completed apply is an
+     * applier that threw mid-apply. FATAL on timeout: the caller lets the exception propagate to a clean
+     * process restart, because proceeding could leave a not-yet-consumed task orphaned.
      * TODO: also fail the drain on a recorded WALApplier.apply failure once the WAL apply path is stable.
      * Deferred for now: while the WAL rewrite settles, apply failures are expected and treated as benign.
      */
@@ -1475,19 +1478,27 @@ public class EditLog {
         return task;
     }
 
-    /** submitRaw for the no-throw paths: retry the enqueue across spurious interrupts. */
+    /**
+     * submitRaw for the no-throw paths: uninterruptible, but never swallows the interrupt - the flag is
+     * cleared on entry (a stale flag would make the first put() throw immediately), remembered across
+     * retries, and re-asserted on exit. No backoff between retries: put() itself blocks for queue space,
+     * so the only retry trigger is the interrupt.
+     */
     private JournalTask submitRawUninterruptibly(short op, Writable writable, long maxWaitIntervalMs) {
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
+        boolean interrupted = Thread.interrupted();
+        try {
+            while (true) {
+                try {
+                    return submitRaw(op, writable, maxWaitIntervalMs);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    LOG.warn("interrupted while submitting journal task; retrying: {}", e.toString());
                 }
-                return submitRaw(op, writable, maxWaitIntervalMs);
-            } catch (InterruptedException e) {
-                LOG.warn("failed to submit journal task, wait and retry {} times..: {}", cnt, e.toString());
             }
-            cnt++;
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -1514,37 +1525,22 @@ public class EditLog {
 
     /**
      * Submit a gated journal write, wait for its commit, and (when applyAction is non-null) run the in-memory
-     * apply INSIDE the WAL fence on a successful commit. The fence (enterGate/exitGate) is released only once
-     * the write is fully resolved: on the normal path after commit (+ apply); on an abnormal exit -- the caller
-     * thread is interrupted while waiting (e.g. a leader-only thread pool is shutdownNow()'d during demotion,
-     * which interrupts its workers), or the task aborts, or apply throws -- the release is deferred to the task
-     * completion callback so it fires when the JournalWriter actually resolves the task. This is critical:
-     * releasing the fence on interrupt while the task is still queued would let demotion's awaitWalDrained()
-     * see inFlight == 0 and seal the writer AHEAD of a not-yet-committed write, defeating the fence.
+     * apply INSIDE the WAL fence on a successful commit. The fence (enterGate/exitGate) is released in the
+     * finally, which is correct on every path because {@link #waitForCommit} is uninterruptible: it returns
+     * only once the JournalWriter has RESOLVED the task (commit or abort), so the fence can never be released
+     * while the write is still in flight. Concretely: normal path = commit + apply done; aborted task =
+     * settled, EditLogException propagates; apply threw = the write is durable and settled (the torn apply is
+     * the caller's exception to surface); serialization failure = nothing was ever enqueued.
      */
     private void logEditGated(short op, Writable writable, Runnable applyAction) {
         enterGate();
-        JournalTask task = null;
-        boolean completedNormally = false;
         try {
-            task = submitRawUninterruptibly(op, writable, -1);
-            waitForCommit(task);
+            waitForCommit(submitRawUninterruptibly(op, writable, -1));
             if (applyAction != null) {
                 applyAction.run();
             }
-            completedNormally = true;
         } finally {
-            if (completedNormally) {
-                // Committed (and applied) on this thread: release the fence now.
-                exitGate();
-            } else if (task != null) {
-                // Interrupted/aborted with the write possibly still in flight: hold the fence until the
-                // JournalWriter resolves the task (setOnDone runs immediately if it already completed).
-                task.setOnDone(this::exitGate);
-            } else {
-                // Never enqueued (serialization failed before submit): nothing is in flight.
-                exitGate();
-            }
+            exitGate();
         }
     }
 
@@ -1582,24 +1578,34 @@ public class EditLog {
     }
 
     /**
-     * Wait for the JournalWriter to commit this task. Responds to every failure by throwing an (unchecked)
-     * {@link EditLogException}: an InterruptedException on this path arrives when the caller thread is being
-     * stopped (e.g. a leader-only thread pool shutdownNow() during demotion), so we react to it rather than
-     * retrying; a committed-then-aborted task and a false result likewise throw. The outcome always matches
-     * what actually got committed, so an applier caller applies iff this returns normally. NOTE: throwing here
-     * does NOT mean the write is dead -- the task may still be queued and commit later, so the caller
-     * (logEditGated) keeps the WAL fence held until the task's own completion callback resolves it, rather than
-     * releasing it on this throw.
+     * Wait until the JournalWriter resolves this task (commit or abort), UNINTERRUPTIBLY: an interrupt
+     * (e.g. a pool shutdownNow() or a query cancel hitting the caller thread) is remembered and re-asserted
+     * on exit, but never abandons the wait. Leaving early would skip the caller's in-memory apply while the
+     * write may still commit, permanently diverging this node's memory from its own journal (upstream's
+     * waitInfinity had the same swallow-interrupt semantics for the same reason). The wait is bounded in
+     * practice because the task always settles: the writer stays alive until the demotion drain completes,
+     * and sealing aborts whatever is still queued. Failures throw an (unchecked) {@link EditLogException}
+     * (aborted task / false result), so an applier caller applies iff this returns normally.
      */
     public static void waitForCommit(JournalTask task) {
         boolean result;
+        boolean interrupted = false;
         try {
-            result = task.get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new EditLogException("interrupted while waiting for journal task to commit", e);
-        } catch (ExecutionException e) {
-            throw new EditLogException("journal task failed to commit", e.getCause());
+            while (true) {
+                try {
+                    result = task.get();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    LOG.warn("interrupted while waiting for journal task to commit; keep waiting until it settles");
+                } catch (ExecutionException e) {
+                    throw new EditLogException("journal task failed to commit", e.getCause());
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
         if (!result) {
             throw new EditLogException("journal task aborted without a detailed cause");

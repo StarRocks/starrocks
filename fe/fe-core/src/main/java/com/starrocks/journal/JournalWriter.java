@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -83,6 +84,11 @@ public class JournalWriter {
     private long lastSlowEditLogTimeNs = -1L;
     private final AtomicReference<WriterState> writerState = new AtomicReference<>(WriterState.RUNNING);
     private volatile Daemon daemon;
+    // Cooperative stop signal for the writer worker. close() sets it and joins; the worker polls the
+    // queue with a timeout and re-checks it each round. The worker is deliberately NEVER interrupted:
+    // an interrupt landing inside a BDB JE call (commit, journal roll) would invalidate the whole
+    // Environment, which the demoted node still needs to replay the journal as a follower.
+    private volatile boolean stopRequested = false;
 
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
@@ -102,6 +108,7 @@ public class JournalWriter {
     public void startDaemon() {
         // ensure init() is called.
         assert (nextVisibleJournalId > 0);
+        stopRequested = false;
         Daemon previous = daemon;
         if (previous != null && previous.isAlive()) {
             String msg = "previous JournalWriter daemon is still alive on restart, will exit now.";
@@ -169,8 +176,11 @@ public class JournalWriter {
         if (d == null) {
             return;
         }
+        stopRequested = true;
         d.setStop();
-        d.interrupt();
+        // No interrupt: the worker polls the queue with a timeout and re-checks stopRequested each
+        // round, so it stops within ~100ms on its own. Interrupting it could land inside a BDB JE
+        // call and invalidate the environment the demoted node still needs for replay.
         try {
             d.join(Math.max(1L, timeoutMs));
         } catch (InterruptedException e) {
@@ -186,8 +196,15 @@ public class JournalWriter {
     }
 
     protected void writeOneBatch() throws InterruptedException {
-        // waiting if necessary until an element becomes available
-        currentJournal = journalQueue.take();
+        // Wait until an element becomes available, polling so a cooperative stop (close() sets
+        // stopRequested; no interrupt, see the field comment) is observed within one poll round.
+        currentJournal = null;
+        while (currentJournal == null) {
+            if (stopRequested) {
+                return;
+            }
+            currentJournal = journalQueue.poll(100L, TimeUnit.MILLISECONDS);
+        }
 
         if (writerState.get() == WriterState.CLOSED) {
             // Writer already stopped serving; abort the straggler so its waiter unwinds instead of hanging.
@@ -220,27 +237,36 @@ public class JournalWriter {
             try {
                 // commit. The retry predicate only gates *retries*: the first commit attempt always runs, so
                 // healthy batches still become durable while the writer is SEALING during a demotion drain.
+                // Retries stay OFF during SEALING on purpose: SEALING only exists while demoting, and
+                // demotion implies BDB mastership already moved, so a commit failure here is deterministic
+                // (this node is a replica) - retrying cannot succeed and would only burn the drain budget.
                 journal.batchWriteCommit(() -> writerState.get() == WriterState.RUNNING);
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
                 lastCommittedJournalId = nextJournalId - 1;
                 markCurrentBatchSucceed();
-            } catch (JournalException e) {
-                // abort
+            } catch (JournalException | InterruptedException e) {
+                // Both failure kinds must resolve the batch: waiters block uninterruptibly on task
+                // completion (EditLog.waitForCommit), so a batch that never settles would pin them and
+                // the WAL fence forever. Nothing interrupts the writer anymore (close() stops it
+                // cooperatively), so the InterruptedException arm is defense in depth.
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 LOG.warn("failed to commit batch, will abort current {} journals.",
                         currentBatchTasks.size(), e);
                 try {
                     journal.batchWriteAbort();
                 } catch (JournalException e2) {
-                    LOG.warn("failed to abort batch, will ignore and continue.", e);
+                    LOG.warn("failed to abort batch, will ignore and continue.", e2);
                 }
                 if (writerState.get() == WriterState.RUNNING) {
                     // Commit failure while still serving is fatal (abortJournalTask exits the process).
-                    abortCurrentBatch(e.getMessage());
+                    abortCurrentBatch(String.valueOf(e.getMessage()));
                 } else {
                     // Demotion drain (SEALING/CLOSED): unblock waiters with a terminal WRITER_ABORTED so they
                     // stop retrying and release the WAL fence, letting the drain converge instead of exiting.
-                    abortCurrentBatch(e.getMessage(), new JournalWriteException(
+                    abortCurrentBatch(String.valueOf(e.getMessage()), new JournalWriteException(
                             JournalWriteException.Reason.WRITER_ABORTED, "journal commit failed while sealing", e));
                 }
             }

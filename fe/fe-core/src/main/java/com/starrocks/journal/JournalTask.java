@@ -16,6 +16,8 @@
 package com.starrocks.journal;
 
 import com.starrocks.common.io.DataOutputBuffer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CountDownLatch;
@@ -25,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
+    private static final Logger LOG = LogManager.getLogger(JournalTask.class);
+
     // serialized JournalEntity
     private final DataOutputBuffer buffer;
     // write result
@@ -97,7 +101,14 @@ public class JournalTask implements Future<Boolean> {
             onDone = null;
         }
         if (callback != null) {
-            callback.run();
+            try {
+                callback.run();
+            } catch (Throwable t) {
+                // Settlement must never be blockable by a callback: markCurrentBatchSucceed() marks a whole
+                // batch in a loop, and a throwing callback would leave the REST of the batch unresolved -
+                // their waiters block uninterruptibly on task completion and would be pinned forever.
+                LOG.error("journal task onDone callback failed; ignored so the batch keeps settling", t);
+            }
         }
     }
 
