@@ -400,9 +400,37 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
     };
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto result = _parallel_mgr->create_parallel_tasks(
-                tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
-                request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+        // create_parallel_tasks() loads the tablet metadata and builds the StarOS/Starlet filesystem, so it can
+        // throw: std::system_error("Resource deadlock avoided") is exactly the #76882 failure mode, and
+        // std::bad_alloc is always possible. Now that this function runs on a `_threads` worker instead of the
+        // brpc bthread, an escaping exception would silently hang the RPC: ThreadPool::dispatch_thread only logs
+        // it (it does not call the runnable's cancel()), compact() has already done `guard.release()`, and
+        // ~CompactionTaskCallback() does not run `done`. finish_task() completes the RPC only once it has
+        // collected one context per tablet id, so a skipped tablet means `done` never runs -- the FE's compact
+        // RPC blocks until its timeout and `request`/`response` are leaked.
+        //
+        // Translate the exception into a Status and take the existing fallback-to-normal-compaction path, which
+        // keeps the "exactly one finish_task() per tablet id" invariant intact. Running `done` here instead
+        // would be unsafe: tablets scheduled by earlier iterations are still writing into `response` from their
+        // own threads, and completing the RPC frees it under them.
+        auto result = [&]() -> StatusOr<int> {
+            try {
+                TEST_SYNC_POINT("CompactionScheduler::process_parallel_compaction:create_parallel_tasks");
+                return _parallel_mgr->create_parallel_tasks(
+                        tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
+                        request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+            } catch (const std::exception& e) {
+                LOG(WARNING) << "Exception while creating parallel compaction tasks, falling back to normal "
+                                "compaction. tablet_id="
+                             << tablet_id << ", txn_id=" << request->txn_id() << ": " << e.what();
+                return Status::InternalError(fmt::format("exception in create_parallel_tasks: {}", e.what()));
+            } catch (...) {
+                LOG(WARNING) << "Unknown exception while creating parallel compaction tasks, falling back to "
+                                "normal compaction. tablet_id="
+                             << tablet_id << ", txn_id=" << request->txn_id();
+                return Status::InternalError("unknown exception in create_parallel_tasks");
+            }
+        }();
 
         if (result.ok() && result.value() > 0) {
             // Parallel compaction tasks created successfully
