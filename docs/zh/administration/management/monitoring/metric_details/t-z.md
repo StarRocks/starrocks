@@ -31,6 +31,11 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: 当前BE中主键表tablet的最高合并分数。
 
+## `threadpool_task_exception_total`
+
+- 单位: 计数
+- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
+
 ## `thrift_connections_total`
 
 - 单位: 计数

@@ -31,6 +31,11 @@ description: "Alphabetical t - z"
 - 単位: -
 - 説明: 現在のBEにおけるプライマリキーテーブル内のタブレットの最高コンパクションスコア。
 
+## `threadpool_task_exception_total`
+
+- 単位: カウント
+- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+
 ## `thrift_connections_total`
 
 - 単位: カウント

@@ -288,7 +288,8 @@
     {
       "path": "be/src/common/config_thread_fwd.h",
       "configs": [
-        "priority_queue_remaining_tasks_increased_frequency"
+        "priority_queue_remaining_tasks_increased_frequency",
+        "enable_threadpool_catch_task_exception"
       ]
     },
     {
