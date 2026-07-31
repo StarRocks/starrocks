@@ -522,9 +522,10 @@ public class AgentTaskTest {
                 return true;
             }
         };
-        // Source guard: once demoting, no new agent task may be enqueued, so a create-tablet
-        // started after the drain fails fast instead of hanging on a never-marked latch.
-        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        // Source guard: once demoting, no new agent task may be enqueued. Refusal is a false
+        // return (not a throw): enqueues also happen inside WAL appliers, where an exception
+        // after the journal committed would tear the apply in half.
+        Assertions.assertFalse(AgentTaskQueue.addTask(createReplicaTask));
         Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 
@@ -538,10 +539,10 @@ public class AgentTaskTest {
             }
         };
         // A straggling leader-session thread (e.g. a DDL that passed admission before the
-        // demotion) must not enqueue AFTER the demotion completed either - otherwise it waits
-        // out its full timeout and leaves a stale entry in the follower's queue that could
-        // shadow a same-signature task after re-election.
-        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        // demotion) must not enqueue AFTER the demotion completed either - otherwise it leaves
+        // a stale entry in the follower's queue that could shadow a same-signature task after
+        // re-election. Refusal is a false return, matching the duplicate-signature convention.
+        Assertions.assertFalse(AgentTaskQueue.addTask(createReplicaTask));
         Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 

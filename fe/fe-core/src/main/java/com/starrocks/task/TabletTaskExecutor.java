@@ -502,6 +502,16 @@ public class TabletTaskExecutor {
     static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Same dispatch fence as AgentBatchTask.run(): a demoting/non-leader node must not send
+                // BE agent-task RPCs. This is the only submit_tasks call site that bypasses
+                // AgentBatchTask.run(), and AgentTaskQueue.addTask refuses by returning false (not by
+                // throwing), so without this check nothing would stop the send. The RuntimeException is
+                // the lambda's established failure mode; callers count the latch down and fail the DDL.
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+                    throw new RuntimeException("node is demoting or not the leader ("
+                            + globalStateMgr.getFeType() + "), refuse to send create-replica tasks");
+                }
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getBackendOrComputeNode(backendId);
                 if (computeNode == null || !computeNode.isAlive()) {
