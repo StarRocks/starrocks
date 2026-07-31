@@ -562,8 +562,8 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.rocky9_image_cache_id }}
-      LINUX_DISTRO: rocky9
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+      LINUX_DISTRO: ubuntu
     steps:
       - name: INIT ECI & RUN UT
         id: run_ut

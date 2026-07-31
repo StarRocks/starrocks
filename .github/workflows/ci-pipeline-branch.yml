@@ -355,8 +355,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.rocky9_image_cache_id }}
-      LINUX_DISTRO: rocky9
     steps:
       - name: BRANCH INFO
         id: branch
@@ -371,10 +369,10 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID
@@ -500,8 +498,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
-      LINUX_DISTRO: ubuntu
     steps:
       - name: clean
         run: |
@@ -522,11 +518,12 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}"
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID
