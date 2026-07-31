@@ -640,6 +640,11 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     sstable_pb.set_encryption_meta(del_sst_meta.encryption_meta());
     sstable_pb.set_shared_version(version);
     sstable_pb.set_shared_rssid(del_rssid);
+    // Preserve the shared flag from del_sst_meta (mirrors the normal ingest path above). During tablet
+    // split cross-publish every child ingests the same tombstone sstable; dropping the flag would record
+    // the shared file as private, letting one child's compaction/vacuum delete a file the siblings still
+    // reference.
+    sstable_pb.set_shared(del_sst_meta.shared());
     sstable_pb.mutable_range()->CopyFrom(del_sst_range);
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));

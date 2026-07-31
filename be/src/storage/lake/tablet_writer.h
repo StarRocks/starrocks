@@ -246,12 +246,21 @@ public:
     // (for example, during large imports or major compaction tasks), it will invoke this function.
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
-    // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (eager build only).
+    // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
+    // when this del file has no sstable). Built for large del files, gated by del size, only when the
+    // tablet uses a cloud-native PK index (see _cloud_native_pk_index) so publish can ingest it.
     std::vector<FileInfo> _del_ssts;
     std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
+
+    // Whether the tablet uses a cloud-native PK index (enable_persistent_index && CLOUD_NATIVE). Only
+    // then does publish ingest the pre-built del tombstone sstables; otherwise it takes the memtable erase
+    // path and a written sstable would be orphaned. Conservatively false until confirmed from metadata, so
+    // a build with uncached metadata simply falls back to the memtable path (correct, just unoptimized).
+    bool cloud_native_pk_index() const { return _cloud_native_pk_index; }
+    void set_cloud_native_pk_index(bool v) { _cloud_native_pk_index = v; }
 
     // Set only on the schema-change conversion writer for the ALTER's shadow tablet, so an
     // async-mode ADD still builds existing data's .vi during the rewrite. Other writers: false.
@@ -296,6 +305,7 @@ protected:
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
+    bool _cloud_native_pk_index = false;
     bool _force_build_vector_index_inline = false;
 };
 
