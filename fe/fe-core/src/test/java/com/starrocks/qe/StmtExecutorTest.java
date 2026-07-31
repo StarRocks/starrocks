@@ -150,6 +150,9 @@ public class StmtExecutorTest {
                 ctx.getSerializer();
                 minTimes = 0;
                 result = serializer;
+                ctx.getExecTimeout();
+                minTimes = 0;
+                result = 10;
             }
         };
 
@@ -160,42 +163,40 @@ public class StmtExecutorTest {
     public void testWaitCurrentFeTransferToLeaderTimeout(@Mocked ConnectContext ctx) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
-        int oldThriftRpcTimeoutMs = Config.thrift_rpc_timeout_ms;
-        Config.thrift_rpc_timeout_ms = 5;
 
-        try {
-            new MockUp<GlobalStateMgr>() {
-                @Mock
-                public GlobalStateMgr getCurrentState() {
-                    return state;
-                }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
 
-                @Mock
-                public boolean isLeader() {
-                    return false;
-                }
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
 
-                @Mock
-                public boolean isInTransferringToLeader() {
-                    return true;
-                }
-            };
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return true;
+            }
+        };
 
-            new Expectations(ctx) {
-                {
-                    ctx.getSerializer();
-                    minTimes = 0;
-                    result = serializer;
-                }
-            };
+        // The wait is bounded by the statement's own exec timeout; a zero budget clamps to 1 ms.
+        new Expectations(ctx) {
+            {
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+                ctx.getExecTimeout();
+                minTimes = 0;
+                result = 0;
+            }
+        };
 
-            StarRocksPlannerException exception = Assertions.assertThrows(StarRocksPlannerException.class,
-                    () -> new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
-            Assertions.assertTrue(exception.getMessage().contains(
-                    "timed out after 5 ms waiting current FE node transferring to LEADER state"));
-        } finally {
-            Config.thrift_rpc_timeout_ms = oldThriftRpcTimeoutMs;
-        }
+        StarRocksPlannerException exception = Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
+        Assertions.assertTrue(exception.getMessage().contains(
+                "timed out after 1 ms waiting current FE node transferring to LEADER state"));
     }
 
     @Test
