@@ -756,6 +756,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return timeoutMs;
     }
 
+    public long getTimeoutDeadlineMs() {
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return prepareTime + timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            return preparedTime + getPreparedTimeoutMs();
+        }
+        return Long.MAX_VALUE;
+    }
+
     public long getWarehouseId() {
         return warehouseId;
     }
@@ -995,15 +1005,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        if (transactionStatus == TransactionStatus.PREPARE) {
-            return currentMillis - prepareTime > timeoutMs;
-        }
-        if (transactionStatus == TransactionStatus.PREPARED) {
-            long timeout = preparedTimeoutMs > 0 ?
-                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
-            return (currentMillis - preparedTime) > timeout;
-        }
-        return false;
+        long timeoutDeadlineMs = getTimeoutDeadlineMs();
+        return timeoutDeadlineMs != Long.MAX_VALUE && currentMillis > timeoutDeadlineMs;
     }
 
     /**

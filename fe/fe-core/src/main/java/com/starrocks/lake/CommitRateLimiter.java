@@ -102,7 +102,7 @@ public class CommitRateLimiter {
         setAllowCommitTimeOnce(partitionIds);
 
         long txnId = transactionState.getTransactionId();
-        long abortTime = transactionState.getPrepareTime() + transactionState.getTimeoutMs();
+        long abortTime = transactionState.getTimeoutDeadlineMs();
 
         if (transactionState.getAllowCommitTimeMs() >= abortTime) {
             throw new CommitFailedException("Txn " + txnId + " timed out due to ingestion slowdown", txnId);
