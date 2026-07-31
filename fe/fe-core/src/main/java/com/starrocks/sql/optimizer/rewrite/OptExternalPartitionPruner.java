@@ -26,6 +26,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.StarRocksExternalTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -36,6 +37,8 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.starrocks.StarRocksRemoteTableStats;
+import com.starrocks.connector.starrocks.StarRocksStatsUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -47,6 +50,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -421,9 +425,69 @@ public class OptExternalPartitionPruner {
             if (icebergTable.isPartitioned()) {
                 checkPartitionFilterRequired(operator, context, table, icebergTable.getPartitionColumns());
             }
+        } else if (table instanceof StarRocksExternalTable) {
+            initStarRocksPartitionInfo(operator, (StarRocksExternalTable) table,
+                    columnToPartitionValuesMap, columnToNullPartitions);
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
                 columnToPartitionValuesMap, columnToNullPartitions);
+    }
+
+    /**
+     * StarRocks external table: rebuild partition metadata from the statistics
+     * snapshot pinned on the table object (no remote call here — the snapshot
+     * was resolved through the connector's cache). LIST partitioning fills the
+     * value maps consumed by ListPartitionPruner; RANGE partitioning only
+     * registers the partition column refs (so classifyConjuncts can split the
+     * conjuncts) and prunes against rebuilt ranges in computePartitionInfo.
+     * Local pruning is estimation-only: the remote re-plans the pushed-down
+     * predicate SQL and prunes against its own live metadata for execution.
+     */
+    private static void initStarRocksPartitionInfo(
+            LogicalScanOperator operator, StarRocksExternalTable table,
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+        StarRocksRemoteTableStats.Snapshot snapshot = table.getStatsSnapshot();
+        if (!StarRocksStatsUtils.isPruneSupported(snapshot) || table.isUnPartitioned()) {
+            return;
+        }
+        List<Column> partitionColumns = table.getPartitionColumns();
+        if (partitionColumns.isEmpty() || snapshot.partitionColumns == null
+                || partitionColumns.size() != snapshot.partitionColumns.size()) {
+            return;
+        }
+        List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
+        for (Column column : partitionColumns) {
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+            columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+            columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
+            partitionColumnRefOperators.add(partitionColumnRefOperator);
+        }
+
+        Map<Long, PartitionKey> canonicalKeys = StarRocksStatsUtils.buildCanonicalKeys(snapshot, partitionColumns);
+        Map<Long, PartitionKey> idToPartitionKey = operator.getScanOperatorPredicates().getIdToPartitionKey();
+        idToPartitionKey.putAll(canonicalKeys);
+
+        if (StarRocksRemoteTableStats.PARTITION_TYPE_LIST.equals(snapshot.partitionType)) {
+            Map<Long, List<List<LiteralExpr>>> tuples =
+                    StarRocksStatsUtils.parseListTuples(snapshot, partitionColumns);
+            for (Map.Entry<Long, List<List<LiteralExpr>>> entry : tuples.entrySet()) {
+                long partitionId = entry.getKey();
+                for (List<LiteralExpr> tuple : entry.getValue()) {
+                    for (int i = 0; i < tuple.size() && i < partitionColumnRefOperators.size(); i++) {
+                        ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
+                        LiteralExpr literal = tuple.get(i);
+                        if (literal == null) {
+                            columnToNullPartitions.get(columnRefOperator).add(partitionId);
+                        } else {
+                            columnToPartitionValuesMap.get(columnRefOperator)
+                                    .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet())
+                                    .add(partitionId);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,
@@ -466,6 +530,9 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+        } else if (table instanceof StarRocksExternalTable) {
+            computeStarRocksPartitionInfo(operator, (StarRocksExternalTable) table,
+                    columnToPartitionValuesMap, columnToNullPartitions);
         } else if (table instanceof PaimonTable) {
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
@@ -508,6 +575,58 @@ public class OptExternalPartitionPruner {
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
+        }
+    }
+
+    private static void computeStarRocksPartitionInfo(
+            LogicalScanOperator operator, StarRocksExternalTable table,
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
+        if (scanOperatorPredicates.getIdToPartitionKey().isEmpty()) {
+            // initStarRocksPartitionInfo decided pruning is unsupported.
+            return;
+        }
+        StarRocksRemoteTableStats.Snapshot snapshot = table.getStatsSnapshot();
+        if (snapshot == null) {
+            return;
+        }
+        if (StarRocksRemoteTableStats.PARTITION_TYPE_LIST.equals(snapshot.partitionType)) {
+            ListPartitionPruner partitionPruner =
+                    new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
+                            scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
+            Collection<Long> selectedPartitionIds = partitionPruner.prune();
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+            }
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+        } else if (StarRocksRemoteTableStats.PARTITION_TYPE_RANGE.equals(snapshot.partitionType)) {
+            List<Column> partitionColumns = table.getPartitionColumns();
+            Map<Long, Range<PartitionKey>> rangeMap = StarRocksStatsUtils.buildRangeMap(snapshot, partitionColumns);
+            if (rangeMap.isEmpty()) {
+                return;
+            }
+            Map<String, PartitionColumnFilter> columnFilters = ColumnFilterConverter.convertColumnFilter(
+                    scanOperatorPredicates.getPartitionConjuncts(), table);
+            List<Long> selectedPartitionIds;
+            try {
+                selectedPartitionIds = new RangePartitionPruner(rangeMap, partitionColumns, columnFilters).prune();
+            } catch (Exception e) {
+                LOG.warn("StarRocks external table range partition prune failed", e);
+                selectedPartitionIds = null;
+            }
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = new ArrayList<>(rangeMap.keySet());
+            }
+            // Range pruning cannot fully evaluate the partition conjuncts (a
+            // range partition can be partially covered); they stay in the scan
+            // predicate and are estimated against narrowed partition-column
+            // statistics.
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts()
+                    .addAll(scanOperatorPredicates.getPartitionConjuncts());
         }
     }
 

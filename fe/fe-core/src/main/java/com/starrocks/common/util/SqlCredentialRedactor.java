@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.re2j.Matcher;
 import com.google.re2j.Pattern;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -84,6 +85,7 @@ public class SqlCredentialRedactor {
             .add("property.sasl.password")
             .add("broker.password")
             .add("api_key")
+            .add(StarRocksConnectorConfig.PASSWORD)
             .build();
 
     // Lowercase set for O(1) lookup (case-insensitive matching)

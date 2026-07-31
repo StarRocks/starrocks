@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.RawValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.StarRocksScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionTableScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
@@ -217,6 +218,7 @@ public class RuleSet {
             new ChangesScanImplementationRule(),
             new JDBCScanImplementationRule(),
             new BenchmarkScanImplementationRule(),
+            new StarRocksScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),

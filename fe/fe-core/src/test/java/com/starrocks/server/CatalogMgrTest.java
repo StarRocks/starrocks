@@ -117,6 +117,26 @@ public class CatalogMgrTest {
     }
 
     @Test
+    public void testStarRocksCatalogPasswordEncryptedOnlyInImage() {
+        Map<String, String> config = new HashMap<>();
+        config.put("type", "starrocks");
+        config.put("starrocks.fe.http.url", "127.0.0.1:8030");
+        config.put("starrocks.user", "root");
+        config.put("starrocks.password", "plain_secret");
+        Catalog catalog = new ExternalCatalog(10000, "sr_catalog", "", config);
+
+        Catalog encrypted = CatalogMgr.encryptCatalogForImage(catalog);
+
+        Assertions.assertEquals("plain_secret", catalog.getConfig().get("starrocks.password"));
+        Assertions.assertNotEquals("plain_secret", encrypted.getConfig().get("starrocks.password"));
+        Assertions.assertEquals("true", encrypted.getConfig().get("starrocks.password.__encrypted"));
+
+        Catalog decrypted = CatalogMgr.decryptCatalogFromImage(encrypted);
+        Assertions.assertEquals("plain_secret", decrypted.getConfig().get("starrocks.password"));
+        Assertions.assertFalse(decrypted.getConfig().containsKey("starrocks.password.__encrypted"));
+    }
+
+    @Test
     public void testLoadCatalogWithException() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assertions.assertTrue(catalogMgr.catalogExists("hive_catalog"));

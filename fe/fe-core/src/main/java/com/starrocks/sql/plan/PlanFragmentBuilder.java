@@ -38,6 +38,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.StarRocksExternalTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
@@ -56,9 +57,15 @@ import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
+import com.starrocks.connector.starrocks.StarRocksFeClient;
+import com.starrocks.connector.starrocks.StarRocksRemotePredicateSerializer;
+import com.starrocks.connector.starrocks.StarRocksRemoteScanSessionManager;
+import com.starrocks.connector.starrocks.StarRocksRemoteScanWire;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.AggregateInfo;
@@ -117,6 +124,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.SortInfo;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.SplitCastPlanFragment;
+import com.starrocks.planner.StarRocksScanNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
@@ -135,6 +143,7 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -212,6 +221,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStarRocksScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -229,12 +239,20 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TStarRocksRemoteScanRequiredOutput;
+import com.starrocks.thrift.TStarRocksRemoteScanWireShape;
+import com.starrocks.thrift.TStarRocksScanRange;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -250,7 +268,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -263,6 +283,7 @@ import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.UNSUPPORTED;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
 
@@ -271,6 +292,7 @@ import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColum
  */
 public class PlanFragmentBuilder {
     private static final Logger LOG = LogManager.getLogger(PlanFragmentBuilder.class);
+    private static final String STARROCKS_REMOTE_ROW_MARKER_COLUMN = "__sr_row_marker";
 
     private static final Set<String> TABLES_USING_EXACT_DB_MATCH = Set.of(
             LoadsSystemTable.NAME,
@@ -371,6 +393,17 @@ public class PlanFragmentBuilder {
             }
         }
         return false;
+    }
+
+    static List<ColumnAccessPath> filterStarRocksRemoteScanColumnAccessPaths(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, List<ColumnAccessPath> columnAccessPaths) {
+        Set<String> structColumns = colRefToColumnMetaMap.values().stream()
+                .filter(column -> column.getType().isStructType())
+                .map(column -> column.getName().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        return columnAccessPaths.stream()
+                .filter(path -> structColumns.contains(path.getPath().toLowerCase(Locale.ROOT)))
+                .collect(Collectors.toList());
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
@@ -917,6 +950,74 @@ public class PlanFragmentBuilder {
             return paths;
         }
 
+        private List<TStarRocksRemoteScanRequiredOutput> buildStarRocksRemoteScanRequiredOutputs(
+                TupleDescriptor tupleDescriptor, List<ColumnAccessPath> columnAccessPaths) {
+            Map<String, ColumnAccessPath> outputStructPaths = columnAccessPaths.stream()
+                    .filter(path -> path.getType() == TAccessPathType.ROOT && path.hasChildPath()
+                            && !path.isFromPredicate() && !path.isExtended())
+                    .collect(Collectors.toMap(path -> path.getPath().toLowerCase(Locale.ROOT),
+                            path -> path, (left, right) -> left));
+
+            List<TStarRocksRemoteScanRequiredOutput> requiredOutputs = new ArrayList<>();
+            for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
+                if (!slot.isMaterialized()) {
+                    continue;
+                }
+                TStarRocksRemoteScanRequiredOutput output = new TStarRocksRemoteScanRequiredOutput();
+                output.setLocal_slot_id(slot.getId().asInt());
+                if (isStarRocksRemoteRowMarkerSlot(slot)) {
+                    output.setWire_shape(TStarRocksRemoteScanWireShape.ROW_MARKER);
+                    output.setExpected_wire_type(TypeSerializer.toThrift(IntegerType.BIGINT));
+                    requiredOutputs.add(output);
+                    continue;
+                }
+                output.setRoot_column(slot.getColumn().getName());
+
+                ColumnAccessPath path = outputStructPaths.get(slot.getColumn().getName().toLowerCase(Locale.ROOT));
+                if (slot.getColumn().getType().isStructType() && slot.getType().isStructType() && path != null) {
+                    output.setAccess_path(path.toThrift());
+                    output.setWire_shape(TStarRocksRemoteScanWireShape.PRUNED_ROOT_STRUCT);
+                    Type expectedWireType = pruneStarRocksRemoteScanStructType(slot.getColumn().getType(), path);
+                    output.setExpected_wire_type(TypeSerializer.toThrift(expectedWireType));
+                } else {
+                    output.setWire_shape(TStarRocksRemoteScanWireShape.FULL_ROOT);
+                    output.setExpected_wire_type(TypeSerializer.toThrift(slot.getColumn().getType()));
+                }
+                requiredOutputs.add(output);
+            }
+            return requiredOutputs;
+        }
+
+        private Type pruneStarRocksRemoteScanStructType(Type type, ColumnAccessPath path) {
+            if (!type.isStructType() || !path.hasChildPath()) {
+                return type;
+            }
+            StructType structType = (StructType) type;
+            List<StructField> fields = new ArrayList<>();
+            for (StructField field : structType.getFields()) {
+                ColumnAccessPath childPath = findStarRocksRemoteScanChildPath(path, field.getName());
+                if (childPath == null || childPath.getType() != TAccessPathType.FIELD) {
+                    continue;
+                }
+                Type fieldType = field.getType().clone();
+                if (fieldType.isStructType() && childPath.hasChildPath()) {
+                    fieldType = pruneStarRocksRemoteScanStructType(fieldType, childPath);
+                }
+                fields.add(new StructField(field.getName(), field.getFieldId(),
+                        field.getFieldPhysicalName(), fieldType, field.getComment()));
+            }
+            return fields.isEmpty() ? type : new StructType(fields, structType.isNamed());
+        }
+
+        private ColumnAccessPath findStarRocksRemoteScanChildPath(ColumnAccessPath path, String childName) {
+            for (ColumnAccessPath child : path.getChildren()) {
+                if (child.getPath().equalsIgnoreCase(childName)) {
+                    return child;
+                }
+            }
+            return null;
+        }
+
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
@@ -1352,6 +1453,41 @@ public class PlanFragmentBuilder {
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
+        }
+
+        private void prepareStarRocksRemoteRowMarkerSlot(ExecPlan context, TupleDescriptor tupleDescriptor) {
+            boolean hasMaterializedSlot = tupleDescriptor.getSlots().stream().anyMatch(SlotDescriptor::isMaterialized);
+            if (hasMaterializedSlot) {
+                return;
+            }
+            SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(tupleDescriptor);
+            Column markerColumn = new Column(STARROCKS_REMOTE_ROW_MARKER_COLUMN, IntegerType.BIGINT, false);
+            slotDescriptor.setColumn(markerColumn);
+            slotDescriptor.setIsNullable(false);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setIsOutputColumn(false);
+        }
+
+        private void dematerializeUnusedStarRocksRemoteSlots(
+                TupleDescriptor tupleDescriptor, List<ScalarOperator> residualPredicates) {
+            ColumnRefSet residualColumns = new ColumnRefSet();
+            for (ScalarOperator residualPredicate : residualPredicates) {
+                residualColumns.union(residualPredicate.getUsedColumns());
+            }
+
+            for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
+                if (!slot.isMaterialized() || slot.isOutputColumn()) {
+                    continue;
+                }
+                if (!residualColumns.contains(slot.getId().asInt())) {
+                    slot.setIsMaterialized(false);
+                }
+            }
+        }
+
+        private boolean isStarRocksRemoteRowMarkerSlot(SlotDescriptor slot) {
+            return slot.getColumn() != null
+                    && STARROCKS_REMOTE_ROW_MARKER_COLUMN.equals(slot.getColumn().getName());
         }
 
         private void registerScanNode(PhysicalScanOperator scanOperator, ScanNode scanNode, ExecPlan context) {
@@ -2349,6 +2485,155 @@ public class PlanFragmentBuilder {
             registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStarRocksScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalStarRocksScanOperator node = (PhysicalStarRocksScanOperator) optExpression.getOp();
+            StarRocksExternalTable table = (StarRocksExternalTable) node.getTable();
+
+            context.getDescTbl().addReferencedTable(node.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(node.getTable());
+
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
+            StarRocksScanNode scanNode = new StarRocksScanNode(context.getNextNodeId(), tupleDescriptor, computeResource);
+            currentExecGroup.add(scanNode, true);
+            List<ColumnAccessPath> columnAccessPaths = computeAllColumnAccessPath(node, context);
+            List<ColumnAccessPath> remoteColumnAccessPaths = filterStarRocksRemoteScanColumnAccessPaths(
+                    node.getColRefToColumnMetaMap(), columnAccessPaths);
+            scanNode.setColumnAccessPaths(remoteColumnAccessPaths);
+
+            StarRocksRemotePredicateSerializer.Result predicateSplit =
+                    StarRocksRemotePredicateSerializer.serialize(
+                            node.getPredicate(), node.getColRefToColumnMetaMap());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator predicate : predicateSplit.getResidualPredicates()) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+            dematerializeUnusedStarRocksRemoteSlots(tupleDescriptor, predicateSplit.getResidualPredicates());
+            prepareStarRocksRemoteRowMarkerSlot(context, tupleDescriptor);
+            tupleDescriptor.computeMemLayout();
+
+            // Build the client from the catalog's CURRENT properties: connection settings
+            // deliberately do not live on the table object, so an altered catalog is picked up here.
+            StarRocksFeClient feClient = StarRocksFeClient.fromCatalog(table.getCatalogName());
+
+            if (StarRocksConnectorConfig.TRANSPORT_ARROW_FLIGHT.equals(feClient.getScanTransport()) &&
+                    tupleDescriptor.getSlots().stream()
+                            .filter(SlotDescriptor::isMaterialized)
+                            .anyMatch(slot -> slot.getType().isComplexType())) {
+                throw new StarRocksPlannerException(
+                        "StarRocks catalog arrow_flight scan does not support complex columns yet; " +
+                                "set starrocks.scan.transport=brpc_chunk for ARRAY/MAP/STRUCT columns",
+                        UNSUPPORTED);
+            }
+            StarRocksRemoteScanWire.PrepareScanRequest request = new StarRocksRemoteScanWire.PrepareScanRequest();
+            request.db = table.getCatalogDBName();
+            request.table = table.getCatalogTableName();
+            request.schemaVersion = table.getSchemaVersion();
+            request.requiredColumns = tupleDescriptor.getSlots().stream()
+                    .filter(SlotDescriptor::isMaterialized)
+                    .filter(slot -> !isStarRocksRemoteRowMarkerSlot(slot))
+                    .map(slot -> slot.getColumn().getName())
+                    .collect(Collectors.toCollection(LinkedHashSet::new))
+                    .stream()
+                    .collect(Collectors.toList());
+            request.columnAccessPaths = remoteColumnAccessPaths.stream()
+                    .map(StarRocksRemoteScanWire::toDto)
+                    .collect(Collectors.toList());
+            List<TStarRocksRemoteScanRequiredOutput> requiredOutputs =
+                    buildStarRocksRemoteScanRequiredOutputs(tupleDescriptor, remoteColumnAccessPaths);
+            request.requiredOutputs = requiredOutputs.stream()
+                    .map(StarRocksRemoteScanWire::toDto)
+                    .collect(Collectors.toList());
+            request.pushdownPredicateSql = predicateSplit.getPushdownSql();
+            // Only cap the remote when every predicate was pushed down. A residual conjunct runs
+            // locally AFTER the remote already applied the limit, so capping the remote there could
+            // drop rows that would have passed the residual and left the result short of the limit;
+            // the local scanNode.setLimit(node.getLimit()) below still enforces the final limit.
+            request.softLimit = predicateSplit.getResidualPredicates().isEmpty() ? node.getLimit() : -1;
+            TUniqueId executionId = context.getConnectContext().getExecutionId();
+            if (executionId != null) {
+                request.sessionId = DebugUtil.printId(executionId);
+            } else if (context.getConnectContext().getQueryId() != null) {
+                request.sessionId = context.getConnectContext().getQueryId().toString();
+            } else {
+                request.sessionId = "exec-plan-" + System.identityHashCode(context);
+            }
+            request.sessionVars = StarRocksFeClient.buildRemoteSessionVars(
+                    context.getConnectContext().getSessionVariable());
+            scanNode.setOutputColumnNames(request.requiredColumns);
+            scanNode.setRemoteScanExplainInfo(request.pushdownPredicateSql, predicateSplit.getUnsupportedReasons(),
+                    requiredOutputs, request.softLimit, request.schemaVersion, request.sessionVars);
+
+            StatementBase.ExplainLevel explainLevel = context.getConnectContext().getExplainLevel();
+            boolean isExplainOnly = explainLevel != null && !StatementBase.ExplainLevel.ANALYZE.equals(explainLevel);
+            if (isExplainOnly) {
+                scanNode.setupScanRangeLocations(Collections.emptyList(), feClient.toThriftTransport());
+            } else {
+                StarRocksRemoteScanWire.PrepareScanResponse remoteScan = null;
+                String remoteSessionId = request.sessionId;
+                try {
+                    remoteScan = feClient.prepareRemoteScan(request);
+                    remoteSessionId = remoteScan.sessionId == null ? request.sessionId : remoteScan.sessionId;
+                    if (remoteScan.outputs != null && !remoteScan.outputs.isEmpty()) {
+                        scanNode.setRemoteOutputs(remoteScan.outputs.stream()
+                                .map(StarRocksRemoteScanWire::toThrift)
+                                .collect(Collectors.toList()));
+                    } else if (remoteScan.outputSchema != null && !remoteScan.outputSchema.isEmpty()) {
+                        scanNode.setOutputColumnNames(remoteScan.outputSchema.stream()
+                                .map(column -> column.name)
+                                .collect(Collectors.toList()));
+                    }
+                    StarRocksRemoteScanSessionManager.registerCleanupOnQueryFinished(context.getConnectContext(),
+                            feClient.getFeHttpUrl(), feClient.getScanTransport(),
+                            feClient.getFeUser(), feClient.getFePassword(), feClient.getFeHttpTimeoutMs(),
+                            feClient.getFeHttpRetryTimes(), remoteSessionId);
+                    String preparedRemoteSessionId = remoteSessionId;
+                    List<TStarRocksScanRange> scanRanges = remoteScan.streams.stream().map(stream -> {
+                        TStarRocksScanRange scanRange = new TStarRocksScanRange();
+                        scanRange.setScan_token(stream.scanToken);
+                        scanRange.setRemote_be(StarRocksRemoteScanWire.toThrift(stream.remoteBe));
+                        scanRange.setTransport(feClient.toThriftTransport());
+                        scanRange.setPacket_seq(0L);
+                        return scanRange;
+                    }).collect(Collectors.toList());
+                    StarRocksRemoteScanSessionManager.registerPreparedRemoteScan(context.getConnectContext(),
+                            feClient.getFeHttpUrl(), feClient.getScanTransport(),
+                            feClient.getFeUser(), feClient.getFePassword(), feClient.getFeHttpTimeoutMs(),
+                            feClient.getFeHttpRetryTimes(), preparedRemoteSessionId);
+                    scanNode.setupScanRangeLocations(scanRanges, feClient.toThriftTransport());
+                } catch (RuntimeException e) {
+                    if (remoteScan != null) {
+                        try {
+                            feClient.batchCleanupScanSessions(Collections.singletonList(
+                                    new StarRocksRemoteScanWire.CleanupItem(remoteSessionId, true)));
+                            // Cleaned up eagerly; drop the finish-listener registration so
+                            // query end does not re-clean the already-gone session.
+                            StarRocksRemoteScanSessionManager.unregisterCleanup(context.getConnectContext(),
+                                    feClient.getFeHttpUrl(), remoteSessionId);
+                        } catch (RuntimeException cleanupException) {
+                            // Keep the finish-listener registration: it retries the cleanup
+                            // at query end.
+                            LOG.warn("failed to cancel remote StarRocks scan session {} after local planning failure",
+                                    remoteSessionId, cleanupException);
+                        }
+                    }
+                    throw e;
+                }
+            }
+
+            scanNode.setLimit(node.getLimit());
+            scanNode.computeStatistics(optExpression.getStatistics());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            registerScanNode(node, scanNode, context);
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

@@ -106,6 +106,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalStarRocksScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
@@ -149,6 +150,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStarRocksScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
@@ -908,6 +910,35 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    /**
+     * StarRocks external table: base statistics come from the connector's
+     * snapshot caches (Hive contract — predicate is passed as null and applied
+     * once by visitOperator afterwards). When the scan was partition-pruned,
+     * the selected partition keys narrow the statistics to the selected set.
+     */
+    private Void computeStarRocksScanNode(Operator node, ExpressionContext context, Table table,
+                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Preconditions.checkState(context.arity() == 0);
+        try {
+            ScanOperatorPredicates predicates;
+            if (node.isLogical()) {
+                predicates = ((LogicalScanOperator) node).getScanOperatorPredicates();
+            } else {
+                predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
+            }
+            // Unpruned scans pass null: the connector treats it as "all partitions".
+            List<PartitionKey> partitionKeys =
+                    predicates.hasPrunedPartition() ? predicates.getSelectedPartitionKeys() : null;
+            Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, table.getCatalogName(), table, colRefToColumnMetaMap, partitionKeys, null);
+            context.setStatistics(statistics);
+            return visitOperator(node, context);
+        } catch (AnalysisException e) {
+            LOG.warn("compute starrocks external table statistics failed : " + e);
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
+        }
+    }
+
     private long estimateBenchmarkRowCount(Table table) {
         Preconditions.checkState(table instanceof BenchmarkTable, "Not a benchmark table: %s", table.getType());
         BenchmarkTable benchmarkTable = (BenchmarkTable) table;
@@ -942,6 +973,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalBenchmarkScan(PhysicalBenchmarkScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
                 estimateBenchmarkRowCount(node.getTable()));
+    }
+
+    @Override
+    public Void visitLogicalStarRocksScan(LogicalStarRocksScanOperator node, ExpressionContext context) {
+        return computeStarRocksScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalStarRocksScan(PhysicalStarRocksScanOperator node, ExpressionContext context) {
+        return computeStarRocksScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override

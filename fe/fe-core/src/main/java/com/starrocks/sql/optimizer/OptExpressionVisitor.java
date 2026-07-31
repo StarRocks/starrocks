@@ -198,6 +198,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalStarRocksScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalCacheStatsScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }

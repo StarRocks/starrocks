@@ -69,15 +69,7 @@ public class HttpUtils {
     private static CloseableHttpClient getHttpClient() {
         Objects.requireNonNull(CLIENT_CONNECTION_MANAGER, "clientConnectionManager is not initialized");
 
-        RequestConfig  requestConfig = RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES)
-                .setExpectContinueEnabled(Boolean.TRUE)
-                .setTargetPreferredAuthSchemes(Arrays.asList(AuthSchemes.NTLM, AuthSchemes.DIGEST, AuthSchemes.SPNEGO))
-                .setProxyPreferredAuthSchemes(Arrays.asList(AuthSchemes.BASIC, AuthSchemes.SPNEGO))
-                .setConnectTimeout(5000)
-                .setSocketTimeout(5000)
-                .setConnectionRequestTimeout(5000)
-                .setRedirectsEnabled(true)
-                .build();
+        RequestConfig requestConfig = buildRequestConfig(5000);
 
         return HttpClients.custom()
                 .setConnectionManager(CLIENT_CONNECTION_MANAGER)
@@ -119,11 +111,39 @@ public class HttpUtils {
         return executeRequest(uri, httpGet, null);
     }
 
+    public static String get(String uri, Map<String, String> header, int timeoutMs) throws Exception {
+        HttpGet httpGet = new HttpGet(uri);
+        httpGet.setConfig(buildRequestConfig(timeoutMs));
+        addHeaders(httpGet, header);
+        return executeRequest(uri, httpGet, null);
+    }
+
     public static String post(String uri, AbstractHttpEntity entity, Map<String, String> header) throws Exception {
         HttpPost httpPost = new HttpPost(uri);
         httpPost.setEntity(entity);
         addHeaders(httpPost, header);
         return executeRequest(uri, httpPost, entity);
+    }
+
+    public static String post(String uri, AbstractHttpEntity entity, Map<String, String> header, int timeoutMs)
+            throws Exception {
+        HttpPost httpPost = new HttpPost(uri);
+        httpPost.setConfig(buildRequestConfig(timeoutMs));
+        httpPost.setEntity(entity);
+        addHeaders(httpPost, header);
+        return executeRequest(uri, httpPost, entity);
+    }
+
+    private static RequestConfig buildRequestConfig(int timeoutMs) {
+        return RequestConfig.custom().setCookieSpec(CookieSpecs.IGNORE_COOKIES)
+                .setExpectContinueEnabled(Boolean.TRUE)
+                .setTargetPreferredAuthSchemes(Arrays.asList(AuthSchemes.NTLM, AuthSchemes.DIGEST, AuthSchemes.SPNEGO))
+                .setProxyPreferredAuthSchemes(Arrays.asList(AuthSchemes.BASIC, AuthSchemes.SPNEGO))
+                .setConnectTimeout(timeoutMs)
+                .setSocketTimeout(timeoutMs)
+                .setConnectionRequestTimeout(timeoutMs)
+                .setRedirectsEnabled(true)
+                .build();
     }
 
     private static void addHeaders(HttpRequestBase request, Map<String, String> headers) {

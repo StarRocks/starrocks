@@ -722,7 +722,6 @@ struct TColumnAccessPath {
 enum TStarRocksRemoteScanWireShape {
   FULL_ROOT,
   PRUNED_ROOT_STRUCT,
-  SCALAR_SUBFIELD,
   ROW_MARKER,
 }
 

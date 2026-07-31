@@ -21,8 +21,11 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
@@ -101,6 +104,35 @@ public class ColumnAccessPath {
             throw new IllegalArgumentException("illegal json path: " + linearPath);
         }
         return createLinearPath(pieces, valueType);
+    }
+
+    public static ColumnAccessPath fromThrift(TColumnAccessPath thrift) {
+        if (thrift == null || thrift.type == null) {
+            throw new IllegalArgumentException("column access path misses type");
+        }
+        Type type = thrift.isSetType_desc() ? TypeDeserializer.fromThrift(thrift.type_desc) : InvalidType.INVALID;
+        ColumnAccessPath path = new ColumnAccessPath(thrift.type, getPathFromThrift(thrift), type);
+        if (thrift.isSetFrom_predicate()) {
+            path.setFromPredicate(thrift.from_predicate);
+        }
+        if (thrift.isSetExtended()) {
+            path.setExtended(thrift.extended);
+        }
+        if (thrift.children != null) {
+            thrift.children.stream().map(ColumnAccessPath::fromThrift).forEach(path::addChildPath);
+        }
+        return path;
+    }
+
+    private static String getPathFromThrift(TColumnAccessPath thrift) {
+        if (thrift.path == null || thrift.path.nodes == null || thrift.path.nodes.size() != 1) {
+            throw new IllegalArgumentException("column access path must be a string literal");
+        }
+        TExprNode node = thrift.path.nodes.get(0);
+        if (node.node_type != TExprNodeType.STRING_LITERAL || node.string_literal == null) {
+            throw new IllegalArgumentException("column access path must be a string literal");
+        }
+        return node.string_literal.value;
     }
 
     /**

@@ -38,6 +38,8 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
+import com.starrocks.epack.security.SecurityUtils;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
@@ -55,6 +57,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -72,6 +76,14 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
+    private static final String STARROCKS_PASSWORD_ENCRYPTED =
+            StarRocksConnectorConfig.PASSWORD + ".__encrypted";
+    private static final byte[] CATALOG_AES_KEY_ENCODED = {
+        0x02, 0x42, 0x0D, 0x10, 0x5E, 0x4C, 0x48, 0x18,
+        0x00, 0x0A, 0x24, 0x5B, 0x31, 0x10, 0x43, 0x4F
+    };
+    private static final byte CATALOG_AES_XOR_KEY = 0x7A;
+
     private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
@@ -422,6 +434,62 @@ public class CatalogMgr {
         return new HashMap<>(catalogs);
     }
 
+    static Catalog encryptCatalogForImage(Catalog catalog) {
+        if (!needEncryptStarRocksCatalogPassword(catalog)) {
+            return catalog;
+        }
+        Map<String, String> encryptedConfig = new HashMap<>(catalog.getConfig());
+        try {
+            byte[] encrypted = SecurityUtils.aes128Encrypt(
+                    encryptedConfig.get(StarRocksConnectorConfig.PASSWORD).getBytes(StandardCharsets.UTF_8),
+                    getCatalogAesKey().getBytes(StandardCharsets.UTF_8));
+            encryptedConfig.put(StarRocksConnectorConfig.PASSWORD,
+                    Base64.getEncoder().encodeToString(encrypted));
+            encryptedConfig.put(STARROCKS_PASSWORD_ENCRYPTED, "true");
+            return new ExternalCatalog(catalog.getId(), catalog.getName(), catalog.getComment(), encryptedConfig);
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to encrypt StarRocks catalog password for image", e);
+        }
+    }
+
+    static Catalog decryptCatalogFromImage(Catalog catalog) {
+        if (catalog == null || catalog.getConfig() == null ||
+                !"true".equalsIgnoreCase(catalog.getConfig().get(STARROCKS_PASSWORD_ENCRYPTED))) {
+            return catalog;
+        }
+        Map<String, String> decryptedConfig = new HashMap<>(catalog.getConfig());
+        try {
+            String encryptedPassword = decryptedConfig.get(StarRocksConnectorConfig.PASSWORD);
+            byte[] decrypted = SecurityUtils.aes128Decrypt(Base64.getDecoder().decode(encryptedPassword),
+                    getCatalogAesKey().getBytes(StandardCharsets.UTF_8));
+            decryptedConfig.put(StarRocksConnectorConfig.PASSWORD,
+                    new String(decrypted, StandardCharsets.UTF_8));
+            decryptedConfig.remove(STARROCKS_PASSWORD_ENCRYPTED);
+            return new ExternalCatalog(catalog.getId(), catalog.getName(), catalog.getComment(), decryptedConfig);
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to decrypt StarRocks catalog password from image", e);
+        }
+    }
+
+    private static boolean needEncryptStarRocksCatalogPassword(Catalog catalog) {
+        if (catalog == null || catalog.getConfig() == null ||
+                !ConnectorType.STARROCKS.getName().equalsIgnoreCase(catalog.getType())) {
+            return false;
+        }
+        if ("true".equalsIgnoreCase(catalog.getConfig().get(STARROCKS_PASSWORD_ENCRYPTED))) {
+            return false;
+        }
+        return !Strings.isNullOrEmpty(catalog.getConfig().get(StarRocksConnectorConfig.PASSWORD));
+    }
+
+    private static String getCatalogAesKey() {
+        byte[] decryptedBytes = new byte[CATALOG_AES_KEY_ENCODED.length];
+        for (int i = 0; i < CATALOG_AES_KEY_ENCODED.length; i++) {
+            decryptedBytes[i] = (byte) (CATALOG_AES_KEY_ENCODED[i] ^ CATALOG_AES_XOR_KEY);
+        }
+        return new String(decryptedBytes, StandardCharsets.UTF_8);
+    }
+
     public boolean checkCatalogExistsById(long id) {
         return catalogs.entrySet().stream().anyMatch(entry -> entry.getValue().getId() == id);
     }
@@ -515,7 +583,7 @@ public class CatalogMgr {
 
         writer.writeInt(serializedCatalogs.size());
         for (Catalog catalog : serializedCatalogs.values()) {
-            writer.writeJson(catalog);
+            writer.writeJson(encryptCatalogForImage(catalog));
         }
 
         writer.close();
@@ -524,7 +592,7 @@ public class CatalogMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(Catalog.class, catalog -> {
             try {
-                replayCreateCatalog(catalog);
+                replayCreateCatalog(decryptCatalogFromImage(catalog));
             } catch (Exception e) {
                 LOG.error("Failed to load catalog {}, ignore the error, continue load", catalog.getName(), e);
             }

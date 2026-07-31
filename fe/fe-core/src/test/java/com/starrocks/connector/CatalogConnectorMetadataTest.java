@@ -68,6 +68,30 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+    void testListDbNamesSkipsGeneratedInfoSchemaWhenNormalMetadataOwnsIt(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.listDbNames((ConnectContext) any);
+                result = ImmutableList.of("test_db1", "test_db2");
+                times = 1;
+
+                connectorMetadata.hasSelfInfoSchema();
+                result = true;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        List<String> dbNames = catalogConnectorMetadata.listDbNames(new ConnectContext());
+        assertEquals(ImmutableList.of("test_db1", "test_db2"), dbNames);
+    }
+
+    @Test
     void testListTableNames(@Mocked ConnectorMetadata connectorMetadata) {
         new Expectations() {
             {
@@ -116,6 +140,29 @@ public class CatalogConnectorMetadataTest {
         Database db = catalogConnectorMetadata.getDb(new ConnectContext(), "test_db");
         assertNull(db);
         assertNotNull(catalogConnectorMetadata.getDb(new ConnectContext(), InfoSchemaDb.DATABASE_NAME));
+    }
+
+    @Test
+    void testInfoSchemaRoutesToNormalMetadataWhenNormalMetadataOwnsIt(@Mocked ConnectorMetadata connectorMetadata) {
+        new Expectations() {
+            {
+                connectorMetadata.hasSelfInfoSchema();
+                result = true;
+                times = 1;
+
+                connectorMetadata.getDb((ConnectContext) any, InfoSchemaDb.DATABASE_NAME);
+                result = null;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        assertNull(catalogConnectorMetadata.getDb(new ConnectContext(), InfoSchemaDb.DATABASE_NAME));
     }
 
     @Test

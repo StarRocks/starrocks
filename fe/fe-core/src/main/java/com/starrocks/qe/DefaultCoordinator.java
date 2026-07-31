@@ -61,6 +61,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.starrocks.StarRocksRemoteScanSessionManager;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
@@ -608,6 +609,12 @@ public class DefaultCoordinator extends Coordinator {
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
+        }
+
+        if (StarRocksRemoteScanSessionManager.hasPreparedRemoteScans(connectContext)) {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "StartRemoteScan")) {
+                StarRocksRemoteScanSessionManager.startPreparedRemoteScans(connectContext);
+            }
         }
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {

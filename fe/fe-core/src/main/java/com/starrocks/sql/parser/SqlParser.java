@@ -38,14 +38,17 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
@@ -202,6 +205,21 @@ public class SqlParser {
                 .visit(expressionContext);
     }
 
+    public static Type parseType(String typeSql, SessionVariable sessionVariable) {
+        SessionVariable sv = sessionVariable == null ? new SessionVariable() : sessionVariable;
+        Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> pair =
+                invokeParser(typeSql, sv, com.starrocks.sql.parser.StarRocksParser::type);
+        if (pair.second.getCurrentToken().getType() != Token.EOF) {
+            throw new ParsingException("Failed to parse the whole input as a type: " + typeSql);
+        }
+        com.starrocks.sql.parser.StarRocksParser.TypeContext typeContext =
+                (com.starrocks.sql.parser.StarRocksParser.TypeContext) pair.first;
+        Type type = TypeParser.getType(typeContext);
+        normalizeType(type);
+        TypeDefAnalyzer.analyze(new TypeDef(type, createPos(typeContext)));
+        return type;
+    }
+
     /**
      * We need not only sqlMode but also other parameters to define the property of parser.
      * Please consider use {@link #parse(String, SessionVariable)}
@@ -330,6 +348,31 @@ public class SqlParser {
         } else if (type instanceof StructType) {
             for (StructField f : ((StructType) type).getFields()) {
                 rejectMetricTypes(f.getType(), columnName, pos);
+            }
+        }
+    }
+
+    private static void normalizeType(Type type) {
+        if (type.isScalarType()) {
+            ScalarType scalarType = (ScalarType) type;
+            if (scalarType.getPrimitiveType() == PrimitiveType.VARCHAR && scalarType.getLength() <= 0) {
+                scalarType.setLength(TypeFactory.getOlapMaxVarcharLength());
+            } else if (scalarType.getPrimitiveType() == PrimitiveType.CHAR && scalarType.getLength() <= 0) {
+                scalarType.setLength(ScalarType.MAX_CHAR_LENGTH);
+            } else if (scalarType.getPrimitiveType() == PrimitiveType.VARBINARY && scalarType.getLength() <= 0) {
+                scalarType.setLength(TypeFactory.getOlapMaxVarcharLength());
+            }
+            return;
+        }
+
+        if (type instanceof ArrayType) {
+            normalizeType(((ArrayType) type).getItemType());
+        } else if (type instanceof MapType) {
+            normalizeType(((MapType) type).getKeyType());
+            normalizeType(((MapType) type).getValueType());
+        } else if (type instanceof StructType) {
+            for (StructField field : ((StructType) type).getFields()) {
+                normalizeType(field.getType());
             }
         }
     }

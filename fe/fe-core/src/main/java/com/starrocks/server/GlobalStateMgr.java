@@ -67,6 +67,7 @@ import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.StarRocksExternalTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -3276,7 +3277,8 @@ public class GlobalStateMgr {
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable() || table.isOdpsTable();
+                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable() || table.isOdpsTable()
+                || table instanceof StarRocksExternalTable;
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {

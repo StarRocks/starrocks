@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.util.Map;
+
 public class SqlCredentialRedactorTest {
 
     @Test
@@ -96,6 +98,34 @@ public class SqlCredentialRedactorTest {
                 "ALTER USER u IDENTIFIED\n  WITH mysql_native_password BY 'x'"));
         Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
                 "SET\n PASSWORD FOR u = PASSWORD('p')"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE EXTERNAL CATALOG sr PROPERTIES(\"starrocks.password\"=\"secret\")"));
+    }
+
+    @Test
+    public void testRedactStarRocksCatalogPassword() {
+        String sql = "CREATE EXTERNAL CATALOG sr PROPERTIES (\n" +
+                "  \"type\" = \"starrocks\",\n" +
+                "  \"starrocks.fe.http.url\" = \"127.0.0.1:8030\",\n" +
+                "  \"starrocks.user\" = \"root\",\n" +
+                "  \"starrocks.password\" = \"plain_secret\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+
+        Assertions.assertFalse(redacted.contains("plain_secret"));
+        Assertions.assertTrue(redacted.contains("\"starrocks.password\" = ***"));
+    }
+
+    @Test
+    public void testPrintableMapHidesStarRocksCatalogPassword() {
+        String printable = new PrintableMap<>(
+                Map.of("starrocks.password", "plain_secret", "starrocks.user", "root"),
+                "=", true, false, true).toString();
+
+        Assertions.assertFalse(printable.contains("plain_secret"));
+        Assertions.assertTrue(printable.contains("\"starrocks.password\" = \"***\""));
+        Assertions.assertTrue(printable.contains("\"starrocks.user\" = \"root\""));
     }
 
     @Test

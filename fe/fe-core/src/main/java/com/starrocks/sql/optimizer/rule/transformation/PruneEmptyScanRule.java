@@ -39,7 +39,8 @@ public class PruneEmptyScanRule extends TransformationRule {
             OperatorType.LOGICAL_PAIMON_SCAN,
             OperatorType.LOGICAL_ODPS_SCAN,
             OperatorType.LOGICAL_KUDU_SCAN,
-            OperatorType.LOGICAL_BENCHMARK_SCAN
+            OperatorType.LOGICAL_BENCHMARK_SCAN,
+            OperatorType.LOGICAL_STARROCKS_SCAN
     );
 
     public PruneEmptyScanRule() {

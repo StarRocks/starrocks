@@ -20,6 +20,7 @@ package com.starrocks.common.util;
 import com.google.common.collect.Sets;
 import com.google.common.escape.Escaper;
 import com.google.common.escape.Escapers;
+import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -52,6 +53,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretKey");
         SENSITIVE_KEY.add("property.sasl.password");
         SENSITIVE_KEY.add("broker.password");
+        SENSITIVE_KEY.add(StarRocksConnectorConfig.PASSWORD);
         SENSITIVE_KEY.add("confluent.schema.registry.url");
         SENSITIVE_KEY.add("gcp.gcs.service_account_private_key_id");
         SENSITIVE_KEY.add("gcp.gcs.service_account_private_key");

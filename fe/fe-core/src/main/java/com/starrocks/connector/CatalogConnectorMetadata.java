@@ -107,7 +107,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     private ConnectorMetadata metadataOfDb(String dBName) {
-        if (isInfoSchemaDb(dBName)) {
+        if (isInfoSchemaDb(dBName) && !normal.hasSelfInfoSchema()) {
             return informationSchema;
         }
         return normal;
@@ -120,10 +120,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
-        return ImmutableList.<String>builder()
-                .addAll(this.normal.listDbNames(context))
-                .addAll(this.informationSchema.listDbNames(context))
-                .build();
+        ImmutableList.Builder<String> dbNames = ImmutableList.<String>builder()
+                .addAll(this.normal.listDbNames(context));
+        if (!normal.hasSelfInfoSchema()) {
+            dbNames.addAll(this.informationSchema.listDbNames(context));
+        }
+        return dbNames.build();
     }
 
     @Override

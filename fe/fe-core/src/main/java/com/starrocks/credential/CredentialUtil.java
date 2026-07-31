@@ -19,6 +19,7 @@ import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.starrocks.StarRocksConnectorConfig;
 import com.starrocks.credential.azure.AzureStoragePath;
 import com.starrocks.epack.connector.delta.DatabricksUnityMetastore;
 import org.apache.iceberg.aws.AwsProperties;
@@ -86,6 +87,9 @@ public class CredentialUtil {
         // Mask for databricks credential
         doMask(properties, DatabricksUnityMetastore.DATABRICKS_TOKEN);
         doMask(properties, DatabricksUnityMetastore.DATABRICKS_CLIENT_SECRET);
+
+        // Mask for StarRocks external catalog credential.
+        doMask(properties, StarRocksConnectorConfig.PASSWORD);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {
