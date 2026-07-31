@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -67,10 +66,6 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!Config.enable_experimental_vector) {
-            return false;
-        }
-
         LogicalTopNOperator topNOp = (LogicalTopNOperator) input.getOp();
         LogicalOlapScanOperator scanOp = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
 

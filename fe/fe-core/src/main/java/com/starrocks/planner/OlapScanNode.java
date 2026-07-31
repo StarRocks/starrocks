@@ -82,6 +82,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
@@ -952,7 +953,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
-        if (Config.enable_experimental_vector) {
+        // Only report the ANN state for tables that actually carry a vector index, so plans of
+        // ordinary tables stay unchanged.
+        boolean hasVectorIndex = olapTable.getIndexes().stream()
+                .anyMatch(idx -> idx.getIndexType() == IndexDef.IndexType.VECTOR);
+        if (hasVectorIndex) {
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 output.append(vectorSearchOptions.getExplainString(prefix));
             } else {

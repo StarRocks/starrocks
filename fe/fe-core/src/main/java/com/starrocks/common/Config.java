@@ -3605,6 +3605,7 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_gin = false;
 
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean enable_experimental_vector = false;
 
     // Master switch for the Context Base (semantic context / AgentBase) module. When false (the
@@ -3615,6 +3616,8 @@ public class Config extends ConfigBase {
     public static boolean enable_context_base = false;
 
     @ConfField(mutable = true)
+=======
+>>>>>>> df08abe851a... [Enhancement] Remove the enable_experimental_vector FE config (#77004)
     public static boolean enable_experimental_mv = true;
 
     /**
