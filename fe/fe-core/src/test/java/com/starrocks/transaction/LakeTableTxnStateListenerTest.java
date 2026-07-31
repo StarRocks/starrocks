@@ -234,6 +234,8 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         TransactionState txnState = newTransactionState();
         listener.preCommit(txnState, buildFullTabletCommitInfo(), Collections.emptyList());
         txnState.setTransactionStatus(TransactionStatus.PREPARED);
+        txnState.setPreparedTimeAndTimeout(
+                System.currentTimeMillis(), TransactionState.DEFAULT_PREPARED_TIMEOUT_MS);
         listener.preWriteCommitLog(txnState);
         return txnState;
     }
