@@ -745,7 +745,9 @@ CONF_mInt32(compression_dict_train_pages, "32");
 // training samples. Many small samples train a better dictionary than a few
 // large ones.
 CONF_mInt32(compression_dict_train_fragment_bytes, "4096");
-// Maximum dictionary size. 64KB, not the 110KiB zstd-CLI convention: measured on
+// "train" mode only: maximum dictionary size ("sample" mode is bounded by
+// compression_dict_sample_bytes instead). A non-positive value disables training.
+// 64KB, not the 110KiB zstd-CLI convention: measured on
 // a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
 // 112KB and 256KB on EVERY column, because the dictionary is a codebook of
 // frequent substrings whose returns diminish fast while its own bytes are stored
@@ -756,8 +758,9 @@ CONF_mInt32(compression_dict_max_size, "65536");
 // keep dictionary-loaded ZSTD decompression contexts warm in a small
 // thread-local set instead of borrowing from the shared pool (whose reset clears
 // the sticky refDDict, forcing the dictionary to be re-loaded into a cold context
-// once per page). Measured to remove ~85% of the dictionary read overhead on
-// full-column scans. Exposed as a switch so the optimization can be turned off in
+// once per page). On a paired full-column scan the dictionary read overhead went
+// from +20-25% down to +5.6-8.6%, i.e. roughly 55-60% of it removed. Exposed as a
+// switch so the optimization can be turned off in
 // production without a rollback, and so its effect can be A/B'd on one cluster.
 CONF_mBool(enable_compression_dict_ctx_cache, "true");
 
