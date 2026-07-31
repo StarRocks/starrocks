@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include "butil/time.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
@@ -27,6 +28,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -377,8 +379,8 @@ TEST_F(NgramBloomFilterPushdownTest, MatchUtf8CaseInsensitiveLowersNeedle) {
 
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
-    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     auto bf = make_bf_with_cyrillic_lowered_trigrams();
     NgramBloomFilterReaderOptions opts;
@@ -389,7 +391,7 @@ TEST_F(NgramBloomFilterPushdownTest, MatchUtf8CaseInsensitiveLowersNeedle) {
     // the bloom filter, so the helper must report the page as a candidate.
     EXPECT_TRUE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
 
-    ExprExecutor::close(expr_ctxs, &_runtime_state);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(NgramBloomFilterPushdownTest, MissUtf8CaseInsensitiveFiltersPage) {
@@ -407,8 +409,8 @@ TEST_F(NgramBloomFilterPushdownTest, MissUtf8CaseInsensitiveFiltersPage) {
 
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
-    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     auto bf = make_bf_with_cyrillic_lowered_trigrams();
     NgramBloomFilterReaderOptions opts;
@@ -419,7 +421,7 @@ TEST_F(NgramBloomFilterPushdownTest, MissUtf8CaseInsensitiveFiltersPage) {
     // present in the bloom filter that was populated for "привет".
     EXPECT_FALSE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
 
-    ExprExecutor::close(expr_ctxs, &_runtime_state);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
@@ -438,8 +440,8 @@ TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
 
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
-    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     auto bf = make_bf_with_cyrillic_lowered_trigrams();
     NgramBloomFilterReaderOptions opts;
@@ -450,7 +452,7 @@ TEST_F(NgramBloomFilterPushdownTest, InvalidUtf8NeedleDisablesIndex) {
     // returns true so the page is not filtered out by the bloom filter.
     EXPECT_TRUE(expr.ngram_bloom_filter(&exprContext, bf.get(), opts));
 
-    ExprExecutor::close(expr_ctxs, &_runtime_state);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
@@ -468,8 +470,8 @@ TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
 
     ExprContext expr_context(&expr);
     std::vector<ExprContext*> expr_ctxs = {&expr_context};
-    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     NgramBloomFilterReaderOptions opts;
     opts.index_gram_num = 3;
@@ -487,7 +489,7 @@ TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
     opts.index_gram_num = 0;
     EXPECT_TRUE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
 
-    ExprExecutor::close(expr_ctxs, &_runtime_state);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 } // namespace starrocks
