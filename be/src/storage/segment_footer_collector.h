@@ -35,7 +35,6 @@ class Tablet;
 // bundled, or already vacuumed) is skipped rather than failing the whole call, so
 // a metadata query degrades to fewer rows instead of an error. Returns the
 // (segment id, footer) pairs actually read, in rowset then segment order.
-std::vector<std::pair<int64_t, SegmentFooterPB>> collect_visible_segment_footers(
-        const std::shared_ptr<Tablet>& tablet);
+std::vector<std::pair<int64_t, SegmentFooterPB>> collect_visible_segment_footers(const std::shared_ptr<Tablet>& tablet);
 
 } // namespace starrocks
