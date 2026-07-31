@@ -60,9 +60,11 @@ public class PrepareCollectMetaTaskTest {
         ConnectContext.remove();
     }
 
-    @Test
-    public void testForkJoinMergeEndToEnd() throws Exception {
-
+    /**
+     * A join over two iceberg scans: two scan operators sharing one op type is what makes
+     * PrepareCollectMetaTask actually do work instead of returning early.
+     */
+    private static OptExpression buildTwoIcebergScanPlan() {
         List<Column> columns = Lists.newArrayList(new Column("c1", IntegerType.INT));
         IcebergTable tbl1 = new IcebergTable(1L, "t1", "default_catalog", "default_catalog",
                 "db", "t1", "", columns, null, Maps.newHashMap());
@@ -74,9 +76,15 @@ public class PrepareCollectMetaTaskTest {
         LogicalIcebergScanOperator scan2 = new LogicalIcebergScanOperator.Builder()
                 .setTable(tbl2).setColRefToColumnMetaMap(Maps.newHashMap()).build();
 
-        OptExpression planTree = OptExpression.create(new LogicalJoinOperator(),
+        return OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(scan1),
                 OptExpression.create(scan2));
+    }
+
+    @Test
+    public void testForkJoinMergeEndToEnd() throws Exception {
+
+        OptExpression planTree = buildTwoIcebergScanPlan();
 
         // Mock MetadataMgr.prepareMetadata to return true (no actual connector work)
         new MockUp<MetadataMgr>() {
@@ -119,5 +127,61 @@ public class PrepareCollectMetaTaskTest {
         String output = Tracers.printScopeTimer();
         Assertions.assertTrue(output.contains("EXTERNAL.parallel_prepare_metadata"),
                 "Expected outer scope in output:\n" + output);
+    }
+
+    /**
+     * Background callers - the mv plan cache builder and schema change threads - optimize on a
+     * synthetic ConnectContext that never gets a query id, so OptimizerContext#getQueryId is null.
+     * That must not blow up the whole plan build.
+     */
+    @Test
+    public void testExecuteWithoutQueryId() throws Exception {
+
+        OptExpression planTree = buildTwoIcebergScanPlan();
+
+        List<String> capturedQueryIds = Lists.newArrayList();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public boolean prepareMetadata(String queryId, String catalogName,
+                                           MetaPreparationItem item, Tracers tracers,
+                                           ConnectContext connectContext) {
+                synchronized (capturedQueryIds) {
+                    capturedQueryIds.add(queryId);
+                }
+                return true;
+            }
+        };
+
+        ConnectContext ctx = ConnectContext.get();
+        ctx.getSessionVariable().setPrepareMetadataPoolSize(4);
+
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public void $init(ConnectContext cc) {}
+
+            @Mock
+            public SessionVariable getSessionVariable() {
+                return ctx.getSessionVariable();
+            }
+
+            @Mock
+            public UUID getQueryId() {
+                return null;
+            }
+        };
+
+        OptimizerContext optimizerCtx = new OptimizerContext(ctx);
+        TaskContext taskCtx = new TaskContext(optimizerCtx,
+                new PhysicalPropertySet(), new ColumnRefSet(), 0);
+
+        Assertions.assertDoesNotThrow(() -> new PrepareCollectMetaTask(taskCtx, planTree).execute());
+
+        // Both scans must still be prepared, under one generated id per optimizer run so that the
+        // query level connector metadata cache gets a private key rather than a shared constant.
+        Assertions.assertEquals(2, capturedQueryIds.size());
+        String generated = capturedQueryIds.get(0);
+        Assertions.assertNotNull(generated);
+        Assertions.assertEquals(generated, capturedQueryIds.get(1));
+        Assertions.assertDoesNotThrow(() -> UUID.fromString(generated));
     }
 }
