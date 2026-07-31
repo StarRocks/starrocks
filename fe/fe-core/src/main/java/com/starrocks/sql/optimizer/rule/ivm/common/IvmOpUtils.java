@@ -66,6 +66,11 @@ public class IvmOpUtils {
     private IvmOpUtils() {
     }
 
+    /** Columns IVM derives for itself, as opposed to the ones the user's projection asks for. */
+    public static boolean isIvmInternalColumn(String columnName) {
+        return COLUMN_ROW_ID.equalsIgnoreCase(columnName) || columnName.startsWith(COLUMN_AGG_STATE_PREFIX);
+    }
+
     public static String getIvmAggStateColumnName(FunctionCallExpr functionCallExpr) {
         // agg_state column name is like __AGG_STATE_<agg_func_name>
         String exprFuncName = AstToStringBuilder.getAliasName(functionCallExpr, false, false);
