@@ -204,7 +204,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The number of threads used for checking the consistency of tablets.
 - Introduced in: -
 
@@ -460,21 +460,12 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
 - Introduced in: -
 
-### enable_pk_index_eager_build
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to eagerly build Primary Key index files during data import and compaction phases. When enabled, the system generates persistent PK index files immediately during data writes, improving subsequent query performance.
-- Introduced in: -
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
 - Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
@@ -642,7 +633,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_cumulative_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -705,7 +696,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_update_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -867,7 +858,7 @@ This topic introduces the following types of BE configurations:
 
 ### pk_index_memtable_flush_threadpool_size
 
-- Default: 1048576
+- Default: 2048
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1015,7 +1006,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: When `enable_pk_index_eager_build` is set to true, the system will eagerly build PK index files only if the data generated during import or compaction exceeds this threshold. Default is 100MB.
+- Description: The minimum size of data generated during import or compaction for the system to eagerly build PK index files. Default is 100MB.
 - Introduced in: -
 
 ### primary_key_limit_size

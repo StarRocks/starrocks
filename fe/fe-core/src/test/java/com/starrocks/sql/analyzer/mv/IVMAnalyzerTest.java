@@ -38,6 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -856,6 +857,125 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     "AUTO_INCREMENT __ROW_ID__ must NOT be in the column list, got: " + sql);
             assertTrue(sql.contains("`id`") && sql.contains("`data`") && sql.contains("`date`"),
                     "visible columns must all be in the column list, got: " + sql);
+        });
+    }
+
+    /**
+     * Column identity across an ACTIVE round trip: a positional mis-bind of the DDL column list
+     * would rename columns without changing their count.
+     */
+    private static String schemaFingerprint(MaterializedView mv) {
+        return mv.getBaseSchema().stream()
+                .map(col -> String.format("%s|%s|key=%s|agg=%s|hidden=%s|auto=%s|null=%s",
+                        col.getName(), col.getType().toSql(), col.isKey(), col.getAggregationType(),
+                        col.isHidden(), col.isAutoIncrement(), col.isAllowNull()))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private void assertActiveRoundTripKeepsSchema(String mvName) throws Exception {
+        MaterializedView mv = getMv("test", mvName);
+        String before = schemaFingerprint(mv);
+
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " INACTIVE");
+        assertFalse(mv.isActive());
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " ACTIVE");
+        assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+
+        assertEquals(before, schemaFingerprint(getMv("test", mvName)));
+    }
+
+    /**
+     * The DDL rendered by {@code SHOW CREATE MATERIALIZED VIEW} is re-analyzed by
+     * {@code ALTER MATERIALIZED VIEW ... ACTIVE}, so its column list must pair with the
+     * defined query: no AUTO_INCREMENT {@code __ROW_ID__}, which the analyzer re-appends.
+     */
+    @Test
+    public void testAlterActiveRoundTripForAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_nonagg").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("(`id`, `data`, `date`)"),
+                    "AUTO_INCREMENT __ROW_ID__ must NOT be in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_nonagg");
+
+            Column rowIdCol = getMv("test", "mv_active_nonagg").getColumn(IvmOpUtils.COLUMN_ROW_ID);
+            assertNotNull(rowIdCol, "__ROW_ID__ must survive the active round trip");
+            assertTrue(rowIdCol.isAutoIncrement());
+        });
+    }
+
+    /** Same round trip with a partition column, which adds a PARTITION BY clause to the DDL. */
+    @Test
+    public void testAlterActiveRoundTripForPartitionedAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg_part "
+                + "REFRESH DEFERRED MANUAL "
+                + "PARTITION BY date "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t2` WHERE id > 1";
+        starRocksAssert.withMaterializedView(ddl, () ->
+                assertActiveRoundTripKeepsSchema("mv_active_nonagg_part"));
+    }
+
+    /**
+     * An aggregate MV's {@code __ROW_ID__} and {@code __AGG_STATE_*} columns are produced by the
+     * rewritten query, so they stay in the DDL column list and the analyzer regenerates them --
+     * in the same order, or the positional bind would swap column names.
+     */
+    @Test
+    public void testAlterActiveRoundTripForQueryComputedRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_agg "
+                + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT SUM(c2) AS s2, c1, id, MAX(c1) AS mx "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_agg").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("`" + IvmOpUtils.COLUMN_ROW_ID + "`"),
+                    "QUERY_COMPUTED __ROW_ID__ must stay in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_agg");
+        });
+    }
+
+    /**
+     * The exemption above is positional, not prefix-based: a user-authored name that merely
+     * looks like a state column stays subject to the normal column-name rules -- otherwise it
+     * would smuggle in forbidden characters and become a hidden column.
+     */
+    @Test
+    public void testUserAuthoredStateLikeColumnNameStillRejected() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_fake_state_name (`a`, `__AGG_STATE_bad=x`, `c`, `d`) "
+                + "REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        Exception ex = assertThrows(Exception.class, () -> Analyzer.analyze(stmt, connectContext),
+                "a user-authored __AGG_STATE_* name must still be format-checked");
+        assertTrue(ex.getMessage().contains("Incorrect column name '__AGG_STATE_bad=x'"),
+                "error must name the rejected column, got: " + ex.getMessage());
+    }
+
+    /**
+     * {@code count(*)} names its state column {@code __AGG_STATE_count(*)}, which
+     * {@link com.starrocks.sql.analyzer.FeNameFormat} rejects for a user-authored column in
+     * shared-nothing mode. Re-analysis must not apply that check to IVM's own columns.
+     */
+    @Test
+    public void testAlterActiveRoundTripForStateColumnWithIllegalUserName() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_agg_count_star "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) AS s, COUNT(*) AS c "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_agg_count_star").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("`__AGG_STATE_count(*)`"),
+                    "expected the count(*) state column in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_agg_count_star");
         });
     }
 

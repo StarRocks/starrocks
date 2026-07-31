@@ -20,8 +20,8 @@ on:
         description: 'COMMIT ID'
         required: true
         type: string
-      CENTOS_TAR_PATH:
-        description: 'TAR PATH(Release & Centos)'
+      ROCKY_TAR_PATH:
+        description: 'TAR PATH(Release & Rocky)'
         required: false
         type: string
       UBUNTU_TAR_PATH:
@@ -81,8 +81,8 @@ jobs:
     outputs:
       BRANCH: ${{ steps.param.outputs.BRANCH }}
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
-      CENTOS_FE_TAR_PATH: ${{ steps.param.outputs.CENTOS_FE_TAR_PATH }}
-      CENTOS_BE_TAR_PATH: ${{ steps.param.outputs.CENTOS_BE_TAR_PATH }}
+      ROCKY_FE_TAR_PATH: ${{ steps.param.outputs.ROCKY_FE_TAR_PATH }}
+      ROCKY_BE_TAR_PATH: ${{ steps.param.outputs.ROCKY_BE_TAR_PATH }}
       UBUNTU_FE_TAR_PATH: ${{ steps.param.outputs.UBUNTU_FE_TAR_PATH }}
       UBUNTU_BE_TAR_PATH: ${{ steps.param.outputs.UBUNTU_BE_TAR_PATH }}
       BE_UT_LINUX: ${{ steps.param.outputs.BE_UT_LINUX }}
@@ -99,7 +99,7 @@ jobs:
             rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
             read branch all_linux IS_ARM < <(python3 scripts/inspection_params.py "${{ github.event.schedule }}")
             
-            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=centos7
+            [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=rocky9
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
             echo "::notice::${branch}(${BE_UT_LINUX} ${base_sha})"
             [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
@@ -112,14 +112,14 @@ jobs:
             echo "BRANCH=${{ inputs.BRANCH }}" >> $GITHUB_OUTPUT
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
 
-            IFS=',' read -r -a centos_tar_array <<< "${{ inputs.CENTOS_TAR_PATH }}"
-            if [[ "${#centos_tar_array[@]}" -eq 2 ]]; then
-              echo "CENTOS_FE_TAR_PATH=${centos_tar_array[0]}" >> $GITHUB_OUTPUT
-              echo "CENTOS_BE_TAR_PATH=${centos_tar_array[1]}" >> $GITHUB_OUTPUT
-            elif [[ "${#centos_tar_array[@]}" -eq 0 ]]; then
-              echo "No Centos tar path provided."
+            IFS=',' read -r -a rocky_tar_array <<< "${{ inputs.ROCKY_TAR_PATH }}"
+            if [[ "${#rocky_tar_array[@]}" -eq 2 ]]; then
+              echo "ROCKY_FE_TAR_PATH=${rocky_tar_array[0]}" >> $GITHUB_OUTPUT
+              echo "ROCKY_BE_TAR_PATH=${rocky_tar_array[1]}" >> $GITHUB_OUTPUT
+            elif [[ "${#rocky_tar_array[@]}" -eq 0 ]]; then
+              echo "No Rocky tar path provided."
             else
-              echo "::error::CENTOS_TAR_PATH format error, please check."
+              echo "::error::ROCKY_TAR_PATH format error, please check."
               exit -1
             fi
 
@@ -330,7 +330,7 @@ jobs:
       fail-fast: false
       matrix:
         build_type: [ Release, ASAN ]
-        linux: [ centos7, ubuntu ]
+        linux: [ rocky9, ubuntu ]
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
@@ -390,10 +390,10 @@ jobs:
     env:
       ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
-      CENTOS_RELEASE_BE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_BE_TAR_PATH }}
-      CENTOS_RELEASE_FE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_FE_TAR_PATH }}
-      CENTOS_ASAN_BE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_BE_TAR_PATH }}
-      CENTOS_ASAN_FE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_FE_TAR_PATH }}
+      ROCKY_RELEASE_BE_TAR_PATH: ${{ steps.set_output.outputs.ROCKY_RELEASE_BE_TAR_PATH }}
+      ROCKY_RELEASE_FE_TAR_PATH: ${{ steps.set_output.outputs.ROCKY_RELEASE_FE_TAR_PATH }}
+      ROCKY_ASAN_BE_TAR_PATH: ${{ steps.set_output.outputs.ROCKY_ASAN_BE_TAR_PATH }}
+      ROCKY_ASAN_FE_TAR_PATH: ${{ steps.set_output.outputs.ROCKY_ASAN_FE_TAR_PATH }}
       UBUNTU_RELEASE_BE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}
       UBUNTU_RELEASE_FE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
       UBUNTU_ASAN_BE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_BE_TAR_PATH }}
@@ -415,20 +415,20 @@ jobs:
         id: analyse_artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
-          if [[ -e "./outputs/BUILD-RESULT-Release-centos7/tar.txt" ]]; then
-            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-Release-centos7/tar.txt" | cut -d "=" -f 2`
-            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-Release-centos7/tar.txt" | cut -d "=" -f 2`
-            echo "CENTOS_RELEASE_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
-            echo "CENTOS_RELEASE_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
+          if [[ -e "./outputs/BUILD-RESULT-Release-rocky9/tar.txt" ]]; then
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-Release-rocky9/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-Release-rocky9/tar.txt" | cut -d "=" -f 2`
+            echo "ROCKY_RELEASE_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "ROCKY_RELEASE_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
           
-          if [[ -e "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" ]]; then
-            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" | cut -d "=" -f 2`
-            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" | cut -d "=" -f 2`
-            echo "CENTOS_ASAN_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
+          if [[ -e "./outputs/BUILD-RESULT-ASAN-rocky9/tar.txt" ]]; then
+            build_fe_result=`grep "FE=" "./outputs/BUILD-RESULT-ASAN-rocky9/tar.txt" | cut -d "=" -f 2`
+            build_be_result=`grep "BE=" "./outputs/BUILD-RESULT-ASAN-rocky9/tar.txt" | cut -d "=" -f 2`
+            echo "ROCKY_ASAN_BE_TAR_PATH=${build_be_result}" >> $GITHUB_OUTPUT
+            echo "ROCKY_ASAN_FE_TAR_PATH=${build_fe_result}" >> $GITHUB_OUTPUT
           else
             has_failure=true
           fi
@@ -460,16 +460,16 @@ jobs:
         if: always()
         run: |
           if [[ "${{steps.analyse_artifact.outcome}}" == "skipped" ]]; then
-            echo "CENTOS_RELEASE_BE_TAR_PATH=${{ needs.info.outputs.CENTOS_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_RELEASE_FE_TAR_PATH=${{ needs.info.outputs.CENTOS_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_RELEASE_BE_TAR_PATH=${{ needs.info.outputs.ROCKY_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_RELEASE_FE_TAR_PATH=${{ needs.info.outputs.ROCKY_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_RELEASE_BE_TAR_PATH=${{ needs.info.outputs.UBUNTU_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_RELEASE_FE_TAR_PATH=${{ needs.info.outputs.UBUNTU_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=false" >> $GITHUB_OUTPUT
           else
-            echo "CENTOS_RELEASE_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_RELEASE_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "CENTOS_ASAN_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_RELEASE_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.ROCKY_RELEASE_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_RELEASE_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.ROCKY_RELEASE_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_ASAN_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.ROCKY_ASAN_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "ROCKY_ASAN_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.ROCKY_ASAN_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_RELEASE_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_RELEASE_FE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "UBUNTU_ASAN_BE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_BE_TAR_PATH }}" >> $GITHUB_OUTPUT
@@ -478,20 +478,20 @@ jobs:
           fi
 
   system-test-release:
-    name: 'Release/Centos Native'
+    name: 'Release/Rocky Native'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
       - test_filter
     secrets: inherit
-    if: "!cancelled() && needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')"
+    if: "!cancelled() && needs.test_filter.outputs.ROCKY_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.ROCKY_RELEASE_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')"
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_RELEASE_BE_TAR_PATH }}
-      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.ROCKY_RELEASE_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.ROCKY_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
-      LINUX_DISTRO: centos7
+      LINUX_DISTRO: rocky9
       SYSTEM_TEST_MODE: native
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}

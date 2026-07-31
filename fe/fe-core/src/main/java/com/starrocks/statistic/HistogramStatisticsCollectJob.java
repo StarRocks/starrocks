@@ -73,8 +73,16 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
-    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
-            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName', NULL, $mcv, NOW()";
+    // For char-family columns we skip the histogram() bucket aggregate, but we still need
+    // Histogram.getTotalRows() to reflect the column's real cardinality. So instead of storing
+    // NULL buckets we store a single placeholder bucket that represents "all values excluding
+    // the MCVs".
+    private static final String COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName'," +
+                    " $bucketExpr," +
+                    " $mcv," +
+                    " NOW()" +
+                    " FROM `$dbName`.`$tableName`$sampleClause$randFilter";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
@@ -128,7 +136,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             if (shouldSkipHistogramBuckets(columnType)) {
-                sql = buildCollectMcvOnly(db, table, mostCommonValues, columnName);
+                sql = buildCollectDefaultBucket(db, table, sampleRatio, mostCommonValues, columnName);
             } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
                 sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
                         columnType, false);
@@ -297,11 +305,37 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
     }
 
-    private String buildCollectMcvOnly(Database database, Table table, Map<String, String> mostCommonValues,
-                                       String columnName) {
+    // In case we skip histogram collection, we simply add one tail bucket that contains all values - sum(MCVs)
+    private String buildCollectDefaultBucket(Database database, Table table, double sampleRatio,
+                                             Map<String, String> mostCommonValues, String columnName) {
         VelocityContext context = buildBaseContext(database, table, columnName);
         addMcvToContext(context, mostCommonValues);
-        return buildInsertIntoHistogramStatistics(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
+
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
+        String countExpr;
+        if (sampleRatio > 0.0 && sampleRatio < 1.0) {
+            String ratioLiteral = BigDecimal.valueOf(sampleRatio).stripTrailingZeros().toPlainString();
+            countExpr = "count(" + quoteColumName + ") / cast(" + ratioLiteral + " as double)";
+            if (Config.enable_use_table_sample_collect_statistics) {
+                context.put("sampleClause", " SAMPLE('percent'='" + formatSamplePercent(sampleRatio) + "')");
+                context.put("randFilter", "");
+            } else {
+                context.put("sampleClause", "");
+                context.put("randFilter", " WHERE rand() <= " + ratioLiteral);
+            }
+        } else {
+            context.put("sampleClause", "");
+            context.put("randFilter", "");
+            countExpr = "count(" + quoteColumName + ")";
+        }
+
+        long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
+        String nonMcvExpr = "greatest(0, " + countExpr + " - " + mcvSum + ")";
+
+        context.put("bucketExpr",
+                "concat('[[\"Infinity\",\"Infinity\",', cast(cast(" + nonMcvExpr + " as bigint) as varchar), ',0]]')");
+
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
     }
 
     private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,

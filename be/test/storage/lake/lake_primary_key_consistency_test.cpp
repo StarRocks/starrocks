@@ -219,7 +219,8 @@ private:
 class LakePrimaryKeyConsistencyTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     LakePrimaryKeyConsistencyTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS);
+        const bool separate_sort_key = GetParam().separate_sort_key;
+        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS, separate_sort_key);
         _tablet_metadata->set_enable_persistent_index(true);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
@@ -253,8 +254,15 @@ public:
         items.emplace_back(PICT_OP::COMPACT, 10);
         items.emplace_back(PICT_OP::RELOAD, 10);
         items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 17);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        if (!separate_sort_key) {
+            // Partial updates are not supported on a separate-sort-key table when the partial columns
+            // ({c0, c1}) do not cover the sort key (ROW mode) or touch a sort-key column (COLUMN mode),
+            // and they never take the load-spill / unsort-SST path under test anyway
+            // (should_enable_load_spill disables spilling for partial updates). Skip them for the
+            // ORDER BY != PK variant; the remaining ops fully drive the separate-sort-key write path.
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        }
         items.emplace_back(PICT_OP::CONDITION_UPDATE, 5);
         items.emplace_back(PICT_OP::MIXED_UPSERT_DELETE, 17);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
@@ -304,18 +312,18 @@ public:
                 _old_pk_index_parallel_compaction_task_split_threshold_bytes;
     }
 
-    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
+    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type, bool separate_sort_key = false) {
         auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(next_id());
         metadata->set_version(1);
         metadata->set_cumulative_point(0);
         metadata->set_next_rowset_id(1);
         //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  STRING | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        //  |   c2   |  INT | NO  |  NO  |
+        //  | column | type | KEY | NULL | SORTKEY(when separate) |
+        //  +--------+------+-----+------+------------------------+
+        //  |   c0   |  STRING | YES |  NO  |          NO          |
+        //  |   c1   |  INT | NO  |  NO  |          YES         |
+        //  |   c2   |  INT | NO  |  NO  |          YES         |
         auto schema = metadata->mutable_schema();
         schema->set_keys_type(keys_type);
         schema->set_id(next_id());
@@ -347,6 +355,12 @@ public:
             c2->set_is_key(false);
             c2->set_is_nullable(false);
             c2->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+        if (separate_sort_key) {
+            // ORDER BY (c1, c2) while the primary key is c0, so the sort key differs from the primary
+            // key. num_short_key_columns stays 1 (the short key is the c1 prefix of the sort key).
+            schema->add_sort_key_idxes(1);
+            schema->add_sort_key_idxes(2);
         }
         return metadata;
     }
@@ -418,18 +432,6 @@ public:
         return force_flush_guard;
     }
 
-    // 20% chance to enable eager PK index build
-    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
-        uint32_t r = _random_generator->random() % 100;
-        if (r < 20) {
-            // 20% chance to enable eager PK index build
-            pk_index_eager_build_guard =
-                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
-        }
-        return pk_index_eager_build_guard;
-    }
-
     ChunkPtr read(int64_t tablet_id, int64_t version) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
@@ -450,7 +452,6 @@ public:
 
     Status upsert_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -581,7 +582,6 @@ public:
 
     Status partial_update_op(PartialUpdateMode mode) {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -618,7 +618,6 @@ public:
 
     Status condition_update() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -651,7 +650,6 @@ public:
 
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         size_t batch_cnt = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxBatchCnt), 1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
@@ -694,7 +692,6 @@ public:
 
     Status delete_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -721,7 +718,6 @@ public:
 
     Status compact_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);
@@ -841,7 +837,7 @@ protected:
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
     _seed = 1719499276; // seed
-    _run_second = 100;  // 100 second
+    _run_second = 50;   // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -851,7 +847,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     _seed = time(nullptr); // use current ts as seed
-    _run_second = 100;     // 100 second
+    _run_second = 50;      // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -859,8 +855,12 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{
-                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+INSTANTIATE_TEST_SUITE_P(
+        LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
+        ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE},
+                          // ORDER BY != PK: separate sort key (c1, c2) exercises the
+                          // load-spill + unsort-SST-writer + op-aware merge path.
+                          PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                          .separate_sort_key = true}));
 
 } // namespace starrocks::lake

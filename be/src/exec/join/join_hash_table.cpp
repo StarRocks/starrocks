@@ -467,9 +467,9 @@ void JoinHashTable::create(const HashTableParam& param) {
 }
 
 void JoinHashTable::_init_probe_column(const HashTableParam& param) {
-    const auto& probe_desc = *param.probe_row_desc;
-    for (const auto& tuple_desc : probe_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
+    const auto& probe_desc = *param.probe_record_desc;
+    for (auto* slot : probe_desc.slots()) {
+        {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
@@ -525,15 +525,15 @@ void JoinHashTable::_init_probe_column(const HashTableParam& param) {
 }
 
 void JoinHashTable::_init_build_column(const HashTableParam& param) {
-    const auto& build_desc = *param.build_row_desc;
+    const auto& build_desc = *param.build_record_desc;
     std::unordered_set<SlotId> join_key_col_refs;
     for (const auto& join_key : param.join_keys) {
         if (join_key.col_ref != nullptr) {
             join_key_col_refs.insert(join_key.col_ref->slot_id());
         }
     }
-    for (const auto& tuple_desc : build_desc.tuple_descriptors()) {
-        for (const auto& slot : tuple_desc->slots()) {
+    for (auto* slot : build_desc.slots()) {
+        {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
 
@@ -612,12 +612,11 @@ void JoinHashTable::_init_join_keys() {
 }
 
 int64_t JoinHashTable::mem_usage() const {
-    // Theoretically, `_table_items` may be a nullptr after a cancel, even though in practice we haven’t observed any
-    // cases where `_table_items` was unexpectedly cleared or left uninitialized.
-    // To prevent potential null pointer exceptions, we add a defensive check here.
+    // `_table_items` is legitimately null after a cancel: the build hash table can be reset/torn down
+    // while a memory-tracking query (ht_mem_usage from estimated_memory_reserved / revocable-bytes /
+    // close metrics) races in. Return 0 defensively; do NOT DCHECK(false) here -- that is a real,
+    // expected state on cancel and would abort debug/ASan builds (release already returns 0).
     if (_table_items == nullptr) {
-        LOG(WARNING) << "table_items is nullptr in mem_usage, stack:" << get_stack_trace();
-        DCHECK(false);
         return 0;
     }
 

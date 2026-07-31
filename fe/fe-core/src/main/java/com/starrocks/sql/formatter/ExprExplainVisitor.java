@@ -508,7 +508,9 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
 
     @Override
     public String visitDefaultValueExpr(DefaultValueExpr node, Void context) {
-        return null;
+        // Returning null here made every caller that joins child strings throw NPE, e.g. deparsing
+        // `INSERT INTO t VALUES (DEFAULT, 3)`. DEFAULT is also the literal input syntax, so it round-trips.
+        return "DEFAULT";
     }
 
     @Override

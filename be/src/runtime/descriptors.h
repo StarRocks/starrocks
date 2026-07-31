@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory_resource>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -222,55 +223,31 @@ private:
     friend class ObjectPool;
 };
 
-// Records positions of tuples within row produced by ExecNode.
-// TODO: this needs to differentiate between tuples contained in row
-// and tuples produced by ExecNode (parallel to PlanNode.rowTupleIds and
-// PlanNode.tupleIds); right now, we conflate the two (and distinguish based on
-// context; for instance, HdfsScanNode uses these tids to create row batches, ie, the
-// first case, whereas TopNNode uses these tids to copy output rows, ie, the second
-// case)
-class RowDescriptor {
+// Describes the record produced by an ExecNode.
+//
+// It does not expose how the record is split into tuples: consumers only care about the
+// slots the record carries, so they are presented as a single flat sequence and the tuple
+// boundaries are invisible.
+class RecordDescriptor {
 public:
-    RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples);
+    RecordDescriptor() = default;
+    RecordDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& tuple_ids);
+    explicit RecordDescriptor(TupleDescriptor* tuple_desc) : _tuple_descs(1, tuple_desc) {}
 
-    // standard copy c'tor, made explicit here
-    RowDescriptor(const RowDescriptor& desc) = default;
+    // All the slots of the record, in order of appearance.
+    auto slots() const {
+        return _tuple_descs | std::ranges::views::transform([](const TupleDescriptor* tuple) -> const auto& {
+                   return tuple->slots();
+               }) |
+               std::ranges::views::join;
+    }
 
-    RowDescriptor(TupleDescriptor* tuple_desc);
-
-    // dummy descriptor, needed for the JNI EvalPredicate() function
-    RowDescriptor() = default;
-
-    static const int INVALID_IDX;
-
-    // Returns INVALID_IDX if id not part of this row.
-    int get_tuple_idx(TupleId id) const;
-
-    // Return descriptors for all tuples in this row, in order of appearance.
-    const std::vector<TupleDescriptor*>& tuple_descriptors() const { return _tuple_desc_map; }
-
-    // Populate row_tuple_ids with our ids.
-    void to_thrift(std::vector<TTupleId>* row_tuple_ids);
-    void to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids);
-
-    // Return true if the tuple ids of this descriptor are a prefix
-    // of the tuple ids of other_desc.
-    bool is_prefix_of(const RowDescriptor& other_desc) const;
-
-    // Return true if the tuple ids of this descriptor match tuple ids of other desc.
-    bool equals(const RowDescriptor& other_desc) const;
+    size_t num_slots() const;
 
     std::string debug_string() const;
 
 private:
-    // Initializes tupleIdxMap during c'tor using the _tuple_desc_map.
-    void init_tuple_idx_map();
-
-    // map from position of tuple w/in row to its descriptor
-    std::vector<TupleDescriptor*> _tuple_desc_map;
-
-    // map from TupleId to position of tuple w/in row
-    std::vector<int> _tuple_idx_map;
+    std::vector<TupleDescriptor*> _tuple_descs;
 };
 
 // used to describe row position, only used in global late materialization

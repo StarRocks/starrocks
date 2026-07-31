@@ -45,6 +45,8 @@ import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -75,7 +77,9 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.hive.ReplayHiveCatalogMetadata;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
+import com.starrocks.connector.iceberg.ReplayIcebergCatalogMetadata;
 import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -107,6 +111,8 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -130,13 +136,18 @@ import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
@@ -172,8 +183,10 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -758,90 +771,134 @@ public class UtFrameUtils {
         return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
-    private static void registerReplayIcebergResourceTables(ConnectContext connectContext,
-                                                           StarRocksAssert starRocksAssert,
-                                                           QueryDumpInfo replayDumpInfo) throws Exception {
+    private static void registerReplayExternalCatalogTables(ConnectContext connectContext,
+                                                            StarRocksAssert starRocksAssert,
+                                                            QueryDumpInfo replayDumpInfo) throws Exception {
         Map<String, String> createTableStmtMap = replayDumpInfo.getCreateTableStmtMap();
         if (createTableStmtMap.isEmpty()) {
             return;
         }
-        // The dump stores iceberg tables as bare db.table in table_meta but references them as
-        // catalog.db.table in the query/view bodies. That combined SQL text is the only record of
-        // which external catalog each dumped db belongs to.
+        // The dump stores external tables as bare db.table in table_meta but references them as
+        // catalog.db.table in the query/view/MV bodies. That combined SQL text is the only record of
+        // which external catalog each dumped db belongs to -- in particular a materialized view's
+        // definition (carried in table_meta) references its base external tables by their real
+        // catalog.db.table name even when the query itself reaches the MV through the internal catalog.
+        // Strip identifier backticks so a quoted `catalog`.`db`.`table` reference is recovered the same
+        // as an unquoted one.
         StringBuilder sqlText = new StringBuilder(
                 replayDumpInfo.getOriginStmt() == null ? "" : replayDumpInfo.getOriginStmt());
         for (String view : replayDumpInfo.getCreateViewStmtMap().values()) {
             sqlText.append('\n').append(view);
         }
-        String allSql = sqlText.toString();
-
-        Map<String, String> dbToCatalog = new java.util.HashMap<>();
-        for (String key : createTableStmtMap.keySet()) {
-            String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
-            if (dbToCatalog.containsKey(db)) {
-                continue;
-            }
-            java.util.regex.Matcher m = java.util.regex.Pattern
-                    .compile("(\\w+)\\." + java.util.regex.Pattern.quote(db) + "\\.")
-                    .matcher(allSql);
-            if (m.find()) {
-                dbToCatalog.put(db, m.group(1));
-            }
+        for (String createStmt : createTableStmtMap.values()) {
+            sqlText.append('\n').append(createStmt);
         }
-        if (dbToCatalog.isEmpty()) {
-            return;
-        }
+        String allSql = sqlText.toString().replace("`", "");
 
-        Map<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> metaByCatalog =
-                new java.util.LinkedHashMap<>();
-        java.util.List<String> consumed = new java.util.ArrayList<>();
+        Map<String, ReplayIcebergCatalogMetadata> icebergByCatalog = new LinkedHashMap<>();
+        Map<String, ReplayHiveCatalogMetadata> hiveByCatalog = new LinkedHashMap<>();
+        // Preserve which connector type each recovered catalog is, so the right external catalog is created.
+        Map<String, String> catalogType = new LinkedHashMap<>();
+        List<String> consumed = new ArrayList<>();
         for (Map.Entry<String, String> entry : createTableStmtMap.entrySet()) {
             String key = entry.getKey();
             String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
             String table = key.contains(".") ? key.substring(key.indexOf('.') + 1) : key;
-            String catalog = dbToCatalog.get(db);
-            if (catalog == null) {
-                continue;
-            }
             com.starrocks.sql.ast.CreateTableStmt stmt;
             try {
                 com.starrocks.sql.ast.StatementBase parsed =
                         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(entry.getValue(), connectContext);
-                if (!(parsed instanceof com.starrocks.sql.ast.CreateTableStmt)) {
+                if (!(parsed instanceof CreateTableStmt)) {
                     continue;
                 }
-                stmt = (com.starrocks.sql.ast.CreateTableStmt) parsed;
+                stmt = (CreateTableStmt) parsed;
             } catch (Exception e) {
                 continue;
             }
-            // Only handle old-style resource-mapping iceberg external tables: CREATE EXTERNAL TABLE ...
-            // ENGINE=ICEBERG ("resource"=...). Other external tables (e.g. ENGINE=HIVE) and native tables
-            // must go through the normal replay create path -- otherwise we would hijack unrelated tables,
-            // drop their CREATE statements from createTableStmtMap, and break other dumps.
-            if (!stmt.isExternal()
-                    || stmt.getEngineName() == null
-                    || !stmt.getEngineName().equalsIgnoreCase("iceberg")
-                    || stmt.getProperties() == null
-                    || !stmt.getProperties().containsKey("resource")) {
+            // Identify an external-catalog table purely by it being an external table with a mockable
+            // connector engine (iceberg/hive today). We deliberately do NOT require the legacy "resource"
+            // property -- the catalog is what matters, and newer dumps may not lean on "resource" at all.
+            // Native tables and engines we do not mock fall through to the normal replay create path.
+            String engine = stmt.getEngineName();
+            if (!stmt.isExternal() || engine == null || stmt.getProperties() == null) {
                 continue;
             }
-            List<com.starrocks.catalog.Column> columns = new java.util.ArrayList<>();
-            for (com.starrocks.sql.ast.ColumnDef cd : stmt.getColumnDefs()) {
-                columns.add(new com.starrocks.catalog.Column(
-                        cd.getName(), cd.getType(), cd.isAllowNull(), cd.getComment()));
+            // Recover the external catalog this table belongs to. Prefer the explicit external_table_catalog
+            // section that newer dumps record (catalog captured directly, no inference). Fall back to a
+            // catalog.db.table reference in the combined SQL (query, views, and CREATE statements -- notably a
+            // materialized view's definition names its base external tables by their real catalog.db.table)
+            // for older dumps that lack the section. Legacy resource-mapping dumps reference their tables
+            // unqualified, so both lookups yield null and we skip them here, leaving them to the legacy path.
+            String catalog = replayDumpInfo.getExternalTableCatalogMap().get(key);
+            if (catalog == null) {
+                catalog = recoverExternalCatalog(allSql, db, table);
             }
-            com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata meta =
-                    metaByCatalog.computeIfAbsent(catalog,
-                            c -> new com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata(c));
-            meta.registerTable(null, db, table, columns, 100L);
-            consumed.add(key);
+            if (catalog == null) {
+                continue;
+            }
+            List<Column> columns = new ArrayList<>();
+            for (ColumnDef cd : stmt.getColumnDefs()) {
+                columns.add(new Column(cd.getName(), cd.getType(), cd.isAllowNull(), cd.getComment()));
+            }
+            Map<String, ColumnStatistic> columnStats =
+                    replayDumpInfo.getTableStatisticsMap().getOrDefault(key, Collections.emptyMap());
+
+            if (engine.equalsIgnoreCase("iceberg")) {
+                // Prefer the captured total row count (external_table_row_count); iceberg has no hms
+                // scanRowCount, and a tiny fallback would clamp every column NDV/cardinality on replay.
+                long rowCount = replayDumpInfo.getExternalTableRowCountMap().containsKey(key)
+                        ? replayDumpInfo.getExternalTableRowCountMap().get(key)
+                        : sumReplayPartitionRowCount(replayDumpInfo, key, 100L);
+                ReplayIcebergCatalogMetadata meta = icebergByCatalog.computeIfAbsent(catalog, ReplayIcebergCatalogMetadata::new);
+                List<String> partTransforms = replayDumpInfo.getExternalTablePartitionSpecMap().get(key);
+                List<String> partNames = replayDumpInfo.getExternalTablePartitionNameMap().get(key);
+                // Real per-partition record counts (from the table_row_count section) so each reconstructed
+                // partition DataFile carries its true row count instead of an even split of the total.
+                Map<String, Long> partRowCounts =
+                        replayDumpInfo.getPartitionRowCountMap().getOrDefault(key, Collections.emptyMap());
+                meta.registerTable(db, table, columns, rowCount, columnStats, partTransforms, partNames, partRowCounts);
+                catalogType.put(catalog, "iceberg");
+                consumed.add(key);
+            } else if (engine.equalsIgnoreCase("hive")) {
+                HiveMetaStoreTableDumpInfo hms = findReplayHmsInfo(replayDumpInfo, catalog, db, table);
+                // Prefer the captured total row count, then the hms scan row count, then the numRows table
+                // property, then a nonzero default.
+                long rowCount = 1L;
+                if (replayDumpInfo.getExternalTableRowCountMap().containsKey(key)) {
+                    rowCount = replayDumpInfo.getExternalTableRowCountMap().get(key);
+                } else if (hms != null && hms.getScanRowCount() > 0) {
+                    rowCount = (long) hms.getScanRowCount();
+                } else {
+                    Long numRows = parseLongOrNull(stmt.getProperties().get("numRows"));
+                    if (numRows != null && numRows > 0) {
+                        rowCount = numRows;
+                    }
+                }
+                List<String> dataCols = (hms != null && !hms.getDataColumnNames().isEmpty())
+                        ? hms.getDataColumnNames()
+                        : columns.stream().map(com.starrocks.catalog.Column::getName)
+                                .collect(java.util.stream.Collectors.toList());
+                List<String> partCols = hms != null ? hms.getPartColumnNames() : com.google.common.collect.Lists
+                        .newArrayList();
+                // Partition names, when the dump captured them, drive partition pruning on replay (empty for
+                // dumps that did not capture them -> unpartitioned, same as before).
+                List<String> partNames = hms != null ? hms.getPartitionNames() : com.google.common.collect.Lists
+                        .newArrayList();
+                ReplayHiveCatalogMetadata meta = hiveByCatalog.computeIfAbsent(catalog, ReplayHiveCatalogMetadata::new);
+                meta.registerTable(db, table, columns, dataCols, partCols, rowCount, columnStats, partNames);
+                catalogType.put(catalog, "hive");
+                consumed.add(key);
+                // Drop the matching hms entry so the legacy resource-mapping hive replay path below does not
+                // also try to serve this table (and NPE on missing per-column statistics).
+                removeReplayHmsEntry(replayDumpInfo, catalog, db, table);
+            }
         }
         // Served via the external catalogs below, so drop their internal-catalog CREATE EXTERNAL TABLE
-        // statements -- those would need a live iceberg resource that the dump does not carry.
+        // statements -- those would need a live iceberg/hive resource that the dump does not carry.
         for (String key : consumed) {
             createTableStmtMap.remove(key);
         }
-        if (metaByCatalog.isEmpty()) {
+        if (catalogType.isEmpty()) {
             return;
         }
 
@@ -854,18 +911,108 @@ public class UtFrameUtils {
                     gsm.getLocalMetastore(), gsm.getConnectorMgr());
             gsm.setMetadataMgr(mockedMetadataMgr);
         }
-        for (Map.Entry<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> e
-                : metaByCatalog.entrySet()) {
+        for (Map.Entry<String, String> e : catalogType.entrySet()) {
             String catalog = e.getKey();
+            String type = e.getValue();
             if (!gsm.getCatalogMgr().catalogExists(catalog)) {
                 Map<String, String> props = new java.util.HashMap<>();
-                props.put("type", "iceberg");
-                props.put("iceberg.catalog.type", "hive");
+                props.put("type", type);
+                if (type.equals("iceberg")) {
+                    props.put("iceberg.catalog.type", "hive");
+                }
                 props.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-                gsm.getCatalogMgr().createCatalog("iceberg", catalog, "", props);
+                gsm.getCatalogMgr().createCatalog(type, catalog, "", props);
             }
-            mockedMetadataMgr.registerMockedMetadata(catalog, e.getValue());
+            if (type.equals("iceberg")) {
+                mockedMetadataMgr.registerMockedMetadata(catalog, icebergByCatalog.get(catalog));
+            } else {
+                mockedMetadataMgr.registerMockedMetadata(catalog, hiveByCatalog.get(catalog));
+            }
         }
+    }
+
+    // Recover the external catalog that a dumped db.table belongs to, from a catalog.db.table reference in the
+    // dump SQL (backticks already stripped). Prefer a full catalog.db.table match, which disambiguates two
+    // catalogs that happen to expose a same-named db; fall back to catalog.db. when no full-table reference is
+    // present (e.g. a desensitized dump whose query body was rewritten with different table identifiers).
+    private static String recoverExternalCatalog(String allSql, String db, String table) {
+        java.util.regex.Matcher full = java.util.regex.Pattern
+                .compile("(\\w+)\\." + java.util.regex.Pattern.quote(db) + "\\."
+                        + java.util.regex.Pattern.quote(table) + "(?![\\w])")
+                .matcher(allSql);
+        if (full.find()) {
+            return full.group(1);
+        }
+        java.util.regex.Matcher byDb = java.util.regex.Pattern
+                .compile("(\\w+)\\." + java.util.regex.Pattern.quote(db) + "\\.")
+                .matcher(allSql);
+        if (byDb.find()) {
+            return byDb.group(1);
+        }
+        return null;
+    }
+
+    // Sum the captured per-partition row counts of a dumped table (keyed db.table), or return the fallback
+    // when the dump recorded none (iceberg dumps commonly carry no table_row_count section).
+    private static long sumReplayPartitionRowCount(QueryDumpInfo replayDumpInfo, String dbAndTable, long fallback) {
+        Map<String, Long> partitionRowCount = replayDumpInfo.getPartitionRowCountMap().get(dbAndTable);
+        if (partitionRowCount == null || partitionRowCount.isEmpty()) {
+            return fallback;
+        }
+        long total = 0L;
+        for (long c : partitionRowCount.values()) {
+            total += c;
+        }
+        return total > 0 ? total : fallback;
+    }
+
+    private static HiveMetaStoreTableDumpInfo findReplayHmsInfo(
+            QueryDumpInfo replayDumpInfo, String catalog, String db, String table) {
+        Map<String, Map<String, HiveMetaStoreTableDumpInfo>> dbMap = replayDumpInfo.getHmsTableMap().get(catalog);
+        if (dbMap == null || dbMap.get(db) == null) {
+            return null;
+        }
+        return dbMap.get(db).get(table);
+    }
+
+    private static void removeReplayHmsEntry(QueryDumpInfo replayDumpInfo, String catalog, String db, String table) {
+        Map<String, Map<String, HiveMetaStoreTableDumpInfo>> dbMap = replayDumpInfo.getHmsTableMap().get(catalog);
+        if (dbMap == null || dbMap.get(db) == null) {
+            return;
+        }
+        dbMap.get(db).remove(table);
+        if (dbMap.get(db).isEmpty()) {
+            dbMap.remove(db);
+        }
+        if (dbMap.isEmpty()) {
+            replayDumpInfo.getHmsTableMap().remove(catalog);
+        }
+    }
+
+    private static Long parseLongOrNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(s.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // Remove shared-data / enterprise-only properties from a dumped CREATE MATERIALIZED VIEW statement so it
+    // can be created in the open-source (shared-nothing) replay environment. analyzeMVProperties rejects the
+    // ENTIRE property map on the first unknown key, so an un-stripped enterprise MV would fail to create.
+    private static String stripReplayUnsupportedMvProperties(String mvDdl) {
+        String result = mvDdl;
+        for (String key : new String[] {"warehouse", "storage_volume",
+                "datacache.enable", "datacache.partition_duration", "enable_async_write_back"}) {
+            // drop the "key" = "value" entry plus any trailing comma/whitespace
+            result = result.replaceAll("\"" + java.util.regex.Pattern.quote(key) + "\"\\s*=\\s*\"[^\"]*\"\\s*,?\\s*", "");
+        }
+        // tidy up a comma left dangling before the closing paren of PROPERTIES(...)
+        result = result.replaceAll(",\\s*\\)", "\n)");
+        return result;
     }
 
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
@@ -886,22 +1033,27 @@ public class UtFrameUtils {
             starRocksAssert.withResource(createResourceStmt);
         }
 
-        // mock replay external table info
+        // Replay modern external-catalog tables (iceberg/hive) that the dump captured as
+        // CREATE EXTERNAL TABLE ... ENGINE=<engine> ("resource"=...) in table_meta and referenced as
+        // catalog.db.table in the query. Register a real external catalog of the right type plus a mock
+        // connector metadata built from the declared schema so these tables can be planned entirely
+        // offline. Runs before the legacy resource-mapping path below and removes the hms_table entries it
+        // consumes, so a modern hive table is not also served by (and does not NPE) that legacy path.
+        registerReplayExternalCatalogTables(connectContext, starRocksAssert, replayDumpInfo);
+
+        // mock replay external table info (legacy resource-mapping hive dumps not consumed above).
+        // Delegate to whatever manager the modern path installed (a MockedMetadataMgr holding the modern
+        // external catalogs, if any), so a dump mixing legacy and modern external tables resolves both.
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
                     GlobalStateMgr.getCurrentState().getLocalMetastore(),
                     GlobalStateMgr.getCurrentState().getConnectorMgr(),
                     GlobalStateMgr.getCurrentState().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
-                    replayDumpInfo.getTableStatisticsMap());
+                    replayDumpInfo.getTableStatisticsMap(),
+                    GlobalStateMgr.getCurrentState().getMetadataMgr());
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
-
-        // Replay old-style resource-mapping iceberg external tables that the dump only captured as
-        // CREATE EXTERNAL TABLE ... ENGINE=ICEBERG ("resource"=...) statements in table_meta. Register
-        // the referenced iceberg resource and a mock resource-mapping catalog metadata built from the
-        // declared schema so these tables can be created and planned during replay.
-        registerReplayIcebergResourceTables(connectContext, starRocksAssert, replayDumpInfo);
 
         // create table
         int backendId = 10002;
@@ -975,8 +1127,11 @@ public class UtFrameUtils {
             String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
             connectContext.executeSql(dropMv);
             starRocksAssert.useDatabase(dbName);
-            // no need to refresh
-            starRocksAssert.withMaterializedView(entry.getValue());
+            // no need to refresh. Strip shared-data / enterprise-only MV properties the open-source
+            // (shared-nothing) replay env cannot analyze (warehouse / storage_volume / datacache.*), so a
+            // dump captured from a shared-data cluster still creates its MVs -- otherwise
+            // PropertyAnalyzer.analyzeMVProperties rejects the whole property set.
+            starRocksAssert.withMaterializedView(stripReplayUnsupportedMvProperties(entry.getValue()));
         }
 
         // mock be core stat
@@ -1034,9 +1189,15 @@ public class UtFrameUtils {
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
-                    .getTable(entry.getKey().split("\\.")[1]);
-
+            Database replayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName);
+            Table candidate = replayDb == null ? null : replayDb.getTable(entry.getKey().split("\\.")[1]);
+            if (!(candidate instanceof OlapTable)) {
+                // Not an internal table: an external-catalog table whose per-partition row counts are served by
+                // its mock ConnectorMetadata (fed from the same partitionRowCountMap). setPartitionStatistics
+                // targets OlapTable partitions, so skip it here to avoid an NPE/ClassCastException.
+                continue;
+            }
+            OlapTable replayTable = (OlapTable) candidate;
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
             }
@@ -1045,8 +1206,14 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
-                    .getTable(entry.getKey().split("\\.")[1]);
+            Database replayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName);
+            Table replayTable = replayDb == null ? null : replayDb.getTable(entry.getKey().split("\\.")[1]);
+            if (replayTable == null) {
+                // Not an internal table: an external-catalog table whose column statistics are served by its
+                // mock ConnectorMetadata (fed from the same tableStatisticsMap), not the internal storage.
+                // Skip it here to avoid dereferencing a db that does not exist in the local metastore.
+                continue;
+            }
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
@@ -1063,10 +1230,47 @@ public class UtFrameUtils {
                 }
             }
         }
+        // mock low-cardinality global dicts: relocate each captured dict (keyed db.table + column name) onto
+        // the REPLAYED table's freshly-assigned id, and seed CacheDictManager so hasGlobalDict returns true
+        // offline. This reproduces the dict-encoding (Decode-node) optimization that would otherwise be lost
+        // because the replay env has no BE to load a dict from. Kept on the real CacheDictManager path (not
+        // USE_MOCK_DICT_MANAGER) so only genuinely dict-optimized columns light up.
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : replayDumpInfo.getTableGlobalDictMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                    .getTable(entry.getKey().split("\\.")[1]);
+            if (replayTable == null) {
+                continue;
+            }
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                CacheDictManager.replayPut(replayTable.getId(),
+                        ColumnId.create(columnEntry.getKey()), columnEntry.getValue());
+            }
+        }
+        // mock column min/max: same relocation as the global dict above, seeding ColumnMinMaxMgr so the
+        // meta-scan / group-by-compressed-key / monotonic-function rewrites reproduce offline (the replay env
+        // has no BE to compute min/max).
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                replayDumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            Table replayTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("" + dbName)
+                    .getTable(entry.getKey().split("\\.")[1]);
+            // Only OLAP min/max is replayable (seeded into ColumnMinMaxMgr); skip any other table type.
+            if (!(replayTable instanceof OlapTable)) {
+                continue;
+            }
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                ColumnMinMaxMgr.replayPut(replayTable.getId(),
+                        ColumnId.create(columnEntry.getKey()), columnEntry.getValue());
+            }
+        }
         return replaySql;
     }
 
     private static void tearMockEnv() {
+        // Drop dump-seeded global dicts and column min/max so they never leak into a later test.
+        CacheDictManager.clearReplayDicts();
+        ColumnMinMaxMgr.clearReplayMinMax();
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         for (int i = 1; i < backendIdSize; ++i) {
@@ -1232,6 +1436,13 @@ public class UtFrameUtils {
         for (TableRelation tableRelation : tableRelations) {
             if (tableRelation.getName().getCatalog() != null) {
                 String catalogName = tableRelation.getName().getCatalog();
+                // A modern external-catalog dump references tables by their real catalog name, which
+                // registerReplayExternalCatalogTables has already created as a real catalog. Leave those
+                // alone; only bare resource names (legacy resource-mapping dumps, catalog not registered)
+                // are rewritten to their resource-mapping catalog.
+                if (GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    continue;
+                }
                 tableRelation.getName().setCatalog(
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
             }

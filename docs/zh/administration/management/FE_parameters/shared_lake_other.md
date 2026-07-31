@@ -663,6 +663,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于存算分离集群。
 - 引入版本: v3.3.7, v3.4.0, v3.5.0
 
+### `lake_vector_index_build_warehouse`
+
+- 默认值：`default_warehouse`
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中用于执行异步向量索引构建任务的 Warehouse。将该配置设置为非默认 Warehouse 名称，可以隔离向量索引构建与查询、导入负载。如果配置为 `default_warehouse`、空值，或指定的 Warehouse 不存在或不可用，StarRocks 会使用表记录的后台 Warehouse，最后回退到默认 Warehouse。
+- 引入版本：v4.2.0
+
 ### `lake_vi_build_load_tail_delay_ms`
 
 - 默认值：300000

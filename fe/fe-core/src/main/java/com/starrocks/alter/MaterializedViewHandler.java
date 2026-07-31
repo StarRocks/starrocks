@@ -363,7 +363,7 @@ public class MaterializedViewHandler extends AlterHandler {
      * (The caller is {@code processBatchAddRollup}, so this is always a plain rollup, never a
      * synchronous materialized view, which carries a query statement.)
      */
-    static boolean isRangeRollupRoutable(OlapTable olapTable) {
+    public static boolean isRangeRollupRoutable(OlapTable olapTable) {
         // A cloud-native, non-colocate, non-auto-increment, non-primary-key range-distribution table
         // admits an additive rollup. A table that already carries one or more rollups is still routable:
         // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
@@ -372,7 +372,7 @@ public class MaterializedViewHandler extends AlterHandler {
         // never a synchronous materialized view, which carries a query statement.)
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
-                && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
+                && !olapTable.hasColocateGroup()
                 && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
     }

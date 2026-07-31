@@ -509,10 +509,6 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
-struct TChangesScanNode {
-    // no implementation, only used for placeholder in TPlanNode
-}
-
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -791,6 +787,8 @@ struct TLakeScanNode {
   // Per-scan decision (session flag on AND not disabled by the duplicate-lake-table gate), made at plan
   // build, that this lake scan should take the prepared physical split scan path. Absent means off.
   62: optional bool use_prepared_physical_split_scan
+
+  63: optional TTableSampleOptions sample_options
 }
 
 struct TEqJoinCondition {
@@ -1078,7 +1076,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
-  31: optional bool analytic_partition_skewed;
+  31: optional bool analytic_need_merge;
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
@@ -1184,6 +1182,9 @@ struct TAnalyticNode {
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
   22: optional bool is_skewed
+  // Feed the AnalyticNode from a single globally-ordered stream via an ordered-partition
+  // local exchange instead of hash-shuffling the partition keys.
+  23: optional bool force_merge_sort
 }
 
 struct TMergeNode {
@@ -1622,9 +1623,6 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
-
-  // just a placeholder
-  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

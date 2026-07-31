@@ -49,13 +49,11 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_context_manager.h"
 #include "exec/runtime/query_context_manager.h"
-#include "orchestration/fragment_mgr.h"
 #include "runtime/runtime_metrics.h"
 
 namespace starrocks::orchestration {
 
-ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics, FragmentMgr* fragment_mgr)
-        : _exec_env(exec_env), _fragment_mgr(fragment_mgr) {
+ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env, MetricRegistry* metrics) : _exec_env(exec_env) {
     // start the reaper thread for gc the expired context
     _keep_alive_reaper = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
@@ -122,21 +120,29 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
         }
     }
     if (context != nullptr) {
-        // cancel pipeline
-        const auto& fragment_instance_id = context->fragment_instance_id;
-        if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
-            if (auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id); fragment_ctx != nullptr) {
-                std::stringstream msg;
-                msg << "FragmentContext(id=" << print_id(fragment_instance_id) << ") cancelled by close_scanner";
-                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(msg.str()));
-            }
-        }
         LOG(INFO) << "close scan context: context id [ " << context_id << " ], fragment instance id [ "
-                  << print_id(fragment_instance_id) << " ]";
-        // clear the fragment instance's related result queue
-        RETURN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(fragment_instance_id));
+                  << print_id(context->fragment_instance_id) << " ]";
+        RETURN_IF_ERROR(_cancel_scan_context(context, "close_scanner"));
     }
     return Status::OK();
+}
+
+Status ExternalScanContextMgr::_cancel_scan_context(const std::shared_ptr<ScanContext>& context,
+                                                    const std::string& reason) {
+    const auto& fragment_instance_id = context->fragment_instance_id;
+    // The fragment opened by open_scanner always runs on the pipeline engine, so it must be cancelled
+    // through the pipeline QueryContext/FragmentContext. Cancelling through the non-pipeline
+    // FragmentMgr is a silent no-op for pipeline fragments, which leaves an abandoned scanner holding
+    // all its buffered memory until the query deadline expires.
+    if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
+        if (auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id); fragment_ctx != nullptr) {
+            std::stringstream msg;
+            msg << "FragmentContext(id=" << print_id(fragment_instance_id) << ") cancelled by " << reason;
+            pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(msg.str()));
+        }
+    }
+    // clear the fragment instance's related result queue
+    return _exec_env->result_queue_mgr()->cancel(fragment_instance_id);
 }
 
 void ExternalScanContextMgr::gc_expired_context() {
@@ -174,16 +180,12 @@ void ExternalScanContextMgr::gc_expired_context() {
             }
         }
         for (const auto& expired_context : expired_contexts) {
-            // must cancel the fragment instance, otherwise return thrift transport TTransportException
-            DCHECK(_fragment_mgr != nullptr);
-            WARN_IF_ERROR(
-                    _fragment_mgr->cancel(expired_context->fragment_instance_id),
-                    strings::Substitute("Fail to cancel fragment $0", print_id(expired_context->fragment_instance_id)));
-            WARN_IF_ERROR(_exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id),
+            WARN_IF_ERROR(_cancel_scan_context(expired_context, "expired scan context gc"),
                           strings::Substitute("Fail to cancel fragment $0 in result queue mgr",
                                               print_id(expired_context->fragment_instance_id)));
         }
     }
 #endif
 }
+
 } // namespace starrocks::orchestration

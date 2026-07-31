@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -26,6 +28,8 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticAutoCollector;
+import com.starrocks.statistic.StatisticsCollectJob;
+import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -62,6 +66,14 @@ public class AnalyzeCreateAnalyzeJobTest {
                 "properties('replication_num'='1') ");
         starRocksAssert.ddl("alter table db.tbl1 add partition p1 values in ('1')");
         starRocksAssert.ddl("alter table db.tbl1 add partition p2 values in ('2')");
+        starRocksAssert.withTable("create table db.tbl_histo("
+                + "k1 int, "
+                + "c_array array<int>, "
+                + "c_struct struct<a int>, "
+                + "c_map map<int, int>, "
+                + "c_json json, "
+                + "c_varbinary varbinary) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 
     @Test
@@ -157,6 +169,22 @@ public class AnalyzeCreateAnalyzeJobTest {
 
         // drop analyze
         starRocksAssert.ddl("drop analyze " + jobId);
+    }
+
+    @Test
+    public void testCreateHistogramAllColumnsStaysAdaptiveAndFiltersUnsupported() {
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(
+                "create analyze table db.tbl_histo update histogram on all columns");
+        Assertions.assertTrue(analyzeStmt.getColumnNames().isEmpty());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "tbl_histo");
+        StatisticsCollectJob collectJob = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                db, table, null, Lists.newArrayList(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), List.of(), List.of(), false);
+        Assertions.assertEquals(List.of("k1"), collectJob.getColumnNames());
     }
 
     @Test

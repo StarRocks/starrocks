@@ -37,6 +37,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -85,6 +86,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -106,6 +110,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -278,6 +283,10 @@ public final class MetricRepo {
     public static final LongCounterMetric COUNTER_PUBLISH_VERSION_DAEMON_LOOP =
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
+
+    public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
+            new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
+                    "Times we have exhausted the budget");
 
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
@@ -457,6 +466,8 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
+
+    public static GaugeMetric<Long> GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES;
 
     public static List<LeaderAwareGaugeMetric<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
@@ -757,6 +768,20 @@ public final class MetricRepo {
                 "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
         GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
+
+        // Per-FE dict cache size, so not leader-aware.
+        GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES = new GaugeMetric<Long>("low_cardinality_dict_cache_bytes", MetricUnit.BYTES,
+                "total bytes of cached dictionary data in the low-cardinality global dictionary cache") {
+            @Override
+            public Long getValue() {
+                IDictManager dictManager = IDictManager.getInstance();
+                if (dictManager instanceof CacheDictManager) {
+                    return ((CacheDictManager) dictManager).getCacheWeightedBytes();
+                }
+                return 0L;
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
@@ -1119,11 +1144,18 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER);
 
+        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL);
+
         // init system metrics
         initSystemMetrics();
 
         // init clone metrics
         initCloneMetrics();
+
+        // init statistics cache metrics
+        if (Config.enable_statistic_cache_metrics) {
+            initStatisticsCacheMetrics();
+        }
 
         updateMetrics();
         hasInit = true;
@@ -1131,6 +1163,62 @@ public final class MetricRepo {
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private static void initStatisticsCacheMetrics() {
+        final var storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
+        if (storage instanceof CachedStatisticStorage cachedStatisticStorage) {
+            for (var nameCachePair : cachedStatisticStorage.getNamedCacheMap().entrySet()) {
+                final var cacheName = nameCachePair.getKey();
+                final var cache = nameCachePair.getValue();
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_hit_count",
+                        "Cumulative number of statistics cache hits", c -> c.stats().hitCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_miss_count",
+                        "Cumulative number of statistics cache misses", c -> c.stats().missCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_eviction_count",
+                        "Cumulative number of statistics cache evictions", c -> c.stats().evictionCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_success_count",
+                        "Cumulative number of successful statistics cache loads",
+                        c -> c.stats().loadSuccessCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_failure_count",
+                        "Cumulative number of failed statistics cache loads",
+                        c -> c.stats().loadFailureCount());
+                // Current cache occupancy — a point-in-time value, so it stays a GAUGE.
+                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_entries",
+                        "Number of entries currently held in the statistics cache",
+                        LoadingCache::estimatedSize);
+            }
+        }
+
+    }
+
+    private static void addStatisticsCacheGauge(String cacheName, LoadingCache<?, ?> cache, String metricName, String description,
+                                                Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
+        final var gauge = new GaugeMetric<>(metricName, MetricUnit.NOUNIT, description) {
+            @Override
+            public Long getValue() {
+                return cache == null ? 0L : cacheMetricFun.apply(cache);
+            }
+        };
+        gauge.addLabel(new MetricLabel("cache", cacheName));
+        STARROCKS_METRIC_REGISTER.addMetric(gauge);
+    }
+
+    private static void addStatisticsCacheCounter(String cacheName, LoadingCache<?, ?> cache, String metricName,
+                                                  String description, Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
+        final var counter = new CounterMetric<Long>(metricName, MetricUnit.NOUNIT, description) {
+            @Override
+            public void increase(Long delta) {
+                // No-op: the value is pulled on demand from Caffeine's cumulative stats
+            }
+
+            @Override
+            public Long getValue() {
+                return cache == null ? 0L : cacheMetricFun.apply(cache);
+            }
+        };
+        counter.addLabel(new MetricLabel("cache", cacheName));
+        STARROCKS_METRIC_REGISTER.addMetric(counter);
     }
 
     private static void initSystemMetrics() {
@@ -1540,7 +1628,6 @@ public final class MetricRepo {
 
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
-
 
         // collect connection metrics
         collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());

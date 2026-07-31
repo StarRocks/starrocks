@@ -1154,11 +1154,11 @@ TEST_F(HttpRequestFunctionsTest, multipleRowsTest) {
     ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
 }
 
-// Test prepare with THREAD_LOCAL scope (no-op)
+// Test prepare with FRAGMENT_LOCAL scope (no-op)
 TEST_F(HttpRequestFunctionsTest, prepareThreadLocalScopeTest) {
-    FunctionContext::FunctionStateScope scope = FunctionContext::THREAD_LOCAL;
+    FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
     ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
-    // THREAD_LOCAL should be a no-op
+    // FRAGMENT_LOCAL should be a no-op
     ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
 }
 

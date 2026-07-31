@@ -68,8 +68,10 @@ void SpillableHashJoinProbeOperator::close(RuntimeState* state) {
         _reset_load_partitions();
     }
     HashJoinProbeOperator::close(state);
-    DCHECK(!has_output());
-    DCHECK(is_finished());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || !has_output());
+    DCHECK(state->is_cancelled() || is_finished());
 }
 
 bool SpillableHashJoinProbeOperator::has_output() const {
@@ -291,6 +293,15 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
             }
 
             RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker)));
+            // Cancellation (or a restore-task I/O error) can land *during* trigger_restore's IO
+            // task -- after the is_cancelled() check above -- leaving the stream with neither a
+            // buffered chunk nor EOF. Re-check both here so we bail cleanly instead of consuming
+            // an empty/not-eof stream (which would otherwise hit BufferedInputStream::get_next's
+            // no-data path).
+            if (state->is_cancelled()) {
+                return Status::Cancelled("cancelled");
+            }
+            RETURN_IF_ERROR(_join_builder->spiller()->task_status());
             auto chunk_st = reader->restore<SyncTaskExecutor>(state, MemTrackerGuard(tls_mem_tracker));
 
             FAIL_POINT_TRIGGER_EXECUTE(spill_hash_join_throw_bad_alloc, { throw std::bad_alloc(); });

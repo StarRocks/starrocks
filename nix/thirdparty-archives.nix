@@ -334,10 +334,10 @@ let
       md5 = "251d9200d27dda9120653b4928a23a86";
       sha256 = "0287mwpqc83rgs7rmc3iilsl6bnnldf8791ppgs7j2zrh8sl1wmh";
     };
-    "thrift-0.23.0.tar.gz" = {
-      url = "https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz";
-      md5 = "7b62f4258ded41e233a638fe8b9fcf64";
-      sha256 = "0vzlx0xv0g8xs6zz4l7zll8664cc40qnj6asdk8i67xfs8rdjn8q";
+    "thrift-0.24.0.tar.gz" = {
+      url = "https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz";
+      md5 = "232e035ff80c5fb4b7243f0be3a76b02";
+      sha256 = "1r66jr1wx0jgzlzzpag3zvia9gzbak2z474kn0qxdhf5lhwmiyp0";
     };
     "vectorscan-5.4.12.tar.gz" = {
       url = "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz";
@@ -463,7 +463,7 @@ let
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
@@ -534,7 +534,7 @@ let
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
@@ -603,7 +603,7 @@ let
       "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
       "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
