@@ -16,7 +16,6 @@
 
 #include "column/nullable_column.h"
 #include "common/system/master_info.h"
-#include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gen_cpp/types.pb.h"
@@ -24,8 +23,7 @@
 #include "gutil/strings/substitute.h"
 #include "schema_scanner/schema_helper.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/rowset/rowset.h"
-#include "storage/rowset/segment.h"
+#include "storage/segment_footer_collector.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet.h"
@@ -267,46 +265,26 @@ bool SchemaCompressionDictStatsScanner::_try_expand_local_footers(const TabletSh
         uid_to_col.emplace(col.unique_id(), std::make_pair(std::string(col.name()), col.use_compression_dict()));
     }
 
-    std::vector<RowsetSharedPtr> rowsets;
-    if (Status st = tablet->capture_consistent_rowsets(tablet->max_version(), &rowsets); !st.ok()) {
-        return false;
-    }
-
-    auto* fs = FileSystem::Default();
+    // Opening segment files is a storage-layer concern; this scanner only walks the
+    // metadata it gets back.
+    const auto footers = collect_visible_segment_footers(tablet);
     bool any_segment = false;
-    for (const auto& rs : rowsets) {
-        if (rs == nullptr) {
-            continue;
-        }
-        const int64_t num_segments = rs->num_segments();
-        for (int64_t seg_id = 0; seg_id < num_segments; ++seg_id) {
-            std::string seg_path = Rowset::segment_file_path(rs->rowset_path(), rs->rowset_id(), seg_id);
-            auto file_or = fs->new_random_access_file(seg_path);
-            if (!file_or.ok()) {
-                // Encrypted / bundled / missing segment: skip. Never fabricate.
-                continue;
+    for (const auto& [seg_id, footer] : footers) {
+        any_segment = true;
+        for (const auto& col_meta : footer.columns()) {
+            std::string node_name;
+            bool node_use_compression_dict = false;
+            auto it = uid_to_col.find(col_meta.unique_id());
+            if (it != uid_to_col.end()) {
+                node_name = it->second.first;
+                node_use_compression_dict = it->second.second;
+            } else if (col_meta.has_name() && !col_meta.name().empty()) {
+                node_name = col_meta.name();
+            } else {
+                node_name = strings::Substitute("__uid_$0", col_meta.unique_id());
             }
-            SegmentFooterPB footer;
-            if (auto footer_or = Segment::parse_segment_footer(file_or.value().get(), &footer, nullptr, nullptr);
-                !footer_or.ok()) {
-                continue;
-            }
-            any_segment = true;
-            for (const auto& col_meta : footer.columns()) {
-                std::string node_name;
-                bool node_use_compression_dict = false;
-                auto it = uid_to_col.find(col_meta.unique_id());
-                if (it != uid_to_col.end()) {
-                    node_name = it->second.first;
-                    node_use_compression_dict = it->second.second;
-                } else if (col_meta.has_name() && !col_meta.name().empty()) {
-                    node_name = col_meta.name();
-                } else {
-                    node_name = strings::Substitute("__uid_$0", col_meta.unique_id());
-                }
-                _expand_footer_column(col_meta, seg_id, node_name, node_use_compression_dict, table_id, partition_id,
-                                      tablet_id);
-            }
+            _expand_footer_column(col_meta, seg_id, node_name, node_use_compression_dict, table_id, partition_id,
+                                  tablet_id);
         }
     }
     return any_segment;
