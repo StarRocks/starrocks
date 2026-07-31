@@ -143,7 +143,7 @@ protected:
 
         TPlanNode analytic_tnode = make_analytic_plan_node(force_merge_sort);
         AnalyticNode analytic(_runtime_state->obj_pool(), analytic_tnode, *_desc_tbl);
-        analytic.add_child(&child);
+        analytic.set_children({&child});
         CHECK_OK(analytic.init(analytic_tnode, _runtime_state));
 
         pipeline::PipelineBuilderContext context(_fragment_ctx.get(), kPipelineDop, kPipelineDop, false);
@@ -155,7 +155,7 @@ protected:
                                                       pipeline::OpFactories* analytic_source_ops) {
         TPlanNode analytic_tnode = make_analytic_plan_node(force_merge_sort);
         AnalyticNode analytic(_runtime_state->obj_pool(), analytic_tnode, *_desc_tbl);
-        analytic.add_child(child);
+        analytic.set_children({child});
         CHECK_OK(analytic.init(analytic_tnode, _runtime_state));
 
         pipeline::PipelineBuilderContext context(_fragment_ctx.get(), kPipelineDop, kPipelineDop, false);
