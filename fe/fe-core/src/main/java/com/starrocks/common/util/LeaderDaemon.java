@@ -281,14 +281,13 @@ public abstract class LeaderDaemon {
         }
         if (!gsm.isLeaderLeaseValid(lease)) {
             LOG.info("{} sees lease invalid, self-stop. lease={}", name, lease);
-            // Fast path: leadership was lost before this cycle started (the lease is invalidated at the very
-            // first demotion stage, well before stopLeaderOnlyDaemonThreads reaches this daemon). Self-stop
-            // now instead of spinning until the demotion flow stops us - this also keeps interval==0 daemons
-            // from tight-looping during the demotion window. The worker is running this check, not blocked,
-            // so no interrupt is needed (setStop() would force one, ignoring interruptOnStop()); just request
-            // stop and the loop breaks on its next isStopRequested check. A daemon already inside
-            // runAfterLeaseValid is instead woken/stopped by the demotion flow (interrupt, or onStopRequested
-            // for interrupt-unsafe daemons).
+            // Defensive self-stop; on today's paths this is rarely reached. Demotion sets isReady=false
+            // (transferToNonLeader's first statement) BEFORE it invalidates the lease, so workers park in
+            // the isReady spin above and are stopped by stopLeaderOnlyDaemonThreads; and a FAILED
+            // activation exits the process instead of leaving an invalid lease behind. Keep the check
+            // anyway: it costs nothing and self-heals any future path that invalidates the lease while
+            // isReady stays true. The worker is running this check, not blocked, so no interrupt is
+            // needed; just request stop and the loop breaks on its next isStopRequested check.
             requestStop(false);
             return;
         }

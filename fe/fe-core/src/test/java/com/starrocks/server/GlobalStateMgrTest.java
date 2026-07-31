@@ -50,7 +50,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
@@ -83,7 +82,6 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.net.InetSocketAddress;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -340,87 +338,6 @@ public class GlobalStateMgrTest {
         Assertions.assertTrue(secondLease.getGeneration() > firstLease.getGeneration());
         Assertions.assertEquals(104L, secondLease.getHaEpoch());
         Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(firstLease));
-    }
-
-    @Test
-    public void testLeaderLeaseRollbackAfterActivationFailure() {
-        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
-        EditLog editLog = new EditLog(new ArrayBlockingQueue<>(100), false);
-        globalStateMgr.setEditLog(editLog);
-        globalStateMgr.beginLeaderActivation();
-        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
-        globalStateMgr.publishLeaderLease(105L);
-        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
-        // publishLeaderLease opens the WAL gate as its last step.
-        Assertions.assertTrue(editLog.isWalGateOpenForTest());
-
-        globalStateMgr.rollbackLeaderActivation();
-
-        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
-        // A failed activation rolls back after the gate was opened; it must close the gate again, otherwise a
-        // node that falls back to follower keeps admitting journal writes through the still-open WAL gate.
-        Assertions.assertFalse(editLog.isWalGateOpenForTest());
-        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
-        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
-        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
-        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
-    }
-
-    @Test
-    public void testStaleLeaderActivationFailureRollsBackWhenBdbMasterChanged() {
-        NodeMgr nodeMgr = new NodeMgr(FrontendNodeType.FOLLOWER, "self", Pair.create("127.0.0.1", 9010));
-        GlobalStateMgr globalStateMgr = new GlobalStateMgr(nodeMgr);
-        globalStateMgr.setHaProtocol(new HAProtocol() {
-            @Override
-            public boolean fencing() {
-                return false;
-            }
-
-            @Override
-            public InetSocketAddress getLeader() {
-                return null;
-            }
-
-            @Override
-            public String getLeaderNodeName() {
-                return "other";
-            }
-
-            @Override
-            public List<InetSocketAddress> getObserverNodes() {
-                return java.util.Collections.emptyList();
-            }
-
-            @Override
-            public List<InetSocketAddress> getElectableNodes(boolean leaderIncluded) {
-                return java.util.Collections.emptyList();
-            }
-
-            @Override
-            public boolean removeElectableNode(String nodeName) {
-                return false;
-            }
-
-            @Override
-            public long getLatestEpoch() {
-                return 0;
-            }
-
-            @Override
-            public void removeUnstableNode(String nodeName, int currentFollowerCnt) {
-            }
-
-            @Override
-            public String transferToMaster(String nodeName, int timeoutMs, boolean force) {
-                return nodeName;
-            }
-        });
-
-        globalStateMgr.beginLeaderActivation();
-
-        Assertions.assertTrue(globalStateMgr.rollbackStaleLeaderActivationIfNeeded(new Exception("fencing failed")));
-        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
-        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
     }
 
     @Test

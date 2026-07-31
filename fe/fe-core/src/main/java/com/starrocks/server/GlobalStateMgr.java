@@ -1358,7 +1358,6 @@ public class GlobalStateMgr {
     }
 
     private void transferToLeader() {
-        FrontendNodeType oldType = feType;
         // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
         // acquire) cannot hang leader activation on the single state-change thread forever; if it does
         // not stop in time, terminate for a clean restart rather than wedge with a bdbje master that
@@ -1401,11 +1400,9 @@ public class GlobalStateMgr {
             nodeMgr.checkCurrentNodeExist();
             journalWriter.init(maxJournalId);
         } catch (Exception e) {
-            if (rollbackStaleLeaderActivationIfNeeded(e)) {
-                restoreNonLeaderReplayAfterStaleLeaderActivation(oldType);
-                return;
-            }
-            // TODO: gracefully exit
+            // A failed activation is not rolled back: a half-done activation (lease published, WAL gate
+            // open, daemons started, journal writer initialized) cannot be un-done reliably, so fail fast
+            // to a clean process restart; the node rejoins as a follower and rediscovers the leader.
             LOG.error("failed to init journal after transfer to leader! will exit", e);
             System.exit(-1);
         }
@@ -1453,15 +1450,10 @@ public class GlobalStateMgr {
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
             if (!isReady.get()) {
-                rollbackLeaderActivation();
-                feType = oldType;
+                // No rollback: a half-done activation cannot be un-done reliably. Let the failure
+                // escape to StateChangeExecutor, which exits the process for a clean restart.
                 throw new RuntimeException("transfer to leader failed", e);
             }
-        } catch (Throwable t) {
-            LOG.warn("transfer to leader failed with error", t);
-            rollbackLeaderActivation();
-            feType = oldType;
-            throw t;
         }
 
         createBuiltinStorageVolume();
@@ -1526,7 +1518,8 @@ public class GlobalStateMgr {
     @VisibleForTesting
     void beginLeaderActivation() {
         // The WAL admission gate is already closed here: this node reaches activation only from INACTIVE
-        // (fresh, or after a demotion/rollback that closed it), so it need not be closed again.
+        // (fresh, or after a demotion that closed it; a FAILED activation exits the process instead of
+        // rolling back, so no half-open gate can survive into this method), so it need not be closed again.
         leaderWorkAdmissionOpen.set(false);
         activeLeaderLease = LeaderLease.INVALID;
         pendingDemotionTargetType = null;
@@ -1547,55 +1540,6 @@ public class GlobalStateMgr {
         updateLeaderRoleState(LeaderRoleState.ACTIVE);
         // Open the WAL admission gate last, once the node is fully ACTIVE, so leader writes are accepted.
         openEditLogWalGate();
-    }
-
-    @VisibleForTesting
-    void rollbackLeaderActivation() {
-        // Roll back a failed activation. publishLeaderLease() opens the WAL gate as its FIRST step, and many
-        // later activation steps (bootstrap actions, daemon start, metric init, ...) can still throw, so this
-        // rollback CAN run with the gate already open. Close it here (closeWalGate is idempotent): EditLog.log*
-        // gates solely on the WAL gate now, so a node that falls back to follower after a failed activation
-        // would otherwise keep admitting journal writes through the still-open gate. This also upholds the
-        // invariant beginLeaderActivation() relies on -- INACTIVE (after demotion/rollback) => gate closed.
-        leaderWorkAdmissionOpen.set(false);
-        activeLeaderLease = LeaderLease.INVALID;
-        pendingDemotionTargetType = null;
-        updateLeaderRoleState(LeaderRoleState.INACTIVE);
-        closeEditLogWalGate();
-    }
-
-    @VisibleForTesting
-    boolean rollbackStaleLeaderActivationIfNeeded(Exception cause) {
-        if (leaderRoleState != LeaderRoleState.ACTIVATING || leaderWorkAdmissionOpen.get()) {
-            return false;
-        }
-        if (haProtocol == null || nodeMgr == null || nodeMgr.getNodeName() == null) {
-            return false;
-        }
-
-        String currentBdbMaster;
-        try {
-            currentBdbMaster = haProtocol.getLeaderNodeName();
-        } catch (Throwable t) {
-            LOG.warn("failed to check BDB master after leader activation failure", t);
-            return false;
-        }
-        if (currentBdbMaster == null || Objects.equals(nodeMgr.getNodeName(), currentBdbMaster)) {
-            return false;
-        }
-
-        rollbackLeaderActivation();
-        LOG.warn("leader activation failed after BDB master changed to another node. selfNode={}, "
-                        + "currentBdbMaster={}. Will wait for the next FE type notification.",
-                nodeMgr.getNodeName(), currentBdbMaster, cause);
-        return true;
-    }
-
-    private void restoreNonLeaderReplayAfterStaleLeaderActivation(FrontendNodeType oldType) {
-        if ((oldType == FrontendNodeType.FOLLOWER || oldType == FrontendNodeType.OBSERVER) && replayer == null) {
-            createReplayer();
-            replayer.start();
-        }
     }
 
     @VisibleForTesting
