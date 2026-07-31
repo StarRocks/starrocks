@@ -40,10 +40,19 @@ Status AggregateBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
 
-    _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by keys
-                                _aggregator->limit() != -1 &&                 // has limit
-                                _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
-                                _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    // The limit optimization drops rows whose group-by key is not already in the hash map once the
+    // limit is reached. That is only sound because a key reaches exactly one hash map: the input is
+    // partitioned by the group-by key, so a key dropped here has no rows anywhere else. The query
+    // cache breaks that premise -- it decomposes this aggregation into one lane per tablet, each lane
+    // with its own Aggregator, while the shared limit countdown lives on the factory and is consumed
+    // once per (lane, key). A key can then survive in one tablet and be dropped in another, and the
+    // truncated per-tablet result is populated into the cache as if it were complete. So keep the
+    // optimization off for an aggregation that the query cache has decomposed.
+    _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&      // has group by keys
+                                _aggregator->limit() != -1 &&                  // has limit
+                                _aggregator->conjunct_ctxs().empty() &&        // no 'having' clause
+                                _aggregator->get_aggr_phase() == AggrPhase2 && // phase 2, keep it to make things safe
+                                _aggregator->aggr_mode() == AM_DEFAULT);       // not decomposed by the query cache
     return Status::OK();
 }
 

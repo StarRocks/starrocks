@@ -562,6 +562,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
     bool is_pre_cache() { return _aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE; }
+    AggrMode aggr_mode() const { return _aggr_mode; }
     MutableColumns create_group_by_columns(size_t num_rows) const { return _create_group_by_columns(num_rows); }
 
 protected:
