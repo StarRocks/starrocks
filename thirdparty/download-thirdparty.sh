@@ -491,56 +491,6 @@ cd -
 echo "Finished patching $ROCKSDB_SOURCE"
 
 # brpc patches
-reset_brpc_117_source() {
-    local source_dir="$TP_SOURCE_DIR/$BRPC_SOURCE"
-    local archive="$TP_SOURCE_DIR/$BRPC_NAME"
-    local tmp_dir
-
-    if [ "$BRPC_SOURCE" != "brpc-1.17.0" ] ||
-       [ "$source_dir" != "$TP_SOURCE_DIR/brpc-1.17.0" ] ||
-       [ -L "$source_dir" ]; then
-        echo "Refusing to reset an unexpected bRPC source directory"
-        return 1
-    fi
-    if [ ! -r "$archive" ]; then
-        echo "Cannot refresh $BRPC_SOURCE without the verified archive $archive"
-        return 1
-    fi
-
-    tmp_dir=$(mktemp -d "$TP_SOURCE_DIR/brpc-1.17.0.repatch.XXXXXX") || return 1
-    if ! tar xzf "$archive" -C "$tmp_dir" ||
-       [ ! -d "$tmp_dir/$BRPC_SOURCE" ]; then
-        echo "Failed to extract a clean $BRPC_SOURCE source tree"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-    if ! rm -rf "$source_dir" ||
-       ! mv "$tmp_dir/$BRPC_SOURCE" "$source_dir"; then
-        echo "Failed to replace the stale $BRPC_SOURCE source tree"
-        rm -rf "$tmp_dir"
-        return 1
-    fi
-    rm -rf "$tmp_dir"
-}
-
-BRPC_PATCH_REVISION="${BRPC_SOURCE}-starrocks-${BRPC_STARROCKS_PATCH_REVISION}"
-BRPC_PATCH_STATE="$TP_SOURCE_DIR/$BRPC_SOURCE/.starrocks-patch-revision"
-BRPC_LEGACY_PATCHED_MARK="$TP_SOURCE_DIR/$BRPC_SOURCE/${PATCHED_MARK}.starrocks-${BRPC_SOURCE#brpc-}-${BRPC_STARROCKS_PATCH_REVISION}"
-if [ "$BRPC_SOURCE" == "brpc-1.17.0" ]; then
-    BRPC_STALE_PATCHED_MARK=$(find "$TP_SOURCE_DIR/$BRPC_SOURCE" -maxdepth 1 -type f \
-        -name "${PATCHED_MARK}.starrocks-${BRPC_SOURCE#brpc-}-*" \
-        ! -name "$(basename "$BRPC_LEGACY_PATCHED_MARK")" -print -quit)
-    if [ -f "$BRPC_PATCH_STATE" ] &&
-       [ "$(cat "$BRPC_PATCH_STATE")" != "$BRPC_PATCH_REVISION" ]; then
-        reset_brpc_117_source || exit 1
-    elif [ ! -f "$BRPC_PATCH_STATE" ] && [ -f "$BRPC_LEGACY_PATCHED_MARK" ]; then
-        # Migrate source trees produced by the first 1.17.0 patch-marker format.
-        printf '%s\n' "$BRPC_PATCH_REVISION" > "$BRPC_PATCH_STATE" || exit 1
-    elif [ ! -f "$BRPC_PATCH_STATE" ] && [ -n "$BRPC_STALE_PATCHED_MARK" ]; then
-        reset_brpc_117_source || exit 1
-    fi
-fi
-
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-0.9.5.patch
@@ -560,9 +510,11 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
     patch < $TP_PATCH_DIR/brpc-1.9.0.patch
     touch $PATCHED_MARK
 fi
-if [ ! -f "$BRPC_PATCH_STATE" ] && [ "$BRPC_SOURCE" == "brpc-1.17.0" ]; then
+if [ ! -f "$PATCHED_MARK" ] && [ "$BRPC_SOURCE" == "brpc-1.17.0" ]; then
     patch -p1 -N -F 0 < "$TP_PATCH_DIR/brpc-1.17.0.patch" || exit 1
-    printf '%s\n' "$BRPC_PATCH_REVISION" > "$BRPC_PATCH_STATE" || exit 1
+    # apache/brpc#3384: reclaim unscheduled timer tasks.
+    patch -p1 -N -F 0 < "$TP_PATCH_DIR/brpc-1.17.0-timer-reclaim.patch" || exit 1
+    touch "$PATCHED_MARK"
 fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
