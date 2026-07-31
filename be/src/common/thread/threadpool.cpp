@@ -34,12 +34,15 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
+
 #include <limits>
 #include <ostream>
 
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_thread_fwd.h"
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "common/system/cpu_info.h"
@@ -50,6 +53,10 @@
 #include "gutil/sysinfo.h"
 
 namespace starrocks {
+
+namespace {
+bvar::Adder<int64_t> g_threadpool_task_exception_total("threadpool_task_exception_total");
+} // namespace
 
 using std::string;
 using strings::Substitute;
@@ -663,36 +670,48 @@ void ThreadPool::dispatch_thread() {
         l.unlock();
 
         MonoTime start_time = MonoTime::Now();
-        // Execute the task
-        // Catch all exceptions to prevent thread pool crash. Individual tasks should handle
-        // exceptions and convert them to Status where appropriate (e.g., RPC handlers).
+        // Execute the task.
         //
-        // IMPORTANT: This catch block only prevents the thread pool from crashing. It does NOT
-        // guarantee exception safety of the task itself. Tasks should use RAII (e.g., ClosureGuard,
-        // DeferOp, lock_guard) to ensure resources are properly cleaned up even when exceptions
-        // are thrown. If a task is not exception-safe, catching the exception here may leave the
-        // system in an inconsistent state (e.g., leaked resources, held locks, corrupted data).
+        // Whether an exception thrown by the task is swallowed is selected by
+        // enable_threadpool_catch_task_exception, default false.
         //
-        // The task's destructor will be called via task.runnable.reset() below, which should
-        // clean up any RAII-managed resources. However, non-RAII resources must be managed by
-        // the task itself.
-        try {
+        // The flag deliberately selects between "there is an enclosing catch clause" and
+        // "there is none" rather than between two behaviours inside a single catch clause,
+        // and the difference is observable. A catch(...) always matches, so its mere presence
+        // makes phase 1 of unwinding find a handler and phase 2 run cleanups on the way out:
+        // DeferOp and task destructors execute, and any CountDownLatch they release lets a
+        // waiter proceed - and possibly report success - before a rethrow from inside the
+        // handler could abort the process. With no enclosing catch clause the exception finds
+        // no handler and terminates at the throw point without unwinding, so no completion
+        // signal is ever delivered. Only the latter is the fail-stop behaviour we want by
+        // default, so the flag must be tested here and not inside a catch block.
+        if (!config::enable_threadpool_catch_task_exception) {
             task.runnable->run();
-        } catch (const std::bad_alloc& e) {
-            LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what() << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
-        } catch (const std::exception& e) {
-            LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
-        } catch (...) {
-            LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
-                       << get_stack_trace();
-            // Continue execution to avoid thread pool crash. The task's destructor will be
-            // called below to clean up RAII-managed resources.
+        } else {
+            // Catching here only prevents the worker thread from dying. It does NOT make the
+            // task exception safe: a task that signals completion from a DeferOp or from its
+            // destructor while its result write is skipped will be reported to its waiter as
+            // success, because an unset Status/StatusPB reads as OK. That combination silently
+            // produces wrong results rather than a failure, which is why this is opt-in.
+            //
+            // The task's destructor runs via task.runnable.reset() below and cleans up
+            // RAII-managed resources; non-RAII resources must be managed by the task itself.
+            try {
+                task.runnable->run();
+            } catch (const std::bad_alloc& e) {
+                LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what()
+                           << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            } catch (const std::exception& e) {
+                LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            } catch (...) {
+                LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
+                           << get_stack_trace();
+                g_threadpool_task_exception_total << 1;
+            }
         }
         current_thread->inc_finished_tasks();
 
