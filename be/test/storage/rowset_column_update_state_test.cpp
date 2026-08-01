@@ -285,6 +285,8 @@ TEST_F(RowsetColumnUpdateStateTest, split_rowid_pairs_validates_source_rowid_ord
     st = split_rowid_pairs({{2, 0}, {1, 1}}, &source_rowids, &upt_rowids, nullptr);
     EXPECT_TRUE(st.is_corruption()) << st;
 
+    source_rowids.clear();
+    upt_rowids.clear();
     StreamChunkContainer container{.start_rowid = 10, .end_rowid = 20};
     st = split_rowid_pairs({{5, 0}, {12, 1}, {18, 2}, {25, 3}}, &source_rowids, &upt_rowids, &container);
     ASSERT_TRUE(st.ok()) << st;
