@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR bitmap_to_base64(BITMAP bitmap)
 ```
 

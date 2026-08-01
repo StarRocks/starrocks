@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 POINT ST_Point(DOUBLE x, DOUBLE y)
 ```
 

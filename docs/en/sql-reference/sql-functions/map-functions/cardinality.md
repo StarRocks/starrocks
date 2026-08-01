@@ -12,7 +12,7 @@ This function is supported from v3.0 onwards. It is the alias of [map_size()](ma
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT cardinality(any_map)
 ```
 

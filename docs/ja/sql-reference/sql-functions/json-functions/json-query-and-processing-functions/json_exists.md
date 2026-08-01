@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_exists(json_object_expr, json_path)
 ```
 

@@ -10,7 +10,7 @@ If point is of a valid Point type, return the corresponding X-coordinate value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE ST_X(POINT point)
 ```
 

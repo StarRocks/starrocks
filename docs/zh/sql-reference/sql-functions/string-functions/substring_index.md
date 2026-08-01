@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR substring_index(VARCHAR str, VARCHAR delimiter, INT count)
 ```
 

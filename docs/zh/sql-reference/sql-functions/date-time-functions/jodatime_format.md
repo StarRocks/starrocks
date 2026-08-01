@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 

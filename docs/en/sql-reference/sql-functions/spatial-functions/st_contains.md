@@ -10,7 +10,7 @@ Checks whether the geometric figure shape1 can fully contain shape2.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
 ```
 

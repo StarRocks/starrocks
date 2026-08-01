@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
 ```
 

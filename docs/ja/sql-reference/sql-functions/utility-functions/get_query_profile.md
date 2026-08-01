@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 get_query_profile(x)
 ```
 

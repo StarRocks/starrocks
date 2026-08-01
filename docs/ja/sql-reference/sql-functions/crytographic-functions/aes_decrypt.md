@@ -10,7 +10,7 @@ AES は advanced encryption standard の略で、ECB は electronic code book �
 
 ## Syntax
 
-```Haskell
+```plaintext
 aes_decrypt(str,key_str);
 ```
 

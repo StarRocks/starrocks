@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR ltrim(VARCHAR str[, VARCHAR characters])
 ```
 

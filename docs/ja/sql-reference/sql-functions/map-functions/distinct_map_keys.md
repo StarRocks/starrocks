@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 distinct_map_keys(any_map)
 ```
 

@@ -8,7 +8,7 @@
 
 ## 语法
 
-```Haskell
+```plaintext
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
 - `log_k`：必须为整数。范围：[4, 21]。默认值：17。

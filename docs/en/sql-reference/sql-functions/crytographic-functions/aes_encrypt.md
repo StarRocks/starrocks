@@ -12,7 +12,7 @@ AES is short for advanced encryption standard and ECB is short for electronic co
 
 ## Syntax
 
-```Haskell
+```plaintext
 aes_encrypt(str,key_str);
 ```
 

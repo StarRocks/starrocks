@@ -8,7 +8,7 @@ WKT (Well Known Text) を対応するメモリジオメトリに変換します�
 
 ## 構文
 
-```Haskell
+```plaintext
 GEOMETRY ST_GeometryFromText(VARCHAR wkt)
 ```
 
