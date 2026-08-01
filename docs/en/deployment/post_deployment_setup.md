@@ -48,12 +48,12 @@ The default value is `false`, which means no profile is required.
 Setting this variable to `true` can affect the concurrency of StarRocks. 
 
 #### Recommended value
-false
+true
 
 - Set `enable_profile` to `false` globally:
 
   ```SQL
-  SET GLOBAL enable_profile = false;
+  SET GLOBAL enable_profile = true;
   ```
 
 ### enable_pipeline_engine
