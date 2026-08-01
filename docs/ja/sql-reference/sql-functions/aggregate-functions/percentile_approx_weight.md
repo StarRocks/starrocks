@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "指定されたパーセンタイルの加重近似値を返します。PERCENTILE_APPROX の重み付きバージョンで、各入力値に重みを指定できます。"
+---
+
 # percentile_approx_weight
 
 重み付きの p パーセンタイルの近似値を返します。`percentile_approx_weight` は `PERCENTILE_APPROX` の重み付きバージョンであり、各入力値に対して重み（定数値または数値列）を指定することができます。

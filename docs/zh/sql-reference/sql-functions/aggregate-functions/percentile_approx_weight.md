@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "计算指定百分位数的加权近似值。PERCENTILE_APPROX 的加权版本，允许为每个输入值指定权重。"
+---
+
 # percentile_approx_weight
 
 返回带权重的 p 分位数的近似值。`percentile_approx_weight` 是 `PERCENTILE_APPROX` 的加权版本，允许用户为每个输入值指定一个权重（一个常量值或数值列）。
