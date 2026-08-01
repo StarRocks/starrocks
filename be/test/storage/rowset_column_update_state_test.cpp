@@ -23,6 +23,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/datum_tuple.h"
+#include "column/nullable_column.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -314,12 +315,15 @@ TEST_F(RowsetColumnUpdateStateTest, deduplicate_variable_length_update_indexes) 
     source_binary->update_rows(*selected_binary, source_rowids.data());
     EXPECT_EQ("first", source_binary->get(0).get_slice());
 
-    auto source_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    auto source_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                            UInt32Column::create());
     source_array->append_datum(Datum(DatumArray{Datum("old")}));
-    auto upt_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    auto upt_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                         UInt32Column::create());
     upt_array->append_datum(Datum(DatumArray{Datum("first")}));
     upt_array->append_datum(Datum(DatumArray{Datum("first")}));
-    auto selected_array = ArrayColumn::create(BinaryColumn::create(), UInt32Column::create());
+    auto selected_array = ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
+                                              UInt32Column::create());
     selected_array->append_selective(*upt_array, upt_rowids.data(), 0, upt_rowids.size());
     source_array->update_rows(*selected_array, source_rowids.data());
 
