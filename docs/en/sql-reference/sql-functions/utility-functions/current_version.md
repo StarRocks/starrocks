@@ -10,7 +10,7 @@ Returns the current version of StarRocks. Two syntaxes are provided for compatib
 
 ## Syntax
 
-```Haskell
+```plaintext
 current_version();
 
 @@version_comment;

@@ -11,7 +11,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 

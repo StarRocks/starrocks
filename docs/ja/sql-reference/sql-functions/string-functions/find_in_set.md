@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT find_in_set(VARCHAR str, VARCHAR strlist)
 ```
 

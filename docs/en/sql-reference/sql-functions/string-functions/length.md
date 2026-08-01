@@ -10,7 +10,7 @@ This function returns the length of a string (in bytes).
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT length(VARCHAR str)
 ```
 

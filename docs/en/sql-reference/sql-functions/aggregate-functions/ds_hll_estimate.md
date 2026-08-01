@@ -8,7 +8,7 @@ It is based on Apache DataSketches and provides high precision for approximate d
 
 ## Syntax
 
-```Haskell
+```plaintext
 bigint ds_hll_estimate(sketch)
 ```
 

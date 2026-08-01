@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 get_query_profile(x)
 ```
 

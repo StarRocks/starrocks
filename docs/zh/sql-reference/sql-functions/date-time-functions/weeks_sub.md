@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME weeks_sub(DATETIME|DATE expr1, INT expr2)
 ```
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 MAP map_filter(any_map, array<boolean>)
 MAP map_filter(lambda_func, any_map)
 ```

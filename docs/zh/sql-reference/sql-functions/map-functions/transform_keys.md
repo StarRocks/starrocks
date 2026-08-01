@@ -12,13 +12,13 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP transform_keys(lambda_func, any_map)
 ```
 
 `lambda_func` 也可以放在 `any_map` 之后， 即:
 
-```Haskell
+```plaintext
 MAP transform_keys(any_map, lambda_func)
 ```
 

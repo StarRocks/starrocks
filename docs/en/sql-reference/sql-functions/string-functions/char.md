@@ -10,7 +10,7 @@ CHAR() returns the character value of the given integer value according to the A
 
 ## Syntax
 
-```Haskell
+```plaintext
 char(n)
 ```
 

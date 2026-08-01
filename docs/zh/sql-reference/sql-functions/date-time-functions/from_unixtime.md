@@ -23,7 +23,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 ```
 

@@ -12,7 +12,7 @@ This function is supported from v3.3 onwards.
 
 ## Syntax
 
-```haskell
+```plaintext
 VARCHAR url_extract_host(VARCHAR str)
 ```
 

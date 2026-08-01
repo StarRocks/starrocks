@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME days_sub(DATETIME|DATE d, INT n);
 ```
 

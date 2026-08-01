@@ -12,7 +12,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_from_arrays(ARRAY keys, ARRAY values)
 ```
 

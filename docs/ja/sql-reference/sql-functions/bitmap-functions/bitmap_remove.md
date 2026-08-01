@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_remove(BITMAP lhs, BIGINT input)
 ```
 

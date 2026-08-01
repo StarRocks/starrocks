@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT milliseconds_diff(DATETIME expr1, DATETIME expr2);
 ```
 

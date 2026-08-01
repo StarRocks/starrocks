@@ -8,7 +8,7 @@ Apache DataSketches に基づいており、近似重複除去カウントに高
 
 ## 構文
 
-```Haskell
+```plaintext
 sketch ds_hll_accumulate(expr)
 sketch ds_hll_accumulate(expr, log_k)
 sketch ds_hll_accumulate(expr, log_k, tgt_type)

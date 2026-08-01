@@ -14,7 +14,7 @@ The comparison rules are the same as the [greatest](greatest.md) function.
 
 ## Syntax
 
-```Haskell
+```plaintext
 LEAST(expr1,...);
 ```
 

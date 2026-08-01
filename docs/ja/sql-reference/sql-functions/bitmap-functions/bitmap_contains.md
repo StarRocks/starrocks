@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)
 ```
 

@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN is_role_in_session(VARCHAR role_name);
 ```
 

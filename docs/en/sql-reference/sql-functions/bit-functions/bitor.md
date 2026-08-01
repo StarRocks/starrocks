@@ -10,7 +10,7 @@ Returns the bitwise OR of two numeric expressions.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITOR(x,y);
 ```
 

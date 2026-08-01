@@ -10,7 +10,7 @@ Converts a binary value to a VARCHAR string based on the specified binary format
 
 ## Syntax
 
-```Haskell
+```plaintext
 from_binary(binary[, binary_type])
 ```
 

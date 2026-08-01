@@ -13,7 +13,7 @@ This function is supported from v2.3.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 

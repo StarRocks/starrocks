@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 regexp_split(str, pattern[, max_split])
 ```
 

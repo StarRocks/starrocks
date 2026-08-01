@@ -10,7 +10,7 @@ Calculates the bitmap union of a set of values after grouping. Common usage scen
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_UNION(BITMAP value)
 ```
 
