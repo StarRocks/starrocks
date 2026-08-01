@@ -15,6 +15,7 @@
 #include "rowset_column_update_state.h"
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/nullable_column.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
@@ -87,6 +88,29 @@ static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tab
                 << "PCU_DIAG_C: " << tag << " array elements mismatch col=" << i << " span=" << span
                 << " elements=" << array->elements().size() << " tablet=" << tablet_id << " txn=" << txn_id
                 << " rssid=" << rssid << " upt_id=" << upt_id;
+        // The array's own offsets are element indexes and rarely get anywhere near UINT32_MAX.
+        // The offsets that actually overflow are the uint32 BYTE offsets of the element
+        // BinaryColumn, once one chunk holds more than 4 GiB of string data.
+        const Column* elements = &array->elements();
+        if (elements->is_nullable()) {
+            elements = down_cast<const NullableColumn*>(elements)->data_column().get();
+        }
+        if (!elements->is_binary()) {
+            continue;
+        }
+        const auto* binary = down_cast<const BinaryColumn*>(elements);
+        const auto& byte_offsets = binary->get_offset();
+        for (size_t e = 1; e < byte_offsets.size(); e++) {
+            if (byte_offsets[e] < byte_offsets[e - 1]) {
+                LOG(ERROR) << "PCU_DIAG_C: " << tag << " BYTE OFFSET WRAP (uint32 overflow) col=" << i
+                           << " element=" << e - 1 << " off[i-1]=" << byte_offsets[e - 1]
+                           << " off[i]=" << byte_offsets[e] << " num_elements=" << byte_offsets.size() - 1
+                           << " bytes=" << binary->get_bytes().size() << " UINT32_MAX=" << UINT32_MAX
+                           << " tablet=" << tablet_id << " txn=" << txn_id << " rssid=" << rssid
+                           << " upt_id=" << upt_id;
+                break;
+            }
+        }
     }
 }
 

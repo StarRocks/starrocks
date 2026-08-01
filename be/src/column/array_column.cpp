@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
@@ -179,6 +180,32 @@ void ArrayColumn::fill_default(const Filter& filter) {
 
 namespace {
 
+// [PCU_DIAG] The elements of an ARRAY<STRING> are a BinaryColumn whose offsets are uint32 BYTE
+// offsets. Once the element bytes of one chunk pass UINT32_MAX they silently wrap, and every
+// later `append` derives its byte range from wrapped values -- which is how a legal count still
+// produces a multi-hundred-MB phantom slice. This is the offset set that actually overflows;
+// ArrayColumn's own offsets are element indexes and stay far below the limit.
+void diag_check_binary_offsets(const Column& column, const char* tag) {
+    const Column* inner = &column;
+    if (inner->is_nullable()) {
+        inner = down_cast<const NullableColumn*>(inner)->data_column().get();
+    }
+    if (!inner->is_binary()) {
+        return;
+    }
+    const auto& offsets = down_cast<const BinaryColumn*>(inner)->get_offset();
+    for (size_t i = 1; i < offsets.size(); i++) {
+        if (offsets[i] < offsets[i - 1]) {
+            LOG(ERROR) << "PCU_DIAG_A0: " << tag << " BYTE OFFSET WRAP (uint32 overflow) at element=" << i - 1
+                       << " off[i-1]=" << offsets[i - 1] << " off[i]=" << offsets[i]
+                       << " num_elements=" << offsets.size() - 1
+                       << " bytes=" << down_cast<const BinaryColumn*>(inner)->get_bytes().size()
+                       << " UINT32_MAX=" << UINT32_MAX;
+            return;
+        }
+    }
+}
+
 // [PCU_DIAG] The byte range `append()` copies is derived from offset arithmetic, so a wild
 // range can come from corrupt offsets just as easily as from a bad index. Report the first
 // anomaly only -- these run per update_rows() call and must not flood the log.
@@ -200,6 +227,7 @@ void diag_check_array_offsets(const ArrayColumn& column, const char* tag) {
     LOG_IF(ERROR, span != column.elements().size())
             << "PCU_DIAG_A1: " << tag << " elements size mismatch span=" << span
             << " elements=" << column.elements().size() << " num_rows=" << offsets.size() - 1;
+    diag_check_binary_offsets(column.elements(), tag);
 }
 
 // [PCU_DIAG] The resize branch below computes an unsigned span between consecutive indexes,
