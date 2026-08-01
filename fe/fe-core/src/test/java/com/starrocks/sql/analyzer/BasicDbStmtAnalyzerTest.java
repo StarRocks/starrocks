@@ -126,6 +126,23 @@ public class BasicDbStmtAnalyzerTest {
     }
 
     @Test
+    public void testUseDbWithReservedKeyword() throws Exception {
+        // `default` is a reserved keyword in the lexer (StarRocks lexes case-insensitively),
+        // but MySQL-compatible clients submit `USE default` as a plain COM_QUERY statement.
+        // The database name must be accepted as a non-reserved identifier (issue #76938).
+        UseDbStmt stmt = (UseDbStmt) SqlParser.parse("USE default", connectContext.getSessionVariable()).get(0);
+
+        connectContext.setCurrentCatalog("default_catalog");
+
+        try {
+            BasicDbStmtAnalyzer.analyze(stmt, connectContext);
+            // Should not throw exception
+        } catch (Exception e) {
+            Assertions.fail("USE default should not throw when catalog is set: " + e.getMessage());
+        }
+    }
+
+    @Test
     public void testRecoverDbStatementWithValidCatalog() throws Exception {
         // Test case to ensure normal flow works when catalog is set
         RecoverDbStmt stmt =
