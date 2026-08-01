@@ -424,14 +424,14 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // If container is not provided, we will just push back the rowids without alignment.
 Status split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
                          std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
-    for (size_t i = 1; i < rowid_pairs.size(); ++i) {
-        if (UNLIKELY(rowid_pairs[i - 1].first >= rowid_pairs[i].first)) {
-            return Status::Corruption(
-                    strings::Substitute("source rowids must be strictly increasing, previous:$0 current:$1",
-                                        rowid_pairs[i - 1].first, rowid_pairs[i].first));
-        }
-    }
+    const RowidPairs* previous = nullptr;
     for (const auto& each : rowid_pairs) {
+        if (UNLIKELY(previous != nullptr && previous->first >= each.first)) {
+            return Status::Corruption(strings::Substitute(
+                    "source rowids must be strictly increasing, previous:$0 current:$1", previous->first, each.first));
+        }
+        previous = &each;
+
         if (container == nullptr) {
             // If container is not provided, we just push back the rowids.
             sorted_source_rowids->push_back(each.first);
