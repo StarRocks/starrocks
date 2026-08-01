@@ -11,7 +11,7 @@ Decodes a Base64-encoded string. This function is an inverse of [to_base64](to_b
 
 ## Syntax
 
-```Haskell
+```plaintext
 from_base64(str);
 ```
 

@@ -11,7 +11,7 @@ description: "返回不大于x的最大整数值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 FLOOR(x);
 ```
 

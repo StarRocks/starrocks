@@ -11,7 +11,7 @@ description: "计算以指定底数的数值对数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 log([base,] x);
 ```
 

@@ -9,7 +9,7 @@ description: "指定された時間間隔を日付から減算します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 ```
 

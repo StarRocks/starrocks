@@ -8,7 +8,7 @@
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT ds_theta_count_distinct(expr)
 ```
 

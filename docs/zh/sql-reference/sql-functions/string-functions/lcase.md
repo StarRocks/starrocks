@@ -11,7 +11,7 @@ description: "将字符串转换为小写形式，与lower函数一致。"
 
 ## 语法
 
-```Haskell
+```plaintext
 lcase(str)
 ```
 

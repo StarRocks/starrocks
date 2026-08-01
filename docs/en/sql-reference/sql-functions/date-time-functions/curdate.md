@@ -11,7 +11,7 @@ Obtains the current date and returns a value of the DATE type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE CURDATE()
 ```
 

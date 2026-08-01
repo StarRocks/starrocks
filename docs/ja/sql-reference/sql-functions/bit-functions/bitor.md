@@ -9,7 +9,7 @@ description: "2つの数値式のビット単位のORを返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 BITOR(x,y);
 ```
 

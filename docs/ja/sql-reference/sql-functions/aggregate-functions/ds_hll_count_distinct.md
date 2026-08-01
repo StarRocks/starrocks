@@ -8,7 +8,7 @@ APPROX_COUNT_DISTINCT(expr) よりも遅いですが、Apache Datasketches を�
 
 ## 構文
 
-```Haskell
+```plaintext
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
 - `log_k`: 整数。範囲 [4, 21]。デフォルト: 17。

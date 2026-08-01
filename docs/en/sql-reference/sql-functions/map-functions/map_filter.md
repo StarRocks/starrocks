@@ -13,7 +13,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_filter(any_map, array<boolean>)
 MAP map_filter(lambda_func, any_map)
 ```

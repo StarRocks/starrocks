@@ -11,7 +11,7 @@ description: "以 VARCHAR 形式返回一个随机的 UUID 值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 uuid();
 ```
 

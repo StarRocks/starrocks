@@ -11,7 +11,7 @@ This function compares two strings. Returns 0 if lhs and rhs compare equal. Retu
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strcmp(VARCHAR lhs, VARCHAR rhs)
 ```
 

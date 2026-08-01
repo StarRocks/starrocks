@@ -15,7 +15,7 @@ JSON オブジェクトの最外層の要素をキーと値のペアに展開し
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_each(json_object_expr)
 ```
 

@@ -11,7 +11,7 @@ Returns the sum of distinct values in `expr`, equivalent to sum(distinct expr).
 
 ## Syntax
 
-```Haskell
+```plaintext
 multi_distinct_sum(expr)
 ```
 

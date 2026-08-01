@@ -9,7 +9,7 @@ description: "文字列をセパレータで分割し、指定された位置の
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
 ```
 

@@ -11,7 +11,7 @@ description: "生成空 HLL 列，用于 INSERT 或导入数据时补充默认�
 
 ## 语法
 
-```Haskell
+```plaintext
 HLL_EMPTY()
 ```
 

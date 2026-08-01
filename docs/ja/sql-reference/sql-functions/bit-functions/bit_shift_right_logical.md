@@ -11,7 +11,7 @@ description: "数値式の2進数表現を指定されたビット数だけ右�
 
 ## Syntax
 
-```Haskell
+```plaintext
 bit_shift_right(value, shift)
 ```
 

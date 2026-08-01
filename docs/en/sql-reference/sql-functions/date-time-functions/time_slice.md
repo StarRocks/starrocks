@@ -15,7 +15,7 @@ v2.5 supports converting a given time into the end of a time interval.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 ```
 

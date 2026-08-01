@@ -6,7 +6,7 @@
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE> p[, DOUBLE compression])
 ```
 

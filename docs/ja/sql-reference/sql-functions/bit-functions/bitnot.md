@@ -9,7 +9,7 @@ description: "数値式のビット単位の否定を返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 BITNOT(x);
 ```
 

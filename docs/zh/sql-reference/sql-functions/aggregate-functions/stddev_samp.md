@@ -9,7 +9,7 @@ description: "返回表达式的样本标准差，支持作为窗口函数使用
 
 ## 语法
 
-```Haskell
+```plaintext
 STDDEV_SAMP(expr)
 ```
 

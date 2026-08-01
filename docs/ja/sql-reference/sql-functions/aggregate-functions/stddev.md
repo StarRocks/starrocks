@@ -9,7 +9,7 @@ expr 式の母集団標準偏差を返します。バージョン 2.5.10 以降�
 
 ## Syntax
 
-```Haskell
+```plaintext
 STDDEV(expr)
 ```
 

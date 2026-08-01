@@ -11,7 +11,7 @@ description: "Base64 エンコードされた文字列をデコードします�
 
 ## 構文
 
-```Haskell
+```plaintext
 base64_decode_string(str);
 ```
 

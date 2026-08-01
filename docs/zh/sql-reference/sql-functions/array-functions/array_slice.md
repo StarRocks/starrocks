@@ -11,7 +11,7 @@ description: "根据指定的偏移量和长度从数组中截取片段。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_slice(input, offset, length)
 ```
 

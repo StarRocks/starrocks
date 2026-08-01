@@ -19,7 +19,7 @@ description: "从 JSON 字符串中指定的 JSON 路径解析并获取布尔值
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ```
 

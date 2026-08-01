@@ -11,7 +11,7 @@ Returns the 128-bit xxhash3 hash value of the input string.
 
 ## Syntax
 
-```Haskell
+```plaintext
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 

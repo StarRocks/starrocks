@@ -17,7 +17,7 @@ description: "从 JSON 字符串中指定路径解析并获取字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
 ```
 

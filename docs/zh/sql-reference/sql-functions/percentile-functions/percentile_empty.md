@@ -11,7 +11,7 @@ description: "构造一个 PERCENTILE 类型的空值，用于 Stream Load 或 I
 
 ## 语法
 
-```Haskell
+```plaintext
 PERCENTILE_EMPTY();
 ```
 

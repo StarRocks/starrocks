@@ -11,7 +11,7 @@ description: "max 返回表达式的最大值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 MAX(expr)
 ```
 

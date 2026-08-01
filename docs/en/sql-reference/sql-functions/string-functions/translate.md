@@ -13,7 +13,7 @@ This function is supported from v3.2.
 
 ## Syntax
 
-```Haskell
+```plaintext
 TRANSLATE(source, from_string, to_string)
 ```
 

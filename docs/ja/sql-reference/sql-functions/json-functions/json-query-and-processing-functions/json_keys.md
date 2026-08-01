@@ -15,7 +15,7 @@ JSON オブジェクトからトップレベルのキーを JSON 配列として
 
 ## 構文
 
-```Haskell
+```plaintext
 json_keys(json_doc[, path])
 ```
 

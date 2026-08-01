@@ -9,7 +9,7 @@ description: "日付または日時式のDATETIME値を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME timestamp(DATETIME|DATE expr);
 ```
 

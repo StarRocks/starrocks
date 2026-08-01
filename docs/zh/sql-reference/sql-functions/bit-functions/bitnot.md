@@ -11,7 +11,7 @@ description: "返回数值的按位取反结果。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BITNOT(x);
 ```
 

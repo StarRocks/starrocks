@@ -11,7 +11,7 @@ description: "向日期添加指定的月数，精确到月。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME months_add(DATETIME expr1, INT expr2);
 ```
 

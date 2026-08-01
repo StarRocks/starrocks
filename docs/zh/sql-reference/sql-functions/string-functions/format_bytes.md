@@ -13,7 +13,7 @@ description: "将字节数转换为带有适当单位（B、KB、MB、GB、TB、
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR format_bytes(BIGINT bytes)
 ```
 

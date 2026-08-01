@@ -11,7 +11,7 @@ description: "返回字符串第一个字符对应的 ASCII 码。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ascii(str)
 ```
 

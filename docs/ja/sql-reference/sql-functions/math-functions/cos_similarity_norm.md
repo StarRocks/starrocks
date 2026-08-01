@@ -15,7 +15,7 @@ description: "2つの正規化されたベクトル間の角度の余弦を計�
 
 ## Syntax
 
-```Haskell
+```plaintext
 cosine_similarity_norm(a, b)
 ```
 
