@@ -43,8 +43,8 @@ namespace starrocks {
 // `tag` says where the chunk came from, which is the whole point: the same segfault in
 // ArrayColumn::update_rows can originate from a corrupt .upt file, a corrupt source segment
 // (or its delta column groups), or a bad rowid mapping, and only the origin tells them apart.
-static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tablet_id, int64_t txn_id,
-                                uint32_t rssid, uint32_t upt_id) {
+static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tablet_id, int64_t txn_id, uint32_t rssid,
+                                uint32_t upt_id) {
     const size_t num_rows = chunk.num_rows();
     for (size_t i = 0; i < chunk.num_columns(); i++) {
         const Column* column = chunk.get_column_by_index(i).get();
@@ -57,10 +57,9 @@ static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tab
             const auto* nullable = down_cast<const NullableColumn*>(column);
             if (nullable->null_column()->size() != num_rows || nullable->data_column()->size() != num_rows) {
                 LOG(ERROR) << "PCU_DIAG_C: " << tag << " nullable sub-column size mismatch col=" << i
-                           << " null=" << nullable->null_column()->size()
-                           << " data=" << nullable->data_column()->size() << " chunk_rows=" << num_rows
-                           << " tablet=" << tablet_id << " txn=" << txn_id << " rssid=" << rssid
-                           << " upt_id=" << upt_id;
+                           << " null=" << nullable->null_column()->size() << " data=" << nullable->data_column()->size()
+                           << " chunk_rows=" << num_rows << " tablet=" << tablet_id << " txn=" << txn_id
+                           << " rssid=" << rssid << " upt_id=" << upt_id;
             }
             column = nullable->data_column().get();
         }
@@ -71,8 +70,8 @@ static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tab
         const auto& offsets = array->offsets().get_data();
         if (offsets.size() != column->size() + 1) {
             LOG(ERROR) << "PCU_DIAG_C: " << tag << " array offsets size mismatch col=" << i
-                       << " offsets=" << offsets.size() << " expected=" << column->size() + 1
-                       << " tablet=" << tablet_id << " txn=" << txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
+                       << " offsets=" << offsets.size() << " expected=" << column->size() + 1 << " tablet=" << tablet_id
+                       << " txn=" << txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
             continue;
         }
         for (size_t r = 1; r < offsets.size(); r++) {
