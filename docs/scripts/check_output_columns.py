@@ -54,8 +54,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -85,10 +87,13 @@ _VERT_FIELD = re.compile(r"^\s*([A-Za-z_][\w $.]*)\s*:\s?(.*)$")
 _CHROME = re.compile(r"(?im)^\s*(Query OK|Empty set|\d+ rows?\s+in set|\d+ rows?\s+affected)")
 # Client prompts. Two forms, kept separate on purpose:
 #  - a KNOWN client name may have spaces before '>' (`MySQL > `, `MySQL [db] > `)
-#  - any other identifier must NOT, so a comparison (`col > 5`) is never eaten
+#  - any other identifier must NOT, and must be followed by a space or tab, so that
+#    neither `col > 5` nor an unspaced `col>5` on a wrapped WHERE line is eaten. An
+#    unspaced bare prompt (`mydb>SELECT 1`) is therefore left alone: that costs one
+#    ERROR row, where mis-stripping would silently corrupt the statement instead.
 _PROMPT_NAMED = re.compile(
     r"^\s*(mysql|starrocks|hive|spark-sql|clickhouse|psql)\b[^>\n]*>\s?", re.I)
-_PROMPT_BARE = re.compile(r"^\s*[A-Za-z][\w.\-]*(\s*\[[^\]]*\])?>\s?")
+_PROMPT_BARE = re.compile(r"^\s*[A-Za-z][\w.\-]*(\s*\[[^\]]*\])?>[ \t]")
 # Continuation prompt inside a transcript.
 _CONT_PROMPT = re.compile(r"^\s*(->|\.\.\.)\s?")
 
@@ -315,8 +320,9 @@ def _normalize_col(name: str) -> str:
 def _classify(doc: list[str], live: list[str]) -> tuple[str, list[str], list[str]]:
     d_fold = [_normalize_col(c) for c in doc]
     l_fold = [_normalize_col(c) for c in live]
-    missing = [c for c in live if _normalize_col(c) not in set(d_fold)]
-    extra = [c for c in doc if _normalize_col(c) not in set(l_fold)]
+    d_set, l_set = set(d_fold), set(l_fold)
+    missing = [c for c in live if _normalize_col(c) not in d_set]
+    extra = [c for c in doc if _normalize_col(c) not in l_set]
     if missing and extra:
         return "BOTH", missing, extra
     if missing:
@@ -338,34 +344,38 @@ def run_live(pairs: list[Pair], conn_kwargs: dict) -> None:
 
     conn = pymysql.connect(**conn_kwargs, autocommit=True,
                            connect_timeout=30, read_timeout=120)
-    scratch = "doccolumns_probe"
+    # Unique per run, and created rather than recreated: a fixed name lets two
+    # concurrent runs drop each other's scratch DB, and turns a pre-existing DB that
+    # happens to share the name into collateral damage. This only ever drops a DB it
+    # created itself, so a name collision fails loudly at CREATE instead.
+    scratch = f"doccolumns_probe_{os.getpid()}_{uuid.uuid4().hex[:8]}"
     with conn.cursor() as cur:
-        cur.execute(f"DROP DATABASE IF EXISTS {scratch}")
         cur.execute(f"CREATE DATABASE {scratch}")
         cur.execute(f"USE {scratch}")
 
-    for p in pairs:
-        if not _CHECKABLE_STMT.match(p.statement):
-            p.status = "OUT_OF_SCOPE"
-            p.detail = "not a read-only result-returning statement"
-            continue
-        try:
-            with conn.cursor() as cur:
-                cur.execute(p.statement)
-                if not cur.description:
-                    p.status = "NO_RESULTSET"
-                    continue
-                p.live_columns = [d[0] for d in cur.description]
-                cur.fetchall()
-        except Exception as exc:                      # noqa: BLE001
-            p.status = "ERROR"
-            p.detail = str(exc).strip()[:200]
-            continue
-        p.status, p.missing, p.extra = _classify(p.doc_columns, p.live_columns)
-
-    with conn.cursor() as cur:
-        cur.execute(f"DROP DATABASE IF EXISTS {scratch}")
-    conn.close()
+    try:
+        for p in pairs:
+            if not _CHECKABLE_STMT.match(p.statement):
+                p.status = "OUT_OF_SCOPE"
+                p.detail = "not a read-only result-returning statement"
+                continue
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(p.statement)
+                    if not cur.description:
+                        p.status = "NO_RESULTSET"
+                        continue
+                    p.live_columns = [d[0] for d in cur.description]
+                    cur.fetchall()
+            except Exception as exc:                  # noqa: BLE001
+                p.status = "ERROR"
+                p.detail = str(exc).strip()[:200]
+                continue
+            p.status, p.missing, p.extra = _classify(p.doc_columns, p.live_columns)
+    finally:
+        with conn.cursor() as cur:
+            cur.execute(f"DROP DATABASE IF EXISTS {scratch}")
+        conn.close()
 
 
 # ── Reporting ────────────────────────────────────────────────────────────────
