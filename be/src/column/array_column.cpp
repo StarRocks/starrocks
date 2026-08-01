@@ -177,11 +177,60 @@ void ArrayColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
+namespace {
+
+// [PCU_DIAG] The byte range `append()` copies is derived from offset arithmetic, so a wild
+// range can come from corrupt offsets just as easily as from a bad index. Report the first
+// anomaly only -- these run per update_rows() call and must not flood the log.
+void diag_check_array_offsets(const ArrayColumn& column, const char* tag) {
+    const auto& offsets = column.offsets().get_data();
+    if (offsets.empty()) {
+        LOG(ERROR) << "PCU_DIAG_A1: " << tag << " empty offsets";
+        return;
+    }
+    for (size_t i = 1; i < offsets.size(); i++) {
+        if (offsets[i] < offsets[i - 1]) {
+            LOG(ERROR) << "PCU_DIAG_A1: " << tag << " non-monotonic offsets row=" << i - 1
+                       << " off[i-1]=" << offsets[i - 1] << " off[i]=" << offsets[i]
+                       << " num_rows=" << offsets.size() - 1 << " elements=" << column.elements().size();
+            return;
+        }
+    }
+    const uint32_t span = offsets.back() - offsets.front();
+    LOG_IF(ERROR, span != column.elements().size())
+            << "PCU_DIAG_A1: " << tag << " elements size mismatch span=" << span
+            << " elements=" << column.elements().size() << " num_rows=" << offsets.size() - 1;
+}
+
+// [PCU_DIAG] The resize branch below computes an unsigned span between consecutive indexes,
+// so anything but a strictly increasing, in-range sequence underflows to ~SIZE_MAX.
+void diag_check_update_indexes(const uint32_t* indexes, size_t replace_num, size_t dst_rows) {
+    for (size_t i = 0; i < replace_num; ++i) {
+        if (indexes[i] >= dst_rows) {
+            LOG(ERROR) << "PCU_DIAG_A2: index out of bounds i=" << i << " indexes[i]=" << indexes[i]
+                       << " dst_rows=" << dst_rows << " replace_num=" << replace_num;
+            return;
+        }
+        if (i > 0 && indexes[i] <= indexes[i - 1]) {
+            LOG(ERROR) << "PCU_DIAG_A2: indexes not strictly increasing i=" << i << " indexes[i-1]=" << indexes[i - 1]
+                       << " indexes[i]=" << indexes[i] << " replace_num=" << replace_num;
+            return;
+        }
+    }
+}
+
+} // namespace
+
 void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
     const OffsetColumn& src_offsets = array_column.offsets();
     size_t replace_num = src.size();
+
+    diag_check_array_offsets(*this, "update_rows.dst");
+    diag_check_array_offsets(array_column, "update_rows.src");
+    diag_check_update_indexes(indexes, replace_num, _offsets->size() - 1);
+
     bool need_resize = false;
     for (size_t i = 0; i < replace_num; ++i) {
         if (_offsets->get_data()[indexes[i] + 1] - _offsets->get_data()[indexes[i]] !=
@@ -205,7 +254,13 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
         MutableColumnPtr new_array_column = clone_empty();
         size_t idx_begin = 0;
         for (size_t i = 0; i < replace_num; ++i) {
-            size_t count = indexes[i] - idx_begin;
+            // [PCU_DIAG] Clamp instead of underflowing: a ~SIZE_MAX count makes append() read a
+            // multi-hundred-MB phantom slice and segfault, which turns a committed rowset into a
+            // permanent apply crash loop. Skipping the copy corrupts this one row, not the process.
+            LOG_IF(ERROR, indexes[i] < idx_begin)
+                    << "PCU_DIAG_A3: update_rows count underflow clamped i=" << i << " indexes[i]=" << indexes[i]
+                    << " idx_begin=" << idx_begin << " replace_num=" << replace_num;
+            size_t count = (indexes[i] >= idx_begin) ? (indexes[i] - idx_begin) : 0;
             new_array_column->append(*this, idx_begin, count);
             new_array_column->append(src, i, 1);
             idx_begin = indexes[i] + 1;
@@ -214,6 +269,10 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
         if (remain_count > 0) {
             new_array_column->append(*this, idx_begin, remain_count);
         }
+        const auto* rebuilt = down_cast<const ArrayColumn*>(new_array_column.get());
+        LOG_IF(ERROR, rebuilt->offsets().size() != _offsets->size())
+                << "PCU_DIAG_A3: update_rows row count mismatch new=" << rebuilt->offsets().size()
+                << " old=" << _offsets->size() << " replace_num=" << replace_num;
         swap_column(*new_array_column.get());
     }
 }

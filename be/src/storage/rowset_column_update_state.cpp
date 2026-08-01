@@ -14,6 +14,8 @@
 
 #include "rowset_column_update_state.h"
 
+#include "column/array_column.h"
+#include "column/nullable_column.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -36,6 +38,58 @@
 #include "util/time.h"
 
 namespace starrocks {
+
+// [PCU_DIAG] Structural validation of a chunk on the column-mode partial update apply path.
+// `tag` says where the chunk came from, which is the whole point: the same segfault in
+// ArrayColumn::update_rows can originate from a corrupt .upt file, a corrupt source segment
+// (or its delta column groups), or a bad rowid mapping, and only the origin tells them apart.
+static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tablet_id, int64_t txn_id,
+                                uint32_t rssid, uint32_t upt_id) {
+    const size_t num_rows = chunk.num_rows();
+    for (size_t i = 0; i < chunk.num_columns(); i++) {
+        const Column* column = chunk.get_column_by_index(i).get();
+        if (column->size() != num_rows) {
+            LOG(ERROR) << "PCU_DIAG_C: " << tag << " column size mismatch col=" << i << " size=" << column->size()
+                       << " chunk_rows=" << num_rows << " tablet=" << tablet_id << " txn=" << txn_id
+                       << " rssid=" << rssid << " upt_id=" << upt_id;
+        }
+        if (column->is_nullable()) {
+            const auto* nullable = down_cast<const NullableColumn*>(column);
+            if (nullable->null_column()->size() != num_rows || nullable->data_column()->size() != num_rows) {
+                LOG(ERROR) << "PCU_DIAG_C: " << tag << " nullable sub-column size mismatch col=" << i
+                           << " null=" << nullable->null_column()->size()
+                           << " data=" << nullable->data_column()->size() << " chunk_rows=" << num_rows
+                           << " tablet=" << tablet_id << " txn=" << txn_id << " rssid=" << rssid
+                           << " upt_id=" << upt_id;
+            }
+            column = nullable->data_column().get();
+        }
+        if (!column->is_array()) {
+            continue;
+        }
+        const auto* array = down_cast<const ArrayColumn*>(column);
+        const auto& offsets = array->offsets().get_data();
+        if (offsets.size() != column->size() + 1) {
+            LOG(ERROR) << "PCU_DIAG_C: " << tag << " array offsets size mismatch col=" << i
+                       << " offsets=" << offsets.size() << " expected=" << column->size() + 1
+                       << " tablet=" << tablet_id << " txn=" << txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
+            continue;
+        }
+        for (size_t r = 1; r < offsets.size(); r++) {
+            if (offsets[r] < offsets[r - 1]) {
+                LOG(ERROR) << "PCU_DIAG_C: " << tag << " array non-monotonic offsets col=" << i << " row=" << r - 1
+                           << " off[i-1]=" << offsets[r - 1] << " off[i]=" << offsets[r] << " tablet=" << tablet_id
+                           << " txn=" << txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
+                break;
+            }
+        }
+        const uint32_t span = offsets.back() - offsets.front();
+        LOG_IF(ERROR, span != array->elements().size())
+                << "PCU_DIAG_C: " << tag << " array elements mismatch col=" << i << " span=" << span
+                << " elements=" << array->elements().size() << " tablet=" << tablet_id << " txn=" << txn_id
+                << " rssid=" << rssid << " upt_id=" << upt_id;
+    }
+}
 
 RowsetColumnUpdateState::RowsetColumnUpdateState() = default;
 
@@ -452,8 +506,12 @@ void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<u
 Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                             const Schema& partial_schema, Rowset* rowset,
                                                             OlapReaderStatistics* stats, MemTracker* tracker,
-                                                            StreamChunkContainer container) {
+                                                            StreamChunkContainer container, uint32_t rssid) {
     CHECK_MEM_LIMIT("RowsetColumnUpdateState::_update_source_chunk_by_upt");
+    const int64_t diag_txn_id = rowset->txn_id();
+    // [PCU_DIAG] The source chunk is shared across every upt file handled below, so validate it
+    // once here: if it already arrives corrupt, the fault is in the segment/DCG read, not in us.
+    diag_validate_chunk(*container.chunk_ptr, "source_chunk", _tablet_id, diag_txn_id, rssid, 0);
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
@@ -467,6 +525,9 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
             }
         });
         RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, upt_chunk));
+        // [PCU_DIAG] The .upt content is persisted, so corruption here reproduces on every
+        // re-apply after restart -- exactly the deterministic crash loop we are chasing.
+        diag_validate_chunk(*upt_chunk, "upt_chunk", _tablet_id, diag_txn_id, rssid, upt_id);
         const size_t upt_chunk_size = upt_chunk->memory_usage();
         tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { tracker->release(upt_chunk_size); });
@@ -476,12 +537,35 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         // split rowid_pairs into sorted_source_rowids and unsorted_upt_rowids
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+        // [PCU_DIAG] The DCHECK above is compiled out in release, and std::is_sorted treats
+        // adjacent duplicates as sorted, so nothing enforces the strictly-increasing invariant
+        // that ArrayColumn::update_rows relies on. Report the first violation with full context.
+        for (size_t i = 1; i < sorted_source_rowids.size(); i++) {
+            if (sorted_source_rowids[i] == sorted_source_rowids[i - 1]) {
+                LOG(ERROR) << "PCU_DIAG_S2: duplicate source rowid=" << sorted_source_rowids[i]
+                           << " (container-relative, start_rowid=" << container.start_rowid << ")"
+                           << " upt_rowids=" << unsorted_upt_rowids[i - 1] << "," << unsorted_upt_rowids[i]
+                           << " at i=" << i << " total=" << sorted_source_rowids.size() << " tablet=" << _tablet_id
+                           << " txn=" << diag_txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
+                break;
+            }
+        }
+        for (size_t i = 0; i < unsorted_upt_rowids.size(); i++) {
+            if (unsorted_upt_rowids[i] >= upt_chunk->num_rows()) {
+                LOG(ERROR) << "PCU_DIAG_S2: upt rowid out of range=" << unsorted_upt_rowids[i]
+                           << " upt_rows=" << upt_chunk->num_rows() << " at i=" << i << " tablet=" << _tablet_id
+                           << " txn=" << diag_txn_id << " rssid=" << rssid << " upt_id=" << upt_id;
+                break;
+            }
+        }
         // fetch upt rows from upt_chunk
         auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        diag_validate_chunk(*tmp_chunk, "selected_upt_chunk", _tablet_id, diag_txn_id, rssid, upt_id);
         // update source chunk use upt rows
         RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
+        diag_validate_chunk(*container.chunk_ptr, "updated_source_chunk", _tablet_id, diag_txn_id, rssid, upt_id);
     }
     return Status::OK();
 }
@@ -805,7 +889,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
                         DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
                         // 3.4 read from update segment and do update
                         RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, rowset, &stats,
-                                                                    tracker, container));
+                                                                    tracker, container, each.first));
                         padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
                         RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*container.chunk_ptr));
                         return Status::OK();
