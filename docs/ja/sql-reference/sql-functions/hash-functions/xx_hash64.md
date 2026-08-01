@@ -9,7 +9,7 @@ description: "入力文字列の64ビットのXXH64ハッシュ値を返しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT XX_HASH64(VARCHAR input, ...)
 ```
 

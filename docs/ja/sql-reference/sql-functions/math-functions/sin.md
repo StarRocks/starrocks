@@ -9,7 +9,7 @@ description: "x のサイン（ラジアン単位）を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 SIN(x);
 ```
 

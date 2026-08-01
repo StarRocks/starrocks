@@ -9,7 +9,7 @@ str 文字列が空でなく、末尾に trailing_char 文字が含まれてい�
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR append_trailing_char_if_absent(VARCHAR str, VARCHAR trailing_char)
 ```
 

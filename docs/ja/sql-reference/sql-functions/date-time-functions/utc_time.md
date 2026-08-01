@@ -9,7 +9,7 @@ description: "現在のUTC時刻を'HH:MM:SS'形式で返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 TIME UTC_TIME()
 ```
 

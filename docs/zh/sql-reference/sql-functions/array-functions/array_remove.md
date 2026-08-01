@@ -11,7 +11,7 @@ description: "从数组中移除指定元素。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_remove(any_array, any_element)
 ```
 

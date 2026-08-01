@@ -11,7 +11,7 @@ description: "统计 Bitmap 中不重复值的个数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT BITMAP_COUNT(any_bitmap)
 ```
 

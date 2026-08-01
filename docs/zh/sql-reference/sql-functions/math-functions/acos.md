@@ -11,7 +11,7 @@ description: "计算数值的反余弦值（单位为弧度）。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ACOS(x);
 ```
 

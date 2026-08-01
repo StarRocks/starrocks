@@ -11,7 +11,7 @@ This function repeats `str` by a number of times according to `count`. When `cou
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR repeat(VARCHAR str, INT count)
 ```
 

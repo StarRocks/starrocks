@@ -12,7 +12,7 @@ Returns the concatenation of a set of HLL values.
 
 ## Syntax
 
-```Haskell
+```plaintext
 hll_union(hll)
 ```
 

@@ -9,7 +9,7 @@ description: "現在のユーザーに対してアクティブ化されている
 
 ## 構文
 
-```Haskell
+```plaintext
 current_role();
 current_role;
 ```

@@ -13,7 +13,7 @@ description: "按照指定格式将字符串转换为 DATE 类型的值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE str2date(VARCHAR str, VARCHAR format);
 ```
 

@@ -13,7 +13,7 @@ It is based on Apache DataSketches and provides high precision for approximate d
 
 ## Syntax
 
-```Haskell
+```plaintext
 sketch ds_hll_combine(sketch)
 ```
 

@@ -11,7 +11,7 @@ catalog が選択されていない場合、StarRocks の内部 catalog `default
 
 ## Syntax
 
-```Haskell
+```plaintext
 catalog()
 ```
 

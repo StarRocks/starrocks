@@ -17,7 +17,7 @@ description: "将字符串中符合指定模式的所有字符替换为其他字
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 

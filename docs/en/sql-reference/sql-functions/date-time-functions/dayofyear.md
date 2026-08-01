@@ -13,7 +13,7 @@ The `date` parameter must be of the DATE or DATETIME type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DAYOFYEAR(DATETIME|DATE date)
 ```
 

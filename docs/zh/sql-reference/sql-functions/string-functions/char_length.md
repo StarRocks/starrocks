@@ -12,7 +12,7 @@ description: "返回字符串的字符数，支持多字节字符和 UTF-8 编�
 
 ## 语法
 
-```Haskell
+```plaintext
 char_length(str)
 ```
 

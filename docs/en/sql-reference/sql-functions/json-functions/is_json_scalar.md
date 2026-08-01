@@ -12,7 +12,7 @@ None
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN is_json_scalar(JSON)
 ```
 

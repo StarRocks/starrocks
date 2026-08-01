@@ -19,7 +19,7 @@ HLL 是基于 HyperLogLog 算法的工程实现，用于保存 HyperLogLog 计�
 
 ## 语法
 
-```Haskell
+```plaintext
 HLL_UNION_AGG(hll)
 ```
 

@@ -9,7 +9,7 @@ description: "文字列の先頭から空白または指定された文字を削
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR ltrim(VARCHAR str[, VARCHAR characters])
 ```
 

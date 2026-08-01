@@ -11,7 +11,7 @@ description: "ARRAY_FILTER関数は指定されたフィルターに一致する
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_filter(array, array<bool>)
 array_filter(lambda_function, arr1,arr2...)
 ```

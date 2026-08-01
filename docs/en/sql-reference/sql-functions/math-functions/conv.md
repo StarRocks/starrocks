@@ -11,7 +11,7 @@ Converts the number `x` from one numeric base system to another, and returns the
 
 ## Syntax
 
-```Haskell
+```plaintext
 CONV(x,y,z);
 ```
 

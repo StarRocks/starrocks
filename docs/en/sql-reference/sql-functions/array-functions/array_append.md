@@ -11,7 +11,7 @@ Adds a new element to the end of the array. Returns an array.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_append(any_array, any_element)
 ```
 

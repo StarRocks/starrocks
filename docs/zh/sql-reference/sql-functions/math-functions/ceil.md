@@ -11,7 +11,7 @@ description: "返回大于或等于输入参数的最小整数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 CEIL(x);
 ```
 

@@ -9,7 +9,7 @@ description: "指定された日付のISO標準週を1から53の範囲内の整
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT WEEK_ISO(DATETIME date)
 ```
 

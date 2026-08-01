@@ -11,7 +11,7 @@ Removes consecutive spaces or specified characters from the beginning and end of
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR trim(VARCHAR str[, VARCHAR characters])
 ```
 

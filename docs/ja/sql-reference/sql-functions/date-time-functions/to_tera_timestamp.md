@@ -9,7 +9,7 @@ description: "指定されたフォーマットに従って日付または時刻
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 ```
 

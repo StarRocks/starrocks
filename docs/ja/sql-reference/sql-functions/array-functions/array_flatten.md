@@ -11,7 +11,7 @@ description: "ARRAY_FLATTEN関数はネストされた配列の一層をフラ�
 
 ## 構文
 
-```Haskell
+```plaintext
 array_flatten(param)
 ```
 

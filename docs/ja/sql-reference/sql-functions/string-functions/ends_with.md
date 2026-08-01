@@ -9,7 +9,7 @@ description: "文字列が指定されたサフィックスで終わる場合に
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN ENDS_WITH (VARCHAR str, VARCHAR suffix)
 ```
 

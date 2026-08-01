@@ -29,7 +29,7 @@ now(6): 2023-12-08 13:46:45.115843
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME NOW()
 DATETIME NOW(INT p)
 ```

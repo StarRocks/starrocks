@@ -11,7 +11,7 @@ LIKE は通常、パーセント記号 (%) やアンダースコア (_) など�
 
 ## 構文
 
-```Haskell
+```plaintext
 BOOLEAN like(VARCHAR expr, VARCHAR pattern);
 ```
 

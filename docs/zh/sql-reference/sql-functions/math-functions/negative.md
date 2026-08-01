@@ -11,7 +11,7 @@ description: "返回参数x的负数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 NEGATIVE(x);
 ```
 
