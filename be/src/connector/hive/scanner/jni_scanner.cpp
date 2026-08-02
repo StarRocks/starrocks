@@ -293,6 +293,11 @@ Status JniScanner::_append_variant_data(const FillColumnArgs& args) {
     MutableColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     MutableColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
 
+    // Unlike an ordinary struct's fields, the variant's metadata/value children are a fixed
+    // protocol pair and must never be pruned/UNKNOWN on the jni-connector side: _fill_column
+    // treats a null chunk-meta pointer for a child as "field not selected" and silently
+    // append_default()s it, which would desync metadata_bin/value_bin below from the actual
+    // encoded bytes instead of failing loudly.
     std::string metadata_name = args.slot_name + ".metadata";
     FillColumnArgs metadata_args = {.num_rows = args.num_rows,
                                     .slot_name = metadata_name,
@@ -312,6 +317,9 @@ Status JniScanner::_append_variant_data(const FillColumnArgs& args) {
     RETURN_IF_ERROR(_fill_column(&value_args));
 
     auto* variant_column = down_cast<VariantColumn*>(args.column);
+    // args.column must be a fresh, empty chunk column: we append() below without indexing by row,
+    // so any pre-existing rows would desync this column from its siblings in the chunk.
+    DCHECK_EQ(0, variant_column->size());
     const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
     const auto* value_nullable = down_cast<const NullableColumn*>(value_col.get());
     const auto* metadata_bin = down_cast<const BinaryColumn*>(metadata_nullable->data_column_raw_ptr());
