@@ -52,7 +52,7 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `VARIANT`             | `VARIANT`                   |
 
 :::note
-`VARIANT` is supported from v4.2 onwards for splits read by the native reader (append-only tables and compacted primary-key data). Reading `VARIANT` from uncompacted primary-key data requires the JNI reader and is not yet supported.
+`VARIANT` is supported from v4.2 onwards for splits read by the native reader (append-only tables and compacted primary-key data). Reading `VARIANT` from uncompacted primary-key data requires the JNI reader and is not yet supported; such queries are rejected with a plan-time error.
 :::
 
 ## Integration preparations
