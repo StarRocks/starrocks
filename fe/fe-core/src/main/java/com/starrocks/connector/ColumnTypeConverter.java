@@ -597,6 +597,10 @@ public class ColumnTypeConverter {
             return new StructType(structFields);
         }
 
+        public Type visit(org.apache.paimon.types.VariantType variantType) {
+            return VariantType.VARIANT;
+        }
+
         @Override
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {
             return UNKNOWN_TYPE;
