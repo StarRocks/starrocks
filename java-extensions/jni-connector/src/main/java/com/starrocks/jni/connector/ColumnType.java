@@ -52,6 +52,7 @@ public class ColumnType {
         MAP,
         STRUCT,
         TINYINT,
+        VARIANT,
     }
 
     TypeValue typeValue;
@@ -99,6 +100,7 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.VARIANT, "variant");
 
         // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
         // so it won't trouble hudi reader to map hudi type to hive type
@@ -239,6 +241,21 @@ public class ColumnType {
                 parseStruct(childNames, childTypes, scanner);
             }
             break;
+            case "variant": {
+                // Wire layout is identical to struct<metadata:binary, value:binary>.
+                // Field order is a fixed protocol shared with BE JniScanner::_append_variant_data.
+                typeValue = TypeValue.VARIANT;
+                childNames = new ArrayList<>();
+                childTypes = new ArrayList<>();
+                childNames.add("metadata");
+                childTypes.add(new ColumnType(name + ".metadata", "binary"));
+                childNames.add("value");
+                childTypes.add(new ColumnType(name + ".value", "binary"));
+                fieldIndex = new ArrayList<>();
+                fieldIndex.add(0);
+                fieldIndex.add(1);
+            }
+            break;
             default: {
                 if (t.startsWith("decimal")) {
                     typeValue = parseDecimal(t);
@@ -288,6 +305,10 @@ public class ColumnType {
         return typeValue == TypeValue.STRUCT;
     }
 
+    public boolean isVariant() {
+        return typeValue == TypeValue.VARIANT;
+    }
+
     public boolean isMapKeySelected() {
         return childNames.indexOf(FIELD_0_NAME) != -1;
     }
@@ -309,13 +330,14 @@ public class ColumnType {
                 return 1;
             case ARRAY:
             case MAP:
-            case STRUCT: {
+            case STRUCT:
+            case VARIANT: {
                 // array & map
                 // [ null | offset | ... ]
                 // struct
                 // [ null | ... ]
                 int res = 2;
-                if (typeValue == TypeValue.STRUCT) {
+                if (typeValue == TypeValue.STRUCT || typeValue == TypeValue.VARIANT) {
                     res = 1;
                 }
                 for (ColumnType t : childTypes) {
