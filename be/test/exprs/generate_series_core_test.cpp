@@ -37,8 +37,8 @@ protected:
 
     // Runs one `process()` batch of generate_series(start, stop[, step]) over a single input row.
     template <LogicalType Type>
-    Result<Type> run_one_batch(RunTimeCppType<Type> start, RunTimeCppType<Type> stop,
-                               const RunTimeCppType<Type>* step, int chunk_size) {
+    Result<Type> run_one_batch(RunTimeCppType<Type> start, RunTimeCppType<Type> stop, const RunTimeCppType<Type>* step,
+                               int chunk_size) {
         GenerateSeries<Type> function;
         TableFunctionState* state = nullptr;
         CHECK(function.init(TFunction(), &state).ok());

@@ -136,7 +136,7 @@ public:
                 size_t count;
                 if constexpr (sizeof(UnsignedType) >= sizeof(size_t)) {
                     count = (steps_left >= static_cast<UnsignedType>(room)) ? room
-                                                                           : static_cast<size_t>(steps_left) + 1;
+                                                                            : static_cast<size_t>(steps_left) + 1;
                 } else {
                     count = std::min<size_t>(static_cast<size_t>(steps_left) + 1, room);
                 }
