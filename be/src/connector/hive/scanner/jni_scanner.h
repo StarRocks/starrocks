@@ -76,6 +76,7 @@ private:
     Status _append_array_data(const FillColumnArgs& args);
     Status _append_map_data(const FillColumnArgs& args);
     Status _append_struct_data(const FillColumnArgs& args);
+    Status _append_variant_data(const FillColumnArgs& args);
 
     Status _fill_column(FillColumnArgs* args);
 
