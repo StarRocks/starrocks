@@ -325,13 +325,21 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
 
-    auto gram_num_column = fn_ctx->get_constant_column(2);
-    if (gram_num_column != nullptr) {
+    // Defence in depth: the FE analyzer already requires a positive integer literal here.
+    // get_const_value() casts the constant's data column straight to an Int32Column, so a
+    // non-constant or NULL gram_num would be a wild read rather than a skipped optimization.
+    // Note this runs during index evaluation in the storage layer, before the function itself is
+    // ever evaluated, so ngram_search_prepare()'s own guard does not protect it.
+    if (fn_ctx->is_notnull_constant_column(2)) {
+        auto gram_num_column = fn_ctx->get_constant_column(2);
         size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
         // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
         if (index_gram_num != predicate_gram_num) {
             return false;
         }
+    } else {
+        // gram_num is not a usable constant: the index cannot be matched against it.
+        return false;
     }
 
     // if ngram bloom filter is case_sensitive,but function is case insensitive

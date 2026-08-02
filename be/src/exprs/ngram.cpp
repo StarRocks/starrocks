@@ -76,6 +76,12 @@ public:
         const auto& needle_column = columns[1];
         const auto& gram_num_column = columns[2];
 
+        // Defence in depth: the FE analyzer already requires a positive integer literal here, and
+        // get_const_value() casts the data column straight to an Int32Column, so anything else
+        // would be a wild read rather than an error.
+        if (!context->is_notnull_constant_column(2)) {
+            return Status::InvalidArgument("ngram search's third parameter must be a non-null constant integer");
+        }
         int gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
         if (gram_num <= 0) {
             return Status::NotSupported("ngram search's third parameter must be a positive number");
