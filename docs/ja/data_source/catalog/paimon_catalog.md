@@ -52,7 +52,7 @@ Paimon catalog はデータのクエリにのみ使用できます。Paimon cata
 | `VARIANT`             | `VARIANT`                   |
 
 :::note
-`VARIANT` はv4.2以降、ネイティブリーダーで読み取られるsplit（Append-Onlyテーブル、およびPrimary KeyテーブルのCompaction済みデータ）でのみサポートされています。Compaction前のPrimary Keyデータから`VARIANT`を読み取るにはJNIリーダーが必要であり、現時点ではまだサポートされていません。
+`VARIANT` はv4.2以降、ネイティブリーダーで読み取られるsplit（Append-Onlyテーブル、およびPrimary KeyテーブルのCompaction済みデータ）でのみサポートされています。Compaction前のPrimary Keyデータから`VARIANT`を読み取るにはJNIリーダーが必要であり、現時点ではまだサポートされていません。該当するクエリはプランニング時にエラーとして拒否されます。
 :::
 
 ## 統合準備
