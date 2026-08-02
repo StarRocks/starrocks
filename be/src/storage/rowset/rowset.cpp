@@ -53,6 +53,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -462,6 +463,9 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -591,6 +595,9 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {
