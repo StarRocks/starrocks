@@ -35,6 +35,7 @@ import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
 import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
+import org.apache.paimon.types.VariantType;
 
 import java.util.stream.Collectors;
 
@@ -128,6 +129,10 @@ public class PaimonTypeUtils {
             String type = rowType.getFields().stream().map(f -> f.name() + ":" + f.type().accept(this))
                     .collect(Collectors.joining(","));
             return String.format("struct<%s>", type);
+        }
+
+        public String visit(VariantType variantType) {
+            return "variant";
         }
 
         @Override
