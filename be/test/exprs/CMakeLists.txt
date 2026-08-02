@@ -70,6 +70,7 @@ set(EXPR_TEST_FILES
     decimal_cast_expr_time_test.cpp
     encryption_functions_test.cpp
     function_call_expr_test.cpp
+    generate_series_core_test.cpp
     if_expr_test.cpp
     json_each_core_test.cpp
     like_test.cpp
