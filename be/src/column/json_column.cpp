@@ -109,6 +109,20 @@ const uint8_t* JsonColumn::deserialize_and_append(const uint8_t* data) {
     return data + size;
 }
 
+// ObjectColumn::deserialize_and_append_batch() is a DCHECK-only stub that silently degrades into a
+// no-op in release builds. Set operations (INTERSECT/EXCEPT) and the serialized-key aggregator use it
+// to rebuild a *non-nullable* key column out of the serialized keys, so falling back to that stub left
+// the JSON column empty while its sibling key columns held `chunk_size` rows. The resulting chunk is
+// inconsistent and reading it by Chunk::num_rows() (e.g. Chunk::bytes_usage()) walks off the end of the
+// JSON pool. The nullable case never hit this because it goes through
+// ColumnFactory::deserialize_and_append_batch_nullable(), which calls the per-row overload below.
+void JsonColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
+    DCHECK(!is_flat_json());
+    for (size_t i = 0; i < chunk_size; ++i) {
+        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
+    }
+}
+
 uint32_t JsonColumn::serialize_size(size_t idx) const {
     return static_cast<uint32_t>(get_object(idx)->serialize_size());
 }
