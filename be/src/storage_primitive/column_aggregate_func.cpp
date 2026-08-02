@@ -502,9 +502,9 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
         // The storage aggregate functions above take the column type as both their argument and
         // return type.
         auto type_desc = TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                          field->type()->precision(), field->type()->scale());
+                                                           field->type()->precision(), field->type()->scale());
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func, type_desc,
-                                                            std::vector<TypeDescriptor>{type_desc});
+                                                             std::vector<TypeDescriptor>{type_desc});
     }
 }
 } // namespace starrocks
