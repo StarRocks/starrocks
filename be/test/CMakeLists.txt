@@ -381,6 +381,7 @@ SET(DW_TEST_FILES
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
