@@ -159,7 +159,7 @@ public class OffHeapColumnVector {
                 this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
                         ColumnType.TypeValue.BYTE));
             }
-        } else if (type.isArray() || type.isMap() || type.isStruct()) {
+        } else if (type.isArray() || type.isMap() || type.isStruct() || type.isVariant()) {
             if (type.isArray() || type.isMap()) {
                 this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             }
@@ -229,7 +229,7 @@ public class OffHeapColumnVector {
             putArrayOffset(elementsAppended, offset, 0);
         }
 
-        if (type.isStruct()) {
+        if (type.isStruct() || type.isVariant()) {
             for (int i = 0; i < childColumns.length; i++) {
                 childColumns[i].appendValue(null);
             }
@@ -423,6 +423,16 @@ public class OffHeapColumnVector {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
+    public byte[] getBinary(int rowId) {
+        if (isNullAt(rowId)) {
+            return null;
+        }
+        int start = getArrayOffset(rowId);
+        int end = getArrayOffset(rowId + 1);
+        int size = end - start;
+        return arrayData().getBytes(start, size);
+    }
+
     private int getArrayOffset(int rowId) {
         return Platform.getInt(null, offsetData + 4L * rowId);
     }
@@ -492,7 +502,7 @@ public class OffHeapColumnVector {
             meta.appendLong(nullsNativeAddress());
             meta.appendLong(arrayOffsetNativeAddress());
             meta.appendLong(arrayDataNativeAddress());
-        } else if (type.isArray() || type.isMap() || type.isStruct()) {
+        } else if (type.isArray() || type.isMap() || type.isStruct() || type.isVariant()) {
             meta.appendLong(nullsNativeAddress());
             if (type.isArray() || type.isMap()) {
                 meta.appendLong(arrayOffsetNativeAddress());
@@ -571,7 +581,8 @@ public class OffHeapColumnVector {
                 appendMap(keys, values);
                 break;
             }
-            case STRUCT: {
+            case STRUCT:
+            case VARIANT: {
                 List<ColumnValue> values = new ArrayList<>();
                 o.unpackStruct(type.getFieldIndex(), values);
                 appendStruct(values);
@@ -599,6 +610,12 @@ public class OffHeapColumnVector {
             }
         }
         return null;
+    }
+
+    // for test only. Exposes the struct/variant child vector (e.g. metadata/value for VARIANT) so
+    // tests can assert on the appended child data directly.
+    public OffHeapColumnVector getChildColumn(int idx) {
+        return childColumns[idx];
     }
 
     // for test only.
@@ -689,7 +706,8 @@ public class OffHeapColumnVector {
                 sb.append("]");
                 break;
             }
-            case STRUCT: {
+            case STRUCT:
+            case VARIANT: {
                 List<String> names = type.getChildNames();
                 sb.append("{");
                 for (int c = 0; c < names.size(); c++) {
@@ -720,13 +738,13 @@ public class OffHeapColumnVector {
         if (type.isByteStorageType()) {
             checker.check(contextOffset, arrayOffsetNativeAddress());
             checker.check(context + "#data", arrayDataNativeAddress());
-        } else if (type.isArray() || type.isMap() || type.isStruct()) {
+        } else if (type.isArray() || type.isMap() || type.isStruct() || type.isVariant()) {
             if (type.isArray() || type.isMap()) {
                 checker.check(contextOffset, arrayOffsetNativeAddress());
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
-                if (type.isStruct()) {
+                if (type.isStruct() || type.isVariant()) {
                     // For example
                     // struct<a: null>
                     // struct<a: null>
@@ -820,7 +838,8 @@ public class OffHeapColumnVector {
             case MAP:
                 return nullsLength >= elementsAppended && childColumns[0].checkNullsLength()
                         && childColumns[1].checkNullsLength();
-            case STRUCT: {
+            case STRUCT:
+            case VARIANT: {
                 List<String> names = type.getChildNames();
                 for (int c = 0; c < names.size(); c++) {
                     if (!childColumns[c].checkNullsLength()) {
