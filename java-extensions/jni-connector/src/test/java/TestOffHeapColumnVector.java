@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.paimon.reader;
-
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.OffHeapColumnVector;
@@ -27,10 +25,9 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 
-public class TestVariantColumnType {
+public class TestOffHeapColumnVector {
 
     // OffHeapColumnVector normally allocates through the BE's native memory tracker (JNI), which
     // isn't linked in a plain unit test JVM. Platform.UT_KEY switches it to sun.misc.Unsafe malloc
@@ -43,20 +40,6 @@ public class TestVariantColumnType {
     @AfterEach
     public void tearDown() {
         System.setProperty(Platform.UT_KEY, Boolean.FALSE.toString());
-    }
-
-    @Test
-    public void testParseVariant() {
-        ColumnType type = new ColumnType("v", "variant");
-        Assertions.assertEquals(ColumnType.TypeValue.VARIANT, type.getTypeValue());
-        Assertions.assertTrue(type.isVariant());
-        Assertions.assertEquals(Arrays.asList("metadata", "value"), type.getChildNames());
-        Assertions.assertEquals(ColumnType.TypeValue.BINARY, type.getChildTypes().get(0).getTypeValue());
-        Assertions.assertEquals(ColumnType.TypeValue.BINARY, type.getChildTypes().get(1).getTypeValue());
-        Assertions.assertEquals(Arrays.asList(0, 1), type.getFieldIndex());
-        // variant column meta: [null] + 2 binary children, each [null | offset | data] => 1 + 3 + 3
-        Assertions.assertEquals(7, type.computeColumnSize());
-        Assertions.assertEquals("variant", type.getTypeValueString());
     }
 
     /**

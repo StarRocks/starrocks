@@ -137,7 +137,13 @@ public class PaimonColumnValue implements ColumnValue {
     private void unpackVariant(List<Integer> structFieldIndex, List<ColumnValue> values) {
         Variant variant = (Variant) fieldData;
         for (Integer idx : structFieldIndex) {
-            byte[] bytes = (idx != null && idx == 0) ? variant.metadata() : variant.value();
+            if (idx == null || idx < 0 || idx > 1) {
+                throw new IllegalStateException(
+                        "Invalid variant fieldIndex " + idx + ": a variant column must only be unpacked with " +
+                                "field indexes 0 (metadata) or 1 (value), per the jni-connector ColumnType " +
+                                "\"variant\" layout.");
+            }
+            byte[] bytes = (idx == 0) ? variant.metadata() : variant.value();
             values.add(new PaimonColumnValue(bytes, DataTypes.BYTES(), timeZone));
         }
     }

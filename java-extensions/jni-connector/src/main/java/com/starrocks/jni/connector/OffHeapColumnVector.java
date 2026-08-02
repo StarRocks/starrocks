@@ -423,6 +423,8 @@ public class OffHeapColumnVector {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
+    // for test only. Reads back the raw bytes appended at rowId (e.g. a variant metadata/value
+    // child) so tests can assert on the appended data directly.
     public byte[] getBinary(int rowId) {
         if (isNullAt(rowId)) {
             return null;
