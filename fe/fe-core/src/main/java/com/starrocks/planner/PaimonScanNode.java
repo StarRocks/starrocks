@@ -25,7 +25,6 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -312,21 +311,7 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor) {
-        for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
-            if (slot.getType().containsVariant()) {
-                throw new StarRocksConnectorException(
-                        "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
-                        "reader (merge-on-read data, system table, or paimon_force_jni_reader=true). Reading " +
-                        "VARIANT through the Paimon JNI reader is not yet supported. Compact the table or " +
-                        "exclude the VARIANT column from the query.",
-                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
-            }
-        }
-    }
-
     public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
-        checkJniReaderVariantSupport(desc);
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();

@@ -188,7 +188,7 @@ $.config["key"]        -- Map-style access
 ## 制限事項と注意点
 
 - VARIANTは、バリアントエンコーディングを使用したParquet形式のIcebergテーブルからのデータ読み取り、およびStarRocksファイルライター（非シュレッドバリアントエンコーディング）を使用したParquetファイルへの書き込みに対応しています。
-- VARIANTは、Paimonテーブルからのデータ読み取りにも対応しています（Paimonではvariant列はParquet形式での格納が必須です）が、ネイティブリーダーで読み取られるsplit（Append-Onlyテーブル、およびPrimary KeyテーブルのCompaction済みデータ）でのみサポートされています。Compaction前のPrimary KeyデータからVARIANTを読み取るにはJNIリーダーが必要であり、現時点ではまだサポートされていません。該当するクエリはプランニング時にエラーとして拒否されます。
+- VARIANTは、Paimonテーブルからのデータ読み取りにも対応しています（Paimonではvariant列はParquet形式での格納が必須です）。テーブルタイプやCompaction状態に関わらず、ネイティブリーダーとJNIリーダーの両方でVARIANT列を読み取ることができます。
 - VARIANT値のサイズは16 MBに制限されています。
 - 現在、読み取りと書き込みの両方において、非シュレッドバリアント値のみがサポートされています。
 - VARIANTは、JSON値またはサポートされているSQLタイプ（ARRAY、MAP、STRUCTを含む）からのキャストによって作成できます。

@@ -188,7 +188,7 @@ $.config["key"]        -- Map-style access
 ## 限制与注意事项
 
 - VARIANT 支持从 Parquet 格式的 Iceberg 表中读取具有 variant 编码的数据，以及使用 StarRocks 文件写入器写入 Parquet 文件（非分片 variant 编码）。
-- VARIANT 也支持从 Paimon 表中读取数据（Paimon 要求 variant 列必须以 Parquet 格式存储），但仅支持由 Native Reader 读取的 split（Append-Only 表以及 Primary Key 表中已完成 Compaction 的数据）。从尚未 Compaction 的 Primary Key 数据中读取 VARIANT 需要使用 JNI Reader，目前尚不支持，此类查询会在 Plan 阶段报错并被拒绝执行。
+- VARIANT 也支持从 Paimon 表中读取数据（Paimon 要求 variant 列必须以 Parquet 格式存储），且不受表类型或 Compaction 状态的限制，Native Reader 和 JNI Reader 均可读取 VARIANT 列。
 - VARIANT 值的大小限制为 16 MB。
 - 目前读写均仅支持非分片 variant 值。
 - VARIANT 可通过从 JSON 值或支持的 SQL 类型（包括 ARRAY、MAP 和 STRUCT）进行类型转换来创建。

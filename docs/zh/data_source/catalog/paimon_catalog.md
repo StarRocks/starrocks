@@ -52,7 +52,7 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 | `VARIANT`             | `VARIANT`                   |
 
 :::note
-`VARIANT` 从 v4.2 版本起支持，且仅支持由 Native Reader 读取的 split（Append-Only 表以及 Primary Key 表中已完成 Compaction 的数据）。从尚未 Compaction 的 Primary Key 数据中读取 `VARIANT` 需要使用 JNI Reader，目前尚不支持，此类查询会在 Plan 阶段报错并被拒绝执行。
+`VARIANT` 从 v4.2 版本起支持读取，且不受表类型或 Compaction 状态的限制，Native Reader 和 JNI Reader 均可读取 `VARIANT` 列。
 :::
 
 ## 集成准备
