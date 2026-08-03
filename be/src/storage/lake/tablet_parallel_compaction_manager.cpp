@@ -2028,6 +2028,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     VLOG(1) << "Parallel compaction: acquired all " << tokens_acquired << " tokens for tablet " << tablet_id
             << ", txn_id=" << txn_id;
 
+
     // Record expected split counts for each large rowset as a safety net.
     // Even though we've acquired all tokens, thread pool submission can still fail.
     // This allows get_merged_txn_log() to detect incomplete splits.
@@ -2055,6 +2056,20 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // Thread pool submission failures are still possible but rare.
     int subtasks_created = 0;
     int64_t submitted_bytes = 0;
+
+    // All `total_groups` tokens are held now, and each submitted subtask releases its own on completion. Every
+    // exit below settles the rest explicitly and sets `tokens_settled` -- except an exception, which would
+    // otherwise strand them: with compact_threads defaulting to 4, leaking a couple per failure quickly starves
+    // lake compaction for the whole BE until it restarts. Give them back while unwinding.
+    bool tokens_settled = false;
+    DeferOp release_unused_tokens([&] {
+        if (tokens_settled) {
+            return;
+        }
+        for (int32_t j = subtasks_created; j < total_groups; j++) {
+            release_token(false);
+        }
+    });
 
     for (size_t group_idx = 0; group_idx < groups.size(); group_idx++) {
         auto& group = groups[group_idx];
@@ -2141,6 +2156,11 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         // below succeeds.
         registered = true;
 
+        // Test hook for the opposite window of ":after_submit": lets a test throw while this subtask is
+        // registered but has NOT been handed to the thread pool, which is the case rollback_registration
+        // exists for.
+        TEST_SYNC_POINT("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+
         // Submit task to thread pool (token already acquired)
         Status submit_st;
         if (group.type == SubtaskType::NORMAL) {
@@ -2207,6 +2227,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             for (int32_t j = 0; j < remaining_tokens; j++) {
                 release_token(false);
             }
+            // This branch has accounted for every unused token; release_unused_tokens must not repeat it,
+            // whether we return just below or break out of the loop.
+            tokens_settled = true;
 
             if (subtasks_created == 0) {
                 cleanup_tablet(tablet_id, txn_id);
@@ -2247,6 +2270,8 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                     << ", is_last=" << group.is_last_range << ", input_bytes=" << input_bytes;
         }
     }
+    // The loop ran to completion (or broke out after settling tokens itself), so nothing is stranded.
+    tokens_settled = true;
 
     if (subtasks_created == 0) {
         cleanup_tablet(tablet_id, txn_id);

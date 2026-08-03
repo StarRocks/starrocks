@@ -729,4 +729,75 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_sub
     EXPECT_EQ(1, response.compact_stats_size());
 }
 
+// The remaining window: the throw lands while a subtask is registered in running_subtasks but has NOT been
+// handed to the thread pool. Nobody will ever complete that subtask, so if the registration survived,
+// is_complete() (`running_subtasks.empty() && total_subtasks_created > 0`) could never become true and the
+// tablet would never call finish_task() -- the compact RPC would hang forever. rollback_registration must
+// undo it, after which create_parallel_tasks() sees nothing submitted and reports an error so the caller
+// falls back to normal compaction, which then completes the RPC exactly once.
+//
+// Runs both arms so the `catch (const std::exception&)` and the `catch (...)` handlers are both exercised.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_register_completes_rpc_once) {
+    struct ForeignException {};
+
+    for (bool foreign : {false, true}) {
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(next_id());
+        metadata->set_version(11);
+        for (int i = 0; i < 10; i++) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(i);
+            rowset->set_overlapped(true);
+            rowset->set_num_rows(100);
+            rowset->set_data_size(1024 * 1024);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+            segment_meta->set_size(1024 * 1024);
+        }
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        // Throw on the first registration only, so exactly one subtask is left registered-but-unsubmitted.
+        std::atomic<bool> thrown{false};
+        auto* sync_point = SyncPoint::GetInstance();
+        sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                                [&](void* /*arg*/) {
+                                    if (thrown.exchange(true)) {
+                                        return;
+                                    }
+                                    if (foreign) {
+                                        throw ForeignException{};
+                                    }
+                                    throw std::bad_alloc();
+                                });
+        sync_point->EnableProcessing();
+        SCOPED_CLEANUP({
+            sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+            sync_point->DisableProcessing();
+        });
+
+        auto txn_id = next_id();
+        auto latch = std::make_shared<CountDownLatch>(1);
+        CompactRequest request;
+        CompactResponse response;
+        request.add_tablet_ids(metadata->id());
+        request.set_timeout_ms(60 * 1000);
+        request.set_txn_id(txn_id);
+        request.set_version(11);
+        auto* parallel_config = request.mutable_parallel_config();
+        parallel_config->set_enable_parallel(true);
+        parallel_config->set_max_parallel_per_tablet(3);
+        parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+        auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+        _compaction_scheduler.compact(nullptr, &request, &response, cb);
+        // Hangs here if the stranded registration was not rolled back.
+        latch->wait();
+
+        EXPECT_TRUE(thrown.load());
+        // The fallback owns the completion, and it is the only one: a second finish_task() would add another
+        // compact_stat (and crash on the already-nulled _response).
+        EXPECT_EQ(1, response.compact_stats_size());
+    }
+}
+
 } // namespace starrocks::lake
