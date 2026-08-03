@@ -119,7 +119,6 @@ protected:
         ctx->format_scan_context.scan_range_length = scan_range->length;
     }
 
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
 

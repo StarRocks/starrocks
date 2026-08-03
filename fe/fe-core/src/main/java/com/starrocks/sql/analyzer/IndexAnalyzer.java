@@ -265,11 +265,6 @@ public class IndexAnalyzer {
 
     // VectorIndexUtil methods
     public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (!Config.enable_experimental_vector) {
-            throw new SemanticException(
-                    "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
-        }
-
         if (column.isAllowNull()) {
             throw new SemanticException("The vector index can only build on non-nullable column");
         }

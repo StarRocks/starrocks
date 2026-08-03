@@ -191,7 +191,7 @@ private:
     TDescriptorTable _t_desc_table;
     RuntimeState* _state = nullptr;
     TPlanNode _tnode;
-    RowDescriptor* _row_desc = nullptr;
+    RecordDescriptor* _record_desc = nullptr;
     TMemoryScratchSink _tsink;
     DescriptorTbl* _desc_tbl = nullptr;
     std::vector<TExpr> _exprs;
@@ -268,7 +268,7 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);
 
-    _row_desc = _obj_pool.add(new RowDescriptor(*_desc_tbl, row_tids));
+    _record_desc = _obj_pool.add(new RecordDescriptor(*_desc_tbl, row_tids));
 
     // node
     _tnode.node_id = 0;
@@ -295,7 +295,7 @@ TEST_F(MemoryScratchSinkTest, work_flow_normal) {
     auto st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
-    MemoryScratchSink sink(*_row_desc, _exprs, _tsink);
+    MemoryScratchSink sink(*_record_desc, _exprs, _tsink);
     TDataSink data_sink;
     data_sink.memory_scratch_sink = _tsink;
     ASSERT_TRUE(sink.init(data_sink, nullptr).ok());

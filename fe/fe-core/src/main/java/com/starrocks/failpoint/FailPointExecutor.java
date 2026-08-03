@@ -27,7 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -38,10 +38,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class FailPointExecutor {
     private static final Logger LOG = LogManager.getLogger(FailPointExecutor.class);
@@ -69,40 +69,47 @@ public class FailPointExecutor {
         }
     }
 
+    /**
+     * Resolve BE/CN nodes for failpoint SQL control.
+     * When {@code backends} is null/empty, all alive backends and compute nodes are returned.
+     * Otherwise each {@code host:bePort} is resolved via {@link SystemInfoService#getBackendOrComputeNodeWithBePort}.
+     */
+    public static List<ComputeNode> resolveNodes(SystemInfoService clusterInfoService, List<String> backends)
+            throws DdlException {
+        if (backends == null || backends.isEmpty()) {
+            List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream()
+                    .filter(ComputeNode::isAlive)
+                    .collect(Collectors.toList());
+            if (nodes.isEmpty()) {
+                throw new DdlException("No alive backends or compute nodes");
+            }
+            return nodes;
+        }
+
+        List<ComputeNode> nodes = Lists.newArrayList();
+        for (String backendAddr : backends) {
+            String[] tmp = backendAddr.split(":");
+            if (tmp.length != 2) {
+                throw new SemanticException("invalid backend addr");
+            }
+            ComputeNode node = clusterInfoService.getBackendOrComputeNodeWithBePort(
+                    tmp[0], Integer.parseInt(tmp[1]));
+            if (node == null) {
+                throw new SemanticException("cannot find backend or compute node with addr " + backendAddr);
+            }
+            nodes.add(node);
+        }
+        return nodes;
+    }
+
     private void updateBackendFailPoint(UpdateFailPointStatusStatement updateStmt) throws Exception {
         PUpdateFailPointStatusRequest request = updateStmt.toProto();
-
-        List<TNetworkAddress> backends = new LinkedList<>();
-        if (updateStmt.getBackends() == null || updateStmt.getBackends().isEmpty()) {
-            // effect all backends
-            List<Long> backendIds = clusterInfoService.getBackendIds(true);
-            if (backendIds == null) {
-                throw new DdlException("No alive backends");
-            }
-            for (long backendId : backendIds) {
-                Backend backend = clusterInfoService.getBackend(backendId);
-                if (backend == null) {
-                    continue;
-                }
-                backends.add(backend.getBrpcAddress());
-            }
-        } else {
-            for (String backendAddr : updateStmt.getBackends()) {
-                String[] tmp = backendAddr.split(":");
-                if (tmp.length != 2) {
-                    throw new SemanticException("invalid backend addr");
-                }
-                Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
-                if (backend == null) {
-                    throw new SemanticException("cannot find backend with addr " + backendAddr);
-                }
-                backends.add(backend.getBrpcAddress());
-            }
-        }
+        List<ComputeNode> nodes = resolveNodes(clusterInfoService, updateStmt.getBackends());
 
         // send request
         List<Pair<TNetworkAddress, Future<PUpdateFailPointStatusResponse>>> futures = Lists.newArrayList();
-        for (TNetworkAddress address : backends) {
+        for (ComputeNode node : nodes) {
+            TNetworkAddress address = node.getBrpcAddress();
             try {
                 futures.add(Pair.create(address,
                         BackendServiceClient.getInstance().updateFailPointStatusAsync(address, request)));
@@ -116,7 +123,7 @@ public class FailPointExecutor {
                 final PUpdateFailPointStatusResponse result = future.second.get(10, TimeUnit.SECONDS);
                 if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
                     TNetworkAddress address = future.first;
-                    String errMsg = String.format("update failPoint status failed, backend: %s:%d, error: %s",
+                    String errMsg = String.format("update failPoint status failed, node: %s:%d, error: %s",
                             address.getHostname(), address.getPort(), result.status.errorMsgs.get(0));
                     LOG.warn(errMsg);
                     throw new DdlException(errMsg);
@@ -124,7 +131,7 @@ public class FailPointExecutor {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Throwable e) {
-                LOG.warn("update failPoint for backend: {} failed", future.first, e);
+                LOG.warn("update failPoint for node: {} failed", future.first, e);
                 throw e;
             }
         }

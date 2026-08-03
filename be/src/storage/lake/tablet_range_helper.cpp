@@ -14,8 +14,6 @@
 
 #include "storage/lake/tablet_range_helper.h"
 
-#include <google/protobuf/util/message_differencer.h>
-
 #include <memory>
 
 #include "column/binary_column.h"
@@ -141,6 +139,24 @@ static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
 // byte-identical protos are not guaranteed even when the value is unchanged (e.g. an optional type or
 // variant_type field present on one side and defaulted on the other). Used to check that a trailing ADD
 // preserves the existing range prefix without spuriously rejecting an equivalent re-encoding.
+static Status validate_variant_type_shape(const VariantPB& value) {
+    if (!value.has_type()) {
+        return Status::OK();
+    }
+    const auto& type = value.type();
+    if (type.types_size() != 1) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must contain exactly one node, got {}", type.types_size()));
+    }
+    const auto& node = type.types(0);
+    if (static_cast<TTypeNodeType::type>(node.type()) != TTypeNodeType::SCALAR || !node.has_scalar_type()) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must be scalar (node_type={}, has_scalar_type={})", node.type(),
+                            node.has_scalar_type()));
+    }
+    return Status::OK();
+}
+
 static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const VariantPB& new_value) {
     if (old_value.variant_type() != new_value.variant_type()) {
         return false;
@@ -148,6 +164,8 @@ static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const 
     if (old_value.has_type() != new_value.has_type()) {
         return false;
     }
+    RETURN_IF_ERROR(validate_variant_type_shape(old_value));
+    RETURN_IF_ERROR(validate_variant_type_shape(new_value));
     if (old_value.has_type()) {
         const auto old_type = TypeDescriptor::from_protobuf(old_value.type());
         const auto new_type = TypeDescriptor::from_protobuf(new_value.type());
@@ -438,17 +456,47 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
     return pb_range;
 }
 
-// Structural (proto byte-for-byte) equality of two TuplePB messages. Used by
-// validate_new_tablet_ranges to detect zero-width and adjacency-tile mismatches.
+// Whether two TuplePB messages denote the same sort-key value, compared position by
+// position with leading_value_preserved — i.e. semantically (variant kind, logical type,
+// decoded value), not by raw proto bytes. Used by validate_new_tablet_ranges to detect
+// zero-width ranges, adjacency-tile mismatches, and endpoint mismatches against the parent
+// tablet's range.
+//
+// A byte-level comparison here (MessageDifferencer::Equals) rejected every
+// external-boundaries split of a tablet that already had an explicit bound, because the two
+// sides of that comparison are produced by different serializers: the parent's bound was
+// written by BE and the new-tablet bounds arrive from FE. BE's TypeDescriptor::to_protobuf
+// always sets PScalarType::len (be/src/types/type_descriptor.cpp) while FE's
+// TypeSerializer.scalarTypeToProtobuf sets it only for CHAR/VARCHAR/VARBINARY/HLL, and
+// PScalarType::len is `optional`, so for an integer or date sort key the encodings differ
+// byte-for-byte while denoting the same type. leading_value_preserved already documents and
+// handles exactly this hazard for the trailing-sort-key-ADD check; the endpoint checks need
+// the same treatment.
+//
+// The consequence of rejecting was not a failed split but a wedged table: the split fell
+// back to an identical tablet, so the layout never changed, TableAlignmentLatch suppressed
+// further alignment, the range-colocate group never re-stabilised, and the size-driven split
+// stayed blocked behind the unstable-group guard in SplitTabletJobFactory. Parents with no
+// bound were unaffected because tuple_bound_equal short-circuits on absence, which is why
+// alignment only ever failed once a tablet had already been split.
 namespace {
-bool tuple_pb_equal(const TuplePB& lhs, const TuplePB& rhs) {
-    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+StatusOr<bool> tuple_pb_equal(const TuplePB& lhs, const TuplePB& rhs) {
+    if (lhs.values_size() != rhs.values_size()) {
+        return false;
+    }
+    for (int i = 0; i < lhs.values_size(); ++i) {
+        ASSIGN_OR_RETURN(bool equal, leading_value_preserved(lhs.values(i), rhs.values(i)));
+        if (!equal) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Same as tuple_pb_equal but treats "neither side has the bound" as equal —
 // used at the first.lower / last.upper endpoint checks where the parent range
 // may be unbounded.
-bool tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const TuplePB& rhs) {
+StatusOr<bool> tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const TuplePB& rhs) {
     if (lhs_has != rhs_has) return false;
     if (!lhs_has) return true;
     return tuple_pb_equal(lhs, rhs);
@@ -629,23 +677,28 @@ Status TabletRangeHelper::validate_new_tablet_ranges(
     RETURN_IF_ERROR(validate_tablet_range(old_tablet_range));
 
     // 1. Each new-tablet range must be individually well-formed, and the two
-    //    bounds (when both set) must not be byte-equal (catches zero-width
+    //    bounds (when both set) must not denote the same value (catches zero-width
     //    children). Strict semantic ordering (lower < upper) requires a
     //    schema for type-aware comparison and is the caller's responsibility
     //    (e.g., compute_split_ranges_from_external_boundaries compares via
     //    the tablet schema).
     for (const auto& r : new_tablet_ranges) {
         RETURN_IF_ERROR(validate_tablet_range(r));
-        if (r.has_lower_bound() && r.has_upper_bound() && tuple_pb_equal(r.lower_bound(), r.upper_bound())) {
-            return Status::InvalidArgument(
-                    "validate_new_tablet_ranges: range with lower_bound == upper_bound (zero-width)");
+        if (r.has_lower_bound() && r.has_upper_bound()) {
+            ASSIGN_OR_RETURN(bool zero_width, tuple_pb_equal(r.lower_bound(), r.upper_bound()));
+            if (zero_width) {
+                return Status::InvalidArgument(
+                        "validate_new_tablet_ranges: range with lower_bound == upper_bound (zero-width)");
+            }
         }
     }
 
     // 2. First range's lower bound must match the old tablet's lower bound.
     const auto& first = new_tablet_ranges[0];
-    if (!tuple_bound_equal(first.has_lower_bound(), first.lower_bound(), old_tablet_range.has_lower_bound(),
-                           old_tablet_range.lower_bound())) {
+    ASSIGN_OR_RETURN(bool first_lower_matches,
+                     tuple_bound_equal(first.has_lower_bound(), first.lower_bound(), old_tablet_range.has_lower_bound(),
+                                       old_tablet_range.lower_bound()));
+    if (!first_lower_matches) {
         return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound != old_tablet_range.lower_bound");
     }
     if (first.has_lower_bound() && !first.lower_bound_included()) {
@@ -654,8 +707,10 @@ Status TabletRangeHelper::validate_new_tablet_ranges(
 
     // 3. Last range's upper bound must match the old tablet's upper bound.
     const auto& last = new_tablet_ranges[new_tablet_ranges.size() - 1];
-    if (!tuple_bound_equal(last.has_upper_bound(), last.upper_bound(), old_tablet_range.has_upper_bound(),
-                           old_tablet_range.upper_bound())) {
+    ASSIGN_OR_RETURN(bool last_upper_matches,
+                     tuple_bound_equal(last.has_upper_bound(), last.upper_bound(), old_tablet_range.has_upper_bound(),
+                                       old_tablet_range.upper_bound()));
+    if (!last_upper_matches) {
         return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound != old_tablet_range.upper_bound");
     }
     if (last.has_upper_bound() && last.upper_bound_included()) {
@@ -677,7 +732,8 @@ Status TabletRangeHelper::validate_new_tablet_ranges(
                                 "(left must be exclusive, right must be inclusive)",
                                 i));
         }
-        if (!tuple_pb_equal(current_range.upper_bound(), next_range.lower_bound())) {
+        ASSIGN_OR_RETURN(bool tiles, tuple_pb_equal(current_range.upper_bound(), next_range.lower_bound()));
+        if (!tiles) {
             return Status::InvalidArgument(
                     fmt::format("validate_new_tablet_ranges: gap or overlap at boundary {} "
                                 "(ranges[i].upper_bound != ranges[i+1].lower_bound)",

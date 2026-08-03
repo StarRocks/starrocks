@@ -3558,6 +3558,7 @@ public class PlanFragmentBuilder {
                     analyticWindow,
                     node.isUseHashBasedPartition(),
                     node.isSkewed(),
+                    node.isForceMergeSort(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -3577,8 +3578,10 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
+            // Both the skewed and the forceMergeSort paths make the AnalyticNode consume a single
+            // ordered stream via OrderedPartitionExchanger, so the child SortNode must merge.
             passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
-                    node.isSkewed());
+                    node.isSkewed() || node.isForceMergeSort());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
@@ -3642,9 +3645,13 @@ public class PlanFragmentBuilder {
          * In new planner.
          * Add partition exprs of AnalyticEvalNode to SortNode, it is used in pipeline execution engine
          * to eliminate time-consuming LocalMergeSortSourceOperator and parallelize AnalyticNode.
+         *
+         * @param needsMerge when true, forces the SortNode to produce a single merged output stream
+         *                   instead of partition-sorted streams, because the downstream AnalyticNode
+         *                   consumes a single globally-ordered input.
          */
         private static void passPartitionByToSortNode(ExecPlan context, PlanNode childRoot, List<Expr> partitionExprs,
-                                                      boolean isSkewed) {
+                                                      boolean needsMerge) {
             SortNode sortNode = null;
             if (childRoot instanceof SortNode) {
                 sortNode = (SortNode) childRoot;
@@ -3676,7 +3683,7 @@ public class PlanFragmentBuilder {
 
             if (sortNode != null) {
                 // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
-                sortNode.setAnalyticPartitionSkewed(isSkewed);
+                sortNode.setAnalyticNeedsMerge(needsMerge);
             }
         }
 
@@ -3813,10 +3820,6 @@ public class PlanFragmentBuilder {
             }
 
             ExecGroup execGroup = execGroups.newExecGroup();
-            // TODO(by satanson): only all children of Set operator are colocate branch, we turn on execGroup.
-            //  if colocate set operator has bucket-shuffle branch, BE need tackle this situation to avoid
-            //  query hanging forever.
-            boolean canExecGroup = true;
             Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
@@ -3825,9 +3828,19 @@ public class PlanFragmentBuilder {
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
                 ExecGroup inputExecGroup = inputExecGroups.get(i);
+                // This branch's exec group is about to disappear -- merged into the Set operator's
+                // group below (which we then disable), or simply dropped when the branch sits
+                // behind an exchange. Runtime filters built inside the branch were stamped with
+                // build_from_group_execution back when that group was still colocate
+                // (RuntimeFilterPushDownContext stamps it as the join is built), and merge() copies
+                // only node ids -- so nothing would ever clear the flag. The BE would keep treating
+                // those probes as group-colocate filters and refuse to push them down, even though
+                // no colocate TExecGroup is emitted for them any more. disableColocateGroup() drops
+                // that metadata; it walks only this group's own node ids, so a colocate group
+                // elsewhere in the plan is left untouched.
+                inputExecGroup.disableColocateGroup(inputFragment.getPlanRoot());
                 execGroups.remove(inputExecGroup);
                 if (inputFragment.getPlanRoot() instanceof ExchangeNode) {
-                    canExecGroup = false;
                     if (isColocate) {
                         inputFragment.getChildren().forEach(fragment -> {
                             fragment.setOutputPartition(
@@ -3845,11 +3858,30 @@ public class PlanFragmentBuilder {
             execGroup.add(setOperationNode);
 
             setOperationNode.setColocate(isColocate);
-            if (canExecGroup && isColocate && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
-                execGroup.setColocateGroup();
-            } else {
-                execGroup.disableColocateGroup(setOperationNode);
-            }
+            // Never run a Set operator inside a colocate exec group: it hangs forever.
+            //
+            // A colocate Set operator carries localPartitionByExprs, so on the BE
+            // UnionNode::decompose_to_pipeline routes each branch through
+            // maybe_interpolate_local_bucket_shuffle_exchange, which returns early -- without
+            // interpolating a grouped exchange -- whenever the branch source reports
+            // could_local_shuffle() == false. A group-execution scan always reports false. The
+            // branch pipelines therefore stay in the colocate exec group but are terminated by a
+            // plain LocalExchangeSink instead of a GroupedExecutionSink.
+            //
+            // ColocateExecutionGroup submits its logical bucket groups in waves of physical dop
+            // and the only thing that advances a wave is
+            // GroupedExecutionSinkOperator::set_finishing() -> submit_next_driver(). With no
+            // grouped sink on those pipelines, the groups beyond the first wave are never
+            // submitted, the gather exchanger never sees all sinkers finish, and every downstream
+            // driver stays INPUT_EMPTY forever. Reproduces whenever
+            // bucket groups >= 2 * physical dop (e.g. INSERT INTO, whose sink fragment dop is
+            // forced down in InsertPlanner).
+            //
+            // Group execution buys nothing for this shape anyway -- the gather exchanger at the
+            // Set operator collapses logical dop back to physical dop, so the per-group agg/join
+            // benefit is already lost -- hence disabling it outright rather than teaching the BE
+            // to split the group here.
+            execGroup.disableColocateGroup(setOperationNode);
             currentExecGroup = execGroup;
             return setOperationFragment;
         }

@@ -203,19 +203,18 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             (!_has_remain || i != _flat_paths.size() - 1)) {
             // try to use dict encoding for flat json
             opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         }
-        // Propagate the compression LEVEL too. ColumnMetaPB.compression_level has
-        // no proto default, so a fresh child meta would otherwise carry level 0.
-        // For ZSTD, get_block_compression_codec(ZSTD, level=0) resolves to
-        // instance(0) == nullptr (valid levels are 1..22), which would (a) store
-        // the sub-column UNCOMPRESSED and (b) make the compression dict sampling gate -- which
-        // requires a non-null codec -- never fire, silently disabling the shared
-        // dict on exactly the `remain` blob it targets. Copying the parent level
-        // (default -1) resolves ZSTD to its default-level instance.
+        // Inherit both the codec and its level from the parent JSON column. The level
+        // matters more than it looks: ColumnMetaPB.compression_level has no proto
+        // default, so a fresh child meta would carry level 0, and for ZSTD
+        // get_block_compression_codec(ZSTD, 0) resolves to instance(0) == nullptr
+        // (valid levels are 1..22). That would store the sub-column UNCOMPRESSED and
+        // also keep the compression-dict gate, which requires a non-null codec, from
+        // ever firing on the `remain` blob it targets. The parent level (default -1)
+        // resolves to ZSTD's default-level instance.
+        opts.meta->set_compression(_json_meta->compression());
         opts.meta->set_compression_level(_json_meta->compression_level());
 
         if (_flat_types[i] == LogicalType::TYPE_JSON) {

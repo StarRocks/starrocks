@@ -42,7 +42,7 @@ public:
 private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
     StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context,
-                                                           bool is_partition_topn, bool is_partition_skewed,
+                                                           bool is_partition_topn, bool analytic_need_merge,
                                                            bool is_merging, bool enable_parallel_merge,
                                                            bool is_per_pipeline);
 
@@ -64,9 +64,6 @@ private:
     std::vector<ExprContext*> _analytic_partition_exprs;
 
     std::vector<ExprContext*> _local_partition_exprs;
-
-    // Cached descriptor for the materialized tuple. Assigned in Prepare().
-    TupleDescriptor* _materialized_tuple_desc;
 
     // True if the _limit comes from DEFAULT_ORDER_BY_LIMIT and option
     // ABORT_ON_DEFAULT_LIMIT_EXCEEDED is set.

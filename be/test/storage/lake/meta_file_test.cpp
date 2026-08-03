@@ -134,7 +134,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_tiny.dat");
         segment_meta->set_size(100);
     }
-    builder.add_rowset(rs_tiny, {}, {}, {}, {});
+    builder.add_rowset(rs_tiny, {}, {}, {}, {}, {});
 
     RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
     rs_large.set_num_rows(10000);
@@ -146,7 +146,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_large.dat");
         segment_meta->set_size(50000);
     }
-    builder.add_rowset(rs_large, {}, {}, {}, {});
+    builder.add_rowset(rs_large, {}, {}, {}, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
 
@@ -866,6 +866,76 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(7, written.del_files(0).op_offset());
     EXPECT_EQ(7, written.del_files(1).op_offset());
     EXPECT_EQ(118, metadata->next_rowset_id());
+}
+
+// apply_opwrite path: op_write.del_num_rows (parallel to dels_meta) is recorded into
+// DelfileWithRowsetId.num_rows; del files without a recorded count leave num_rows unset.
+TEST_F(MetaFileTest, test_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write.add_dels_meta()->set_name("d1.del");
+    op_write.add_dels_meta()->set_name("d2.del");
+    op_write.add_dels_meta()->set_name("d3.del");
+    // del_num_rows is parallel to dels_meta; the third is left unrecorded on purpose.
+    op_write.add_del_num_rows(40);
+    op_write.add_del_num_rows(60);
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(3, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        total += rowset.del_files(i).num_rows(); // absent reads as 0
+    }
+    EXPECT_EQ(100, total); // 40 + 60 + 0
+    EXPECT_TRUE(rowset.del_files(0).has_num_rows());
+    EXPECT_FALSE(rowset.del_files(2).has_num_rows());
+}
+
+// batch path: op_write.del_num_rows is carried through batch_apply_opwrite/set_final_rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_del_num_rows(70);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s2.dat");
+    op_write2.add_dels_meta()->set_name("d2.del");
+    op_write2.add_del_num_rows(30);
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        ASSERT_TRUE(rowset.del_files(i).has_num_rows());
+        total += rowset.del_files(i).num_rows();
+    }
+    EXPECT_EQ(100, total); // 70 + 30
 }
 
 // The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace

@@ -131,10 +131,12 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
             // Rule only applies if there is exactly one partition expression,
             // and that expression is a direct ColumnReference (not a function or expression).
+            // An explicit [merge_sort] hint picks the merge-sort strategy instead, so leave it alone.
             return partitionExprs != null
                     && partitionExprs.size() == 1
                     && lwo.getOrderByElements() != null
-                    && !lwo.getOrderByElements().isEmpty();
+                    && !lwo.getOrderByElements().isEmpty()
+                    && !lwo.isForceMergeSort();
         }
         return false;
     }

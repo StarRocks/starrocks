@@ -985,7 +985,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
         orc::TruthValue val = orc::TruthValue::NO;
         if (node_type == TExprNodeType::BOOL_LITERAL) {
             Expr* literal = const_cast<Expr*>(conjunct);
-            auto ptr = literal->evaluate_checked(nullptr, nullptr).value();
+            ASSIGN_OR_RETURN(auto ptr, literal->evaluate_checked(nullptr, nullptr));
             const Datum& datum = ptr->get(0);
             if (datum.get_int8()) {
                 val = orc::TruthValue::YES;

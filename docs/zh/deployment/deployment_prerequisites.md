@@ -37,7 +37,9 @@ StarRocks 支持 HDD 和 SSD 作为存储介质。
 
 ## 操作系统
 
-StarRocks 支持在 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、Ubuntu Linux 22.04 或 Ubuntu Linux 24.04 上部署。
+对于 StarRocks v4.1 及更早版本，支持的操作系统包括 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、Ubuntu Linux 22.04 和 Ubuntu Linux 24.04。
+
+自 StarRocks v4.2 起，基于 Rocky Linux 9 构建的二进制文件要求 glibc 2.34 或更高版本。因此，这些二进制文件无法在 glibc 低于 2.34 的操作系统上运行，包括 EL7 和 EL8 发行版、CentOS 8、Alibaba Cloud Linux 3、Kylin OS V10 以及 Amazon Linux 2。
 
 ## 软件
 

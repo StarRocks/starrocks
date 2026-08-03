@@ -991,6 +991,18 @@ CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 // The increased frequency of priority for remaining tasks in BlockingPriorityQueue.
 CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
 
+// Whether ThreadPool swallows an exception thrown by a task and keeps the worker running.
+//
+// false (default): the task body has no enclosing catch clause, so an escaping exception
+// finds no handler and terminates the process at the throw point. Loud, and no task can
+// report success without having produced a result.
+//
+// true: the exception is logged and the worker moves on to the next task. This keeps the
+// process alive but does NOT make the task exception safe -- a task whose result write is
+// skipped while its completion signal still fires is reported to its waiter as success.
+// Only turn this on to mitigate a crash loop, and expect the failure to become silent.
+CONF_mBool(enable_threadpool_catch_task_exception, "false");
+
 // Sync tablet_meta when modifing meta.
 CONF_mBool(sync_tablet_meta, "false");
 
@@ -1570,6 +1582,20 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
+// tablet from cumulative selection (the size-tiered small-file merge, which favors small
+// freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
+// deleted rows first) to drop deleted rows and shrink their delete vectors:
+//   1. lake_pk_compaction_base_delete_ratio_threshold: the tablet's aggregate delete ratio
+//      (sum(num_dels)/sum(num_rows) across rowsets) reaches this fraction.
+//   2. lake_pk_compaction_base_delete_rows_threshold: the tablet's absolute delete-row count
+//      (sum(num_dels)) reaches this many rows. This matters because on hot update/delete tables
+//      the deletes bloat the delete vectors and waste space (delvec bytes ~= num_dels * 0.23)
+//      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
+// Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
+// deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
+CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
 // below). Enabled by default: low-value sparse mid-tier picks are skipped per the
 // thresholds below. Set to false to turn off the entire gate in one step — every picked
@@ -1918,7 +1944,14 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 // 2, print exceptions' stack whose prefix is not in the black list
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
-CONF_String(exception_stack_white_list, "std::");
+// `starrocks::BadStatusOrAccess` comes from an unguarded StatusOr::value() and is caught nowhere,
+// so every occurrence is a bug. The stack recorded at the throw site is the only way to locate it:
+// by the time a catch handler runs the throwing frames are already unwound, so a stack taken there
+// only shows the catch site.
+// Keep it an exact type rather than a bare `starrocks::` prefix, which would also match
+// starrocks::RuntimeException. That one exists specifically to opt out of this stack printing (see
+// be/src/runtime/exception.h) because it is thrown per row on hot paths such as cast failures.
+CONF_String(exception_stack_white_list, "std::,starrocks::BadStatusOrAccess");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 // PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
@@ -2141,6 +2174,15 @@ CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor

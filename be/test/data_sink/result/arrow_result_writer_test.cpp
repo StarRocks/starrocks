@@ -36,11 +36,9 @@ TEST(ArrowResultWriterTest, close) {
     std::vector<ExprContext*> output_expr_ctxs;
     std::vector<std::string> output_column_names;
 
-    RowDescriptor row_desc;
-
     RuntimeProfile* profile = new RuntimeProfile("ArrowResultWriterTest");
 
-    ArrowResultWriter writer(sinker, output_expr_ctxs, output_column_names, profile, row_desc);
+    ArrowResultWriter writer(sinker, output_expr_ctxs, output_column_names, profile);
 
     Status st = writer.close();
     ASSERT_TRUE(st.ok());

@@ -121,6 +121,14 @@ message AbortTxnResponse {
 message DeleteTabletRequest {
     // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
+    // Whether these tablets belong to a range-distributed table. Such a table's tablets share physical
+    // data files with the tablets a reshard (tablet split / merge) produced, instead of the reshard
+    // rewriting the data, so BE must not delete their data files -- the tablets that inherited them are
+    // still reading them. BE can otherwise only infer this from a dropped tablet's own metadata, which a
+    // reshard leaves behind and vacuum then removes; once it is gone the tablet looks non-range and its
+    // still-shared files get deleted. FE reads the table definition, so its answer survives that.
+    // Absent from an older FE, which leaves BE on the metadata-derived answer it used before.
+    optional bool is_range_distribution = 2;
 }
 
 message DeleteTabletResponse {

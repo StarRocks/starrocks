@@ -40,7 +40,7 @@ TEST(MergeCascadeTest, merge_cursor_test) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
 
     struct ChannelChunkProvider {
@@ -183,7 +183,7 @@ TEST(MergeCascadeTest, merge_sorted_chunks) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
     auto desc = SortDescs::asc_null_first(1);
     {
