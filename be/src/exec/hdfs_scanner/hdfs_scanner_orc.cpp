@@ -471,9 +471,16 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // create wrapped input stream.
     RETURN_IF_ERROR(open_random_access_file());
     if (_input_stream == nullptr) {
+<<<<<<< HEAD:be/src/exec/hdfs_scanner/hdfs_scanner_orc.cpp
         _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
         _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx->lazy_column_coalesce_counter);
+=======
+        ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
+        _input_stream =
+                std::make_unique<ORCHdfsFileStream>(_file.get(), file_size, _shared_buffered_input_stream.get());
+        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx->format_scan_context.lazy_column_coalesce_counter);
+>>>>>>> 2154578486 ([BugFix] Check the status before unwrapping a StatusOr (#77052)):be/src/connector/hive/scanner/hdfs_scanner_orc.cpp
         _input_stream->set_app_stats(&_app_stats);
     }
     ORCHdfsFileStream* orc_hdfs_file_stream = _input_stream.get();

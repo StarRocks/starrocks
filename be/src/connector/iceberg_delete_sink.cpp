@@ -237,8 +237,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     }
 
     // Create filesystem
+<<<<<<< HEAD:be/src/connector/iceberg_delete_sink.cpp
     std::shared_ptr<FileSystem> fs =
             FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
+=======
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)));
+>>>>>>> 2154578486 ([BugFix] Check the status before unwrapping a StatusOr (#77052)):be/src/connector/iceberg/iceberg_delete_sink.cpp
 
     // For delete files, we only need file_path and row_position columns
     std::vector<std::string> column_names = {"file_path", "pos"};

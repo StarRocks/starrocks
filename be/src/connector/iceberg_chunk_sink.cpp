@@ -81,11 +81,22 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
+<<<<<<< HEAD:be/src/connector/iceberg_chunk_sink.cpp
 StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+=======
+StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(int32_t driver_id) {
+    auto ctx = _ctx;
+    auto* runtime_state = ctx->runtime_state;
+    if (runtime_state == nullptr) {
+        return Status::InternalError("IcebergChunkSinkContext requires runtime_state");
+    }
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
+>>>>>>> 2154578486 ([BugFix] Check the status before unwrapping a StatusOr (#77052)):be/src/connector/iceberg/iceberg_chunk_sink.cpp
     auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(
