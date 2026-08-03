@@ -746,22 +746,31 @@ public class PropertyAnalyzer {
         String refreshMode = null;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
-            MaterializedView.RefreshMode parsed;
-            try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
-                        ". Only INCREMENTAL, PCT are supported.");
-            }
-            // AUTO is intentionally not exposed to users; the implementation is preserved
-            // internally for future revival.
-            if (parsed == MaterializedView.RefreshMode.AUTO) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
-                        ". Only INCREMENTAL, PCT are supported.");
-            }
+            parseRefreshMode(refreshMode);
             properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }
         return refreshMode;
+    }
+
+    /**
+     * Parse a user supplied refresh mode. Shared by the `refresh_mode` table property and the
+     * `default_mv_refresh_mode` FE config so every entry point accepts the same set of values.
+     */
+    public static MaterializedView.RefreshMode parseRefreshMode(String refreshMode) {
+        MaterializedView.RefreshMode parsed;
+        try {
+            parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                    ". Only INCREMENTAL, PCT are supported.");
+        }
+        // AUTO is intentionally not exposed to users; the implementation is preserved
+        // internally for future revival.
+        if (parsed == MaterializedView.RefreshMode.AUTO) {
+            throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                    ". Only INCREMENTAL, PCT are supported.");
+        }
+        return parsed;
     }
 
     public static List<TableName> analyzeExcludedTables(Map<String, String> properties,

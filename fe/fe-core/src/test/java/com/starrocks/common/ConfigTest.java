@@ -141,6 +141,48 @@ public class ConfigTest {
         Assertions.assertEquals(99, Config.adaptive_choose_instances_threshold);
     }
 
+    @Test
+    public void testDefaultMvRefreshMode() throws Exception {
+        String origin = Config.default_mv_refresh_mode;
+        try {
+            Config.setMutableConfig("default_mv_refresh_mode", "pct", false, "");
+            Assertions.assertEquals("pct", Config.default_mv_refresh_mode);
+
+            Config.setMutableConfig("default_mv_refresh_mode", "INCREMENTAL", false, "");
+            Assertions.assertEquals("INCREMENTAL", Config.default_mv_refresh_mode);
+
+            // A typo has to be rejected here, not on every later read of the mv refresh mode
+            Assertions.assertThrows(DdlException.class, () ->
+                    Config.setMutableConfig("default_mv_refresh_mode", "incrementall", false, ""));
+            Assertions.assertThrows(DdlException.class, () ->
+                    Config.setMutableConfig("default_mv_refresh_mode", "", false, ""));
+            // AUTO is not exposed to users, same as the refresh_mode table property
+            Assertions.assertThrows(DdlException.class, () ->
+                    Config.setMutableConfig("default_mv_refresh_mode", "auto", false, ""));
+
+            Assertions.assertEquals("INCREMENTAL", Config.default_mv_refresh_mode);
+        } finally {
+            Config.default_mv_refresh_mode = origin;
+        }
+    }
+
+    @Test
+    public void testDefaultMvRefreshModeFromConfigFile() throws Exception {
+        String origin = Config.default_mv_refresh_mode;
+        try {
+            // ADMIN SET FRONTEND CONFIG ... PERSISTENT writes into fe.conf, so the value read back
+            // on the next startup has to go through the same validation
+            URL resource = getClass().getClassLoader()
+                    .getResource("conf/config_test_invalid_mv_refresh_mode.properties");
+            assert resource != null;
+            String confFile = Paths.get(resource.toURI()).toFile().getAbsolutePath();
+            Assertions.assertThrows(InvalidConfException.class, () -> config.init(confFile));
+            Assertions.assertEquals(origin, Config.default_mv_refresh_mode);
+        } finally {
+            Config.default_mv_refresh_mode = origin;
+        }
+    }
+
     private static class ConfigForArray extends ConfigBase {
 
         @ConfField(mutable = true)

@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -260,6 +261,14 @@ public class ConfigBase {
                     throw new InvalidConfException("'authentication_chain' configuration invalid, " +
                             "'native' must be in the list, and cannot have duplicates, current value: "
                             + confVal);
+                }
+                break;
+            case "default_mv_refresh_mode":
+                try {
+                    PropertyAnalyzer.parseRefreshMode(confVal);
+                } catch (IllegalArgumentException e) {
+                    throw new InvalidConfException("'default_mv_refresh_mode' configuration invalid, " +
+                            "only INCREMENTAL, PCT are supported, current value: " + confVal);
                 }
                 break;
             case "db_used_data_quota_update_interval_secs":
