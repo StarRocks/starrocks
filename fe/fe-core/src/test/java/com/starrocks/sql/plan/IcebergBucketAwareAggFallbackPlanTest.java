@@ -100,6 +100,17 @@ public class IcebergBucketAwareAggFallbackPlanTest extends ConnectorPlanTestBase
         assertContains(plan, "AGGREGATE (update finalize)");
     }
 
+    // an unused second bucket dimension (bucket(1024, other_id)) must not mask the fallback:
+    // the scan only advertises the intersected dimension, bucket(4, project_id)
+    @Test
+    public void testUnusedBucketDimensionDoesNotMaskFallback() throws Exception {
+        String sql = "select project_id, email, count(*) from t_events_multibucket " +
+                "where project_id = 100 group by project_id, email";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "AGGREGATE (merge finalize)");
+        assertNotContains(plan, "AGGREGATE (update finalize)");
+    }
+
     // joins keep bucket-aware behavior (fallback is scoped to SHUFFLE_AGG requirements)
     @Test
     public void testColocateJoinUnaffected() throws Exception {

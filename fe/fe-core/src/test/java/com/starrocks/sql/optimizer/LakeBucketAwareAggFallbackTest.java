@@ -74,13 +74,13 @@ public class LakeBucketAwareAggFallbackTest {
     public void fallbackWhenOneBucketAndHighNdv() {
         // post-predicate statistics: equality already reduced project_id NDV to 1
         assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4));
+                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4, 1));
     }
 
     @Test
     public void keepWhenManyBucketsSurvive() {
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, null, stats(10_000_000, 1000, 500_000), sv(), 4));
+                aggRequire, buckets16, colMap, null, stats(10_000_000, 1000, 500_000), sv(), 4, 1));
     }
 
     @Test
@@ -88,7 +88,7 @@ public class LakeBucketAwareAggFallbackTest {
         HashDistributionDesc groupByBucketColOnly = new HashDistributionDesc(
                 List.of(new DistributionCol(1, true)), HashDistributionDesc.SourceType.SHUFFLE_AGG);
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                groupByBucketColOnly, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4));
+                groupByBucketColOnly, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4, 1));
     }
 
     @Test
@@ -101,7 +101,7 @@ public class LakeBucketAwareAggFallbackTest {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
                 projectIdRef, ConstantOperator.createBigint(100));
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                groupByBucketColOnly, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4));
+                groupByBucketColOnly, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4, 1));
     }
 
     @Test
@@ -111,7 +111,7 @@ public class LakeBucketAwareAggFallbackTest {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
                 projectIdRef, ConstantOperator.createBigint(100));
         assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4));
+                aggRequire, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4, 1));
     }
 
     @Test
@@ -119,13 +119,13 @@ public class LakeBucketAwareAggFallbackTest {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
                 projectIdRef, ConstantOperator.createBigint(100));
         assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, eq, unknownStats(), sv(), 4));
+                aggRequire, buckets16, colMap, eq, unknownStats(), sv(), 4, 1));
     }
 
     @Test
     public void keepWithoutStatsAndWithoutPruningPredicate() {
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, null, unknownStats(), sv(), 4));
+                aggRequire, buckets16, colMap, null, unknownStats(), sv(), 4, 1));
     }
 
     @Test
@@ -134,7 +134,7 @@ public class LakeBucketAwareAggFallbackTest {
                 ConstantOperator.createBigint(1), ConstantOperator.createBigint(2));
         // B = 2 < 4 workers, grouping NDV unknown -> conservative fallback
         assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, in, unknownStats(), sv(), 4));
+                aggRequire, buckets16, colMap, in, unknownStats(), sv(), 4, 1));
     }
 
     @Test
@@ -142,7 +142,7 @@ public class LakeBucketAwareAggFallbackTest {
         HashDistributionDesc joinRequire = new HashDistributionDesc(
                 List.of(new DistributionCol(1, true)), HashDistributionDesc.SourceType.SHUFFLE_JOIN);
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                joinRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4));
+                joinRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 4, 1));
     }
 
     @Test
@@ -150,12 +150,29 @@ public class LakeBucketAwareAggFallbackTest {
         SessionVariable sv = sv();
         sv.setLakeBucketAwareMinBucketsPerWorker(0);
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv, 4));
+                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv, 4, 1));
+    }
+
+    @Test
+    public void highEffectiveDopKeepsModerateGroupCountsOneStage() {
+        // groups (~1000 for the bucket column after damping) exceed the worker count but fit
+        // within workers * effective DOP, so the one-stage plan stays
+        HashDistributionDesc groupByBucketColOnly = new HashDistributionDesc(
+                List.of(new DistributionCol(1, true)), HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        Statistics oneBucketStats = stats(10_000_000, 1000, 500_000);
+        assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
+                groupByBucketColOnly,
+                List.of(new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, projectIdCol)),
+                colMap, null, oneBucketStats, sv(), 4, 1));
+        assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
+                groupByBucketColOnly,
+                List.of(new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, projectIdCol)),
+                colMap, null, oneBucketStats, sv(), 4, 512));
     }
 
     @Test
     public void singleWorkerNeverFallsBack() {
         assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
-                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 1));
+                aggRequire, buckets16, colMap, null, stats(1_000_000, 1, 500_000), sv(), 1, 1));
     }
 }

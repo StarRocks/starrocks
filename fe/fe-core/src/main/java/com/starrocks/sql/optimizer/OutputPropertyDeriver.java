@@ -26,6 +26,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -75,7 +76,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -629,7 +629,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 List<BucketProperty> properties = table.getBucketProperties();
                 Optional<HashDistributionDesc> hashDistributionDesc = computeLakeHashDistributionDesc(
                         hashDistribution.getHashDistributionDesc(), properties, node.getColRefToColumnMetaMap());
-                if (hashDistributionDesc.isPresent() && !shouldFallbackToShuffleAgg(hashDistribution, properties,
+                // the runtime bucket-id space is derived from the bucket properties the scan
+                // actually advertises (the intersection), not from every table bucket transform
+                if (hashDistributionDesc.isPresent() && !shouldFallbackToShuffleAgg(hashDistribution,
+                        ((HashDistributionDescBP) hashDistributionDesc.get()).getBucketProperties(),
                         node, context)) {
                     HashDistributionDesc nullStrictDesc = hashDistributionDesc.get().getNullStrictDesc();
                     return createPropertySetByDistribution(new HashDistributionSpec(nullStrictDesc));
@@ -646,8 +649,16 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                PhysicalIcebergScanOperator node,
                                                ExpressionContext context) {
         ConnectContext ctx = ConnectContext.get();
-        SystemInfoService clusterInfo = ctx.getGlobalStateMgr().getNodeMgr().getClusterInfo();
-        int aliveWorkerNum = ctx.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber();
+        // count only workers eligible for this query: the current warehouse's compute nodes in
+        // shared-data mode, alive backends otherwise
+        int aliveWorkerNum;
+        if (RunMode.isSharedDataMode()) {
+            aliveWorkerNum = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getAliveComputeNodes(ctx.getCurrentComputeResource()).size();
+        } else {
+            aliveWorkerNum = ctx.getAliveBackendNumber();
+        }
+        int effectiveDop = ctx.getSessionVariable().getDegreeOfParallelism(ctx.getCurrentWarehouseId());
         return LakeBucketAwareAggFallback.shouldFallbackToShuffle(
                 requiredSpec.getHashDistributionDesc(),
                 bucketProperties,
@@ -655,7 +666,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 node.getPredicate(),
                 context.getStatistics(),
                 ctx.getSessionVariable(),
-                aliveWorkerNum);
+                aliveWorkerNum,
+                effectiveDop);
     }
 
     @Override

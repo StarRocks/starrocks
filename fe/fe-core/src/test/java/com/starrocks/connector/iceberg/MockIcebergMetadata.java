@@ -116,6 +116,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_BUCKET_AGG_DB_NAME = "bucket_agg_db";
     public static final String MOCKED_BUCKET_AGG_TABLE_NAME = "t_events";
     public static final String MOCKED_BUCKET_AGG_NOSTATS_TABLE_NAME = "t_events_nostats";
+    public static final String MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME = "t_events_multibucket";
 
     private static final List<String> PARTITION_TABLE_NAMES = ImmutableList.of(MOCKED_PARTITIONED_TABLE_NAME1,
             MOCKED_PARTITIONED_V2_TABLE_NAME,
@@ -339,6 +340,45 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             icebergTableInfoMap.put(tblName,
                     new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 10_000_000, columnStatisticMap));
         }
+
+        // second bucket transform on a column the aggregation does not group by: the scan only
+        // advertises (and the scheduler only uses) the intersected bucket dimension
+        List<Column> multiColumns = ImmutableList.of(
+                new Column("project_id", IntegerType.BIGINT, true),
+                new Column("other_id", IntegerType.BIGINT, true),
+                new Column("email", StringType.STRING, true),
+                new Column("created_at", DateType.DATE, true));
+        Schema multiSchema = new Schema(
+                required(1, "project_id", Types.LongType.get()),
+                required(2, "other_id", Types.LongType.get()),
+                required(3, "email", Types.StringType.get()),
+                required(4, "created_at", Types.DateType.get()));
+        PartitionSpec multiSpec = PartitionSpec.builderFor(multiSchema)
+                .bucket("project_id", 4).bucket("other_id", 1024).build();
+        List<Column> multiFullSchemas = addMetaColumns(multiColumns);
+        TestTables.TestTable multiBaseTable = TestTables.create(
+                new File(getStarRocksHome() + "/" + MOCKED_BUCKET_AGG_DB_NAME + "/"
+                        + MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME),
+                MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME, multiSchema, multiSpec, 1);
+        MockIcebergTable multiMockTable = new MockIcebergTable(
+                MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME.hashCode(), MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME,
+                MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_BUCKET_AGG_DB_NAME,
+                MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME, multiFullSchemas, multiBaseTable, null, "");
+        Map<String, ColumnStatistic> multiStats = multiFullSchemas.stream().map(Column::getName)
+                .collect(Collectors.toMap(Function.identity(), col -> ColumnStatistic.unknown()));
+        multiStats.put("project_id", ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(1000).setDistinctValuesCount(1000)
+                .setAverageRowSize(8).setNullsFraction(0).build());
+        multiStats.put("other_id", ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100_000).setDistinctValuesCount(100_000)
+                .setAverageRowSize(8).setNullsFraction(0).build());
+        multiStats.put("email", ColumnStatistic.builder()
+                .setDistinctValuesCount(2_000_000).setAverageRowSize(20).setNullsFraction(0).build());
+        multiStats.put("created_at", ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(20000).setDistinctValuesCount(365)
+                .setAverageRowSize(4).setNullsFraction(0).build());
+        icebergTableInfoMap.put(MOCKED_BUCKET_AGG_MULTIBUCKET_TABLE_NAME,
+                new IcebergTableInfo(multiMockTable, Lists.newArrayList(), 10_000_000, multiStats));
     }
 
     public static void mockPartitionTransforms() throws IOException {

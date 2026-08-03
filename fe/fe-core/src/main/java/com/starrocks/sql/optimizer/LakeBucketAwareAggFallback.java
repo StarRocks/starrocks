@@ -58,7 +58,8 @@ public final class LakeBucketAwareAggFallback {
                                                   ScalarOperator scanPredicate,
                                                   Statistics statistics,
                                                   SessionVariable sv,
-                                                  int aliveWorkerNum) {
+                                                  int aliveWorkerNum,
+                                                  int effectiveDop) {
         if (requiredDesc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
             return false;
         }
@@ -74,7 +75,7 @@ public final class LakeBucketAwareAggFallback {
         // Few buckets survive: the one-stage plan caps aggregation parallelism at survivingBuckets
         // serial streams. Keep it only when the aggregation output is small enough that those
         // streams stay cheap; with unknown grouping statistics assume the worst.
-        int totalDop = aliveWorkerNum * Math.max(1, sv.getPipelineDop());
+        int totalDop = aliveWorkerNum * Math.max(1, effectiveDop);
         OptionalDouble groupCount = estimateGroupCount(requiredDesc, colRefToColumnMetaMap, scanPredicate, statistics);
         return groupCount.isEmpty() || groupCount.getAsDouble() > totalDop;
     }
