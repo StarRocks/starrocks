@@ -37,6 +37,7 @@
 #include "storage/primary_index.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sstable/comparator.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -170,25 +171,27 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     } else {
         ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->del_location(_tablet_id, name)));
     }
-    size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
-    std::vector<uint8_t> content(sz);
+    const size_t del_size_bytes = serde::ColumnArraySerde::max_serialized_size(deletes);
+    std::vector<uint8_t> content(del_size_bytes);
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
 
     // For a large del file, also emit a tombstone sstable so publish can ingest it directly instead of
-    // inserting every deleted key into the persistent-index memtable -- the per-key insert dominates a
-    // large delete's publish. Gated on the del size (reusing pk_index_parallel_execution_min_rows), NOT on
-    // eager PK-index build: eager build is triggered by upsert spill volume, so a pure delete never enables
-    // it -- but pure deletes are exactly what we want to cover. Shared-data primary-key tablets always use
-    // the cloud-native persistent index, so publish can ingest this sstable unconditionally. Built outside
-    // the lock (I/O heavy); the entry version is 0 here and is stamped to the publish version at ingest via
-    // shared_version (see the tombstone projection in PersistentIndexSstable::multi_get).
-    const size_t del_sst_min_rows =
-            static_cast<size_t>(std::max<int64_t>(config::pk_index_parallel_execution_min_rows, 0));
+    // accumulating every tombstone in the persistent-index memtable. This avoids oversized memtables and
+    // repeated flushes across large del files; reverse lookup is independently parallelized in both erase
+    // paths. Use the eager-build byte threshold, but do not depend on the upsert-side eager writer being
+    // enabled: a pure delete has no upsert spill to enable it. Shared-data primary-key tablets always use the
+    // cloud-native persistent index, so publish can ingest this sstable unconditionally. Built outside the lock
+    // (I/O heavy); the entry version is 0 here and is stamped to the publish version at ingest via shared_version
+    // (see the tombstone projection in PersistentIndexSstable::multi_get).
+    const int64_t eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+    const bool should_build_del_sst =
+            !deletes.empty() &&
+            (eager_build_threshold_bytes <= 0 || del_size_bytes >= static_cast<size_t>(eager_build_threshold_bytes));
     FileInfo del_sst_info; // empty name => no tombstone sstable for this del file (publish uses memtable erase)
     PersistentIndexSstableRangePB del_sst_range;
-    if (deletes.size() > del_sst_min_rows) {
+    if (should_build_del_sst) {
         ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema()->primary_key_encoding_type_or_error());
         std::vector<ColumnId> pk_columns(tablet_schema()->num_key_columns());
         std::iota(pk_columns.begin(), pk_columns.end(), 0);
@@ -202,7 +205,8 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         // sort only when necessary.
         std::vector<Slice> sorted;
         const Slice* sst_keys = vkeys;
-        auto less = [](const Slice& a, const Slice& b) { return a.compare(b) < 0; };
+        const auto* comparator = sstable::BytewiseComparator();
+        auto less = [comparator](const Slice& a, const Slice& b) { return comparator->Compare(a, b) < 0; };
         if (!std::is_sorted(vkeys, vkeys + deletes.size(), less)) {
             sorted.assign(vkeys, vkeys + deletes.size());
             std::sort(sorted.begin(), sorted.end(), less);

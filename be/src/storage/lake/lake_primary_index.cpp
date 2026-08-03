@@ -325,14 +325,8 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             std::lock_guard<std::mutex> l(*context_ptr->mutex);
             context_ptr->status->update(st);
 
-            // Collect rows to delete: extract segment ID and row ID from old_values
-            // Format: old_value = (segment_id << 32) | row_id
             if (context_ptr->status->ok()) {
-                for (unsigned long old : slot->old_values) {
-                    if (old != NullIndexValue) {
-                        (*context_ptr->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    }
-                }
+                old_values_to_deletes(slot->old_values, context_ptr->deletes);
             }
         };
 

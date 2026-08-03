@@ -29,6 +29,7 @@
 #include "platform/key_cache.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
+#include "storage/sstable/comparator.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
 
@@ -181,7 +182,7 @@ Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys,
     // strictly-increasing check in TableBuilder::Add. Any out-of-order key (a broken caller assumption)
     // still surfaces as an Add error rather than silent corruption.
     for (size_t i = 0; i < n; ++i) {
-        if (i > 0 && sorted_keys[i].compare(sorted_keys[i - 1]) == 0) {
+        if (i > 0 && options.comparator->Compare(sorted_keys[i], sorted_keys[i - 1]) == 0) {
             continue;
         }
         RETURN_IF_ERROR(builder.Add(sorted_keys[i], value_slice));

@@ -56,10 +56,10 @@ public:
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
     // Build an sstable that contains only tombstone entries (NullIndexValue) for the given keys, all at
-    // |version|. Used to apply a large pure-delete without inserting every key into the memtable. |keys|
-    // MUST be sorted ascending (bytewise) and deduplicated, as required by TableBuilder. Each entry is
-    // encoded exactly like a memtable-flushed tombstone (rssid == rowid == UINT32_MAX), so reads and
-    // compaction treat it identically.
+    // |version|. Used to apply a large pure-delete without accumulating tombstones in the memtable and
+    // triggering additional flushes. |keys| MUST be sorted ascending (bytewise) and deduplicated, as required
+    // by TableBuilder. Each entry is encoded exactly like a memtable-flushed tombstone
+    // (rssid == rowid == UINT32_MAX), so reads and compaction treat it identically.
     static Status build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version, WritableFile* wf,
                                           uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 

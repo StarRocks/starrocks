@@ -41,6 +41,7 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -448,33 +449,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Plan how del files interleave with segments (see DelInterleavePlan / build_del_interleave_plan).
     DelInterleavePlan del_plan =
             build_del_interleave_plan(op_write, rowset_id, assigned_global_segments, max_segment_id, del_rebuild_rssid);
-    // The writer pre-builds a tombstone sstable for each sufficiently large del file (see
-    // PkTabletWriter::flush_del_file). del_ssts is parallel to dels_meta (index by del_id); an entry with
-    // an empty name means that del file has no pre-built sstable. When a del file has one, apply the delete
-    // by ingesting it instead of inserting every deleted key into the persistent-index memtable -- the
-    // per-key insert otherwise dominates a large delete's publish. Otherwise (small del file or a
-    // pre-upgrade writer with no del_ssts) fall back to the memtable erase path. The deleted keys' rss_rowid
-    // is still reverse-looked-up from the existing index to build the delete vector.
-    const bool del_ssts_aligned = op_write.del_ssts_size() == op_write.dels_meta_size() &&
-                                  op_write.del_sst_ranges_size() == op_write.dels_meta_size();
-    // Apply one del file's erase into the index with its own rssid, recording shadowed rows in
-    // `new_deletes`. Called at the interleave point (right after the segment it follows) so the
-    // upsert/delete order within this transaction is preserved.
-    auto apply_one_del = [&](uint32_t del_id) -> Status {
-        RETURN_IF_ERROR(state.load_delete(del_id, params));
-        DCHECK(state.deletes(del_id) != nullptr);
-        if (del_ssts_aligned && !op_write.del_ssts(del_id).name().empty()) {
-            RETURN_IF_ERROR(index.bulk_erase(metadata, *state.deletes(del_id), &new_deletes,
-                                             del_plan.del_rssids[del_id], op_write.del_ssts(del_id),
-                                             op_write.del_sst_ranges(del_id), metadata->version()));
-        } else {
-            RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_plan.del_rssids[del_id]));
-        }
-        _index_cache.update_object_size(index_entry, index.memory_usage());
-        state.release_delete(del_id);
-        del_plan.del_applied[del_id] = true;
-        return Status::OK();
-    };
     // When too many sst files, we need to compact them early.
     int32_t current_fileset_start_idx = index.current_fileset_index();
     AsyncCompactCBPtr async_compact_cb;
@@ -604,7 +578,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (auto it = del_plan.dels_after_segment.find(global_segment_id);
                 it != del_plan.dels_after_segment.end()) {
                 for (uint32_t del_id : it->second) {
-                    RETURN_IF_ERROR(apply_one_del(del_id));
+                    RETURN_IF_ERROR(
+                            _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+                    _index_cache.update_object_size(index_entry, index.memory_usage());
+                    del_plan.del_applied[del_id] = true;
                 }
             }
             if (async_compact_cb) {
@@ -644,7 +621,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (del_plan.del_applied[del_id]) {
             continue;
         }
-        RETURN_IF_ERROR(apply_one_del(del_id));
+        RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
+        del_plan.del_applied[del_id] = true;
     }
 
     _block_cache->update_memory_usage();
@@ -1172,6 +1151,30 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     return Status::OK();
 }
 
+// Apply one del file to the primary index and collect the rows it shadows. Large del files written by a
+// current BE carry a pre-built tombstone sstable, which bulk_erase ingests directly; small del files and
+// pre-upgrade txn logs fall back to the memtable erase path.
+Status UpdateManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                                 RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("do_delete_latency_us");
+    RETURN_IF_ERROR(state.load_delete(del_id, params));
+    DCHECK(state.deletes(del_id) != nullptr);
+
+    const auto& op_write = params.op_write;
+    const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
+                                      op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
+                                      !op_write.del_ssts(del_id).name().empty();
+    if (has_prebuilt_del_sst) {
+        RETURN_IF_ERROR(index.bulk_erase(params.metadata, *state.deletes(del_id), new_deletes, del_rssid,
+                                         op_write.del_ssts(del_id), op_write.del_sst_ranges(del_id),
+                                         params.metadata->version()));
+    } else {
+        RETURN_IF_ERROR(index.erase(params.metadata, *state.deletes(del_id), new_deletes, del_rssid));
+    }
+    state.release_delete(del_id);
+    return Status::OK();
+}
+
 // Handles condition-based merge for a single chunk of primary keys during parallel publish.
 // This function is invoked concurrently for different chunks to compare condition column values
 // between new and existing rows, deciding which version should be retained.
@@ -1485,8 +1488,9 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // is a safe lower bound for the per-segment count: if the whole rowset is under the
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (config::enable_pk_index_parallel_execution &&
-        params.op_write.rowset().num_rows() >= config::pk_index_parallel_execution_min_rows) {
+        params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }

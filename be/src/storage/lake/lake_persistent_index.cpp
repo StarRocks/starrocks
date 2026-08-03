@@ -39,6 +39,7 @@
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -537,9 +538,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // parallel_upsert. Task granularity is governed by the same config the upsert side uses:
     // SegmentPKIterator splits each segment into pk_index_parallel_execution_min_rows-row chunks (one
     // task each), so use that as both the per-task subset size and the serial/parallel threshold.
-    const size_t min_rows_per_task = config::pk_index_parallel_execution_min_rows > 0
-                                             ? static_cast<size_t>(config::pk_index_parallel_execution_min_rows)
-                                             : 16384;
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     const bool have_backing_store = !_sstable_filesets.empty() || !_inactive_memtables.empty();
     const bool parallel_worthwhile =
             config::enable_pk_index_parallel_execution && have_backing_store && not_founds.size() > min_rows_per_task;
@@ -594,19 +593,17 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     //    old_values so the caller can build the delete vector. Read-only, so parallelise it across
     //    contiguous key-index chunks. Each task builds its own small KeyIndexSet inside the task (avoiding
     //    one giant not_founds set for a large delete).
-    const size_t chunk = config::pk_index_parallel_execution_min_rows > 0
-                                 ? static_cast<size_t>(config::pk_index_parallel_execution_min_rows)
-                                 : 16384;
-    const bool parallel_worthwhile = config::enable_pk_index_parallel_execution && n > chunk &&
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const bool parallel_worthwhile = config::enable_pk_index_parallel_execution && n > min_rows_per_task &&
                                      (!_sstable_filesets.empty() || !_inactive_memtables.empty());
-    const size_t num_tasks = (n + chunk - 1) / chunk;
+    const size_t num_tasks = (n + min_rows_per_task - 1) / min_rows_per_task;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("bulk_erase_lookup_wait_us");
         RETURN_IF_ERROR(parallel_reverse_lookup(
                 n, keys, old_values, num_tasks,
-                [chunk, n](size_t i) {
+                [min_rows_per_task, n](size_t i) {
                     KeyIndexSet key_indexes;
-                    for (size_t j = i * chunk, e = std::min(j + chunk, n); j < e; ++j) {
+                    for (size_t j = i * min_rows_per_task, e = std::min(j + min_rows_per_task, n); j < e; ++j) {
                         key_indexes.insert(j);
                     }
                     return key_indexes;
@@ -614,9 +611,9 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                 parallel_worthwhile));
     }
 
-    // 3. Ingest the tombstone sstable that was pre-built at import time (see PkTabletWriter::flush_del_file),
-    //    instead of building one here -- this removes the per-key sstable-build cost from the publish
-    //    critical path. The sstable was written with entry version 0; stamp the publish version at read
+    // 3. Ingest the tombstone sstable that was pre-built at import time (see PkTabletWriter::flush_del_file).
+    //    This bypasses the active memtable, preventing large deletes from accumulating tombstones and causing
+    //    additional flushes. The sstable was written with entry version 0; stamp the publish version at read
     //    time via shared_version (PersistentIndexSstable::multi_get projects it onto tombstones while
     //    preserving the rssid/rowid sentinel). shared_version>0 requires shared_rssid, which tombstones
     //    ignore. max_rss_rowid = del_rssid<<32|UINT32_MAX (delete-row sentinel; del_rssid uses this

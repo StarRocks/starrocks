@@ -908,7 +908,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
         }
     }
-    // Pre-built tombstone sstables for the del files (eager build only), parallel to dels_meta.
+    // Threshold-based pre-built tombstone sstables for the del files, parallel to dels_meta.
     for (const auto& del_sst : _tablet_writer->del_ssts()) {
         to_file_meta_pb(del_sst, op_write->add_del_ssts());
     }
