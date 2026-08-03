@@ -78,7 +78,7 @@ public class DataSkew {
         if (histogram != null) {
             final var mcv = histogram.getMCV();
 
-            if (mcv != null) {
+            if (!mcv.isEmpty()) {
                 int mcvLimit = Math.min(thresholds.mcvLimit, mcv.size());
                 List<Pair<String, Long>> mcvs = Lists.newArrayList();
                 mcv.entrySet().stream()

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.qe.ConnectContext;
@@ -32,6 +31,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -310,7 +311,7 @@ public class BinaryPredicateStatisticCalculator {
             ColumnStatistic finalNewEstimateColumnStatistics = adjustColumnStatisticsMinMax(
                     newEstimateColumnStatistics, constant, statistics, columnRefOperator, false);
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount)
-                                    .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
+                            .addColumnStatistic(operator, finalNewEstimateColumnStatistics).build())
                     .orElseGet(() -> statistics.withOutputRowCount(rowCount));
         }
     }
@@ -481,10 +482,6 @@ public class BinaryPredicateStatisticCalculator {
 
     private static void estimateMcvToBucket(Map<String, Long> leftMcv, Map<String, Long> estimatedMcv,
                                             Histogram rightHistogram, double distinctValuesCount, Type dataType) {
-        if (rightHistogram.getBuckets() == null) {
-            return;
-        }
-
         for (Map.Entry<String, Long> entry : leftMcv.entrySet()) {
             if (estimatedMcv.containsKey(entry.getKey())) {
                 continue;
@@ -502,17 +499,18 @@ public class BinaryPredicateStatisticCalculator {
         }
     }
 
+    @Nonnull
     private static List<Bucket> estimateBucketToBucket(Histogram leftHistogram, double leftColumnDistinctValue, Type dataTypeLeft,
                                                        Histogram rightHistogram, double rightColumnDistinctValue,
                                                        Type dataTypeRight) {
         if (leftHistogram == null || rightHistogram == null) {
-            return null;
+            return List.of();
         }
 
         List<Bucket> leftBuckets = leftHistogram.getBuckets();
         List<Bucket> rightBuckets = rightHistogram.getBuckets();
-        if (leftBuckets == null || leftBuckets.isEmpty() || rightBuckets == null || rightBuckets.isEmpty()) {
-            return null;
+        if (leftBuckets.isEmpty() || rightBuckets.isEmpty()) {
+            return List.of();
         }
 
         // Assume the distinct values are uniformly distributed.
@@ -654,8 +652,8 @@ public class BinaryPredicateStatisticCalculator {
     }
 
     public static Optional<Histogram> updateHistWithLessThan(ColumnStatistic columnStatistic,
-                                                   Optional<ConstantOperator> constant,
-                                                   boolean containUpper) {
+                                                             Optional<ConstantOperator> constant,
+                                                             boolean containUpper) {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             return Optional.empty();
         }
