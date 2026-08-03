@@ -42,12 +42,7 @@ import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_SPLIT_WINDOW_SKEW;
 import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType.NOT;
@@ -155,16 +150,19 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         @Override
         public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
             if (o == null || getClass() != o.getClass()) {
                 return false;
             }
             SkewedInfo that = (SkewedInfo) o;
-            return column.equivalent(that.column) && value.equivalent(that.value);
+            return Objects.equals(column, that.column) && Objects.equals(value, that.value);
         }
 
         @Override
         public int hashCode() {
-            return com.google.common.base.Objects.hashCode(column, value);
+            return Objects.hash(column, value);
         }
     }
 
