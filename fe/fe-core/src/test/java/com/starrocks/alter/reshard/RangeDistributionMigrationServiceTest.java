@@ -254,6 +254,41 @@ class RangeDistributionMigrationServiceTest {
     }
 
     @Test
+    void malformedSentinelAndDecimalBoundariesFailBeforeSubmission() throws Exception {
+        Tuple minimum = new Tuple(List.of(
+                Variant.minVariant(IntegerType.INT),
+                Variant.of(TypeFactory.createVarcharType(10), "a")));
+        Tuple maximum = new Tuple(List.of(
+                Variant.maxVariant(IntegerType.INT),
+                Variant.of(TypeFactory.createVarcharType(10), "a")));
+
+        Assertions.assertEquals("FAILED", status(service().reconcile(request("minimum", List.of(
+                range(null, minimum), range(minimum, null))))));
+        Assertions.assertEquals("FAILED", status(service().reconcile(request("maximum", List.of(
+                range(null, maximum), range(maximum, null))))));
+        Assertions.assertTrue(jobs.jobs.isEmpty());
+
+        useSingleKeyTable("decimal_boundary", "decimal(5, 2)");
+        Tuple rounding = singleValueTuple(Variant.of(table.getColumn("k1").getType(), "1.234"));
+        Tuple overflow = singleValueTuple(Variant.of(table.getColumn("k1").getType(), "1000.00"));
+
+        Assertions.assertEquals("FAILED", status(service().reconcile(request("decimal-rounding", List.of(
+                range(null, rounding), range(rounding, null))))));
+        Assertions.assertEquals("FAILED", status(service().reconcile(request("decimal-overflow", List.of(
+                range(null, overflow), range(overflow, null))))));
+        Assertions.assertTrue(jobs.jobs.isEmpty());
+    }
+
+    @Test
+    void varbinaryDistributionColumnIsRejectedBeforeSubmission() throws Exception {
+        useSingleKeyTable("varbinary_boundary", "varbinary");
+
+        Assertions.assertEquals("INCOMPATIBLE",
+                status(service().reconcile(request("varbinary", List.of(new TabletRange())))));
+        Assertions.assertTrue(jobs.jobs.isEmpty());
+    }
+
+    @Test
     void nonCanonicalBoundOrientationAndClosedPointAreRejectedBeforeSubmission() {
         Tuple boundary = tuple(0, "a");
         List<TabletRange> oppositeOrientation = List.of(
@@ -376,6 +411,25 @@ class RangeDistributionMigrationServiceTest {
     }
 
     @Test
+    void lostSubmissionResponseRetryIsRunningAfterReplacementIndexInstalled() {
+        String originalRequest = request("lost-response", twoRanges());
+        Assertions.assertEquals("SUBMITTED", status(service().reconcile(originalRequest)));
+        SplitTabletJob retained = jobs.last();
+        long originalIndexId = latestIndex().getId();
+
+        retained.setJobState(TabletReshardJob.JobState.CLEANING);
+        PhysicalPartition physical = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        MaterializedIndex replacement = replaceLatestIndex(physical, twoRanges());
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        Assertions.assertNotEquals(originalIndexId, replacement.getId());
+
+        JsonObject response = response(service().reconcile(originalRequest));
+        Assertions.assertEquals("RUNNING", response.get("status").getAsString());
+        Assertions.assertEquals(retained.getJobId(), response.get("jobId").getAsLong());
+        Assertions.assertEquals(1, jobs.jobs.size());
+    }
+
+    @Test
     void alignedTopologyStillHonorsRetainedJobsRequestBindingAndTableState() {
         Assertions.assertEquals("SUBMITTED", status(service().reconcile(request("conflict", twoRanges()))));
         Assertions.assertEquals("INCOMPATIBLE",
@@ -390,7 +444,7 @@ class RangeDistributionMigrationServiceTest {
         Assertions.assertEquals("SUBMITTED", status(service().reconcile(request("matching", twoRanges()))));
         PhysicalPartition physical = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         replaceLatestIndex(physical, twoRanges());
-        Assertions.assertEquals("RETRYABLE_BUSY", status(service().reconcile(request("matching", twoRanges()))));
+        Assertions.assertEquals("RUNNING", status(service().reconcile(request("matching", twoRanges()))));
 
         jobs.jobs.clear();
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
@@ -416,10 +470,17 @@ class RangeDistributionMigrationServiceTest {
         JsonObject changedIndexId = request.deepCopy();
         changedIndexId.getAsJsonArray("targets").get(0).getAsJsonObject()
                 .addProperty("currentIndexId", latestIndex().getId() + 99);
+        JsonObject reorderedRanges = request.deepCopy();
+        JsonArray encodedRanges = reorderedRanges.getAsJsonArray("targets").get(0).getAsJsonObject()
+                .getAsJsonArray("ranges");
+        encodedRanges.add(encodedRanges.remove(0));
 
         Assertions.assertEquals(
                 RangeDistributionMigrationService.finalDigestForTest(request),
                 RangeDistributionMigrationService.finalDigestForTest(changedIndexId));
+        Assertions.assertEquals(
+                RangeDistributionMigrationService.finalDigestForTest(request),
+                RangeDistributionMigrationService.finalDigestForTest(reorderedRanges));
         Assertions.assertEquals("SUBMITTED", status(service().reconcile(encode(request))));
         SplitTabletJob job = jobs.last();
         long splitChildren = job.getReshardingPhysicalPartitions().values().stream()
@@ -508,6 +569,14 @@ class RangeDistributionMigrationServiceTest {
     private MaterializedIndex latestIndex() {
         PhysicalPartition physical = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         return physical.getLatestBaseIndex();
+    }
+
+    private void useSingleKeyTable(String suffix, String keyType) throws Exception {
+        String tableName = table.getName() + '_' + suffix;
+        starRocksAssert.withTable("create table " + tableName
+                + " (k1 " + keyType + ", v bigint) duplicate key(k1) order by(k1) "
+                + "properties('replication_num'='1')");
+        table = (OlapTable) db.getTable(tableName);
     }
 
     private String request(String requestId, List<TabletRange> ranges) {
@@ -658,6 +727,10 @@ class RangeDistributionMigrationServiceTest {
                 Variant.of(IntegerType.INT, Integer.toString(integer)),
                 string == null ? Variant.nullVariant(TypeFactory.createVarcharType(10))
                         : Variant.of(TypeFactory.createVarcharType(10), string)));
+    }
+
+    private static Tuple singleValueTuple(Variant value) {
+        return new Tuple(List.of(value));
     }
 
     private static TabletRange range(Tuple lower, Tuple upper) {

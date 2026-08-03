@@ -166,6 +166,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 表必须满足以下要求：
 
 - 仅支持非 Colocate 的 Range 分布表，不支持 `range-colocate` 表。
+- 不支持 `VARBINARY` 类型的 Range 分布列。首个版本的边界传输无法无损保留任意二进制值，因此目标集群会在提交分裂前拒绝此类表。
 - 每个逻辑分区必须仅包含一个物理分区。
 - 迁移快照必须覆盖所有逻辑分区和所有可见索引（包括 Rollup 索引），不完整的快照会被拒绝。
 - 拓扑对齐仅支持分裂：目标布局可以与源布局相同，也可以通过精确的 Range 分裂细化为源布局。源端发生合并、目标布局比源布局更细，或任何需要在目标端执行合并的拓扑，都会在启动复制前被拒绝。
@@ -770,4 +771,4 @@ ORDER BY TABLE_NAME;
 - 目标集群必须运行 v4.1 或更高版本。
 - 不支持从存算分离集群迁移到存算一体目标集群。
 - 源集群表使用的每个存储卷都必须在目标集群上预先创建对应的 `src_<volume_name>` 存储卷。
-- Range 分布迁移仅支持分裂，以及每个逻辑分区仅有一个物理分区的非 Colocate 表。不支持 `range-colocate`、源端合并和需要目标端合并的拓扑。
+- Range 分布迁移仅支持分裂，以及每个逻辑分区仅有一个物理分区且 Range 分布列不含 `VARBINARY` 的非 Colocate 表。不支持 `range-colocate`、`VARBINARY` Range Key、源端合并和需要目标端合并的拓扑。

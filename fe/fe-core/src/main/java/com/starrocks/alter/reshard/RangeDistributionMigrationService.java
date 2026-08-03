@@ -21,8 +21,12 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaxVariant;
+import com.starrocks.catalog.MinVariant;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -40,11 +44,14 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.ScalarType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -112,6 +119,10 @@ public final class RangeDistributionMigrationService {
     private record RequestedGroup(GroupKey key, long currentIndexId, List<TabletRange> ranges) {
     }
 
+    private record PreparedRequest(Request request, Map<GroupKey, RequestedGroup> requestedGroups,
+                                   String finalDigest) {
+    }
+
     private record CurrentGroup(GroupKey key, long indexMetaId, long currentIndexId,
                                 List<CurrentTablet> tablets, List<Column> rangeColumns) {
     }
@@ -151,6 +162,16 @@ public final class RangeDistributionMigrationService {
     private static final class IncompatibleException extends RuntimeException {
         private IncompatibleException(String message) {
             super(message);
+        }
+    }
+
+    private static final class BadBoundaryValueException extends IllegalArgumentException {
+        private BadBoundaryValueException(String message) {
+            super(message);
+        }
+
+        private BadBoundaryValueException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 
@@ -200,9 +221,14 @@ public final class RangeDistributionMigrationService {
                 return respond(null, "", Status.RETRYABLE_BUSY, 0, "NOT_LEADER: leader work admission is closed");
             }
             request = decodeRequest(encodedRequest);
-            Plan plan = plan(request);
-            finalDigest = plan.finalDigest();
-            JsonResponse retained = inspectRetainedJobs(plan);
+            PreparedRequest prepared = prepareRequest(request);
+            finalDigest = prepared.finalDigest();
+            JsonResponse retained = inspectRetainedJobs(request, finalDigest);
+            if (retained != null) {
+                return respond(request, finalDigest, retained.status(), retained.jobId(), retained.message());
+            }
+            Plan plan = plan(prepared);
+            retained = inspectRetainedJobs(request, finalDigest);
             if (retained != null) {
                 return respond(request, finalDigest, retained.status(), retained.jobId(), retained.message());
             }
@@ -246,7 +272,21 @@ public final class RangeDistributionMigrationService {
         }
     }
 
-    private Plan plan(Request request) {
+    private PreparedRequest prepareRequest(Request request) {
+        Map<GroupKey, RequestedGroup> decodedGroups = decodeRequestedGroups(request);
+        Map<GroupKey, RequestedGroup> requestedGroups = new LinkedHashMap<>();
+        Map<GroupKey, List<TabletRange>> desiredTopology = new LinkedHashMap<>();
+        for (RequestedGroup decoded : decodedGroups.values()) {
+            List<TabletRange> ranges = List.copyOf(decoded.ranges());
+            RequestedGroup requested = new RequestedGroup(decoded.key(), decoded.currentIndexId(), ranges);
+            requestedGroups.put(requested.key(), requested);
+            desiredTopology.put(requested.key(), requested.ranges());
+        }
+        return new PreparedRequest(request, Map.copyOf(requestedGroups), finalDigest(request, desiredTopology));
+    }
+
+    private Plan plan(PreparedRequest prepared) {
+        Request request = prepared.request();
         try (AutoCloseableLock ignored =
                      new AutoCloseableLock(request.databaseId, request.tableId, LockType.READ)) {
             Database database = metastore.getDb(request.databaseId);
@@ -262,13 +302,11 @@ public final class RangeDistributionMigrationService {
             }
             OlapTable table = (OlapTable) resolvedById;
             validateTableScope(table);
-            Map<GroupKey, RequestedGroup> requestedGroups = decodeRequestedGroups(request);
+            Map<GroupKey, RequestedGroup> requestedGroups = prepared.requestedGroups();
             Map<GroupKey, CurrentGroup> currentGroups = collectCurrentGroups(table);
             if (!requestedGroups.keySet().equals(currentGroups.keySet())) {
                 throw new IncompatibleException("Target group snapshot is incomplete or stale");
             }
-
-            Map<GroupKey, List<TabletRange>> desiredTopology = new LinkedHashMap<>();
             Set<SplitTabletJob.ExternalAdmissionGroup> admissionGroups = new LinkedHashSet<>();
             Map<Long, List<TabletRange>> splits = new LinkedHashMap<>();
             List<GroupKey> orderedKeys = new ArrayList<>(currentGroups.keySet());
@@ -276,25 +314,32 @@ public final class RangeDistributionMigrationService {
             for (GroupKey key : orderedKeys) {
                 RequestedGroup requested = requestedGroups.get(key);
                 CurrentGroup current = currentGroups.get(key);
-                if (requested.currentIndexId() != current.currentIndexId()) {
-                    throw new IncompatibleException("Current index id is stale for " + formatKey(key));
-                }
+                validateSupportedRangeColumns(current.rangeColumns(), key);
                 List<TabletRange> desired;
                 List<CurrentTablet> tablets;
                 try {
-                    validateRangeBounds(requested.ranges(), current.rangeColumns());
+                    desired = sortedRanges(requested.ranges());
+                    validateRangeSequence(desired, current.rangeColumns());
+                } catch (BadBoundaryValueException e) {
+                    throw new BadRequestException("Invalid requested range topology for " + formatKey(key)
+                            + ": " + e.getMessage(), e);
+                } catch (IllegalArgumentException e) {
+                    throw new IncompatibleException("Invalid range topology for " + formatKey(key)
+                            + ": " + e.getMessage());
+                }
+                if (requested.currentIndexId() != current.currentIndexId()) {
+                    throw new IncompatibleException("Current index id is stale for " + formatKey(key));
+                }
+                try {
                     validateRangeBounds(
                             current.tablets().stream().map(CurrentTablet::range).toList(), current.rangeColumns());
-                    desired = sortedRanges(requested.ranges());
                     tablets = sortedTablets(current.tablets());
-                    validateRangeSequence(desired, current.rangeColumns());
                     validateRangeSequence(
                             tablets.stream().map(CurrentTablet::range).toList(), current.rangeColumns());
                 } catch (IllegalArgumentException e) {
                     throw new IncompatibleException("Invalid range topology for " + formatKey(key)
                             + ": " + e.getMessage());
                 }
-                desiredTopology.put(key, desired);
                 admissionGroups.add(new SplitTabletJob.ExternalAdmissionGroup(
                         key.physicalPartitionId(), current.indexMetaId(), current.currentIndexId()));
 
@@ -311,24 +356,23 @@ public final class RangeDistributionMigrationService {
                     }
                 }
             }
-            String finalDigest = finalDigest(request, desiredTopology);
             String stepDigest = stepDigest(splits);
-            return new Plan(request, database, table, finalDigest, stepDigest, splits, admissionGroups);
+            return new Plan(request, database, table, prepared.finalDigest(), stepDigest, splits, admissionGroups);
         }
     }
 
-    private JsonResponse inspectRetainedJobs(Plan plan) {
+    private JsonResponse inspectRetainedJobs(Request request, String finalDigest) {
         JsonResponse matching = null;
         for (TabletReshardJob retained : List.copyOf(jobController.jobs())) {
-            if (retained.getTableId() != plan.request().tableId) {
+            if (retained.getTableId() != request.tableId) {
                 continue;
             }
             if (retained instanceof SplitTabletJob split && split.getExternalRequestId() != null
-                    && split.getExternalRequestId().equals(plan.request().requestId)) {
-                if (!Objects.equals(split.getExternalFinalDigest(), plan.finalDigest())) {
+                    && split.getExternalRequestId().equals(request.requestId)) {
+                if (!Objects.equals(split.getExternalFinalDigest(), finalDigest)) {
                     throw new IncompatibleException("Request id is already bound to a different final topology");
                 }
-                if (!split.isDone() && Objects.equals(split.getExternalStepDigest(), plan.stepDigest())) {
+                if (!split.isDone()) {
                     matching = new JsonResponse(Status.RUNNING, split.getJobId(), "");
                     continue;
                 }
@@ -338,6 +382,13 @@ public final class RangeDistributionMigrationService {
             }
         }
         return matching;
+    }
+
+    private static void validateSupportedRangeColumns(List<Column> columns, GroupKey key) {
+        if (columns.stream().anyMatch(column -> column.getType().isBinaryType())) {
+            throw new IncompatibleException(
+                    "Range migration does not support VARBINARY distribution columns for " + formatKey(key));
+        }
     }
 
     private record JsonResponse(Status status, long jobId, String message) {
@@ -709,9 +760,34 @@ public final class RangeDistributionMigrationService {
             throw new IllegalArgumentException("Range tuple arity does not match distribution columns");
         }
         for (int i = 0; i < values.size(); i++) {
-            if (values.get(i) == null || !values.get(i).getType().equals(columns.get(i).getType())) {
+            Variant value = values.get(i);
+            if (value == null || !value.getType().equals(columns.get(i).getType())) {
                 throw new IllegalArgumentException("Range tuple type does not match distribution column " + i);
             }
+            if (value instanceof MinVariant || value instanceof MaxVariant) {
+                throw new BadBoundaryValueException(
+                        "Finite range tuple contains an infinity sentinel at column " + i);
+            }
+            if (value instanceof NullVariant) {
+                continue;
+            }
+            if (value instanceof DecimalVariant) {
+                validateDecimalValue(value, (ScalarType) columns.get(i).getType(), i);
+            }
+        }
+    }
+
+    private static void validateDecimalValue(Variant value, ScalarType targetType, int columnIndex) {
+        try {
+            BigDecimal exact = new BigDecimal(value.getStringValue())
+                    .setScale(targetType.getScalarScale(), RoundingMode.UNNECESSARY);
+            if (exact.precision() > targetType.getScalarPrecision()) {
+                throw new BadBoundaryValueException(
+                        "Decimal range value exceeds target precision at column " + columnIndex);
+            }
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new BadBoundaryValueException(
+                    "Decimal range value is not exactly representable at column " + columnIndex, e);
         }
     }
 
@@ -807,8 +883,12 @@ public final class RangeDistributionMigrationService {
         keys.sort(Comparator.naturalOrder());
         for (GroupKey key : keys) {
             digest.add(key.physicalPartitionId()).add(key.indexName());
-            for (TabletRange range : topology.get(key)) {
-                digest.add(range.toEncodedString());
+            List<String> encodedRanges = topology.get(key).stream()
+                    .map(TabletRange::toEncodedString)
+                    .sorted()
+                    .toList();
+            for (String encodedRange : encodedRanges) {
+                digest.add(encodedRange);
             }
         }
         return digest.finish();
@@ -880,7 +960,7 @@ public final class RangeDistributionMigrationService {
             GroupKey key = new GroupKey(target.physicalPartitionId, target.indexName);
             List<TabletRange> ranges = target.ranges.stream()
                     .map(TabletRange::fromEncodedString).toList();
-            if (topology.put(key, sortedRanges(ranges)) != null) {
+            if (topology.put(key, ranges) != null) {
                 throw new IllegalArgumentException("Duplicate group");
             }
         }
