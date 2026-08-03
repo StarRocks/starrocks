@@ -75,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -628,7 +629,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 List<BucketProperty> properties = table.getBucketProperties();
                 Optional<HashDistributionDesc> hashDistributionDesc = computeLakeHashDistributionDesc(
                         hashDistribution.getHashDistributionDesc(), properties, node.getColRefToColumnMetaMap());
-                if (hashDistributionDesc.isPresent()) {
+                if (hashDistributionDesc.isPresent() && !shouldFallbackToShuffleAgg(hashDistribution, properties,
+                        node, context)) {
                     HashDistributionDesc nullStrictDesc = hashDistributionDesc.get().getNullStrictDesc();
                     return createPropertySetByDistribution(new HashDistributionSpec(nullStrictDesc));
                 }
@@ -637,6 +639,23 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                     distributionSpec.toString());
         }
         return mergeCTEProperty(PhysicalPropertySet.EMPTY);
+    }
+
+    private boolean shouldFallbackToShuffleAgg(HashDistributionSpec requiredSpec,
+                                               List<BucketProperty> bucketProperties,
+                                               PhysicalIcebergScanOperator node,
+                                               ExpressionContext context) {
+        ConnectContext ctx = ConnectContext.get();
+        SystemInfoService clusterInfo = ctx.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        int aliveWorkerNum = ctx.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber();
+        return LakeBucketAwareAggFallback.shouldFallbackToShuffle(
+                requiredSpec.getHashDistributionDesc(),
+                bucketProperties,
+                node.getColRefToColumnMetaMap(),
+                node.getPredicate(),
+                context.getStatistics(),
+                ctx.getSessionVariable(),
+                aliveWorkerNum);
     }
 
     @Override

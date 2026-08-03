@@ -75,7 +75,7 @@ public final class LakeBucketAwareAggFallback {
         // serial streams. Keep it only when the aggregation output is small enough that those
         // streams stay cheap; with unknown grouping statistics assume the worst.
         int totalDop = aliveWorkerNum * Math.max(1, sv.getPipelineDop());
-        OptionalDouble groupCount = estimateGroupCount(requiredDesc, colRefToColumnMetaMap, statistics);
+        OptionalDouble groupCount = estimateGroupCount(requiredDesc, colRefToColumnMetaMap, scanPredicate, statistics);
         return groupCount.isEmpty() || groupCount.getAsDouble() > totalDop;
     }
 
@@ -139,11 +139,17 @@ public final class LakeBucketAwareAggFallback {
         return best == Long.MAX_VALUE ? OptionalLong.empty() : OptionalLong.of(best);
     }
 
-    // Group count of the required (group-by) columns; empty when any statistic is unknown.
+    // Group count of the required (group-by) columns; empty (treated as high) when a column has
+    // neither a known statistic nor a deterministic predicate bound. Predicates on partition
+    // columns are stripped before scan-statistics estimation (StatisticsCalculator
+    // #removePartitionPredicate), so an equality on the bucket source column does not reduce its
+    // NDV in the scan statistics — re-apply the deterministic bound here.
     private static OptionalDouble estimateGroupCount(HashDistributionDesc requiredDesc,
                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                     ScalarOperator scanPredicate,
                                                      Statistics statistics) {
         List<ColumnRefOperator> refs = new ArrayList<>();
+        Statistics.Builder adjusted = Statistics.buildFrom(statistics);
         for (DistributionCol col : requiredDesc.getDistributionCols()) {
             ColumnRefOperator ref = colRefToColumnMetaMap.keySet().stream()
                     .filter(r -> r.getId() == col.getColId()).findFirst().orElse(null);
@@ -151,8 +157,17 @@ public final class LakeBucketAwareAggFallback {
                 return OptionalDouble.empty();
             }
             ColumnStatistic cs = statistics.getColumnStatistics().get(ref);
+            OptionalLong predicateBound = boundFromPredicate(ref, scanPredicate);
             if (cs == null || cs.isUnknown()) {
-                return OptionalDouble.empty();
+                if (predicateBound.isEmpty()) {
+                    return OptionalDouble.empty();
+                }
+                adjusted.addColumnStatistic(ref, ColumnStatistic.builder()
+                        .setDistinctValuesCount(predicateBound.getAsLong()).build());
+            } else if (predicateBound.isPresent()) {
+                adjusted.addColumnStatistic(ref, ColumnStatistic.buildFrom(cs)
+                        .setDistinctValuesCount(Math.min(cs.getDistinctValuesCount(), predicateBound.getAsLong()))
+                        .build());
             }
             refs.add(ref);
         }
@@ -160,6 +175,6 @@ public final class LakeBucketAwareAggFallback {
             return OptionalDouble.empty();
         }
         return OptionalDouble.of(
-                StatisticsCalculator.computeGroupByStatistics(refs, statistics, Maps.newHashMap()));
+                StatisticsCalculator.computeGroupByStatistics(refs, adjusted.build(), Maps.newHashMap()));
     }
 }

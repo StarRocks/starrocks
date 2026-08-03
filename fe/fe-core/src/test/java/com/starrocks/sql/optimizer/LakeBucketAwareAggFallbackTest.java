@@ -92,6 +92,29 @@ public class LakeBucketAwareAggFallbackTest {
     }
 
     @Test
+    public void keepWhenPredicatePinsGroupingColumn() {
+        // Statistics keep the table-level NDV (partition predicates are stripped before scan
+        // stats estimation), but the equality predicate deterministically pins the grouping
+        // column to one value -> tiny aggregation, keep the one-stage plan.
+        HashDistributionDesc groupByBucketColOnly = new HashDistributionDesc(
+                List.of(new DistributionCol(1, true)), HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
+                projectIdRef, ConstantOperator.createBigint(100));
+        assertFalse(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
+                groupByBucketColOnly, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4));
+    }
+
+    @Test
+    public void fallbackOnPinnedBucketWithHighNdvGrouping() {
+        // Production shape of the bug: table-level NDV survives on the bucket column, the
+        // equality predicate proves a single surviving bucket, grouping includes high-NDV email.
+        ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
+                projectIdRef, ConstantOperator.createBigint(100));
+        assertTrue(LakeBucketAwareAggFallback.shouldFallbackToShuffle(
+                aggRequire, buckets16, colMap, eq, stats(10_000_000, 1000, 500_000), sv(), 4));
+    }
+
+    @Test
     public void fallbackOnEqualityPredicateWithoutStats() {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ,
                 projectIdRef, ConstantOperator.createBigint(100));
