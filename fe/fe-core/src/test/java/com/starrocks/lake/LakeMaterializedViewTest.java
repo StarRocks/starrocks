@@ -70,6 +70,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -327,7 +328,10 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
             Assertions.assertNotNull(statement);
             ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
             TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
-            ExecPlan execPlan = taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, statement);
+            MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                    taskManager.getMVRefreshProcessExecPlan(taskRun, task, executeOption, statement);
+            Assertions.assertNotNull(processExecPlan);
+            ExecPlan execPlan = processExecPlan.execPlan();
             MVTaskRunProcessor processor = (MVTaskRunProcessor) taskRun.getProcessor();
             Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
