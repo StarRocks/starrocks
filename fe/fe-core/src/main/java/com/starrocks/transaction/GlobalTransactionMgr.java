@@ -396,16 +396,24 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     VisibleStateWaiter retryCommitPreparedOnRateLimitExceeded(
             @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
         long startTime = System.currentTimeMillis();
+        long lockTimeoutMs = timeoutMs;
         while (true) {
             try {
-                return commitPreparedTransactionUnderDatabaseWLock(db, transactionId, timeoutMs);
+                return commitPreparedTransactionUnderIntensiveDbLock(db, transactionId, lockTimeoutMs);
             } catch (CommitRateExceededException e) {
                 throttleCommitOnRateExceed(e, startTime, timeoutMs);
+                if (timeoutMs != 0) {
+                    lockTimeoutMs = timeoutMs - (System.currentTimeMillis() - startTime);
+                    // A zero lock timeout means wait forever, so do not retry after a finite budget is exhausted.
+                    if (lockTimeoutMs <= 0) {
+                        throw e;
+                    }
+                }
             }
         }
     }
 
-    private VisibleStateWaiter commitPreparedTransactionUnderDatabaseWLock(
+    VisibleStateWaiter commitPreparedTransactionUnderIntensiveDbLock(
             @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableIdList = transactionState.getTableIdList();
@@ -414,7 +422,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         if (!locker.tryLockTablesWithIntensiveDbLock(
                 db.getId(), tableIdList, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
             String errMsg = String.format(
-                    "get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
+                    "get database/table lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
                     transactionId, db.getFullName(), timeoutMs);
             throw new StarRocksException(errMsg);
         }

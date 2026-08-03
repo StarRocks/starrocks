@@ -23,11 +23,11 @@ public interface TransactionStateListener {
     String getTableName();
 
     // This method is called before changing the in-memory TransactionState to PREPARED.
-    void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+    void prePrepared(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException;
 
     // This method is called before changing a PREPARED transaction to COMMITTED.
-    default void preCommitPreparedTransaction(TransactionState txnState) throws TransactionException {
+    default void preCommit(TransactionState txnState) throws TransactionException {
     }
 
     // This method is called after changing the in-memory TransactionState to PREPARED and before writing the edit log.

@@ -920,8 +920,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public long getPreparedTimeoutMs() {
-        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
-            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
+        return preparedTimeoutMs > 0 ?
+                preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
     }
 
     public void setCommitTime(long commitTime) {

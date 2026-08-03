@@ -262,6 +262,11 @@ public class TransactionStateTest {
             assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
 
+            txn.setPreparedTimeAndTimeout(3000, 0);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));
         }

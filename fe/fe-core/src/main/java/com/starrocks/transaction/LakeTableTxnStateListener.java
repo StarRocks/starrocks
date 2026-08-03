@@ -75,7 +75,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+    public void prePrepared(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         txnState.clearAutomaticPartitionSnapshot();
@@ -160,7 +160,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void preCommitPreparedTransaction(TransactionState txnState) throws TransactionException {
+    public void preCommit(TransactionState txnState) throws TransactionException {
         if (!enableIngestSlowdown()) {
             return;
         }

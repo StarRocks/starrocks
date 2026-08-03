@@ -400,7 +400,7 @@ public class DatabaseTransactionMgr {
 
             List<TransactionStateListener> stateListeners = populateTransactionStateListeners(copiedState, db);
             for (TransactionStateListener listener : stateListeners) {
-                listener.preCommit(copiedState, tabletCommitInfos, tabletFailInfos);
+                listener.prePrepared(copiedState, tabletCommitInfos, tabletFailInfos);
             }
             copiedState.beforeStateTransform(TransactionStatus.PREPARED);
 
@@ -500,7 +500,7 @@ public class DatabaseTransactionMgr {
 
             List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
             for (TransactionStateListener listener : stateListeners) {
-                listener.preCommitPreparedTransaction(transactionState);
+                listener.preCommit(transactionState);
             }
 
             // before state transform
