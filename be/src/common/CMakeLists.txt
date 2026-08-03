@@ -22,6 +22,7 @@ ADD_BE_LIB(Common
   logconfig.cpp
   configbase.cpp
   config.cpp
+  crash_watchdog.cpp
   s3_uri.cpp
   tracer.cpp
   process_exit.cpp
