@@ -1394,12 +1394,13 @@ TEST_F(ArrowScannerTest, TestStreamMessageMetaExtraction) {
     broker_scan_range->ranges = ranges;
 
     std::string junk = "invalid_arrow_stream_data";
-    ByteBufferPtr junk_bb = ByteBuffer::allocate_with_tracker(junk.size()).value();
+    ByteBufferPtr junk_bb = ByteBuffer::allocate_with_tracker(junk.size(), 0, ByteBufferMetaType::KAFKA).value();
     junk_bb->put_bytes(junk.data(), junk.size());
     junk_bb->flip_to_read();
 
-    auto msg_meta = std::make_shared<StreamMessageMeta>(2, 100);
-    junk_bb->set_meta(msg_meta);
+    auto* msg_meta = static_cast<StreamMessageMeta*>(junk_bb->meta());
+    msg_meta->set_partition(2);
+    msg_meta->set_offset(100);
 
     EXPECT_OK(pipe->append(std::move(junk_bb)));
     EXPECT_OK(pipe->finish());

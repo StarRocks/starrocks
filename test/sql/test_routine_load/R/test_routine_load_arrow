@@ -51,16 +51,19 @@ PROPERTIES
 "json_root"="",
 "strict_mode"="false",
 "pause_on_fatal_parse_error"="false",
+"timezone"="Asia/Shanghai",
 "partial_update"="false",
 "trim_space"="false",
 "enclose"="0",
 "escape"="0",
-"log_rejected_record_num"="0"
+"log_rejected_record_num"="0",
+"warehouse"="default_warehouse"
 )
 FROM KAFKA
 (
 "kafka_broker_list"="127.0.0.1:9092",
 "kafka_topic"="arrow_topic",
+"kafka_partitions"="",
 "property.group.id"="arrow_group"
 );
 -- !result
