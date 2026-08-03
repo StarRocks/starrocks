@@ -148,10 +148,49 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
 
+<<<<<<< HEAD
             if (!functionCallExpr.getChild(1).isConstant() || !functionCallExpr.getChild(2).isConstant()) {
                 throw new SemanticException(
                         fnName + " function 's second parameter and third parameter must be constant",
                         functionCallExpr.getPos());
+=======
+            // gram_num is read on the BE as a raw non-nullable INT constant column, with no type or
+            // null check. It is read twice: by ngram_search itself, and -- more dangerously -- by
+            // VectorizedFunctionCallExpr::split_normal_string_to_ngram() while evaluating an NGRAMBF
+            // index in the storage layer, which is reached before ordinary expression evaluation.
+            // "constant" alone is not enough there: a constant of another type (e.g. a JSON
+            // expression) or a constant NULL is a ConstColumn over something that is not an
+            // Int32Column, and reading it crashes the BE. Require a positive integer constant.
+            Expr gramNumExpr = functionCallExpr.getChild(2);
+            Optional<Long> gramNum = extractIntegerValue(gramNumExpr);
+            if (!gramNum.isPresent() || gramNum.get() <= 0 || gramNum.get() > Integer.MAX_VALUE) {
+                throw new SemanticException(
+                        fnName + " function 's third parameter must be a constant positive integer",
+                        gramNumExpr.getPos());
+            }
+        }
+
+        // tokenize(tokenizer_name, content): the tokenizer name is read on the BE at prepare time as
+        // a raw non-nullable VARCHAR constant column, with no type or null check. A constant of
+        // another type -- e.g. cast('english' as time), which the FE cannot fold and so cannot see
+        // is NULL -- reaches the BE as a constant of the wrong shape and crashes it. Require a
+        // string literal naming one of the tokenizers the BE implements. A NULL constant stays
+        // legal: FoldConstantsRule rewrites the whole call to NULL, so it never reaches the BE.
+        if (fnName.equals(FunctionSet.TOKENIZE) && functionCallExpr.hasChild(0)) {
+            Expr tokenizerExpr = functionCallExpr.getChild(0);
+            Expr unwrapped = unwrapConstantString(tokenizerExpr);
+            if (unwrapped instanceof StringLiteral) {
+                String tokenizer = ((StringLiteral) unwrapped).getValue();
+                if (!FunctionSet.SUPPORTED_TOKENIZERS.contains(tokenizer)) {
+                    throw new SemanticException(
+                            "Unknown tokenizer '" + tokenizer + "'. Supported tokenizers are: " +
+                                    String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
+                }
+            } else if (!(unwrapped instanceof NullLiteral)) {
+                throw new SemanticException(
+                        "tokenize function 's first parameter (tokenizer_name) must be a constant string, one of: " +
+                                String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
+>>>>>>> 1412ce564a ([BugFix] Reject tokenize and ngram_search constant arguments that crash the BE (#77102))
             }
         }
         Function fn = functionCallExpr.getFn();
@@ -664,6 +703,90 @@ public class FunctionAnalyzer {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Peel user variables and casts to a string type off an expression, so that a constant string
+     * argument can be recognised through e.g. cast('english' as varchar). A cast to a non-string
+     * type is deliberately not peeled: cast('english' as time) is not a constant string, even
+     * though the FE will later wrap it in an implicit cast back to VARCHAR -- its value is whatever
+     * the inner cast produces, which the FE cannot fold and which is NULL at runtime.
+     */
+    private static Expr unwrapConstantString(Expr expr) {
+        if (expr instanceof UserVariableExpr) {
+            return unwrapConstantString(((UserVariableExpr) expr).getValue());
+        }
+
+        if (expr instanceof CastExpr && expr.getType().isStringType()) {
+            return unwrapConstantString(expr.getChild(0));
+        }
+
+        return expr;
+    }
+
+    /**
+     * Validate that a function parameter is of numeric type.
+     * 
+     * @param paramExpr The parameter expression to validate
+     * @param paramPosition The position description (e.g., "first", "second")
+     * @param paramName The parameter name (e.g., "value", "weight", "compression")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric type
+     */
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
+                                                  String paramName, String functionName, 
+                                                  NodePosition pos) {
+        if (!paramExpr.getType().isNumericType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (%s) to be numeric type, but got: %s",
+                            functionName, paramPosition, paramName, paramExpr.getType().toSql()),
+                    pos);
+        }
+    }
+
+    /**
+     * Validate that a percentile parameter is either numeric type or array of numeric type.
+     * <p>
+     * The percentile parameter can be:
+     * - A single numeric value (e.g., 0.5 for median)
+     * - An array of numeric values (e.g., [0.25, 0.5, 0.75] for quartiles)
+     * <p>
+     * Note: This method only validates the type. Constant validation and value range checks
+     * (ensuring values are between 0 and 1) are performed in TypeChecker during the optimization phase.
+     * 
+     * @param percentileExpr The percentile parameter expression to validate
+     * @param paramPosition The position description (e.g., "second", "third")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric or array type, or if array elements are not numeric
+     */
+    private static void validatePercentileParameter(Expr percentileExpr, String paramPosition, 
+                                                     String functionName, NodePosition pos) {
+        Type percentileType = percentileExpr.getType();
+        
+        // Check if parameter is numeric or array type
+        if (!percentileType.isNumericType() && !percentileType.isArrayType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (percentile) to be numeric type or array type, but got: %s",
+                            functionName, paramPosition, percentileType.toSql()),
+                    pos);
+        }
+        
+        // If it's an array, validate that array elements are numeric type
+        if (percentileType.isArrayType()) {
+            ArrayType arrayType = (ArrayType) percentileType;
+            Type itemType = arrayType.getItemType();
+            if (!itemType.isNumericType()) {
+                throw new SemanticException(
+                        String.format("%s requires the %s parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<%s>",
+                                functionName, paramPosition, itemType.toSql()),
+                        pos);
+            }
+        }
+    }
+
+    /**
+>>>>>>> 1412ce564a ([BugFix] Reject tokenize and ngram_search constant arguments that crash the BE (#77102))
      * Get function by function call expression and argument types.
      *
      * @param session       current connect context

@@ -534,7 +534,48 @@ public class AnalyzeExprTest {
     public void testNgramSearch() {
         analyzeFail("select ngram_search('abc', 'a')");
         analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
+<<<<<<< HEAD
         analyzeFail("select ngram_search(th,th,4) from tall;");
+=======
+        // non-string haystack column (th is datetime in tall)
+        analyzeFail("select ngram_search(th, th, 4) from tall;");
+        // non-string non-constant needle must also be rejected (type check, not constant check)
+        analyzeFail("select ngram_search(ta, th, 4) from tall;");
+        // non-constant needle is now allowed
+        analyzeSuccess("select ngram_search(ta, ta, 4) from tall;");
+        // non-constant gram_num is still rejected
+        analyzeFail("select ngram_search(ta, ta, tc) from tall;");
+        // gram_num must be a positive integer constant: a constant expression of some other type is
+        // not enough. The BE reads it as a raw INT const column (including from the ngram bloom
+        // filter path in the storage layer), so a JSON/NULL constant used to crash the BE.
+        analyzeFail("select ngram_search(ta, 'aabaa', json_query(cast(4 as json), '$.a')) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', null) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', cast(null as int)) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', 0) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', -1) from tall;");
+        analyzeSuccess("select ngram_search(ta, 'aabaa', cast(4 as int)) from tall;");
+    }
+
+    @Test
+    public void testTokenize() {
+        analyzeSuccess("select tokenize('english', 'Today is saturday')");
+        analyzeSuccess("select tokenize('standard', 'Today is saturday')");
+        analyzeSuccess("select tokenize('chinese', '中华人民共和国')");
+        // The tokenizer name is read by the BE as a raw VARCHAR const column at prepare time, so a
+        // constant of any other type (or NULL) used to crash the BE.
+        analyzeFail("select tokenize(cast('english' as time), 'Today is saturday')");
+        analyzeFail("select tokenize(cast('english' as int), 'Today is saturday')");
+        analyzeFail("select tokenize(json_query(cast(4 as json), '$.a'), 'Today is saturday')");
+        // a NULL tokenizer is still accepted: the whole call folds to NULL and never reaches the BE
+        analyzeSuccess("select tokenize(null, 'Today is saturday')");
+        analyzeSuccess("select tokenize(cast(null as varchar), 'Today is saturday')");
+        // a cast to a string type over a string literal is still a constant string
+        analyzeSuccess("select tokenize(cast('english' as varchar), 'Today is saturday')");
+        // unknown tokenizer
+        analyzeFail("select tokenize('nosuchtokenizer', 'Today is saturday')");
+        // non-constant tokenizer name
+        analyzeFail("select tokenize(ta, ta) from tall");
+>>>>>>> 1412ce564a ([BugFix] Reject tokenize and ngram_search constant arguments that crash the BE (#77102))
     }
 
 }
