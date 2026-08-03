@@ -3778,6 +3778,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                     "Max skewed branch count for SplitWindowSkewToUnion rewrite rule must be greater than 0.");
         }
         this.splitWindowSkewToUnionMaxSkewedBranchCount = splitWindowSkewToUnionMaxSkewedBranchCount;
+    }
+
     public boolean isEnableWindowSkewMergeSort() {
         return enableWindowSkewMergeSort;
     }
