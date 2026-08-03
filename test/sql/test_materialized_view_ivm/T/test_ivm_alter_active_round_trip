@@ -1,0 +1,139 @@
+-- name: test_ivm_alter_active_round_trip
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into t1 values
+  ('a', 1, '2023-12-01'),
+  ('b', 2, '2023-12-02'),
+  ('c', 3, '2023-12-03');
+create table t2 (
+  col_int int,
+  tag string
+);
+insert into t2 values (1, 'x'), (2, 'y'), (3, 'z'), (4, 'w');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+
+-- ==============================================================
+-- Case 1: PCT MV, partitioned projection. Control group: PCT has no __ROW_ID__,
+-- so the round trip must behave exactly as before.
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_pct_scan PARTITION BY dt
+REFRESH DEFERRED MANUAL
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int > 1;
+REFRESH MATERIALIZED VIEW test_pct_scan WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_pct_scan ORDER BY col_int;
+ALTER MATERIALIZED VIEW test_pct_scan INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_pct_scan';
+ALTER MATERIALIZED VIEW test_pct_scan ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_pct_scan';
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('d', 4, '2023-12-04');
+REFRESH MATERIALIZED VIEW test_pct_scan WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_pct_scan ORDER BY col_int;
+drop materialized view test_pct_scan;
+
+-- ==============================================================
+-- Case 2: PCT MV, aggregate
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_pct_agg
+REFRESH DEFERRED MANUAL
+AS SELECT dt, SUM(col_int) AS s, COUNT(*) AS c FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;
+REFRESH MATERIALIZED VIEW test_pct_agg WITH SYNC MODE;
+SELECT dt, s, c FROM test_pct_agg ORDER BY dt;
+ALTER MATERIALIZED VIEW test_pct_agg INACTIVE;
+ALTER MATERIALIZED VIEW test_pct_agg ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_pct_agg';
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 5, '2023-12-04');
+REFRESH MATERIALIZED VIEW test_pct_agg WITH SYNC MODE;
+SELECT dt, s, c FROM test_pct_agg ORDER BY dt;
+drop materialized view test_pct_agg;
+
+-- ==============================================================
+-- Case 3: IVM projection, whose __ROW_ID__ is AUTO_INCREMENT and therefore
+-- absent from the defined query
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_ivm_scan PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT col_str, col_int, dt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int > 1;
+REFRESH MATERIALIZED VIEW test_ivm_scan WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_ivm_scan ORDER BY col_int;
+ALTER MATERIALIZED VIEW test_ivm_scan INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_scan';
+ALTER MATERIALIZED VIEW test_ivm_scan ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_scan';
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('f', 6, '2023-12-05');
+REFRESH MATERIALIZED VIEW test_ivm_scan WITH SYNC MODE;
+SELECT col_str, col_int, dt FROM test_ivm_scan ORDER BY col_int;
+drop materialized view test_ivm_scan;
+
+-- ==============================================================
+-- Case 4: IVM aggregate. __ROW_ID__ and __AGG_STATE_* are produced by the
+-- rewritten query; count(*) names a state column that is not a legal
+-- user-authored column name.
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_ivm_agg
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT dt, SUM(col_int) AS s, COUNT(*) AS c, MAX(col_str) AS mx
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;
+REFRESH MATERIALIZED VIEW test_ivm_agg WITH SYNC MODE;
+SELECT dt, s, c, mx FROM test_ivm_agg ORDER BY dt;
+ALTER MATERIALIZED VIEW test_ivm_agg INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_agg';
+ALTER MATERIALIZED VIEW test_ivm_agg ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_agg';
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('g', 7, '2023-12-05');
+REFRESH MATERIALIZED VIEW test_ivm_agg WITH SYNC MODE;
+SELECT dt, s, c, mx FROM test_ivm_agg ORDER BY dt;
+drop materialized view test_ivm_agg;
+
+-- ==============================================================
+-- Case 5: IVM join — two base tables must both survive re-binding on ACTIVE
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_ivm_join
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT t1.col_str, t1.col_int, t2.tag
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 t1
+   JOIN mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 t2 ON t1.col_int = t2.col_int;
+REFRESH MATERIALIZED VIEW test_ivm_join WITH SYNC MODE;
+SELECT col_str, col_int, tag FROM test_ivm_join ORDER BY col_int;
+ALTER MATERIALIZED VIEW test_ivm_join INACTIVE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_join';
+ALTER MATERIALIZED VIEW test_ivm_join ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_ivm_join';
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values (6, 'v');
+REFRESH MATERIALIZED VIEW test_ivm_join WITH SYNC MODE;
+SELECT col_str, col_int, tag FROM test_ivm_join ORDER BY col_int;
+drop materialized view test_ivm_join;
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};
