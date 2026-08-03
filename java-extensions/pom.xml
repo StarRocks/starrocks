@@ -69,6 +69,18 @@
     </properties>
 
     <profiles>
+        <profile>
+            <id>lance-reader</id>
+            <activation>
+                <property>
+                    <name>!skipLanceReader</name>
+                </property>
+            </activation>
+            <modules>
+                <module>lance-reader</module>
+            </modules>
+        </profile>
+
         <!-- for custom internal repository -->
         <profile>
             <id>custom-env</id>

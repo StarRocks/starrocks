@@ -240,6 +240,17 @@ public:
     bool has_partition() const override { return false; }
 };
 
+class LanceTableDescriptor : public TableDescriptor {
+public:
+    LanceTableDescriptor(const TTableDescriptor& tdesc,
+                         std::pmr::memory_resource* mr = std::pmr::get_default_resource());
+    std::string_view lance_dataset_uri() const { return _lance_dataset_uri; }
+    std::string debug_string() const override;
+
+private:
+    std::pmr::string _lance_dataset_uri;
+};
+
 class OlapTableDescriptor : public TableDescriptor {
 public:
     OlapTableDescriptor(const TTableDescriptor& tdesc,
