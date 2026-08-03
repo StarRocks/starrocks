@@ -206,14 +206,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
         }
-        // Inherit both the codec and its level from the parent JSON column. The level
-        // matters more than it looks: ColumnMetaPB.compression_level has no proto
-        // default, so a fresh child meta would carry level 0, and for ZSTD
-        // get_block_compression_codec(ZSTD, 0) resolves to instance(0) == nullptr
-        // (valid levels are 1..22). That would store the sub-column UNCOMPRESSED and
-        // also keep the compression-dict gate, which requires a non-null codec, from
-        // ever firing on the `remain` blob it targets. The parent level (default -1)
-        // resolves to ZSTD's default-level instance.
+        // Inherit both the codec and its level from the parent JSON column.
+        // ColumnMetaPB.compression_level has no proto default, so a fresh child meta
+        // reads back 0; get_block_compression_codec treats that as out of range and
+        // falls back to the default-level ZSTD instance. The sub-columns would then
+        // silently ignore a table that asked for a specific zstd level, and the
+        // compression dictionary built for the `remain` blob would bake the default
+        // level into its CDict rather than the requested one.
         opts.meta->set_compression(_json_meta->compression());
         opts.meta->set_compression_level(_json_meta->compression_level());
 

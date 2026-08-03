@@ -2852,8 +2852,8 @@ TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
         writer_opts.meta->set_encoding(DEFAULT_ENCODING);
         writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
         // Mimic segment_writer, which stamps the table compression_level (default
-        // -1). Without this the child metas would inherit level 0 and resolve to a
-        // null ZSTD codec -- exactly the bug this test guards.
+        // -1), so the flat-JSON child metas inherit a real level instead of the proto
+        // default 0 -- the propagation this test guards.
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(false);
 
