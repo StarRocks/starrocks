@@ -412,6 +412,24 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
         // keeps the "exactly one finish_task() per tablet id" invariant intact. Running `done` here instead
         // would be unsafe: tablets scheduled by earlier iterations are still writing into `response` from their
         // own threads, and completing the RPC frees it under them.
+        //
+        // The fallback is only safe when NO subtask was submitted for this tablet. create_parallel_tasks()
+        // registers the tablet state before submitting, and submit_subtasks_from_groups() submits the groups
+        // one at a time, so a throw (e.g. std::bad_alloc from the per-group bookkeeping) can land *after* some
+        // subtasks are already running. Those subtasks own the tablet's single finish_task():
+        // TabletParallelCompactionState::is_complete() is `running_subtasks.empty() && total_subtasks_created > 0`,
+        // so it still fires once the last of them completes. Falling back as well would create a SECOND context
+        // for the same tablet id, so finish_task() would run twice, push _contexts past tablet_ids_size() and
+        // dereference the `_response` that the first completion already nulled out -> SIGSEGV. So on a throw,
+        // only fall back if nothing was submitted; otherwise report the subtasks that are already in flight.
+        auto submitted_subtasks = [&]() -> int {
+            auto state = _parallel_mgr->get_tablet_state(tablet_id, request->txn_id());
+            if (state == nullptr) {
+                return 0;
+            }
+            std::lock_guard<std::mutex> l(state->mutex);
+            return state->total_subtasks_created;
+        };
         auto result = [&]() -> StatusOr<int> {
             try {
                 TEST_SYNC_POINT("CompactionScheduler::process_parallel_compaction:create_parallel_tasks");
@@ -419,14 +437,23 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
                         tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
                         request->force_base_compaction(), _threads.get(), acquire_token, release_token);
             } catch (const std::exception& e) {
-                LOG(WARNING) << "Exception while creating parallel compaction tasks, falling back to normal "
-                                "compaction. tablet_id="
-                             << tablet_id << ", txn_id=" << request->txn_id() << ": " << e.what();
+                auto in_flight = submitted_subtasks();
+                LOG(WARNING) << "Exception while creating parallel compaction tasks. tablet_id=" << tablet_id
+                             << ", txn_id=" << request->txn_id() << ", subtasks already submitted=" << in_flight
+                             << ": " << e.what();
+                if (in_flight > 0) {
+                    return in_flight;
+                }
+                _parallel_mgr->cleanup_tablet(tablet_id, request->txn_id());
                 return Status::InternalError(fmt::format("exception in create_parallel_tasks: {}", e.what()));
             } catch (...) {
-                LOG(WARNING) << "Unknown exception while creating parallel compaction tasks, falling back to "
-                                "normal compaction. tablet_id="
-                             << tablet_id << ", txn_id=" << request->txn_id();
+                auto in_flight = submitted_subtasks();
+                LOG(WARNING) << "Unknown exception while creating parallel compaction tasks. tablet_id=" << tablet_id
+                             << ", txn_id=" << request->txn_id() << ", subtasks already submitted=" << in_flight;
+                if (in_flight > 0) {
+                    return in_flight;
+                }
+                _parallel_mgr->cleanup_tablet(tablet_id, request->txn_id());
                 return Status::InternalError("unknown exception in create_parallel_tasks");
             }
         }();
