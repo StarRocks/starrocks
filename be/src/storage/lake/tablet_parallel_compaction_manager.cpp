@@ -2057,7 +2057,6 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     VLOG(1) << "Parallel compaction: acquired all " << tokens_acquired << " tokens for tablet " << tablet_id
             << ", txn_id=" << txn_id;
 
-
     // Record expected split counts for each large rowset as a safety net.
     // Even though we've acquired all tokens, thread pool submission can still fail.
     // This allows get_merged_txn_log() to detect incomplete splits.
