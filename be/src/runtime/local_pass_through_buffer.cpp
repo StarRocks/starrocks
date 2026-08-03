@@ -105,17 +105,17 @@ PassThroughChunkBuffer::~PassThroughChunkBuffer() {
         LOG(WARNING) << "PassThroughChunkBuffer reference leak detected! query_id=" << print_id(_query_id)
                      << ", _ref_count=" << _ref_count;
     }
-    for (auto& it : _key_to_channel) {
-        delete it.second;
-    }
+    // Channels are shared with the PassThroughContexts that resolved them; dropping the map only
+    // drops this buffer's reference. A channel still referenced by a sink or a receiver stays
+    // alive until that side is destroyed too.
     _key_to_channel.clear();
 }
 
-PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
+PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
     std::unique_lock lock(_mutex);
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
-        auto* channel = new PassThroughChannel();
+        auto channel = std::make_shared<PassThroughChannel>();
         _key_to_channel.emplace(key, channel);
         return channel;
     } else {
@@ -124,7 +124,13 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
 }
 
 void PassThroughContext::init() {
+    if (_channel != nullptr) {
+        return;
+    }
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
+    // From here on the context owns the channel, so every later use of it is safe regardless of
+    // when the PassThroughChunkBuffer is released.
+    _chunk_buffer = nullptr;
 }
 
 void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
