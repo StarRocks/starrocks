@@ -354,6 +354,12 @@ private:
     bool _compression_dict_train_mode = false;
     bool _compression_dict_train_done = false;
     std::vector<DeferredPage> _deferred_pages;
+    // Bytes currently parked in _deferred_pages. They have left the page builder but
+    // have not reached _data_size yet (that only happens in _push_back_page), so
+    // without counting them estimate_buffer_size() under-reports this writer by up to
+    // train_pages * data_page_size, and a wide table would sail past the segment-size
+    // and write-memory thresholds before anything noticed.
+    uint64_t _deferred_pages_bytes = 0;
 
     // Train the compression dict from the buffered samples (best effort), then
     // compress and push every deferred page -- with the dict if training
