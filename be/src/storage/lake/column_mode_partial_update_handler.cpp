@@ -14,6 +14,7 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "column/chunk.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -292,7 +293,16 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
         } else if (!st.ok()) {
             return st;
         } else {
+            // Check before appending from it: appending reads the source offsets, and reading
+            // offsets that have already wrapped is what throws or silently copies from the wrong
+            // address. Note this accumulator has no byte budget at all -- it is sized at the whole
+            // segment -- so it is only the column limit that bounds it.
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*tmp_chunk_ptr,
+                                                                 "column mode partial update source segment read batch",
+                                                                 params.tablet->id(), _txn_id));
             source_chunk_ptr->append(*tmp_chunk_ptr);
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+                    *source_chunk_ptr, "column mode partial update source chunk", params.tablet->id(), _txn_id));
         }
     }
     return source_chunk_ptr;
@@ -334,6 +344,10 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
             }
         });
         RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], upt_chunk));
+        // A whole .upt file lands in one chunk, because the upt rowids below index into it. Check
+        // before append_selective() reads its offsets.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update upt file chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
         const size_t upt_chunk_size = upt_chunk->memory_usage();
         _tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { _tracker->release(upt_chunk_size); });
@@ -347,6 +361,11 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
         RETURN_IF_EXCEPTION((*source_chunk)->update_rows(*tmp_chunk, sorted_source_rowids.data()));
+        // The merge writes values wider than the ones it replaces, so the result can be over the
+        // limit even though both inputs were under it, and the next .upt file in this loop reads
+        // these offsets again.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+                **source_chunk, "column mode partial update merged source chunk", _rowset_ptr->tablet_id(), _txn_id));
     }
     return Status::OK();
 }
@@ -446,6 +465,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             uint64_t index_size = 0;
             uint64_t footer_position = 0;
             padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
+            // Padding grows CHAR values to their declared length, so it can carry a chunk that was
+            // under the limit at the end of the merge over it.
+            RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
+                    *source_chunk_ptr, "column mode partial update padded source chunk", params.tablet->id(), _txn_id));
             ASSIGN_OR_RETURN(auto delta_column_group_writer,
                              _prepare_delta_column_group_writer(params, partial_tschema));
             {
