@@ -39,15 +39,9 @@
 #include <memory>
 #include <sstream>
 
-<<<<<<< HEAD:be/src/runtime/client_cache.cpp
-=======
-#include "base/hash/hash_std.hpp"
-#include "base/network/network_util.h"
-#include "base/utility/defer_op.h"
-#include "common/config_rpc_client_fwd.h"
->>>>>>> 7b2cf89145 ([BugFix] Fix Thrift client leak after cache invalidation (#77072)):be/src/common/util/thrift_client_cache.cpp
 #include "common/logging.h"
 #include "gen_cpp/FrontendService.h"
+#include "util/defer_op.h"
 #include "util/hash_util.hpp"
 #include "util/network_util.h"
 
