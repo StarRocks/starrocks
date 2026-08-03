@@ -138,6 +138,7 @@ set(EXEC_FILES
         ./exec/tablet_sink_sender_range_test.cpp
         ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
+        ./exec/local_pass_through_buffer_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp
