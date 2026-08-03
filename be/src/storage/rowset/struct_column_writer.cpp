@@ -87,6 +87,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_struct_column_writer(const Column
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
+        null_options.meta->set_compression_level(opts.meta->compression_level());
         null_options.meta->set_is_nullable(false);
 
         TypeInfoPtr tiny_type_info = get_type_info(TYPE_TINYINT);
