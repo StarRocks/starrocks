@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -427,6 +428,13 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     @Override
     public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
+        // Route mock connector views (e.g. view_db.cyc_a) through getView, mirroring
+        // IcebergMetadata.getTable's fallback to getView for view identifiers (branch-3.5 mock
+        // otherwise NPEs on MOCK_TABLE_MAP for a name that is a view, not a base table).
+        com.starrocks.catalog.Table view = getView(dbName, tblName);
+        if (view != null) {
+            return view;
+        }
         readLock();
         try {
             MockIcebergTable t = MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
@@ -575,5 +583,34 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    // branch-3.5: ConnectorMetadata.getView is (dbName, viewName) here; IcebergView ctor has no
+    // trailing properties map (that arg is main-only). main-only type aliases -> catalog Type.*.
+    public com.starrocks.catalog.Table getView(String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", Type.INT),
+                    new Column("data", Type.VARCHAR),
+                    new Column("date", Type.DATE)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location");
+        }
+        // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
+        // connector-view detection. Each lookup mints a *fresh* id, mirroring
+        // IcebergApiConverter.toView (CONNECTOR_ID_GENERATOR.getNextId()), so the id can never be
+        // used to detect re-entry.
+        if (dbName.equalsIgnoreCase("view_db")
+                && (viewName.equalsIgnoreCase("cyc_a") || viewName.equalsIgnoreCase("cyc_b"))) {
+            List<Column> schema = Lists.newArrayList(new Column("id", Type.INT));
+            String other = viewName.equalsIgnoreCase("cyc_a") ? "cyc_b" : "cyc_a";
+            String def = "SELECT id FROM " + MOCKED_ICEBERG_CATALOG_NAME + ".view_db." + other;
+            return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location");
+        }
+        return null;
     }
 }
