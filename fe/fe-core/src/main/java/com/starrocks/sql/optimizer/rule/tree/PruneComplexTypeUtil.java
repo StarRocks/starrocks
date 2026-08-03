@@ -151,6 +151,13 @@ public class PruneComplexTypeUtil {
             return unnestColRefMap.containsKey(columnRefOperator);
         }
 
+        // Returns the input array column that an UNNEST output column was produced from, or null if
+        // the given column is not an UNNEST output. Used to walk stacked UNNESTs (UNNEST of an
+        // UNNEST output) when deciding whether an output can be pruned in lockstep with its input.
+        public ColumnRefOperator getUnnestInput(ColumnRefOperator output) {
+            return unnestColRefMap.get(output);
+        }
+
         public ComplexTypeAccessGroup getVisitedAccessGroup(ColumnRefOperator columnRefOperator) {
             return accessGroups.get(columnRefOperator);
         }
