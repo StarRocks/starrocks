@@ -130,3 +130,17 @@ REFRESH DEFERRED MANUAL
 PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT region, SUM(amount) AS s FROM base_having GROUP BY region HAVING SUM(amount) > 50;
 DROP TABLE base_having;
+
+-- name: test_ivm_pk_mixed_with_non_pk_base_rejected @cloud
+-- mixed_mv3 (PK join PK) must succeed: the rejection message tells the user that shape works, so
+-- pinning it here keeps the advice from going stale alongside the message it belongs to.
+CREATE TABLE mixed_pk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE mixed_pk2 (id INT NOT NULL, w BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+CREATE TABLE mixed_dup (k INT, w BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mixed_mv1 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v, b.w FROM mixed_pk a INNER JOIN mixed_dup b ON a.id = b.k;
+CREATE MATERIALIZED VIEW mixed_mv2 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT b.id, b.v, a.w FROM mixed_dup a INNER JOIN mixed_pk b ON a.k = b.id;
+CREATE MATERIALIZED VIEW mixed_mv3 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v, b.w FROM mixed_pk a INNER JOIN mixed_pk2 b ON a.id = b.id;
+DROP MATERIALIZED VIEW mixed_mv3;
+DROP TABLE mixed_pk;
+DROP TABLE mixed_pk2;
+DROP TABLE mixed_dup;

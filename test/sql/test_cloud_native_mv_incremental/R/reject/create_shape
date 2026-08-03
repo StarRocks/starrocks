@@ -246,3 +246,36 @@ AS SELECT region, SUM(amount) AS s FROM base_having GROUP BY region HAVING SUM(a
 DROP TABLE base_having;
 -- result:
 -- !result
+-- name: test_ivm_pk_mixed_with_non_pk_base_rejected @cloud
+CREATE TABLE mixed_pk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+CREATE TABLE mixed_pk2 (id INT NOT NULL, w BIGINT) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+CREATE TABLE mixed_dup (k INT, w BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mixed_mv1 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v, b.w FROM mixed_pk a INNER JOIN mixed_dup b ON a.id = b.k;
+-- result:
+[REGEX].*requires every base to be a cloud-native PRIMARY KEY table, but 'mixed_dup' is not.*__ROW_ID__.*
+-- !result
+CREATE MATERIALIZED VIEW mixed_mv2 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT b.id, b.v, a.w FROM mixed_dup a INNER JOIN mixed_pk b ON a.k = b.id;
+-- result:
+[REGEX].*requires every base to be a cloud-native PRIMARY KEY table, but 'mixed_dup' is not.*__ROW_ID__.*
+-- !result
+CREATE MATERIALIZED VIEW mixed_mv3 DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL") AS SELECT a.id, a.v, b.w FROM mixed_pk a INNER JOIN mixed_pk2 b ON a.id = b.id;
+-- result:
+-- !result
+DROP MATERIALIZED VIEW mixed_mv3;
+-- result:
+-- !result
+DROP TABLE mixed_pk;
+-- result:
+-- !result
+DROP TABLE mixed_pk2;
+-- result:
+-- !result
+DROP TABLE mixed_dup;
+-- result:
+-- !result

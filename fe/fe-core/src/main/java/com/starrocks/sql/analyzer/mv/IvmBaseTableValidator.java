@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -102,6 +103,21 @@ public final class IvmBaseTableValidator {
      */
     public static boolean hasCloudNativePrimaryKeyBase(SelectRelation selectRelation) {
         return findAnyCloudNativeBase(selectRelation.getRelation(), IS_PRIMARY_KEYS) != null;
+    }
+
+    /**
+     * First base that cannot carry a row id, by the same condition as
+     * {@code IvmRowIdDeriver.derivePrimaryKeyColumns} -- keep the two in step. Null means every base can, so
+     * the shape rather than the base mix is what blocked the row id.
+     */
+    public static String findNonPrimaryKeyBaseName(SelectRelation selectRelation) {
+        List<String> names = Lists.newArrayList();
+        forEachBaseTable(selectRelation.getRelation(), table -> {
+            if (asCloudNativeBase(table, IS_PRIMARY_KEYS) == null) {
+                names.add(table.getName());
+            }
+        });
+        return names.isEmpty() ? null : names.get(0);
     }
 
     public static void validate(SelectRelation selectRelation) {
@@ -268,27 +284,32 @@ public final class IvmBaseTableValidator {
 
     private static void collectCloudNativeBasesInto(Relation relation, Predicate<OlapTable> match,
                                                     List<OlapTable> out) {
+        forEachBaseTable(relation, table -> {
+            OlapTable base = asCloudNativeBase(table, match);
+            if (base != null) {
+                out.add(base);
+            }
+        });
+    }
+
+    private static void forEachBaseTable(Relation relation, Consumer<Table> visitor) {
         if (relation == null) {
             return;
         }
         if (relation instanceof TableRelation) {
-            OlapTable base = asCloudNativeBase(((TableRelation) relation).getTable(), match);
-            if (base != null) {
-                out.add(base);
-            }
+            visitor.accept(((TableRelation) relation).getTable());
         } else if (relation instanceof JoinRelation) {
             JoinRelation join = (JoinRelation) relation;
-            collectCloudNativeBasesInto(join.getLeft(), match, out);
-            collectCloudNativeBasesInto(join.getRight(), match, out);
+            forEachBaseTable(join.getLeft(), visitor);
+            forEachBaseTable(join.getRight(), visitor);
         } else if (relation instanceof SubqueryRelation) {
-            collectCloudNativeBasesInto(
-                    ((SubqueryRelation) relation).getQueryStatement().getQueryRelation(), match, out);
+            forEachBaseTable(((SubqueryRelation) relation).getQueryStatement().getQueryRelation(), visitor);
         } else if (relation instanceof UnionRelation) {
             for (QueryRelation child : ((UnionRelation) relation).getRelations()) {
-                collectCloudNativeBasesInto(child, match, out);
+                forEachBaseTable(child, visitor);
             }
         } else if (relation instanceof SelectRelation) {
-            collectCloudNativeBasesInto(((SelectRelation) relation).getRelation(), match, out);
+            forEachBaseTable(((SelectRelation) relation).getRelation(), visitor);
         }
     }
 

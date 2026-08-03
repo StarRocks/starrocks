@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -74,12 +75,26 @@ final class IvmRetractableAdmission {
      * A block retractable only through a nested input carries no {@code __ROW_ID__} on its own output, so its
      * deletes would be dropped. A PK base thus requires the row id on this block's output; the remaining nested
      * PK shapes (union / sub-query) come in later PRs.
+     *
+     * <p>{@code rewriteRelation} runs first and rejects every other row-id-less shape (unsupported join type,
+     * non-forwardable derived table, mixed union) with its own reason, which leaves a base mix as what actually
+     * reaches here -- so name the base instead of describing a shape.
      */
     static void requirePkBaseHasRowId(SelectRelation selectRelation, boolean rowIdOnOutput) {
-        if (!rowIdOnOutput && IvmBaseTableValidator.hasCloudNativePrimaryKeyBase(selectRelation)) {
-            throw new SemanticException("IVMAnalyzer only supports a single-table projection/filter materialized "
-                    + "view over a cloud-native PRIMARY KEY base in this version");
+        if (rowIdOnOutput || !IvmBaseTableValidator.hasCloudNativePrimaryKeyBase(selectRelation)) {
+            return;
         }
+        String nonPkBase = IvmBaseTableValidator.findNonPrimaryKeyBaseName(selectRelation);
+        if (nonPkBase != null) {
+            throw new SemanticException("IVM over a cloud-native PRIMARY KEY base requires every base to be a "
+                    + "cloud-native PRIMARY KEY table, but '%s' is not: the materialized view output would carry "
+                    + "no %s, so a delete or update on the PRIMARY KEY base would have no row to target. A single "
+                    + "PRIMARY KEY table and an INNER / CROSS JOIN of PRIMARY KEY tables are both supported.",
+                    nonPkBase, IvmOpUtils.COLUMN_ROW_ID);
+        }
+        throw new SemanticException("IVM over a cloud-native PRIMARY KEY base requires this materialized view "
+                + "output to carry %s, which this query shape cannot derive, so a delete or update on the "
+                + "PRIMARY KEY base would have no row to target.", IvmOpUtils.COLUMN_ROW_ID);
     }
 
     /**
