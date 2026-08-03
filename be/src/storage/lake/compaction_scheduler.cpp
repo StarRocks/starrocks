@@ -440,8 +440,8 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             } catch (const std::exception& e) {
                 auto in_flight = submitted_subtasks();
                 LOG(WARNING) << "Exception while creating parallel compaction tasks. tablet_id=" << tablet_id
-                             << ", txn_id=" << request->txn_id() << ", subtasks already submitted=" << in_flight
-                             << ": " << e.what();
+                             << ", txn_id=" << request->txn_id() << ", subtasks already submitted=" << in_flight << ": "
+                             << e.what();
                 if (in_flight > 0) {
                     return in_flight;
                 }
