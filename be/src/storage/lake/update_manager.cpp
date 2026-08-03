@@ -1489,8 +1489,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
-    if (config::enable_pk_index_parallel_execution &&
-        params.op_write.rowset().num_rows() >= min_rows_per_task) {
+    if (config::enable_pk_index_parallel_execution && params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
