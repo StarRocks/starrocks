@@ -190,8 +190,8 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
 Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
                                     uint32_t del_rssid, const FileMetaPB& del_sst_meta,
                                     const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
-    // Only the cloud-native persistent index supports ingesting a tombstone sstable; callers gate on
-    // use_cloud_native_pk_index() and on a pre-built del sstable being present before choosing this path.
+    // Shared-data primary-key tablets always use LakePersistentIndex. Keep the cast defensive so a broken
+    // initialization invariant fails explicitly instead of dereferencing the wrong implementation.
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index == nullptr) {
         return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");

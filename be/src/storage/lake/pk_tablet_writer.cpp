@@ -180,16 +180,15 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     // inserting every deleted key into the persistent-index memtable -- the per-key insert dominates a
     // large delete's publish. Gated on the del size (reusing pk_index_parallel_execution_min_rows), NOT on
     // eager PK-index build: eager build is triggered by upsert spill volume, so a pure delete never enables
-    // it -- but pure deletes are exactly what we want to cover. Also gated on the tablet using a cloud-native
-    // PK index: only that publish path ingests the sstable (see use_cloud_native_pk_index); for a LOCAL /
-    // disabled index publish takes the memtable erase path and this file would be orphaned. Built outside the
-    // lock (I/O heavy); the entry version is 0 here and is stamped to the publish version at ingest via
+    // it -- but pure deletes are exactly what we want to cover. Shared-data primary-key tablets always use
+    // the cloud-native persistent index, so publish can ingest this sstable unconditionally. Built outside
+    // the lock (I/O heavy); the entry version is 0 here and is stamped to the publish version at ingest via
     // shared_version (see the tombstone projection in PersistentIndexSstable::multi_get).
     const size_t del_sst_min_rows =
             static_cast<size_t>(std::max<int64_t>(config::pk_index_parallel_execution_min_rows, 0));
     FileInfo del_sst_info; // empty name => no tombstone sstable for this del file (publish uses memtable erase)
     PersistentIndexSstableRangePB del_sst_range;
-    if (deletes.size() > del_sst_min_rows && cloud_native_pk_index()) {
+    if (deletes.size() > del_sst_min_rows) {
         ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema()->primary_key_encoding_type_or_error());
         std::vector<ColumnId> pk_columns(tablet_schema()->num_key_columns());
         std::iota(pk_columns.begin(), pk_columns.end(), 0);
@@ -338,9 +337,6 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
     if (enable_pk_index_eager_build()) {
         writer->force_set_enable_pk_index_eager_build();
     }
-    // Propagate the cloud-native PK index flag so spill-merge clones (which flush del files through
-    // flush_del_file) build tombstone sstables under the same condition as the parent writer.
-    writer->set_cloud_native_pk_index(cloud_native_pk_index());
     writer->set_auto_flush(auto_flush());
     return writer;
 }

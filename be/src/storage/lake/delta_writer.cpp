@@ -435,14 +435,6 @@ Status DeltaWriterImpl::build_schema_and_writer() {
             _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                         _txn_id, nullptr, false /** no compaction**/,
                                                                         _bundle_writable_file_context, _global_dicts);
-            // Only a cloud-native PK index ingests the pre-built del tombstone sstables at publish; for a
-            // LOCAL / disabled persistent index publish takes the memtable erase path and a written sstable
-            // would be orphaned. Tell the writer to build them only when metadata confirms cloud-native.
-            auto latest_metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
-            if (latest_metadata != nullptr && latest_metadata->enable_persistent_index() &&
-                latest_metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
-                _tablet_writer->set_cloud_native_pk_index(true);
-            }
         } else {
             _tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
                     _tablet_manager, _tablet_id, _write_schema, _txn_id, false, nullptr, _bundle_writable_file_context,
