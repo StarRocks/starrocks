@@ -159,6 +159,104 @@ These storage volumes are used **only during migration** to give target CNs read
    - It is recommended to use temporary credentials (access key / secret key) for the source storage volume. These can be revoked after migration is complete.
    :::
 
+#### Prepare a range-distribution migration window
+
+The first release of range-distribution migration supports only a shared-data source cluster to a shared-data target cluster. The StarRocks servers in both clusters and the migration tool must all contain the range-migration protocol described in this section.
+
+The following table requirements apply:
+
+- Only non-colocate range-distribution tables are supported. `range-colocate` tables are not supported.
+- Each logical partition must contain exactly one physical partition.
+- The migration snapshot covers all logical partitions and all visible indexes, including rollup indexes. A partial snapshot is rejected.
+- Reconciliation is split-only: the target layout can be equal to the source layout or can be refined to the source layout by exact range splits. A source merge, a target layout that is finer than the source, or any topology that would require a target merge is rejected without starting replication.
+
+The migration tool reads the opaque `RangeEncoded` column from the source cluster's `SHOW PROC` tablet output. It sends the complete desired topology to the current target Leader FE by issuing an `ADMIN EXECUTE ON FRONTEND` statement that invokes `LocalMetastore.reconcileRangeTablets`:
+
+```SQL
+ADMIN EXECUTE ON FRONTEND 'out.append(metastore.reconcileRangeTablets("<base64-request>"))';
+```
+
+Do not parse the human-readable `Range` column or run this statement manually. The tool discovers `RangeEncoded` by column name, builds the versioned Base64 request, refreshes the target Leader FE, and validates the structured response.
+
+Before changing any configuration, record the original value on every FE in the source and target clusters. Restore these recorded values after migration rather than assuming the defaults. The following settings are dynamic. Set them with `WITH PERSISTENT`, and use `ADMIN SHOW FRONTEND CONFIG` after each change to verify that every FE reports the intended value.
+
+1. On the **source cluster**, disable merge. Keep the source cluster's original `tablet_reshard_target_size`; source tablets must continue to split at their normal threshold so that the target can follow those boundaries.
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+2. On the **target cluster**, disable merge before changing the target tablet size:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+   Before continuing, run the following query on both clusters and verify that every source and target FE reports `false`. Do not enlarge the target tablet size until merge is disabled and verified on both clusters.
+
+   ```SQL
+   ADMIN SHOW FRONTEND CONFIG LIKE 'tablet_reshard_enable_tablet_merge';
+   ```
+
+3. On the **target cluster**, prevent independent size-based split and enable range distribution for tables created by the tool:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true") WITH PERSISTENT;
+   ```
+
+4. Choose exactly one of the following alternatives for migrated target range tables:
+
+   - Guarantee that no independent load writes to those tables during migration. In this case, leave the three cluster-wide pre-split settings unchanged.
+   - If that guarantee cannot be made, disable all three pre-split paths on the target cluster. Record that this alternative changed them so that you can restore them later.
+
+   For the second alternative, run:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "false") WITH PERSISTENT;
+   ```
+
+No dedicated `enable_automatic_tablet_reshard` configuration is added. Setting only the target `tablet_reshard_target_size` to the maximum signed 64-bit value suppresses target size-based split, while `tablet_reshard_enable_tablet_merge=false` suppresses merge. The source retains normal automatic split; the tool then uses the source's exact `RangeEncoded` boundaries to submit metadata-only target splits.
+
+`enable_execute_script_on_frontend` is a static FE configuration and cannot be changed with `ADMIN SET FRONTEND CONFIG`. If its recorded value is `false`, add the following setting to **fe.conf** on every target FE, and perform a supported rolling restart, restarting one FE at a time and waiting for it to become healthy before restarting the next FE:
+
+```Properties
+enable_execute_script_on_frontend = true
+```
+
+After the rolling restart, verify on every target FE that `ADMIN SHOW FRONTEND CONFIG LIKE 'enable_execute_script_on_frontend'` reports `true`. The migration user must have the SYSTEM OPERATE privilege.
+
+:::warning
+
+FE script execution can run arbitrary code in the FE process. Enable it only for the bounded migration window, restrict the migration account, and restore the recorded `enable_execute_script_on_frontend` value in **fe.conf** with another rolling restart after stopping the tool.
+
+:::
+
+After applying and verifying the settings, wait for already-admitted reshard jobs to drain. Run the following query separately on the source cluster and the target cluster:
+
+```SQL
+SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+FROM information_schema.tablet_reshard_jobs
+WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+```
+
+Open the migration window only when this query returns zero rows on both clusters. This criterion covers every non-final job state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`. The initial drain does not disable later source automatic split. During an active incremental replication, a source tablet may split at its normal threshold; the tool then refreshes the source topology. Only the corresponding target split is blocked while a target `REPLICATION` transaction is active.
+
+During migration, the tool interprets reconcile statuses as follows:
+
+| Status | Operator action |
+| ------ | --------------- |
+| `ALIGNED` | The complete target topology matches the source. Replication can proceed after the tool's normal metadata checks. |
+| `SUBMITTED` | An exact target split was submitted. Keep the tool running; it refreshes metadata and polls again. |
+| `RUNNING` | The matching split is still active. Keep polling. |
+| `RETRYABLE_BUSY` | A transient conflict exists, such as a Leader change, another reshard job, or an active replication transaction. Refresh metadata and retry. |
+| `INCOMPATIBLE` | The exact topology cannot be reached by target split, or a scope restriction is violated. The tool fails closed for this topology; correct the topology before retrying. |
+| `FAILED` | The request or server processing failed. The tool fails closed for this topology; investigate the reported message before retrying. |
+
+`SUBMITTED`, `RUNNING`, and `RETRYABLE_BUSY` are progress states, not permission to start another replication for the table. The two gates are independent: replication is not submitted until every partition/index group is aligned, while a target split is not submitted while a target `REPLICATION` transaction is active. If `RETRYABLE_BUSY` is caused by replication, use the transaction ID reported by the tool with `SHOW TRANSACTION`, wait until the target transaction is `VISIBLE` or `ABORTED`, and let the next metadata cycle retry the target split.
+
 </TabItem>
 </Tabs>
 
@@ -627,6 +725,37 @@ When `Sync job progress` has been stable at 100% and your business is ready to s
    ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
    ```
 
+8. If range-distribution tables were migrated, first stop the tool and wait for all `REPLICATION` transactions to become `VISIBLE` or `ABORTED`. Run the `information_schema.tablet_reshard_jobs` drain query from the preparation procedure on both clusters and wait for zero rows. Restore the recorded `enable_execute_script_on_frontend` value in **fe.conf** on every target FE and complete a rolling restart. Then restore the dynamic settings with `WITH PERSISTENT`, verifying every FE after each stage.
+
+   **Restore order:**
+
+   1. Restore target `tablet_reshard_target_size`.
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   2. Restore target `enable_range_distribution`. Restore `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, and `enable_tablet_pre_split_for_insert_from_table` only if you disabled them under the second load-control alternative.
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   3. Restore target `tablet_reshard_enable_tablet_merge`.
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   4. Restore source `tablet_reshard_enable_tablet_merge` last.
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-source-value>") WITH PERSISTENT;
+      ```
+
 ## Limits
 
 The list of objects that support synchronization currently is as follows (those not included indicate that synchronization is not supported):
@@ -641,3 +770,4 @@ For migration between shared-data clusters:
 - The target cluster must be running on v4.1 or later.
 - Migration from a shared-data cluster to a shared-nothing target is not supported.
 - Each storage volume used by the source cluster's tables must have a corresponding `src_<volume_name>` storage volume pre-created on the target cluster.
+- Range-distribution migration is split-only and supports only non-colocate tables with one physical partition per logical partition. `range-colocate`, source merge, and target-merge topologies are not supported.

@@ -25,7 +25,11 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
@@ -68,6 +72,10 @@ public class LakeTabletsProcNodeTest {
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
+        TabletRange tablet1Range = new TabletRange(Range.gelt(
+                new Tuple(List.of(Variant.of(IntegerType.INT, "1"))),
+                new Tuple(List.of(Variant.of(IntegerType.INT, "10")))));
+
         // Schema
         List<Column> columns = Lists.newArrayList();
         Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
@@ -76,7 +84,7 @@ public class LakeTabletsProcNodeTest {
         columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new LakeTablet(tablet1Id);
+        Tablet tablet1 = new LakeTablet(tablet1Id, tablet1Range);
         Tablet tablet2 = new LakeTablet(tablet2Id);
 
         new Expectations() {
@@ -116,32 +124,50 @@ public class LakeTabletsProcNodeTest {
 
         // Check
         LakeTabletsProcDir procDir = new LakeTabletsProcDir(db, table, index);
+        Assertions.assertEquals(List.of("TabletId", "BackendId", "DataSize", "RowCount",
+                "MinVersion", "Range", "RangeEncoded"), LakeTabletsProcDir.TITLE_NAMES);
+        Assertions.assertEquals(5, LakeTabletsProcDir.analyzeColumn("Range"));
+        Assertions.assertEquals(6, LakeTabletsProcDir.analyzeColumn("RangeEncoded"));
         List<List<Comparable>> result = procDir.fetchComparableResult();
         Assertions.assertEquals(2, result.size());
         {
+            Assertions.assertEquals(7, result.get(0).size());
             Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
             Assertions.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
-            Assertions.assertEquals("null", result.get(0).get(5));
+            Assertions.assertEquals(tablet1Range.toString(), result.get(0).get(5));
+            Assertions.assertEquals(tablet1Range.toEncodedString(), result.get(0).get(6));
         }
         {
+            Assertions.assertEquals(7, result.get(1).size());
             Assertions.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
             Assertions.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
             Assertions.assertEquals("null", result.get(1).get(5));
+            Assertions.assertEquals("", result.get(1).get(6));
         }
 
         { // check show single tablet with tablet id
             ProcNodeInterface procNode = procDir.lookup(String.valueOf(tablet1Id));
             ProcResult res = procNode.fetchResult();
             Assertions.assertEquals(1L, res.getRows().size());
+            Assertions.assertEquals(LakeTabletsProcDir.TITLE_NAMES, res.getColumnNames());
             List<String> row = res.getRows().get(0);
+            Assertions.assertEquals(7, row.size());
             Assertions.assertEquals(String.valueOf(tablet1.getId()), row.get(0));
 
             Assertions.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
             Assertions.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
             Assertions.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+            Assertions.assertEquals(tablet1Range.toString(), row.get(5));
+            Assertions.assertEquals(tablet1Range.toEncodedString(), row.get(6));
+        }
+
+        { // check show single tablet without a range
+            ProcNodeInterface procNode = procDir.lookup(String.valueOf(tablet2Id));
+            List<String> row = procNode.fetchResult().getRows().get(0);
             Assertions.assertEquals("null", row.get(5));
+            Assertions.assertEquals("", row.get(6));
         }
 
         { // error case

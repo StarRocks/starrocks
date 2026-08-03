@@ -50,6 +50,7 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -334,6 +335,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 "starrocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
         idToDb.put(starRocksDb.getId(), starRocksDb);
         fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+    }
+
+    /** Entry point exposed to the bounded ADMIN EXECUTE migration script. */
+    public String reconcileRangeTablets(String encodedRequest) {
+        return new RangeDistributionMigrationService(stateMgr, this).reconcile(encodedRequest);
     }
 
     boolean tryLock(boolean mustLock) {

@@ -159,6 +159,104 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
    - 建议为源存储卷使用临时凭证（access key / secret key），迁移完成后可以将其吊销。
    :::
 
+#### 准备 Range 分布迁移窗口
+
+首个版本的 Range 分布迁移仅支持从存算分离源集群迁移到存算分离目标集群。两个集群的 StarRocks 服务端和迁移工具都必须包含本节所述的 Range 迁移协议。
+
+表必须满足以下要求：
+
+- 仅支持非 Colocate 的 Range 分布表，不支持 `range-colocate` 表。
+- 每个逻辑分区必须仅包含一个物理分区。
+- 迁移快照必须覆盖所有逻辑分区和所有可见索引（包括 Rollup 索引），不完整的快照会被拒绝。
+- 拓扑对齐仅支持分裂：目标布局可以与源布局相同，也可以通过精确的 Range 分裂细化为源布局。源端发生合并、目标布局比源布局更细，或任何需要在目标端执行合并的拓扑，都会在启动复制前被拒绝。
+
+迁移工具从源集群 `SHOW PROC` 的 Tablet 输出中读取不透明的 `RangeEncoded` 列。它会向目标集群当前的 Leader FE 发出 `ADMIN EXECUTE ON FRONTEND` 语句，调用 `LocalMetastore.reconcileRangeTablets` 并提交完整的预期拓扑：
+
+```SQL
+ADMIN EXECUTE ON FRONTEND 'out.append(metastore.reconcileRangeTablets("<base64-request>"))';
+```
+
+不要解析供人工阅读的 `Range` 列，也不要手动执行此语句。工具会按列名发现 `RangeEncoded`，构造带版本的 Base64 请求，刷新目标 Leader FE，并校验结构化响应。
+
+更改任何配置前，记录源集群和目标集群每个 FE 上的原始值。迁移完成后必须恢复这些记录的值，不要假定默认值。以下配置为动态配置。请使用 `WITH PERSISTENT` 设置，并在每次更改后使用 `ADMIN SHOW FRONTEND CONFIG` 确认每个 FE 都返回预期值。
+
+1. 在**源集群**上禁用合并。保留源集群原有的 `tablet_reshard_target_size`；源 Tablet 必须继续按正常阈值自动分裂，目标集群才能跟随这些边界。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+2. 在更改目标 Tablet 大小前，先在**目标集群**上禁用合并：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+   继续操作前，请在两个集群上执行以下查询，并确认源集群和目标集群的每个 FE 均返回 `false`。在两个集群都已禁用并验证合并前，不要调大目标 Tablet 大小。
+
+   ```SQL
+   ADMIN SHOW FRONTEND CONFIG LIKE 'tablet_reshard_enable_tablet_merge';
+   ```
+
+3. 在**目标集群**上禁止独立的按大小分裂，并为工具创建的表启用 Range 分布：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true") WITH PERSISTENT;
+   ```
+
+4. 对迁移的目标 Range 表，必须选择以下一种方案：
+
+   - 保证迁移期间没有独立导入写入这些表。此时保持三个集群级预分裂配置不变。
+   - 如果无法做出上述保证，请在目标集群上禁用全部三个预分裂路径，并记录本方案更改了这些配置，以便迁移后恢复。
+
+   如果选择第二种方案，请执行：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "false") WITH PERSISTENT;
+   ```
+
+本功能没有新增专用的 `enable_automatic_tablet_reshard` 配置。仅将目标集群的 `tablet_reshard_target_size` 设为 64 位有符号整数最大值即可抑制目标端按大小自动分裂，`tablet_reshard_enable_tablet_merge=false` 则抑制合并。源集群继续正常自动分裂，工具随后使用源端精确的 `RangeEncoded` 边界提交不重写数据的目标分裂。
+
+`enable_execute_script_on_frontend` 是静态 FE 配置，不能通过 `ADMIN SET FRONTEND CONFIG` 更改。如果记录的原始值为 `false`，请在目标集群的每个 FE 的 **fe.conf** 中加入以下配置，并执行受支持的滚动重启：每次只重启一个 FE，等待其恢复健康后再重启下一个 FE。
+
+```Properties
+enable_execute_script_on_frontend = true
+```
+
+滚动重启完成后，在目标集群的每个 FE 上确认 `ADMIN SHOW FRONTEND CONFIG LIKE 'enable_execute_script_on_frontend'` 返回 `true`。迁移用户必须具有 SYSTEM OPERATE 权限。
+
+:::warning
+
+FE 脚本执行功能可以在 FE 进程中运行任意代码。请仅在有限的迁移窗口内启用此功能，严格限制迁移账号的使用；停止工具后，在 **fe.conf** 中恢复记录的 `enable_execute_script_on_frontend` 原始值并再次滚动重启。
+
+:::
+
+应用并验证配置后，等待已准入的 reshard 作业排空。请分别在源集群和目标集群上执行以下查询：
+
+```SQL
+SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+FROM information_schema.tablet_reshard_jobs
+WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+```
+
+只有该查询在两个集群上均返回零行时，才能打开迁移窗口。该条件覆盖所有非终态作业，包括 `PENDING`、`PREPARING`、`RUNNING`、`CLEANING` 和 `ABORTING`。初始排空不意味着后续禁用源端自动分裂。增量复制事务活跃期间，源 Tablet 可以按正常阈值自动分裂；随后工具会刷新源拓扑。只有对应的目标分裂会在目标 `REPLICATION` 事务活跃期间被阻塞。
+
+迁移期间，工具按下表处理对齐状态：
+
+| 状态 | 运维操作 |
+| ---- | -------- |
+| `ALIGNED` | 目标完整拓扑与源端一致。工具完成常规元数据检查后可以继续复制。 |
+| `SUBMITTED` | 已提交精确的目标分裂。保持工具运行，工具会刷新元数据并再次轮询。 |
+| `RUNNING` | 对应的分裂仍在运行，继续轮询。 |
+| `RETRYABLE_BUSY` | 存在临时冲突，例如 Leader 切换、其他 reshard 作业或活跃复制事务。刷新元数据后重试。 |
+| `INCOMPATIBLE` | 无法仅通过目标分裂得到精确拓扑，或违反了支持范围。工具失败时默认拒绝该拓扑（fail-closed）；修正拓扑后再重试。 |
+| `FAILED` | 请求或服务端处理失败。工具失败时默认拒绝该拓扑（fail-closed）；排查返回的消息后再重试。 |
+
+`SUBMITTED`、`RUNNING` 和 `RETRYABLE_BUSY` 是进度状态，不代表可以为该表启动另一个复制任务。两个门控条件相互独立：在每个分区和索引组对齐前不会提交复制；目标 `REPLICATION` 事务活跃时不会提交目标分裂。如果 `RETRYABLE_BUSY` 由复制导致，请使用工具报告的事务 ID 执行 `SHOW TRANSACTION`，等待目标事务变为 `VISIBLE` 或 `ABORTED`，再由下一轮元数据刷新重试目标分裂。
+
 </TabItem>
 </Tabs>
 
@@ -627,6 +725,37 @@ ORDER BY TABLE_NAME;
    ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
    ```
 
+8. 如果迁移了 Range 分布表，请先停止工具，等待所有 `REPLICATION` 事务变为 `VISIBLE` 或 `ABORTED`。在两个集群上执行准备流程中的 `information_schema.tablet_reshard_jobs` 排空查询，并等待其返回零行。在目标集群每个 FE 的 **fe.conf** 中恢复记录的 `enable_execute_script_on_frontend` 原始值并完成滚动重启。然后使用 `WITH PERSISTENT` 恢复动态配置，并在每个阶段后验证所有 FE。
+
+   **恢复顺序：**
+
+   1. 恢复目标集群的 `tablet_reshard_target_size`。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   2. 恢复目标集群的 `enable_range_distribution`。仅当您使用第二种导入控制方案禁用了预分裂配置时，才恢复 `enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   3. 恢复目标集群的 `tablet_reshard_enable_tablet_merge`。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   4. 最后恢复源集群的 `tablet_reshard_enable_tablet_merge`。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-source-value>") WITH PERSISTENT;
+      ```
+
 ## 限制
 
 目前支持同步的对象列表如下（未列出的对象表示不支持同步）：
@@ -641,3 +770,4 @@ ORDER BY TABLE_NAME;
 - 目标集群必须运行 v4.1 或更高版本。
 - 不支持从存算分离集群迁移到存算一体目标集群。
 - 源集群表使用的每个存储卷都必须在目标集群上预先创建对应的 `src_<volume_name>` 存储卷。
+- Range 分布迁移仅支持分裂，以及每个逻辑分区仅有一个物理分区的非 Colocate 表。不支持 `range-colocate`、源端合并和需要目标端合并的拓扑。

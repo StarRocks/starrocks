@@ -261,6 +261,9 @@ public abstract class TabletReshardJob implements Writable {
      */
     public abstract void init() throws StarRocksException;
 
+    /* Roll back the table reservation when admission journaling definitely did not commit. */
+    public abstract void rollbackInit() throws StarRocksException;
+
     protected abstract void runPendingJob();
 
     protected abstract void runPreparingJob();

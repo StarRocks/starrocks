@@ -30,8 +30,11 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class EditLogFailureVisibleTest {
     @BeforeEach
@@ -186,6 +189,109 @@ public class EditLogFailureVisibleTest {
 
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED, exception.getReason());
         Assertions.assertFalse(applied.get());
+    }
+
+    @Test
+    public void testLogJsonObjectOrThrowInterruptBeforeEnqueueIsDefiniteFailure() throws Exception {
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(1);
+        JournalTask blocker = new JournalTask(System.nanoTime(), makeBuffer(8), -1);
+        queue.put(blocker);
+        EditLog editLog = new EditLog(queue);
+        AtomicBoolean applied = new AtomicBoolean(false);
+
+        Thread.currentThread().interrupt();
+        try {
+            Assertions.assertThrows(InterruptedException.class,
+                    () -> editLog.logJsonObjectOrThrow(
+                            OperationType.OP_STARMGR, "payload", obj -> applied.set(true)));
+        } finally {
+            Thread.interrupted();
+        }
+
+        Assertions.assertSame(blocker, queue.poll());
+        Assertions.assertFalse(applied.get());
+    }
+
+    @Test
+    public void testLogJsonObjectOrThrowWaitsUninterruptiblyAfterEnqueue() throws Exception {
+        InterruptAfterEnqueueQueue queue = new InterruptAfterEnqueueQueue();
+        EditLog editLog = new EditLog(queue);
+        AtomicInteger applyCount = new AtomicInteger();
+        AtomicBoolean interruptedOnReturn = new AtomicBoolean(false);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread producer = new Thread(() -> {
+            try {
+                editLog.logJsonObjectOrThrow(
+                        OperationType.OP_STARMGR, "payload", obj -> applyCount.incrementAndGet());
+                interruptedOnReturn.set(Thread.currentThread().isInterrupted());
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        });
+        producer.start();
+
+        Assertions.assertTrue(queue.enqueued.await(5, TimeUnit.SECONDS));
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+        Assertions.assertTrue(producer.isAlive(), "producer must still wait for a definite journal outcome");
+        Assertions.assertEquals(0, applyCount.get());
+
+        task.markSucceed();
+        producer.join(5000L);
+
+        Assertions.assertFalse(producer.isAlive());
+        Assertions.assertNull(failure.get());
+        Assertions.assertEquals(1, applyCount.get());
+        Assertions.assertTrue(interruptedOnReturn.get());
+    }
+
+    @Test
+    public void testLogJsonObjectOrThrowRestoresInterruptOnDefiniteAbort() throws Exception {
+        InterruptAfterEnqueueQueue queue = new InterruptAfterEnqueueQueue();
+        EditLog editLog = new EditLog(queue);
+        AtomicInteger applyCount = new AtomicInteger();
+        AtomicBoolean interruptedOnAbort = new AtomicBoolean(false);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        Thread producer = new Thread(() -> {
+            try {
+                editLog.logJsonObjectOrThrow(
+                        OperationType.OP_STARMGR, "payload", obj -> applyCount.incrementAndGet());
+            } catch (Throwable t) {
+                interruptedOnAbort.set(Thread.currentThread().isInterrupted());
+                failure.set(t);
+            }
+        });
+        producer.start();
+
+        Assertions.assertTrue(queue.enqueued.await(5, TimeUnit.SECONDS));
+        JournalTask task = queue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task);
+        task.markAbort(new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer stopped"));
+        producer.join(5000L);
+
+        Assertions.assertFalse(producer.isAlive());
+        Assertions.assertInstanceOf(JournalWriteException.class, failure.get());
+        Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
+                ((JournalWriteException) failure.get()).getReason());
+        Assertions.assertEquals(0, applyCount.get());
+        Assertions.assertTrue(interruptedOnAbort.get());
+    }
+
+    private static final class InterruptAfterEnqueueQueue extends ArrayBlockingQueue<JournalTask> {
+        private final CountDownLatch enqueued = new CountDownLatch(1);
+
+        private InterruptAfterEnqueueQueue() {
+            super(1);
+        }
+
+        @Override
+        public void put(JournalTask task) throws InterruptedException {
+            super.put(task);
+            enqueued.countDown();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Thread succeedQueuedTaskAsync(BlockingQueue<JournalTask> queue) {

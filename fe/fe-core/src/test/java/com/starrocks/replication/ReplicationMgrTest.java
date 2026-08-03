@@ -24,6 +24,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ReplicationsProcNode;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -45,6 +46,9 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
@@ -53,10 +57,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ReplicationMgrTest {
     private static StarRocksAssert starRocksAssert;
@@ -100,6 +106,9 @@ public class ReplicationMgrTest {
 
     @BeforeEach
     public void setUp() throws Exception {
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        setLeaderWorkAdmissionOpen(true);
+        clearRunningReplicationTransactions();
         partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
         srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
         partition.getDefaultPhysicalPartition().setDataVersion(8);
@@ -111,6 +120,44 @@ public class ReplicationMgrTest {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
+    }
+
+    private void clearRunningReplicationTransactions() throws Exception {
+        DatabaseTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getDatabaseTransactionMgr(db.getId());
+        Map<Long, TransactionState> runningTransactions =
+                Deencapsulation.getField(transactionMgr, "idToRunningTransactionState");
+        runningTransactions.entrySet().removeIf(
+                entry -> entry.getValue().getSourceType() == TransactionState.LoadJobSourceType.REPLICATION);
+    }
+
+    @Test
+    public void testCommittedReplicationTransactionBlocksAfterRunningJobRemoved() throws Exception {
+        replicationMgr.removeRunningJob(job);
+        DatabaseTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getDatabaseTransactionMgr(db.getId());
+        Map<Long, TransactionState> runningTransactions =
+                Deencapsulation.getField(transactionMgr, "idToRunningTransactionState");
+        TransactionState transactionState = new TransactionState(
+                db.getId(),
+                List.of(table.getId()),
+                987654321L,
+                "committed_replication",
+                null,
+                TransactionState.LoadJobSourceType.REPLICATION,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
+                -1L,
+                Config.replication_transaction_timeout_sec * 1000L);
+        transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
+        runningTransactions.put(transactionState.getTransactionId(), transactionState);
+
+        try {
+            Assertions.assertTrue(replicationMgr.isTableUnderReplication(db.getId(), table.getId()));
+            Assertions.assertThrows(Exception.class, () -> replicationMgr.addReplicationJob(job));
+            Assertions.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        } finally {
+            runningTransactions.remove(transactionState.getTransactionId());
+        }
     }
 
     @Test
@@ -400,6 +447,13 @@ public class ReplicationMgrTest {
         tSnapshotInfo.setSnapshot_path(snapshotPath);
         tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
         return tSnapshotInfo;
+    }
+
+    private void setLeaderWorkAdmissionOpen(boolean open) throws Exception {
+        Field field = GlobalStateMgr.class.getDeclaredField("leaderWorkAdmissionOpen");
+        field.setAccessible(true);
+        AtomicBoolean admissionOpen = (AtomicBoolean) field.get(GlobalStateMgr.getCurrentState());
+        admissionOpen.set(open);
     }
 
     @Test

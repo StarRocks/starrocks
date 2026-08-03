@@ -1382,9 +1382,23 @@ public class EditLog {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
         }, -1);
-        waitOrThrow(task, -1);
-        if (applier != null) {
-            applier.apply(obj);
+        boolean interrupted = false;
+        try {
+            while (true) {
+                try {
+                    waitOrThrow(task, -1);
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+            if (applier != null) {
+                applier.apply(obj);
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

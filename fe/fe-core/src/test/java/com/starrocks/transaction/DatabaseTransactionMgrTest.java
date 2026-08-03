@@ -321,6 +321,97 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testHasActiveTransactionForRunningStatuses() {
+        DatabaseTransactionMgr transactionMgr = new DatabaseTransactionMgr(
+                GlobalStateMgrTestUtil.testDbId1, masterGlobalStateMgr);
+        long tableId = 100L;
+        TransactionState transactionState = new TransactionState(
+                GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(99L, tableId),
+                1000L,
+                "replication_txn",
+                null,
+                TransactionState.LoadJobSourceType.REPLICATION,
+                transactionSource,
+                -1L,
+                Config.replication_transaction_timeout_sec * 1000L);
+        Map<Long, TransactionState> runningTransactions =
+                Deencapsulation.getField(transactionMgr, "idToRunningTransactionState");
+        runningTransactions.put(transactionState.getTransactionId(), transactionState);
+
+        for (TransactionStatus status : Lists.newArrayList(
+                TransactionStatus.PREPARE, TransactionStatus.PREPARED, TransactionStatus.COMMITTED)) {
+            transactionState.setTransactionStatus(status);
+            Assertions.assertTrue(transactionMgr.hasActiveTransaction(
+                    tableId, TransactionState.LoadJobSourceType.REPLICATION));
+        }
+    }
+
+    @Test
+    public void testHasActiveTransactionIgnoresInactiveOrNonMatchingTransactions() {
+        DatabaseTransactionMgr transactionMgr = new DatabaseTransactionMgr(
+                GlobalStateMgrTestUtil.testDbId1, masterGlobalStateMgr);
+        long tableId = 100L;
+        Map<Long, TransactionState> runningTransactions =
+                Deencapsulation.getField(transactionMgr, "idToRunningTransactionState");
+
+        Assertions.assertFalse(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+
+        TransactionState visibleTransaction = createTransactionState(
+                1001L, Lists.newArrayList(tableId), TransactionState.LoadJobSourceType.REPLICATION,
+                TransactionStatus.VISIBLE);
+        runningTransactions.put(visibleTransaction.getTransactionId(), visibleTransaction);
+        Assertions.assertFalse(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+
+        TransactionState abortedTransaction = createTransactionState(
+                1002L, Lists.newArrayList(tableId), TransactionState.LoadJobSourceType.REPLICATION,
+                TransactionStatus.ABORTED);
+        runningTransactions.put(abortedTransaction.getTransactionId(), abortedTransaction);
+        Assertions.assertFalse(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+
+        TransactionState anotherSourceTransaction = createTransactionState(
+                1003L, Lists.newArrayList(tableId), TransactionState.LoadJobSourceType.FRONTEND,
+                TransactionStatus.PREPARED);
+        runningTransactions.put(anotherSourceTransaction.getTransactionId(), anotherSourceTransaction);
+        Assertions.assertFalse(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+
+        TransactionState anotherTableTransaction = createTransactionState(
+                1004L, Lists.newArrayList(101L), TransactionState.LoadJobSourceType.REPLICATION,
+                TransactionStatus.COMMITTED);
+        runningTransactions.put(anotherTableTransaction.getTransactionId(), anotherTableTransaction);
+        Assertions.assertFalse(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+
+        TransactionState matchingTransaction = createTransactionState(
+                1005L, Lists.newArrayList(99L, tableId), TransactionState.LoadJobSourceType.REPLICATION,
+                TransactionStatus.PREPARE);
+        runningTransactions.put(matchingTransaction.getTransactionId(), matchingTransaction);
+        Assertions.assertTrue(transactionMgr.hasActiveTransaction(
+                tableId, TransactionState.LoadJobSourceType.REPLICATION));
+    }
+
+    private TransactionState createTransactionState(long transactionId, List<Long> tableIds,
+                                                     TransactionState.LoadJobSourceType sourceType,
+                                                     TransactionStatus status) {
+        TransactionState transactionState = new TransactionState(
+                GlobalStateMgrTestUtil.testDbId1,
+                tableIds,
+                transactionId,
+                "txn_" + transactionId,
+                null,
+                sourceType,
+                transactionSource,
+                -1L,
+                Config.replication_transaction_timeout_sec * 1000L);
+        transactionState.setTransactionStatus(status);
+        return transactionState;
+    }
+
+    @Test
     public void getLakeCompactionActiveTxnListTest() throws StarRocksException {
         TransactionState.TxnCoordinator feTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");

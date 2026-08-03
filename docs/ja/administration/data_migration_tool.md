@@ -159,6 +159,104 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
    - ソースストレージボリュームには一時的な認証情報（アクセスキー / シークレットキー）を使用することを推奨します。移行完了後に失効させることができます。
    :::
 
+#### レンジ分散の移行ウィンドウを準備する
+
+レンジ分散移行の初回リリースでは、共有データのソースクラスターから共有データのターゲットクラスターへの移行のみをサポートします。両方のクラスターの StarRocks サーバーと移行ツールに、このセクションで説明するレンジ移行プロトコルが含まれている必要があります。
+
+テーブルには次の要件が適用されます。
+
+- 非 Colocate のレンジ分散テーブルのみをサポートします。`range-colocate` テーブルはサポートされません。
+- 各論理パーティションには 1 つの物理パーティションのみが含まれている必要があります。
+- 移行スナップショットには、すべての論理パーティションと、Rollup インデックスを含むすべての可視インデックスが含まれている必要があります。不完全なスナップショットは拒否されます。
+- トポロジーの調整は分割のみをサポートします。ターゲットレイアウトはソースレイアウトと同一であるか、正確なレンジ分割によってソースレイアウトまで細分化できる必要があります。ソースでの統合、ソースより細かいターゲットレイアウト、またはターゲットでの統合が必要なトポロジーは、レプリケーション開始前に拒否されます。
+
+移行ツールは、ソースクラスターの `SHOW PROC` Tablet 出力から不透明な `RangeEncoded` 列を読み取ります。現在のターゲット Leader FE に `ADMIN EXECUTE ON FRONTEND` ステートメントを発行し、`LocalMetastore.reconcileRangeTablets` を呼び出して完全な目的トポロジーを送信します。
+
+```SQL
+ADMIN EXECUTE ON FRONTEND 'out.append(metastore.reconcileRangeTablets("<base64-request>"))';
+```
+
+人が読むための `Range` 列を解析したり、このステートメントを手動で実行したりしないでください。ツールは列名で `RangeEncoded` を検出し、バージョン付き Base64 リクエストを構築して、ターゲット Leader FE を更新し、構造化レスポンスを検証します。
+
+設定を変更する前に、ソースクラスターとターゲットクラスターの各 FE で元の値を記録してください。移行後はデフォルト値を仮定せず、記録した値を復元します。次の設定は動的です。`WITH PERSISTENT` を付けて設定し、変更のたびに `ADMIN SHOW FRONTEND CONFIG` を使用して、すべての FE が目的の値を返すことを確認してください。
+
+1. **ソースクラスター**で統合を無効にします。ソースクラスターの元の `tablet_reshard_target_size` は変更しません。ソース Tablet は通常のしきい値で自動分割を続け、ターゲットがその境界に追従できるようにする必要があります。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+2. ターゲット Tablet のサイズを変更する前に、**ターゲットクラスター**で統合を無効にします。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false") WITH PERSISTENT;
+   ```
+
+   続行する前に、両方のクラスターで次のクエリを実行し、ソースとターゲットのすべての FE が `false` を返すことを確認します。両方のクラスターで統合を無効化して確認するまで、ターゲット Tablet のサイズを大きくしないでください。
+
+   ```SQL
+   ADMIN SHOW FRONTEND CONFIG LIKE 'tablet_reshard_enable_tablet_merge';
+   ```
+
+3. **ターゲットクラスター**で独立したサイズベースの分割を防止し、ツールが作成するテーブルのレンジ分散を有効にします。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true") WITH PERSISTENT;
+   ```
+
+4. 移行するターゲットのレンジテーブルには、次のどちらか一方を選択します。
+
+   - 移行中に、それらのテーブルへ独立したロードが書き込まれないことを保証します。この場合、クラスター全体の 3 つの事前分割設定は変更しません。
+   - 上記を保証できない場合は、ターゲットクラスターの 3 つの事前分割経路をすべて無効にします。後で復元できるよう、この選択によって設定を変更したことを記録してください。
+
+   2 番目の方法を選択した場合は、次を実行します。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "false") WITH PERSISTENT;
+   ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "false") WITH PERSISTENT;
+   ```
+
+専用の `enable_automatic_tablet_reshard` 設定は追加されません。ターゲットの `tablet_reshard_target_size` のみを符号付き 64 ビット整数の最大値に設定すると、ターゲットでのサイズベースの分割が抑止され、`tablet_reshard_enable_tablet_merge=false` によって統合が抑止されます。ソースは通常の自動分割を継続し、ツールはソースの正確な `RangeEncoded` 境界を使用して、データを書き換えないターゲット分割を送信します。
+
+`enable_execute_script_on_frontend` は静的 FE 設定であり、`ADMIN SET FRONTEND CONFIG` では変更できません。記録した元の値が `false` の場合は、すべてのターゲット FE の **fe.conf** に次の設定を追加し、サポートされるローリング再起動を実行します。一度に 1 台の FE のみを再起動し、その FE が正常になってから次の FE を再起動してください。
+
+```Properties
+enable_execute_script_on_frontend = true
+```
+
+ローリング再起動後、各ターゲット FE で `ADMIN SHOW FRONTEND CONFIG LIKE 'enable_execute_script_on_frontend'` が `true` を返すことを確認します。移行ユーザーには SYSTEM OPERATE 権限が必要です。
+
+:::warning
+
+FE スクリプト実行機能は、FE プロセスで任意のコードを実行できます。期間を限定した移行ウィンドウでのみ有効にし、移行アカウントを制限してください。ツールを停止した後、**fe.conf** で記録した `enable_execute_script_on_frontend` の元の値を復元し、もう一度ローリング再起動を実行します。
+
+:::
+
+設定を適用して確認した後、すでに受け付けられた reshard ジョブが完了するまで待機します。次のクエリをソースクラスターとターゲットクラスターのそれぞれで実行してください。
+
+```SQL
+SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+FROM information_schema.tablet_reshard_jobs
+WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+```
+
+両方のクラスターでこのクエリが 0 行を返した場合にのみ、移行ウィンドウを開始します。この条件は、`PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` を含むすべての非終端ジョブ状態を対象にします。この初期排出によって、その後のソース自動分割が無効になるわけではありません。増分レプリケーションがアクティブな間も、ソース Tablet は通常のしきい値で分割される場合があり、その後ツールがソーストポロジーを更新します。ターゲットの `REPLICATION` トランザクションがアクティブな間にブロックされるのは、対応するターゲット分割だけです。
+
+移行中、ツールは調整ステータスを次のように処理します。
+
+| ステータス | オペレーターの対応 |
+| ---------- | ------------------ |
+| `ALIGNED` | ターゲットの完全なトポロジーがソースと一致しています。ツールの通常のメタデータチェック後、レプリケーションを続行できます。 |
+| `SUBMITTED` | 正確なターゲット分割が送信されました。ツールを実行したままにすると、メタデータを更新して再度ポーリングします。 |
+| `RUNNING` | 一致する分割が実行中です。ポーリングを続けます。 |
+| `RETRYABLE_BUSY` | Leader の切り替え、別の reshard ジョブ、またはアクティブなレプリケーショントランザクションなどの一時的な競合があります。メタデータを更新して再試行します。 |
+| `INCOMPATIBLE` | ターゲット分割だけでは正確なトポロジーに到達できないか、サポート範囲の制限に違反しています。ツールはこのトポロジーに対してフェイルクローズします。トポロジーを修正してから再試行してください。 |
+| `FAILED` | リクエストまたはサーバー処理が失敗しました。ツールはこのトポロジーに対してフェイルクローズします。報告されたメッセージを調査してから再試行してください。 |
+
+`SUBMITTED`、`RUNNING`、`RETRYABLE_BUSY` は進捗ステータスであり、そのテーブルで別のレプリケーションを開始できることを意味しません。2 つのゲートは独立しています。すべてのパーティションおよびインデックスグループが整合するまでレプリケーションは送信されず、ターゲットの `REPLICATION` トランザクションがアクティブな間はターゲット分割が送信されません。`RETRYABLE_BUSY` の原因がレプリケーションの場合、ツールが報告するトランザクション ID を指定して `SHOW TRANSACTION` を実行し、ターゲットトランザクションが `VISIBLE` または `ABORTED` になるまで待機して、次のメタデータサイクルでターゲット分割を再試行させます。
+
 </TabItem>
 </Tabs>
 
@@ -627,6 +725,37 @@ ORDER BY TABLE_NAME;
    ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
    ```
 
+8. レンジ分散テーブルを移行した場合は、まずツールを停止し、すべての `REPLICATION` トランザクションが `VISIBLE` または `ABORTED` になるまで待機します。両方のクラスターで、準備手順の `information_schema.tablet_reshard_jobs` 排出クエリを実行し、0 行になるまで待機します。すべてのターゲット FE の **fe.conf** で、記録した `enable_execute_script_on_frontend` の元の値を復元し、ローリング再起動を完了します。その後、`WITH PERSISTENT` を使用して動的設定を復元し、各段階ですべての FE を確認します。
+
+   **復元順序：**
+
+   1. ターゲットの `tablet_reshard_target_size` を復元します。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   2. ターゲットの `enable_range_distribution` を復元します。2 番目のロード制御方法を選んで事前分割設定を無効にした場合に限り、`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` を復元します。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_files" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_broker_load" = "<recorded-target-value>") WITH PERSISTENT;
+      ADMIN SET FRONTEND CONFIG ("enable_tablet_pre_split_for_insert_from_table" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   3. ターゲットの `tablet_reshard_enable_tablet_merge` を復元します。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-target-value>") WITH PERSISTENT;
+      ```
+
+   4. 最後にソースの `tablet_reshard_enable_tablet_merge` を復元します。
+
+      ```SQL
+      ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "<recorded-source-value>") WITH PERSISTENT;
+      ```
+
 ## 制限事項
 
 現在、同期をサポートするオブジェクトのリストは以下の通りです（含まれていないものは同期がサポートされていないことを示します）。
@@ -641,3 +770,4 @@ ORDER BY TABLE_NAME;
 - ターゲットクラスターは v4.1 以降で実行している必要があります。
 - 共有データクラスターから共有なしターゲットへの移行はサポートされていません。
 - ソースクラスターのテーブルが使用する各ストレージボリュームには、ターゲットクラスターに対応する `src_<volume_name>` ストレージボリュームが事前に作成されている必要があります。
+- レンジ分散移行は分割のみをサポートし、各論理パーティションに 1 つの物理パーティションを持つ非 Colocate テーブルに限定されます。`range-colocate`、ソースでの統合、ターゲットでの統合が必要なトポロジーはサポートされません。

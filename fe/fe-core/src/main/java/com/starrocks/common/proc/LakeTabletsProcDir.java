@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -44,7 +45,7 @@ import java.util.List;
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
-            .add("MinVersion").add("Range")
+            .add("MinVersion").add("Range").add("RangeEncoded")
             .build();
 
     private final Database db;
@@ -87,7 +88,9 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfo.add(lakeTablet.getMinVersion());
-                tabletInfo.add(String.valueOf(lakeTablet.getRange()));
+                TabletRange tabletRange = lakeTablet.getRange();
+                tabletInfo.add(String.valueOf(tabletRange));
+                tabletInfo.add(toEncodedString(tabletRange));
                 tabletInfos.add(tabletInfo);
             }
         } finally {
@@ -171,17 +174,23 @@ public class LakeTabletsProcDir implements ProcDirInterface {
 
             // get current warehouse
             ComputeResource computeResource = ConnectContext.get().getCurrentComputeResource();
+            TabletRange tabletRange = tablet.getRange();
             List<String> row = Arrays.asList(
                     String.valueOf(tablet.getId()),
                     new Gson().toJson(tablet.getBackendIds(computeResource)),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
                     String.valueOf(tablet.getRowCount(0L)),
                     String.valueOf(tablet.getMinVersion()),
-                    String.valueOf(tablet.getRange())
+                    String.valueOf(tabletRange),
+                    toEncodedString(tabletRange)
             );
             result.addRow(row);
 
             return result;
         }
+    }
+
+    private static String toEncodedString(TabletRange tabletRange) {
+        return tabletRange == null ? "" : tabletRange.toEncodedString();
     }
 }

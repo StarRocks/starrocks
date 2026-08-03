@@ -18,10 +18,19 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockInterruptException;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -34,6 +43,7 @@ import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,6 +52,8 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ReplicationMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ReplicationMgr.class);
@@ -54,6 +66,8 @@ public class ReplicationMgr extends LeaderDaemon {
 
     @SerializedName(value = "abortedJobs")
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
+
+    private final transient Set<Long> tablesInConstruction = ConcurrentHashMap.newKeySet();
 
     public ReplicationMgr() {
         super("replication-mgr", Config.replication_interval_ms);
@@ -72,9 +86,72 @@ public class ReplicationMgr extends LeaderDaemon {
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
         LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",
                 request.getDatabase_id(), request.getTable_id(), request.getJob_id());
-        ReplicationJob job = isLakeReplicationJob(request) ?
-                new LakeReplicationJob(request) : new ReplicationJob(request);
-        addReplicationJob(job);
+        long dbId = request.getDatabase_id();
+        long tableId = request.getTable_id();
+        OlapTable table = getTargetTable(dbId, tableId);
+        boolean reservationOwned = false;
+        Throwable primaryFailure = null;
+        try {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            try {
+                table = getTargetTable(dbId, tableId);
+                checkLeaderAdmissionOpen();
+                checkTableNormal(table);
+                if (isTableUnderReplication(dbId, tableId)) {
+                    throw new AlreadyExistsException("Replication job of table " + tableId + " is already running");
+                }
+                if (!tablesInConstruction.add(tableId)) {
+                    throw new AlreadyExistsException("Replication job of table " + tableId + " is being constructed");
+                }
+                reservationOwned = true;
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            }
+
+            ReplicationJob job = createReplicationJob(request);
+
+            locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            try {
+                table = getTargetTable(dbId, tableId);
+                checkLeaderAdmissionOpen();
+                checkTableNormal(table);
+                if (runningJobs.containsKey(tableId) || hasActiveReplicationTransaction(dbId, tableId)) {
+                    throw new AlreadyExistsException("Replication job of table " + tableId + " is already running");
+                }
+                checkParallelismLimits();
+                if (runningJobs.putIfAbsent(tableId, job) != null) {
+                    throw new AlreadyExistsException("Replication job of table " + tableId + " is already running");
+                }
+                tablesInConstruction.remove(tableId);
+                reservationOwned = false;
+                removeHistoricalJobs(tableId);
+                logAddedJob(job);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            }
+        } catch (StarRocksException | RuntimeException | Error failure) {
+            primaryFailure = failure;
+            throw failure;
+        } finally {
+            if (reservationOwned) {
+                try {
+                    releaseConstructionReservation(dbId, tableId);
+                } catch (RuntimeException | Error cleanupFailure) {
+                    if (primaryFailure != null) {
+                        primaryFailure.addSuppressed(cleanupFailure);
+                    } else {
+                        throw cleanupFailure;
+                    }
+                }
+            }
+        }
+    }
+
+    @VisibleForTesting
+    protected ReplicationJob createReplicationJob(TTableReplicationRequest request) throws StarRocksException {
+        return isLakeReplicationJob(request) ? new LakeReplicationJob(request) : new ReplicationJob(request);
     }
 
     private boolean isLakeReplicationJob(TTableReplicationRequest request) {
@@ -83,6 +160,51 @@ public class ReplicationMgr extends LeaderDaemon {
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
+        long dbId = job.getDatabaseId();
+        long tableId = job.getTableId();
+        OlapTable table;
+        try {
+            table = getTargetTable(dbId, tableId);
+        } catch (StarRocksException e) {
+            throw new AlreadyExistsException(e.getMessage());
+        }
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        try {
+            try {
+                table = getTargetTable(dbId, tableId);
+            } catch (StarRocksException e) {
+                throw new AlreadyExistsException(e.getMessage());
+            }
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            if (!globalStateMgr.isLeader() || !globalStateMgr.isLeaderWorkAdmissionOpen()) {
+                throw new AlreadyExistsException("Leader work admission is closed");
+            }
+            if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new AlreadyExistsException(
+                        "Table " + table.getName() + " state is not NORMAL: " + table.getState());
+            }
+            if (isTableUnderReplication(dbId, tableId)) {
+                throw new AlreadyExistsException("Replication job of table " + tableId + " is already running");
+            }
+            checkParallelismLimits();
+            if (runningJobs.putIfAbsent(tableId, job) != null) {
+                throw new AlreadyExistsException("Replication job of table " + tableId + " is already running");
+            }
+            removeHistoricalJobs(tableId);
+            logAddedJob(job);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        }
+    }
+
+    public boolean isTableUnderReplication(long dbId, long tableId) {
+        return tablesInConstruction.contains(tableId)
+                || runningJobs.containsKey(tableId)
+                || hasActiveReplicationTransaction(dbId, tableId);
+    }
+
+    private void checkParallelismLimits() {
         // Limit replication job size
         if (runningJobs.size() >= Config.replication_max_parallel_table_count) {
             throw new RuntimeException(
@@ -108,16 +230,137 @@ public class ReplicationMgr extends LeaderDaemon {
                     + Config.replication_max_parallel_data_size_mb);
         }
 
-        if (runningJobs.putIfAbsent(job.getTableId(), job) != null) {
-            throw new AlreadyExistsException("Replication job of table " + job.getTableId() + " is already running");
-        }
+    }
 
-        committedJobs.remove(job.getTableId()); // If the job is committed before, remove it from committed jobs
-        abortedJobs.remove(job.getTableId()); // If the job is aborted before, remove it from aborted jobs
+    private void removeHistoricalJobs(long tableId) {
+        committedJobs.remove(tableId);
+        abortedJobs.remove(tableId);
+    }
 
+    private void logAddedJob(ReplicationJob job) {
+        long replicatingDataSizeMB = getReplicatingDataSize() / 1048576;
         LOG.info("Added replication job, database id: {}, table id: {}, "
                 + "replication data size: {}, current replicating data size: {}(MB)",
                 job.getDatabaseId(), job.getTableId(), job.getReplicationDataSize(), replicatingDataSizeMB);
+    }
+
+    private OlapTable getTargetTable(long dbId, long tableId) throws StarRocksException {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (database == null) {
+            throw new StarRocksException("Database " + dbId + " does not exist");
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (!(table instanceof OlapTable)) {
+            throw new StarRocksException("OLAP table " + tableId + " does not exist");
+        }
+        return (OlapTable) table;
+    }
+
+    private void checkLeaderAdmissionOpen() throws StarRocksException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.isLeader() || !globalStateMgr.isLeaderWorkAdmissionOpen()) {
+            throw new StarRocksException("Leader work admission is closed");
+        }
+    }
+
+    private void checkTableNormal(OlapTable table) throws StarRocksException {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw new StarRocksException(
+                    "Table " + table.getName() + " state is not NORMAL: " + table.getState());
+        }
+    }
+
+    private boolean hasActiveReplicationTransaction(long dbId, long tableId) {
+        try {
+            return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(dbId)
+                    .hasActiveTransaction(tableId, TransactionState.LoadJobSourceType.REPLICATION);
+        } catch (AnalysisException e) {
+            LOG.warn("Cannot inspect replication transactions for database {}, reject table {} admission",
+                    dbId, tableId, e);
+            return true;
+        }
+    }
+
+    private void releaseConstructionReservation(long dbId, long tableId) {
+        boolean restoreInterrupt = Thread.interrupted();
+        Locker locker = new Locker();
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        boolean dbLockHeld = false;
+        boolean tableLockHeld = false;
+        Throwable cleanupFailure = null;
+        try {
+            while (!dbLockHeld || !tableLockHeld) {
+                try {
+                    if (!dbLockHeld) {
+                        locker.lock(dbId, LockType.INTENTION_EXCLUSIVE);
+                        dbLockHeld = true;
+                    }
+                    if (!tableLockHeld) {
+                        locker.lock(tableId, LockType.WRITE);
+                        tableLockHeld = true;
+                    }
+                } catch (LockInterruptException e) {
+                    restoreInterrupt = true;
+                    Thread.interrupted();
+                    dbLockHeld = dbLockHeld
+                            || lockManager.isOwner(dbId, locker, LockType.INTENTION_EXCLUSIVE);
+                    tableLockHeld = tableLockHeld
+                            || lockManager.isOwner(tableId, locker, LockType.WRITE);
+                } catch (LockException e) {
+                    throw new IllegalStateException(
+                            "Failed to acquire lock while releasing replication construction reservation", e);
+                }
+            }
+
+            tablesInConstruction.remove(tableId);
+        } catch (RuntimeException | Error failure) {
+            cleanupFailure = failure;
+            throw failure;
+        } finally {
+            try {
+                releaseConstructionReservationLocks(
+                        locker, dbId, tableId, dbLockHeld, tableLockHeld);
+            } catch (RuntimeException | Error unlockFailure) {
+                if (cleanupFailure != null) {
+                    cleanupFailure.addSuppressed(unlockFailure);
+                } else {
+                    throw unlockFailure;
+                }
+            } finally {
+                if (restoreInterrupt) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+    }
+
+    private void releaseConstructionReservationLocks(
+            Locker locker, long dbId, long tableId, boolean dbLockHeld, boolean tableLockHeld) {
+        Throwable unlockFailure = null;
+        if (tableLockHeld) {
+            try {
+                locker.release(tableId, LockType.WRITE);
+            } catch (RuntimeException | Error failure) {
+                unlockFailure = failure;
+            }
+        }
+        if (dbLockHeld) {
+            try {
+                locker.release(dbId, LockType.INTENTION_EXCLUSIVE);
+            } catch (RuntimeException | Error failure) {
+                if (unlockFailure == null) {
+                    unlockFailure = failure;
+                } else {
+                    unlockFailure.addSuppressed(failure);
+                }
+            }
+        }
+        if (unlockFailure instanceof RuntimeException) {
+            throw (RuntimeException) unlockFailure;
+        }
+        if (unlockFailure instanceof Error) {
+            throw (Error) unlockFailure;
+        }
     }
 
     public Collection<ReplicationJob> getRunningJobs() {

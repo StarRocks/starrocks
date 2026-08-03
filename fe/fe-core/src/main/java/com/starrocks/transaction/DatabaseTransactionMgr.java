@@ -832,6 +832,20 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public boolean hasActiveTransaction(long tableId, TransactionState.LoadJobSourceType sourceType) {
+        readLock();
+        try {
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getSourceType() == sourceType && state.getTableIdList().contains(tableId) && state.isRunning()) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            readUnlock();
+        }
+    }
+
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
         info.add(String.valueOf(txnState.getTransactionId()));
         info.add(txnState.getLabel());

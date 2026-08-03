@@ -19,8 +19,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -35,10 +42,20 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
 public class TabletReshardJobMgrTest {
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
         private long tableId = 0;
+        private int initCount;
+        private int rollbackCount;
 
         public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
             super(jobId, jobType);
@@ -65,6 +82,12 @@ public class TabletReshardJobMgrTest {
 
         @Override
         public void init() throws StarRocksException {
+            initCount++;
+        }
+
+        @Override
+        public void rollbackInit() throws StarRocksException {
+            rollbackCount++;
         }
 
         @Override
@@ -182,7 +205,7 @@ public class TabletReshardJobMgrTest {
     private static LakeTablet oversizedTablet;
 
     @BeforeEach
-    public void clearSharedMgr() {
+    public void clearSharedMgr() throws Exception {
         // Tests that use the singleton TabletReshardJobMgr share its state. Clear it before each
         // test so a job created in one test does not block table-reservation checks in the next.
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().tabletReshardJobs.clear();
@@ -192,6 +215,8 @@ public class TabletReshardJobMgrTest {
         if (reshardTable != null) {
             reshardTable.setState(OlapTable.OlapTableState.NORMAL);
         }
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        setLeaderWorkAdmissionOpen(true);
     }
 
     @BeforeAll
@@ -268,6 +293,226 @@ public class TabletReshardJobMgrTest {
         Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
         Assertions.assertNull(jobMgr.getTabletReshardJob(1));
         Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testAddJobRejectsClosedLeaderWorkBeforeInit() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job =
+                new TestNormalTabletReshardJob(11, TabletReshardJob.JobType.SPLIT_TABLET);
+        mockLeaderAdmissionClosed();
+
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
+
+        Assertions.assertEquals(0, job.initCount);
+        Assertions.assertEquals(0, job.rollbackCount);
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testAddJobPublishesOnlyInWalApplier() throws Exception {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job =
+                new TestNormalTabletReshardJob(12, TabletReshardJob.JobType.SPLIT_TABLET);
+        AtomicReference<WALApplier> capturedApplier = new AtomicReference<>();
+        AtomicReference<Object> capturedObject = new AtomicReference<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObjectOrThrow(short op, Object object, WALApplier applier) {
+                Assertions.assertEquals(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, op);
+                capturedObject.set(object);
+                capturedApplier.set(applier);
+            }
+        };
+
+        jobMgr.addTabletReshardJob(job);
+
+        Assertions.assertEquals(1, job.initCount);
+        Assertions.assertEquals(0, job.rollbackCount);
+        Assertions.assertNull(jobMgr.getTabletReshardJob(job.getJobId()));
+        Assertions.assertSame(job, capturedObject.get());
+        Assertions.assertNotNull(capturedApplier.get());
+
+        capturedApplier.get().apply(job);
+        Assertions.assertSame(job, jobMgr.getTabletReshardJob(job.getJobId()));
+    }
+
+    @Test
+    public void testAddJobRollsBackInitOnDefiniteJournalAbort() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job =
+                new TestNormalTabletReshardJob(13, TabletReshardJob.JobType.MERGE_TABLET);
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                    throws JournalWriteException {
+                throw new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer aborted");
+            }
+        };
+
+        StarRocksException exception = Assertions.assertThrows(
+                StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
+
+        Assertions.assertTrue(exception.getMessage().contains("writer aborted"));
+        Assertions.assertEquals(1, job.initCount);
+        Assertions.assertEquals(1, job.rollbackCount);
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testAddJobRollsBackInitOnPreEnqueueInterrupt() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job =
+                new TestNormalTabletReshardJob(14, TabletReshardJob.JobType.SPLIT_TABLET);
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                    throws InterruptedException {
+                throw new InterruptedException("before enqueue");
+            }
+        };
+
+        try {
+            Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
+            Assertions.assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+        Assertions.assertEquals(1, job.initCount);
+        Assertions.assertEquals(1, job.rollbackCount);
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testPreEnqueueInterruptRollsBackRealSplitWhileTableLockContended() throws Exception {
+        assertInterruptedJournalFailureRollsBack(
+                new SplitTabletJob(140, reshardDb.getId(), reshardTable.getId(), Map.of()), true);
+    }
+
+    @Test
+    public void testPostEnqueueAbortRollsBackRealMergeWhileTableLockContended() throws Exception {
+        assertInterruptedJournalFailureRollsBack(
+                new MergeTabletJob(141, reshardDb.getId(), reshardTable.getId(), Map.of()), false);
+    }
+
+    @Test
+    public void testRollbackFailureIsSuppressedUnderOriginalJournalFailure() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(
+                142, TabletReshardJob.JobType.SPLIT_TABLET) {
+            @Override
+            public void rollbackInit() {
+                throw new IllegalStateException("rollback lock failed");
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                    throws JournalWriteException {
+                throw new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer aborted");
+            }
+        };
+
+        StarRocksException failure = Assertions.assertThrows(
+                StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
+
+        Assertions.assertInstanceOf(JournalWriteException.class, failure.getCause());
+        Assertions.assertEquals(1, failure.getSuppressed().length);
+        Assertions.assertInstanceOf(IllegalStateException.class, failure.getSuppressed()[0]);
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testCapacityReservationIncludesWalPendingJob() throws Exception {
+        long originalLimit = Config.tablet_reshard_max_parallel_tablets;
+        Config.tablet_reshard_max_parallel_tablets = 15;
+        try {
+            TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+            TestNormalTabletReshardJob first = new TestNormalTabletReshardJob(
+                    150, TabletReshardJob.JobType.SPLIT_TABLET);
+            TestNormalTabletReshardJob second = new TestNormalTabletReshardJob(
+                    151, TabletReshardJob.JobType.MERGE_TABLET);
+            CountDownLatch firstJournalEntered = new CountDownLatch(1);
+            CountDownLatch releaseFirstJournal = new CountDownLatch(1);
+            AtomicInteger journalCount = new AtomicInteger();
+            AtomicReference<Throwable> firstFailure = new AtomicReference<>();
+            new MockUp<EditLog>() {
+                @Mock
+                public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                        throws InterruptedException {
+                    int call = journalCount.incrementAndGet();
+                    if (call == 1) {
+                        firstJournalEntered.countDown();
+                        if (!releaseFirstJournal.await(5, TimeUnit.SECONDS)) {
+                            throw new AssertionError("timed out waiting to release first journal append");
+                        }
+                    }
+                    applier.apply(object);
+                }
+            };
+
+            Thread firstProducer = new Thread(() -> {
+                try {
+                    jobMgr.addTabletReshardJob(first);
+                } catch (Throwable t) {
+                    firstFailure.set(t);
+                }
+            });
+            firstProducer.start();
+            Assertions.assertTrue(firstJournalEntered.await(5, TimeUnit.SECONDS));
+            try {
+                Assertions.assertThrows(StarRocksException.class,
+                        () -> jobMgr.addTabletReshardJob(second));
+            } finally {
+                releaseFirstJournal.countDown();
+                firstProducer.join(5000L);
+            }
+
+            Assertions.assertFalse(firstProducer.isAlive());
+            Assertions.assertNull(firstFailure.get());
+            Assertions.assertEquals(1, journalCount.get());
+            Assertions.assertEquals(0, second.initCount);
+            Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
+            Assertions.assertSame(first, jobMgr.getTabletReshardJob(first.getJobId()));
+        } finally {
+            Config.tablet_reshard_max_parallel_tablets = originalLimit;
+        }
+    }
+
+    @Test
+    public void testFailedJournalReleasesCapacityReservation() throws Exception {
+        long originalLimit = Config.tablet_reshard_max_parallel_tablets;
+        Config.tablet_reshard_max_parallel_tablets = 15;
+        try {
+            TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+            TestNormalTabletReshardJob failed = new TestNormalTabletReshardJob(
+                    152, TabletReshardJob.JobType.SPLIT_TABLET);
+            TestNormalTabletReshardJob admitted = new TestNormalTabletReshardJob(
+                    153, TabletReshardJob.JobType.MERGE_TABLET);
+            AtomicInteger journalCount = new AtomicInteger();
+            new MockUp<EditLog>() {
+                @Mock
+                public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                        throws JournalWriteException {
+                    if (journalCount.incrementAndGet() == 1) {
+                        throw new JournalWriteException(
+                                JournalWriteException.Reason.WRITER_ABORTED, "writer aborted");
+                    }
+                    applier.apply(object);
+                }
+            };
+
+            Assertions.assertThrows(StarRocksException.class,
+                    () -> jobMgr.addTabletReshardJob(failed));
+            jobMgr.addTabletReshardJob(admitted);
+
+            Assertions.assertEquals(2, journalCount.get());
+            Assertions.assertEquals(1, failed.rollbackCount);
+            Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
+            Assertions.assertSame(admitted, jobMgr.getTabletReshardJob(admitted.getJobId()));
+        } finally {
+            Config.tablet_reshard_max_parallel_tablets = originalLimit;
+        }
     }
 
     @Test
@@ -376,6 +621,117 @@ public class TabletReshardJobMgrTest {
         Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
     }
 
+    private void assertInterruptedJournalFailureRollsBack(
+            TabletReshardJob job, boolean preEnqueueInterrupt) throws Exception {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountDownLatch journalEntered = new CountDownLatch(1);
+        CountDownLatch tableLockHeld = new CountDownLatch(1);
+        CountDownLatch journalFailureInjected = new CountDownLatch(1);
+        CountDownLatch releaseTableLock = new CountDownLatch(1);
+        AtomicReference<Throwable> producerFailure = new AtomicReference<>();
+        AtomicReference<Throwable> holderFailure = new AtomicReference<>();
+        AtomicBoolean interruptedOnExit = new AtomicBoolean();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logJsonObjectOrThrow(short op, Object object, WALApplier applier)
+                    throws InterruptedException, JournalWriteException {
+                journalEntered.countDown();
+                if (!tableLockHeld.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("timed out waiting for contended table lock");
+                }
+                journalFailureInjected.countDown();
+                if (preEnqueueInterrupt) {
+                    throw new InterruptedException("before enqueue");
+                }
+                Thread.currentThread().interrupt();
+                throw new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED, "writer aborted");
+            }
+        };
+
+        Thread lockHolder = new Thread(() -> {
+            Locker locker = new Locker();
+            boolean locked = false;
+            try {
+                if (!journalEntered.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("journal append was not reached");
+                }
+                locker.lockTableWithIntensiveDbLock(
+                        reshardDb.getId(), reshardTable.getId(), LockType.WRITE);
+                locked = true;
+                tableLockHeld.countDown();
+                if (!releaseTableLock.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("timed out waiting to release table lock");
+                }
+            } catch (Throwable t) {
+                holderFailure.set(t);
+            } finally {
+                if (locked) {
+                    locker.unLockTableWithIntensiveDbLock(
+                            reshardDb.getId(), reshardTable.getId(), LockType.WRITE);
+                }
+            }
+        });
+        Thread producer = new Thread(() -> {
+            try {
+                jobMgr.addTabletReshardJob(job);
+            } catch (Throwable t) {
+                producerFailure.set(t);
+            } finally {
+                interruptedOnExit.set(Thread.currentThread().isInterrupted());
+            }
+        });
+
+        lockHolder.start();
+        producer.start();
+        try {
+            Assertions.assertTrue(tableLockHeld.await(5, TimeUnit.SECONDS));
+            Assertions.assertTrue(journalFailureInjected.await(5, TimeUnit.SECONDS));
+            awaitRollbackBlockedOrFinished(producer);
+        } finally {
+            releaseTableLock.countDown();
+            producer.join(5000L);
+            lockHolder.join(5000L);
+        }
+
+        Assertions.assertFalse(producer.isAlive());
+        Assertions.assertFalse(lockHolder.isAlive());
+        Assertions.assertNull(holderFailure.get());
+        StarRocksException failure = Assertions.assertInstanceOf(
+                StarRocksException.class, producerFailure.get());
+        if (preEnqueueInterrupt) {
+            Assertions.assertInstanceOf(InterruptedException.class, failure.getCause());
+        } else {
+            Assertions.assertInstanceOf(JournalWriteException.class, failure.getCause());
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, reshardTable.getState());
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+        Assertions.assertTrue(interruptedOnExit.get());
+    }
+
+    private void awaitRollbackBlockedOrFinished(Thread thread) throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadlineNanos) {
+            Thread.State state = thread.getState();
+            if (!thread.isAlive()) {
+                return;
+            }
+            boolean inRollbackLock = false;
+            for (StackTraceElement frame : thread.getStackTrace()) {
+                if (frame.getMethodName().equals("rollbackInit")
+                        || frame.getClassName().endsWith("AutoCloseableLock")) {
+                    inRollbackLock = true;
+                    break;
+                }
+            }
+            if (inRollbackLock && (state == Thread.State.BLOCKED || state == Thread.State.WAITING
+                    || state == Thread.State.TIMED_WAITING)) {
+                return;
+            }
+            Thread.sleep(10L);
+        }
+        Assertions.fail("producer neither blocked on the rollback lock nor completed");
+    }
+
     private void mockLeaderAdmissionOpen() {
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -402,6 +758,13 @@ public class TabletReshardJobMgrTest {
                 return false;
             }
         };
+    }
+
+    private void setLeaderWorkAdmissionOpen(boolean open) throws Exception {
+        Field field = GlobalStateMgr.class.getDeclaredField("leaderWorkAdmissionOpen");
+        field.setAccessible(true);
+        AtomicBoolean admissionOpen = (AtomicBoolean) field.get(GlobalStateMgr.getCurrentState());
+        admissionOpen.set(open);
     }
 
     @Test

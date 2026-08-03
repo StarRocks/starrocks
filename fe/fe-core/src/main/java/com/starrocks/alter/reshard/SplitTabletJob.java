@@ -29,6 +29,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -41,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -91,6 +93,27 @@ public class SplitTabletJob extends TabletReshardJob {
     @SerializedName(value = "endTransactionId")
     protected long endTransactionId;
 
+    @SerializedName(value = "externalRequestId")
+    private String externalRequestId;
+
+    @SerializedName(value = "externalFinalDigest")
+    private String externalFinalDigest;
+
+    @SerializedName(value = "externalStepDigest")
+    private String externalStepDigest;
+
+    private transient ExternalAdmissionSnapshot externalAdmissionSnapshot;
+
+    public record ExternalAdmissionGroup(long physicalPartitionId, long indexMetaId, long currentIndexId) {
+    }
+
+    public record ExternalAdmissionSnapshot(
+            long databaseId, long tableId, Set<ExternalAdmissionGroup> groups) {
+        public ExternalAdmissionSnapshot {
+            groups = Set.copyOf(groups);
+        }
+    }
+
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
         super(jobId, JobType.SPLIT_TABLET);
@@ -116,6 +139,28 @@ public class SplitTabletJob extends TabletReshardJob {
         return transactionId;
     }
 
+    public String getExternalRequestId() {
+        return externalRequestId;
+    }
+
+    public String getExternalFinalDigest() {
+        return externalFinalDigest;
+    }
+
+    public String getExternalStepDigest() {
+        return externalStepDigest;
+    }
+
+    public void setExternalIdentity(String requestId, String finalDigest, String stepDigest) {
+        this.externalRequestId = requestId;
+        this.externalFinalDigest = finalDigest;
+        this.externalStepDigest = stepDigest;
+    }
+
+    public void setExternalAdmissionSnapshot(ExternalAdmissionSnapshot snapshot) {
+        this.externalAdmissionSnapshot = snapshot;
+    }
+
     @Override
     public long getParallelTablets() {
         long parallelTablets = 0;
@@ -127,12 +172,68 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try {
-            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            OlapTable olapTable = getOlapTable();
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new TabletReshardException(
+                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+            }
+            if (GlobalStateMgr.getCurrentState().getReplicationMgr().isTableUnderReplication(dbId, tableId)) {
+                throw new TabletReshardException("Table " + olapTable.getName() + " is under replication");
+            }
+            validateExternalAdmissionSnapshot(olapTable);
+            olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
         } catch (TabletReshardException e) {
             // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
             throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void rollbackInit() throws StarRocksException {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            OlapTable olapTable = getOlapTable();
+            if (olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
+                throw new TabletReshardException(
+                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+            }
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        } catch (TabletReshardException e) {
+            throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
+    private void validateExternalAdmissionSnapshot(OlapTable olapTable) {
+        if (externalAdmissionSnapshot == null) {
+            return;
+        }
+        if (externalAdmissionSnapshot.databaseId() != dbId || externalAdmissionSnapshot.tableId() != tableId) {
+            throw new TabletReshardException("External admission snapshot table identity is stale");
+        }
+        if (!olapTable.isCloudNativeTableOrMaterializedView() || !olapTable.isRangeDistribution()) {
+            throw new TabletReshardException("External admission requires a shared-data range table");
+        }
+        if (olapTable.hasColocateGroup()
+                || GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(tableId)) {
+            throw new TabletReshardException("External admission does not support colocate tables");
+        }
+
+        Set<ExternalAdmissionGroup> currentGroups = new LinkedHashSet<>();
+        for (Partition partition : olapTable.getPartitions()) {
+            if (partition.getSubPartitions().size() != 1) {
+                throw new TabletReshardException(
+                        "External admission requires one physical partition per logical partition");
+            }
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+            for (MaterializedIndex index :
+                    physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                currentGroups.add(new ExternalAdmissionGroup(
+                        physicalPartition.getId(), index.getMetaId(), index.getId()));
+            }
+        }
+        if (!currentGroups.equals(externalAdmissionSnapshot.groups())) {
+            throw new TabletReshardException("External admission snapshot is stale");
         }
     }
 
@@ -842,7 +943,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     private OlapTable getOlapTable() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-        if (table == null) { // Table is dropped
+        if (!(table instanceof OlapTable)) { // Table is dropped or its id no longer identifies an OLAP table
             // Only force ABORTING when the job is past the abortable PENDING window. At admission
             // (PENDING, not yet queued) and during runPendingJob (still PENDING), the run()
             // wrapper's abort() can handle the transition cleanly — avoiding a journal entry for
