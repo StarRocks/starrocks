@@ -1539,7 +1539,18 @@ public class EditLog {
         try {
             waitForCommit(submitRawUninterruptibly(op, writable, -1));
             if (applyAction != null) {
-                applyAction.run();
+                try {
+                    applyAction.run();
+                } catch (Throwable t) {
+                    // The journal entry is already durable, so a torn apply permanently diverges this
+                    // FE's in-memory state from its own WAL: nothing replays it later (the commit
+                    // watermark advances past it on demotion). Make that loud and searchable for ops;
+                    // the exception still propagates to the caller unchanged - no new exit path while
+                    // the WAL applier rollout settles.
+                    LOG.error("WAL apply failed for op {}: the journal entry is durable but the in-memory "
+                            + "apply was torn; this FE's memory may have diverged from its own WAL", op, t);
+                    throw t;
+                }
             }
         } finally {
             exitGate();
