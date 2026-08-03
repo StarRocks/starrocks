@@ -747,6 +747,18 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // A ColumnId is only a name, so an entry left behind by a dropped column does not
+        // just linger: re-creating a column with that name would resolve the stale id again
+        // and silently switch the compression dictionary on for it. The schema index has
+        // just been rebuilt, and every schema mutation ends up here -- fast schema
+        // evolution, the shadow-index jobs and edit-log replay alike -- so this is the one
+        // place that can keep the set honest.
+        if (compressionDictColumns != null) {
+            compressionDictColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (compressionDictColumns.isEmpty()) {
+                compressionDictColumns = null;
+            }
+        }
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {

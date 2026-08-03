@@ -473,7 +473,9 @@ Status ScalarColumnWriter::init() {
 }
 
 uint64_t ScalarColumnWriter::estimate_buffer_size() {
-    uint64_t size = _data_size;
+    // _deferred_pages_bytes covers compression-dict "train" mode, where finished pages
+    // are parked raw until the dictionary exists and so are not in _data_size yet.
+    uint64_t size = _data_size + _deferred_pages_bytes;
     // In string type _page_builder in speculating may nullptr
     if (_page_builder != nullptr) {
         size += _page_builder->size();
@@ -752,6 +754,7 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
     }
     _deferred_pages.clear();
     _deferred_pages.shrink_to_fit();
+    _deferred_pages_bytes = 0;
     return Status::OK();
 }
 
@@ -811,6 +814,9 @@ Status ScalarColumnWriter::finish_current_page() {
         deferred.body.emplace_back(encoded_values->build());
         if (nullmap.is_loaded() && nullmap.slice().size > 0) {
             deferred.body.emplace_back(std::move(nullmap));
+        }
+        for (const auto& slice : deferred.body) {
+            _deferred_pages_bytes += slice.slice().size;
         }
         _deferred_pages.emplace_back(std::move(deferred));
         if (_deferred_pages.size() >= static_cast<size_t>(std::max(1, config::compression_dict_train_pages))) {

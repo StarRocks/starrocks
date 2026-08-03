@@ -55,6 +55,29 @@ public class CompressionDictColumnsTest {
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
     }
 
+    @Test
+    public void testDropColumnRemovesItFromCompressionDictColumns() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_drop_col",
+                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+        OlapTable table = getTable("t_cdict_drop_col");
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getCompressionDictColumnNames());
+
+        // Drop one of them WITHOUT restating the property. A ColumnId is only a name, so
+        // if the drop left v1 behind, re-creating a column called v1 later would silently
+        // get the dictionary again.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_drop_col DROP COLUMN v1");
+        waitForSchemaChangeJob(table);
+
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v2")), table.getCompressionDictColumnIds());
+        Assertions.assertFalse(showCreateTable("t_cdict_drop_col").contains("v1"));
+
+        // Re-adding a column with the dropped name must NOT resurrect the dictionary flag.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_drop_col ADD COLUMN v1 string");
+        waitForSchemaChangeJob(table);
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getCompressionDictColumnNames());
+    }
+
     private static String createTableSql(String tableName, String extraProperties) {
         return "CREATE TABLE " + DB_NAME + "." + tableName + " (\n"
                 + "  k1 int,\n"
