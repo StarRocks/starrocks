@@ -37,19 +37,20 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
->>>>>>> 4f1d3fb3ef ([Enhancement] Support lake batch publish for multi-table transactions (#77029))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -69,6 +70,11 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;

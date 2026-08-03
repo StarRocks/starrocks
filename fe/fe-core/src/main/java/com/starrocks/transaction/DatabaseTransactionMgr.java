@@ -987,15 +987,8 @@ public class DatabaseTransactionMgr {
                     //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
-<<<<<<< HEAD
-                    if (tableInfo == null
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
-=======
                     if (state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE
-                            || state.isShadowRewrite()) {
->>>>>>> 4f1d3fb3ef ([Enhancement] Support lake batch publish for multi-table transactions (#77029))
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
