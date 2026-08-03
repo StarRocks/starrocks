@@ -29,6 +29,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -172,6 +173,40 @@ public class JournalWriterSealTest {
         Assertions.assertInstanceOf(JournalWriteException.class, abortException.getCause());
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
                 ((JournalWriteException) abortException.getCause()).getReason());
+    }
+
+    @Test
+    public void testRollFailureWhileSealingStopsWithoutExit() throws Exception {
+        // A roll that started while RUNNING can cross beginSeal() (demotion begins mid-roll) and then
+        // fail - on a demoting node BDB is already a replica, so the roll deterministically throws.
+        // That must stop the worker quietly (the batch is committed and settled); exiting here would
+        // turn an otherwise graceful demotion into a process restart.
+        AtomicReference<JournalWriter> writerRef = new AtomicReference<>();
+        AtomicBoolean failNextRoll = new AtomicBoolean(false);
+        TestJournal journal = new TestJournal() {
+            @Override
+            public void rollJournal(long journalId) throws JournalException {
+                if (!failNextRoll.get()) {
+                    super.rollJournal(journalId);
+                    return;
+                }
+                writerRef.get().beginSeal();
+                throw new JournalException("simulated roll failure after seal started");
+            }
+        };
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writerRef.set(writer);
+        writer.init(3L);
+        failNextRoll.set(true);
+
+        JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
+        queue.put(task);
+        writer.setForceRollJournal();
+        // Without the writer-state re-check in the roll-failure path this would System.exit(-1).
+        writer.writeOneBatch();
+
+        Assertions.assertTrue(task.get(), "the batch committed before the roll and must stay succeeded");
     }
 
     @Test

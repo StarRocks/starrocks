@@ -429,6 +429,15 @@ public class JournalWriter {
             try {
                 journal.rollJournal(nextVisibleJournalId);
             } catch (JournalException e) {
+                if (writerState.get() != WriterState.RUNNING) {
+                    // beginSeal flipped the state while this roll was in flight (the batch itself is
+                    // already committed and its tasks settled). On a demoting node BDB is a replica,
+                    // so the roll deterministically fails - stop quietly instead of turning a graceful
+                    // demotion into a process restart; the next activation re-inits the writer anyway.
+                    LOG.warn("failed to roll journal {} while in state {}, will stop without exit",
+                            nextVisibleJournalId, writerState.get(), e);
+                    return;
+                }
                 String msg = String.format("failed to roll journal %d, will exit", nextVisibleJournalId);
                 LOG.error(msg, e);
                 Util.stdoutWithTime(msg);
