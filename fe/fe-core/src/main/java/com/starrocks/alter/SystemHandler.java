@@ -174,6 +174,15 @@ public class SystemHandler extends AlterHandler {
                     throw new DdlException("ALTER SYSTEM TRANSFER LEADER is not supported in shared-data mode; "
                             + "to transfer leadership, restart the current leader FE to trigger an election");
                 }
+                // Re-check leadership NOW, after this statement got through process()'s monitor: a
+                // concurrent TRANSFER LEADER may have completed while this one queued on the lock, and
+                // this FE may already be a follower. Unlike other DDL (whose journal write the WAL gate
+                // rejects after demotion), this clause never writes the journal - without this check it
+                // would drive ANOTHER transfer through the JE admin from a non-leader node.
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                    throw new DdlException("this FE is no longer the leader (a leader transfer may have just"
+                            + " completed); connect to the current leader and retry");
+                }
                 String host = clause.getHost();
                 int port = clause.getPort();
                 Frontend target = null;

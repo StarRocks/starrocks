@@ -96,6 +96,25 @@ public class SystemHandlerTest {
     }
 
     @Test
+    public void testTransferLeaderRejectedWhenNoLongerLeader() {
+        // A queued TRANSFER LEADER dequeues from process()'s monitor only after a concurrent transfer
+        // finished - possibly having already moved leadership away. It must fail here instead of
+        // driving a second transfer through the JE admin from a non-leader node.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        TransferLeaderClause clause = new TransferLeaderClause("127.0.0.1:9010", false);
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> systemHandler.process(clauses, null, null));
+        assertThat(e.getMessage(), containsString("no longer the leader"));
+    }
+
+    @Test
     public void testModifyBackendAddressLogic() {
         assertThrows(RuntimeException.class, () -> {
             ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");

@@ -49,7 +49,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
   ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
   ```
 
-  The target must be an alive Follower FE. This statement runs on the current Leader FE and hands the Leader role to the target Follower; the previous Leader then transitions to a Follower in place instead of restarting. Check the new Leader with `SHOW PROC '/frontends'\G`. With `FORCE`, the statement supersedes a Leader transfer that is already in progress; without `FORCE`, it fails if a transfer is already in progress.
+  The target must be an alive Follower FE. This statement runs on the current Leader FE and hands the Leader role to the target Follower; the previous Leader then transitions to a Follower in place instead of restarting. Check the new Leader with `SHOW PROC '/frontends'\G`. With `FORCE`, the statement supersedes a Leader transfer that is already in progress at the BDBJE layer; without `FORCE`, it fails if such a transfer is in progress. Concurrent `TRANSFER LEADER` statements are serialized on the Leader: a queued statement waits for the previous one to finish, and returns an error if this FE is no longer the Leader when it gets its turn (it does not trigger a second transfer).
 
   Failure semantics: if the transfer itself fails (for example, the target cannot catch up within the internal 30-second window, or its cluster membership is not fully acknowledged yet), the statement returns an error and the current Leader stays unchanged - a safe outcome you can simply retry. If the transfer succeeds but the old Leader cannot drain its in-flight work within `leader_demotion_drain_timeout_sec`, the old Leader process exits and restarts as a Follower; the new Leader is unaffected.
 
@@ -59,7 +59,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | Yes          | The host name or IP address of the FE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses. |
 | edit_log_port      | Yes          | BDB JE communication port of the FE node. Default: `9010`.          |
-| FORCE              | No           | Supersede a Leader transfer that is already in progress. Without it, the statement fails if a transfer is already in progress. |
+| FORCE              | No           | Supersede a Leader transfer that is already in progress at the BDBJE layer. Without it, the statement fails if such a transfer is in progress. Concurrent `TRANSFER LEADER` statements are serialized and do not need `FORCE`. |
 
 ### BE
 

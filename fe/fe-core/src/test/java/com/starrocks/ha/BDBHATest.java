@@ -98,7 +98,7 @@ public class BDBHATest {
                 () -> ha.transferToLeader("no_such_node", 1000, false));
         Assertions.assertTrue(e.getMessage().contains("failed to transfer leader to no_such_node"),
                 "wrapped message expected, got: " + e.getMessage());
-        Assertions.assertTrue(e.getMessage().contains("the current leader is unchanged"),
+        Assertions.assertTrue(e.getMessage().contains("the current leader should be unchanged"),
                 "retry guidance expected, got: " + e.getMessage());
         Assertions.assertNotNull(ha.getLeaderNodeName());
     }

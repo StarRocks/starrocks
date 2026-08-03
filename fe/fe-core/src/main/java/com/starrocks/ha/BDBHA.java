@@ -172,7 +172,8 @@ public class BDBHA implements HAProtocol {
             // which would otherwise reach the user as raw JE text with no logging or context.
             LOG.warn("failed to transfer leader to {} (force={})", nodeName, force, e);
             throw new RuntimeException("failed to transfer leader to " + nodeName + ": " + e.getMessage()
-                    + " (the current leader is unchanged; retry after the target is fully joined and caught up)", e);
+                    + " (the current leader should be unchanged - verify with SHOW FRONTENDS; retry after the"
+                    + " target is fully joined and caught up)", e);
         }
     }
 
