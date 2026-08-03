@@ -216,6 +216,13 @@ public class SplitTabletJob extends TabletReshardJob {
         }
 
         Set<ExternalAdmissionGroup> currentGroups = new LinkedHashSet<>();
+        Map<Long, String> indexNamesByMetaId = new HashMap<>();
+        for (Map.Entry<String, Long> entry : olapTable.getIndexNameToMetaId().entrySet()) {
+            if (indexNamesByMetaId.containsKey(entry.getValue())) {
+                throw new TabletReshardException("External admission index metadata has duplicate meta id mappings");
+            }
+            indexNamesByMetaId.put(entry.getValue(), entry.getKey());
+        }
         for (Partition partition : olapTable.getPartitions()) {
             if (partition.getSubPartitions().size() != 1) {
                 throw new TabletReshardException(
@@ -224,7 +231,7 @@ public class SplitTabletJob extends TabletReshardJob {
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
             for (MaterializedIndex index :
                     physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                String indexName = olapTable.getIndexNameByMetaId(index.getMetaId());
+                String indexName = indexNamesByMetaId.get(index.getMetaId());
                 if (indexName == null) {
                     throw new TabletReshardException("External admission index name is missing");
                 }

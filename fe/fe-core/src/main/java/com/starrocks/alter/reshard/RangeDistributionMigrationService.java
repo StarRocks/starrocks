@@ -63,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -440,10 +441,17 @@ public final class RangeDistributionMigrationService {
 
     private Map<GroupKey, CurrentGroup> collectCurrentGroups(OlapTable table) {
         Map<GroupKey, CurrentGroup> groups = new LinkedHashMap<>();
+        Map<Long, String> indexNamesByMetaId = new HashMap<>();
+        for (Map.Entry<String, Long> entry : table.getIndexNameToMetaId().entrySet()) {
+            if (indexNamesByMetaId.containsKey(entry.getValue())) {
+                throw new IncompatibleException("Current catalog has duplicate index meta id mappings");
+            }
+            indexNamesByMetaId.put(entry.getValue(), entry.getKey());
+        }
         for (Partition partition : table.getPartitions()) {
             PhysicalPartition physical = partition.getDefaultPhysicalPartition();
             for (MaterializedIndex index : physical.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                String indexName = table.getIndexNameByMetaId(index.getMetaId());
+                String indexName = indexNamesByMetaId.get(index.getMetaId());
                 if (indexName == null) {
                     throw new IncompatibleException("Latest index metadata name is missing");
                 }
