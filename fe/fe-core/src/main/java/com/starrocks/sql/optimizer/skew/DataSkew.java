@@ -108,7 +108,7 @@ public class DataSkew {
 
         final var mcv = histogram.getMCV();
 
-        if (mcv == null) {
+        if (mcv.isEmpty()) {
             return new McvSkewInfo(false, AdditionalInfo.NO_MCV);
         }
 
@@ -237,4 +237,18 @@ public class DataSkew {
     public static boolean isColumnSkewed(@NotNull Statistics statistics, @NotNull ColumnStatistic columnStatistic) {
         return isColumnSkewed(statistics, columnStatistic, DEFAULT_THRESHOLDS);
     }
+<<<<<<< HEAD
+=======
+
+    public static long getOverlappingMcvRowCount(Map<String, Long> mcvs, Map<String, Long> otherMcvs) {
+        if (mcvs.isEmpty() || otherMcvs.isEmpty()) {
+            return 0;
+        }
+
+        return mcvs.entrySet().stream() //
+                .filter(mcv -> otherMcvs.containsKey(mcv.getKey())) //
+                .mapToLong(Map.Entry::getValue) //
+                .sum();
+    }
+>>>>>>> 2c110bbc3e ([BugFix] Do not allow null buckets/mcv in Histogram (#77024))
 }

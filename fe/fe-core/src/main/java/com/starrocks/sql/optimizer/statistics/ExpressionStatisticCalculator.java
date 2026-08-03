@@ -144,6 +144,226 @@ public class ExpressionStatisticCalculator {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            if (operator.isNot()) {
+                // not just swaps pTrue and pFalse, pNull stays the same.
+                return computeBooleanProbabilities(operator.getChild(0), context)
+                        .map(p -> buildCompoundResult(operator, p.pFalse(), p.pTrue(), p.pNull()))
+                        .orElseGet(ColumnStatistic::unknown);
+            }
+
+            var left = computeBooleanProbabilities(operator.getChild(0), context);
+            var right = computeBooleanProbabilities(operator.getChild(1), context);
+
+            if (left.isEmpty() || right.isEmpty()) {
+                return ColumnStatistic.unknown();
+            }
+
+            double pTrue;
+            double pFalse;
+            var l = left.get();
+            var r = right.get();
+            if (operator.isAnd()) {
+                pTrue = l.pTrue() * r.pTrue();
+                pFalse = (l.pFalse() + r.pFalse()) - (l.pFalse() * r.pFalse());
+            } else {
+                pTrue = (l.pTrue() + r.pTrue()) - (l.pTrue() * r.pTrue());
+                pFalse = l.pFalse() * r.pFalse();
+            }
+            double pNull = clampFraction(1.0 - pTrue - pFalse);
+
+            return buildCompoundResult(operator, pTrue, pFalse, pNull);
+        }
+
+        private Optional<NullableBooleanProbabilities> computeBooleanProbabilities(ScalarOperator child, Void context) {
+            ColumnStatistic childStat = child.accept(this, context);
+            double pNull = childStat.isUnknown() ? 0.0 : clampFraction(childStat.getNullsFraction());
+            double nonNullMass = 1.0 - pNull;
+
+            // Extract from boolean MCV histogram if available. This is the most accurate strategy since it reflects the actual
+            // boolean value distribution. The MCV's true/false counts are treated as the conditional distribution among
+            // non-null rows and scaled by (1 - pNull), so pTrue + pFalse + pNull == 1 by construction (independent of how
+            // the MCV counts relate to rowCount).
+
+            if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
+                Map<String, Long> mcv = childStat.getHistogram().getMCV();
+                if (!mcv.isEmpty()) {
+                    String trueKey = booleanToMcvValue(true);
+                    String falseKey = booleanToMcvValue(false);
+
+                    if (mcv.containsKey(trueKey) || mcv.containsKey(falseKey)) {
+                        long trueCount = mcv.getOrDefault(trueKey, 0L);
+                        long falseCount = mcv.getOrDefault(falseKey, 0L);
+                        long mcvTotal = trueCount + falseCount;
+                        double pTrue = mcvTotal > 0 ? nonNullMass * trueCount / mcvTotal : 0.0;
+                        double pFalse = mcvTotal > 0 ? nonNullMass - pTrue : 0.0;
+                        return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                    }
+                }
+            }
+
+            // Use PredicateStatisticsCalculator selectivity as a fallback. A predicate evaluates to UNKNOWN (not TRUE) on NULL
+            // inputs, so pTrue is capped at the non-null mass and pFalse takes the remainder, again keeping the sum at 1.
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(child, inputStatistics);
+            if (predicateStatistics != null && !Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                double inputStatisticsRows = inputStatistics.getOutputRowCount();
+                if (!Double.isNaN(inputStatisticsRows) && inputStatisticsRows > 0) {
+                    double pTrueRaw = clampFraction(predicateStatistics.getOutputRowCount() / inputStatisticsRows);
+                    double pTrue = Math.min(pTrueRaw, nonNullMass);
+                    double pFalse = nonNullMass - pTrue;
+                    return Optional.of(new NullableBooleanProbabilities(pTrue, pFalse, pNull));
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private ColumnStatistic buildCompoundResult(CompoundPredicateOperator operator, double pTrue, double pFalse,
+                                                    double pNull) {
+            long trueRows = Math.round(rowCount * pTrue);
+            long falseRows = Math.round(rowCount * pFalse);
+
+            Map<String, Long> mcvs = new java.util.LinkedHashMap<>();
+            if (trueRows > 0) {
+                mcvs.put(booleanToMcvValue(true), trueRows);
+            }
+            if (falseRows > 0) {
+                mcvs.put(booleanToMcvValue(false), falseRows);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1).setNullsFraction(pNull)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private static double clampFraction(double value) {
+            if (Double.isNaN(value)) {
+                return 0.0;
+            }
+            return Math.max(0.0, Math.min(1.0, value));
+        }
+
+        @Override
+        public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+            // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
+            // for example `(SELECT 'season') > (SELECT 'a.season')` becomes `'season' > 'a.season'`
+            // when uncorrelated scalar subqueries are rewritten and merged into projections.
+            Optional<ConstantOperator> constantResult = evaluateConstantBinaryPredicate(operator);
+            if (constantResult.isPresent()) {
+                return constantResult.get().accept(this, context);
+            }
+
+            if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            ColumnStatistic leftStat = operator.getChild(0).accept(this, context);
+            ColumnStatistic rightStat = operator.getChild(1).accept(this, context);
+
+            // For non-null-safe predicates (=, <, >, <=, >=, !=), if either operand is NULL
+            // the result is NULL (SQL three-valued logic). Only <=> is guaranteed non-null.
+            // An unknown operand is treated as contributing no nulls so a known operand's null mass survives.
+            double nullsFraction = 0.0;
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL) {
+                double leftNullFrac = leftStat.isUnknown() ? 0.0 : leftStat.getNullsFraction();
+                double rightNullFrac = rightStat.isUnknown() ? 0.0 : rightStat.getNullsFraction();
+                // Probability that at least one operand is NULL
+                nullsFraction = 1.0 - (1.0 - leftNullFrac) * (1.0 - rightNullFrac);
+            }
+
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(operator.getType().getTypeSize())
+                    .setDistinctValuesCount(2);
+
+            if (leftStat.isUnknown() || rightStat.isUnknown()) {
+                return builder.build();
+            }
+
+            Statistics predicateStatistics = PredicateStatisticsCalculator.statisticsCalculate(operator, inputStatistics);
+            if (predicateStatistics == null || Double.isNaN(predicateStatistics.getOutputRowCount())) {
+                return ColumnStatistic.unknown();
+            }
+
+            long inputRows = Math.max(1L, Math.round(inputStatistics.getOutputRowCount()));
+            long nullRows = Math.round(inputRows * nullsFraction);
+            long nonNullRows = Math.max(0L, inputRows - nullRows);
+            long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
+            long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
+            long falseRows = nonNullRows - trueRows;
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
+                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+            }
+            if (falseRows > 0) {
+                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
+                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+            }
+
+            if (!mcvs.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
+        }
+
+        private Optional<ConstantOperator> evaluateConstantBinaryPredicate(BinaryPredicateOperator operator) {
+            if (!operator.getChild(0).isConstantRef() || !operator.getChild(1).isConstantRef()) {
+                return Optional.empty();
+            }
+
+            ConstantOperator left = (ConstantOperator) operator.getChild(0);
+            ConstantOperator right = (ConstantOperator) operator.getChild(1);
+
+            if (operator.getBinaryType() != BinaryType.EQ_FOR_NULL && (left.isNull() || right.isNull())) {
+                return Optional.of(ConstantOperator.createNull(BooleanType.BOOLEAN));
+            }
+
+            switch (operator.getBinaryType()) {
+                case EQ:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                case NE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) != 0));
+                case EQ_FOR_NULL:
+                    if (left.isNull() && right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(true));
+                    } else if (!left.isNull() && !right.isNull()) {
+                        return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) == 0));
+                    } else {
+                        return Optional.of(ConstantOperator.createBoolean(false));
+                    }
+                case GE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) >= 0));
+                case GT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) > 0));
+                case LE:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) <= 0));
+                case LT:
+                    return Optional.of(ConstantOperator.createBoolean(left.compareTo(right) < 0));
+                default:
+                    return Optional.empty();
+            }
+        }
+
+        @Override
+>>>>>>> 2c110bbc3e ([BugFix] Do not allow null buckets/mcv in Histogram (#77024))
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
             // 1. compute children column statistics
             int whenClauseSize = caseWhenOperator.getWhenClauseSize();
@@ -761,6 +981,121 @@ public class ExpressionStatisticCalculator {
 
         }
 
+<<<<<<< HEAD
+=======
+        private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            double nullsFraction = inputs.stream()
+                    .mapToDouble(ColumnStatistic::getNullsFraction)
+                    .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
+            List<ColumnStatistic> reachableInputs = reachableCoalesceInputs(inputs);
+            double distinctValues = Math.min(rowCount,
+                    reachableInputs.stream()
+                            .mapToDouble(ColumnStatistic::getDistinctValuesCount)
+                            .sum());
+            double coalesceMin = Double.NEGATIVE_INFINITY;
+            double coalesceMax = Double.POSITIVE_INFINITY;
+            final Type resultType = callOperator.getType();
+            if (resultType.isNumericType() || resultType.isDateType() || resultType.isTime()) {
+                coalesceMin = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
+                coalesceMax = reachableInputs.stream()
+                        .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
+            }
+            Map<String, Long> mcv = buildCoalesceMcv(inputs);
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
+                    .setMinValue(coalesceMin)
+                    .setMaxValue(coalesceMax)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues);
+
+            if (!mcv.isEmpty()) {
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+            }
+
+            return builder.build();
+        }
+
+        private List<ColumnStatistic> reachableCoalesceInputs(List<ColumnStatistic> inputs) {
+            List<ColumnStatistic> reachable = new ArrayList<>();
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                if (nullsFraction < 1.0) {
+                    reachable.add(input);
+                }
+                if (nullsFraction == 0) {
+                    break;
+                }
+            }
+            return reachable;
+        }
+
+        private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
+            Map<String, Long> coalesceMcv = new HashMap<>();
+            long maxRows = Math.round(rowCount);
+            List<Map.Entry<String, Double>> contributions = collectWeightedCoalesceMcv(inputs);
+            long mcvTotalRowsAccountedFor = 0;
+            for (int i = 0; i < contributions.size(); i++) {
+                final var contribution = contributions.get(i);
+                long scaled = Math.round(contribution.getValue());
+                if (scaled <= 0) {
+                    continue;
+                }
+                if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
+                    scaleRemainingMcvs(contributions.subList(i, contributions.size()),
+                            maxRows - mcvTotalRowsAccountedFor, coalesceMcv);
+                    return coalesceMcv;
+                }
+                coalesceMcv.merge(contribution.getKey(), scaled, Long::sum);
+                mcvTotalRowsAccountedFor += scaled;
+            }
+
+            return coalesceMcv;
+        }
+
+        private List<Map.Entry<String, Double>> collectWeightedCoalesceMcv(List<ColumnStatistic> inputs) {
+            List<Map.Entry<String, Double>> contributions = new ArrayList<>();
+            double weight = 1.0;
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                final var histogram = input.getHistogram();
+                if (nullsFraction < 1 && histogram != null) {
+                    for (final var entry : histogram.getMCV().entrySet().stream()
+                            .sorted((a, b) -> {
+                                int cmp = Long.compare(b.getValue(), a.getValue());
+                                return cmp != 0 ? cmp : a.getKey().compareTo(b.getKey());
+                            })
+                            .collect(Collectors.toList())) {
+                        contributions.add(Map.entry(entry.getKey(), entry.getValue() * weight));
+                    }
+                }
+                // A never-null column means every later column is unreachable.
+                if (nullsFraction == 0) {
+                    break;
+                }
+                weight *= nullsFraction;
+            }
+            return contributions;
+        }
+
+        private void scaleRemainingMcvs(List<Map.Entry<String, Double>> remaining, long remainingBudget,
+                                        Map<String, Long> targetMcv) {
+            if (remainingBudget <= 0) {
+                return;
+            }
+            double totalWeighted = remaining.stream().mapToDouble(Map.Entry::getValue).sum();
+            if (totalWeighted <= 0) {
+                return;
+            }
+            for (final var entry : remaining) {
+                double scaled = Math.floor(remainingBudget * entry.getValue() / totalWeighted);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), (long) scaled, Long::sum);
+                }
+            }
+        }
+
+>>>>>>> 2c110bbc3e ([BugFix] Do not allow null buckets/mcv in Histogram (#77024))
         private ColumnStatistic calculateDateTruncStats(CallOperator callOperator, ColumnStatistic dateStatistic) {
             final var fmtArg = toConstantOperator(callOperator.getChild(0));
             final var type = callOperator.getType();
@@ -811,7 +1146,7 @@ public class ExpressionStatisticCalculator {
         private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
                                                          Type resultType) {
             final var histogram = dateStatistic.getHistogram();
-            if (histogram == null || histogram.getMCV() == null || histogram.getMCV().isEmpty()) {
+            if (histogram == null || histogram.getMCV().isEmpty()) {
                 return null;
             }
 
@@ -909,7 +1244,7 @@ public class ExpressionStatisticCalculator {
                     // If condition MCVs are available, use branch row weights and collapse
                     // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
-                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                    if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
                         final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
                         final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
@@ -977,7 +1312,7 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
+            if (condStat.getHistogram() == null) {
                 return null;
             }
 
@@ -986,8 +1321,8 @@ public class ExpressionStatisticCalculator {
             long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
             long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
 
-            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
-            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+            final boolean thenHasHist = thenStat.getHistogram() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null;
 
             // If neither branch has a histogram, nothing to propagate.
             if (!thenHasHist && !elseHasHist) {
@@ -1076,7 +1411,7 @@ public class ExpressionStatisticCalculator {
          */
         private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
             Histogram childHist = childStats == null ? null : childStats.getHistogram();
-            if (childHist == null || childHist.getMCV() == null || childHist.getMCV().isEmpty()) {
+            if (childHist == null || childHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 
@@ -1102,7 +1437,7 @@ public class ExpressionStatisticCalculator {
             //     - if buckets are all <= 0: y = -x (monotonic decreasing) => [l,u] -> [-u,-l], reverse order
             //     - if buckets cross 0: non-monotonic => fail closed (Optional.empty()) to avoid inconsistent histogram
             List<Bucket> newBuckets = childHist.getBuckets();
-            if (newBuckets != null && !newBuckets.isEmpty()) {
+            if (!newBuckets.isEmpty()) {
                 boolean needNegateBuckets = FunctionSet.NEGATIVE.equalsIgnoreCase(fn);
                 if (FunctionSet.ABS.equalsIgnoreCase(fn)) {
                     boolean allNonNegative = newBuckets.stream().allMatch(b -> b.getLower() >= 0);
@@ -1205,7 +1540,7 @@ public class ExpressionStatisticCalculator {
             ConstantOperator constOp = constOpOpt.get();
             ColumnStatistic baseStats = leftIsConst ? rightStats : leftStats;
             Histogram baseHist = baseStats == null ? null : baseStats.getHistogram();
-            if (baseHist == null || baseHist.getMCV() == null || baseHist.getMCV().isEmpty()) {
+            if (baseHist == null || baseHist.getMCV().isEmpty()) {
                 return Optional.empty();
             }
 
@@ -1250,16 +1585,23 @@ public class ExpressionStatisticCalculator {
                     final double bucketShift = FunctionSet.SUBTRACT.equalsIgnoreCase(callOperator.getFnName())
                             ? -deltaOpt.getAsDouble()
                             : deltaOpt.getAsDouble();
+<<<<<<< HEAD
                     if (baseHist.getBuckets() != null) {
                         newBuckets = baseHist.getBuckets().stream()
                             .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
                                     b.getCount(), b.getUpperRepeats()))
                             .collect(Collectors.toList());
                     }
+=======
+                    newBuckets = baseHist.getBuckets().stream()
+                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                    b.getCount(), b.getUpperRepeats()))
+                            .collect(Collectors.toList());
+>>>>>>> 2c110bbc3e ([BugFix] Do not allow null buckets/mcv in Histogram (#77024))
                 }
             } else {
                 OptionalDouble cOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
-                if (cOpt.isPresent() && baseHist.getBuckets() != null && !baseHist.getBuckets().isEmpty()) {
+                if (cOpt.isPresent() && !baseHist.getBuckets().isEmpty()) {
                     final double cDouble = cOpt.getAsDouble();
                     final List<Bucket> baseBuckets = baseHist.getBuckets();
                     long prevCum = 0L;
