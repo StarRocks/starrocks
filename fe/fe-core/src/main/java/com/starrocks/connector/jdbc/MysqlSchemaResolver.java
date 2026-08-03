@@ -20,8 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
+=======
+>>>>>>> bdf38028ad4... [BugFix] Use last freshness confirmed time as the MV rewrite staleness baseline (#76758)
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -280,7 +283,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
-            long createTime = TimeUtils.getEpochSeconds();
+            long createTime = System.currentTimeMillis();
             if (null != rs) {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").
