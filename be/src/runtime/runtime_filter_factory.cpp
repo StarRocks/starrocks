@@ -15,6 +15,7 @@
 #include "runtime/runtime_filter_factory.h"
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
 #include "runtime/runtime_in_filter.h"
@@ -97,6 +98,32 @@ RuntimeFilter* RuntimeFilterFactory::create_filter(ObjectPool* pool, RuntimeFilt
     default:
         return nullptr;
     }
+}
+
+RuntimeFilter* RuntimeFilterFactory::create_min_max_filter(ObjectPool* pool, LogicalType type,
+                                                           bool is_greater_predicate, bool close_interval,
+                                                           const ColumnPtr& value, int8_t join_mode) {
+    DCHECK(pool != nullptr);
+    return type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() -> RuntimeFilter* {
+        MinMaxRuntimeFilter<LT>* min_max_filter = nullptr;
+        if (value == nullptr) {
+            min_max_filter = MinMaxRuntimeFilter<LT>::create_full_range_with_null(pool);
+        } else {
+            const auto boundary = ColumnViewer<LT>(value).value(0);
+            min_max_filter = is_greater_predicate ? MinMaxRuntimeFilter<LT>::template create_with_range<true>(
+                                                            pool, boundary, close_interval)
+                                                  : MinMaxRuntimeFilter<LT>::template create_with_range<false>(
+                                                            pool, boundary, close_interval);
+        }
+
+        RuntimeEmptyFilter<LT> membership_filter;
+        membership_filter.init(1);
+        membership_filter.set_join_mode(join_mode);
+        if (value == nullptr) {
+            membership_filter.insert_null();
+        }
+        return pool->add(new ComposedRuntimeEmptyFilter<LT>(*min_max_filter, membership_filter));
+    });
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
