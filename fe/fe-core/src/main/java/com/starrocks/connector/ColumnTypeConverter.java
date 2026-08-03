@@ -574,6 +574,10 @@ public class ColumnTypeConverter {
             return DATETIME;
         }
 
+        public Type visit(org.apache.paimon.types.VariantType variantType) {
+            return VariantType.VARIANT;
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -655,6 +659,8 @@ public class ColumnTypeConverter {
                 case DECIMAL128:
                     ScalarType scalarType = (ScalarType) type;
                     return DataTypes.DECIMAL(scalarType.getScalarPrecision(), scalarType.getScalarScale());
+                case VARIANT:
+                    return DataTypes.VARIANT();
                 default:
                     throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
             }
@@ -1103,4 +1109,3 @@ public class ColumnTypeConverter {
         return true;
     }
 }
-

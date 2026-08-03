@@ -24,6 +24,8 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -32,6 +34,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/column_helper.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/datetime_value.h"
 #include "types/type_descriptor.h"
@@ -1629,6 +1632,58 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
     return builder.Finish().ValueOrDie();
 }
 
+struct ArrowVariantTestRow {
+    bool outer_null = false;
+    std::optional<std::string> value;
+    std::optional<std::string> metadata;
+};
+
+static arrow::FieldVector canonical_variant_fields() {
+    return {arrow::field("value", arrow::binary(), false), arrow::field("metadata", arrow::binary(), false)};
+}
+
+static std::shared_ptr<arrow::Array> create_variant_array(const std::vector<ArrowVariantTestRow>& rows,
+                                                          arrow::FieldVector fields = {}) {
+    if (fields.empty()) {
+        fields = canonical_variant_fields();
+    }
+
+    arrow::BinaryBuilder value_builder;
+    arrow::BinaryBuilder metadata_builder;
+    int64_t null_count = 0;
+    for (const auto& row : rows) {
+        if (row.value.has_value()) {
+            ARROW_EXPECT_OK(value_builder.Append(*row.value));
+        } else {
+            ARROW_EXPECT_OK(value_builder.AppendNull());
+        }
+        if (row.metadata.has_value()) {
+            ARROW_EXPECT_OK(metadata_builder.Append(*row.metadata));
+        } else {
+            ARROW_EXPECT_OK(metadata_builder.AppendNull());
+        }
+        null_count += row.outer_null;
+    }
+
+    auto value_array = value_builder.Finish().ValueOrDie();
+    auto metadata_array = metadata_builder.Finish().ValueOrDie();
+    std::shared_ptr<arrow::Buffer> null_bitmap;
+    if (null_count > 0) {
+        auto bitmap_result = arrow::AllocateBuffer(arrow::bit_util::BytesForBits(rows.size()));
+        null_bitmap = std::move(bitmap_result.ValueOrDie());
+        memset(null_bitmap->mutable_data(), 0xff, null_bitmap->size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (rows[i].outer_null) {
+                arrow::bit_util::ClearBit(null_bitmap->mutable_data(), i);
+            }
+        }
+    }
+
+    return arrow::StructArray::Make({value_array, metadata_array}, std::move(fields), std::move(null_bitmap),
+                                    null_count)
+            .ValueOrDie();
+}
+
 static std::string map_to_json(const std::map<std::string, int>& m) {
     std::ostringstream oss;
     oss << "{";
@@ -1968,6 +2023,131 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
     ASSERT_EQ(st_col->debug_item(0), "{col1:0,col2:'char-0'}");
     ASSERT_EQ(st_col->debug_item(8), "{col1:8,col2:'char-8'}");
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_paimon_variant_non_nullable) {
+    const std::string metadata(VariantMetadata::kEmptyMetadata);
+    const std::string one("\x0c\x01", 2);
+    const std::string encoded_null(VariantValue::kEmptyValue);
+    auto array = create_variant_array({
+            {.value = one, .metadata = metadata},
+            {.value = encoded_null, .metadata = metadata},
+            {.outer_null = true, .value = std::string(), .metadata = std::string()},
+    });
+
+    TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+    TypeDescriptor raw_type;
+    ConvertFuncTree converter;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(array->type().get(), &variant_type, false, &raw_type, &converter,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_VARIANT, raw_type.type);
+    ASSERT_NE(nullptr, converter.func);
+
+    auto column = VariantColumn::create();
+    Filter filter(array->length(), 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&converter, array->length(), array.get(), column.get(), 0, 0,
+                                                   &filter, nullptr));
+
+    ASSERT_EQ(3, column->size());
+    VariantRowValue row;
+    const auto* first = column->get_row_value(0, &row);
+    ASSERT_NE(nullptr, first);
+    EXPECT_EQ(one, first->get_value().raw());
+    EXPECT_EQ("1", first->to_string());
+    const auto* second = column->get_row_value(1, &row);
+    ASSERT_NE(nullptr, second);
+    EXPECT_EQ(encoded_null, second->get_value().raw());
+    EXPECT_EQ("null", second->to_string());
+    EXPECT_EQ(metadata, column->metadata_column()->get_slice(0).to_string());
+    EXPECT_EQ(one, column->remain_value_column()->get_slice(0).to_string());
+    EXPECT_EQ(metadata, column->metadata_column()->get_slice(1).to_string());
+    EXPECT_EQ(encoded_null, column->remain_value_column()->get_slice(1).to_string());
+    EXPECT_TRUE(column->metadata_column()->get_slice(2).empty());
+    EXPECT_TRUE(column->remain_value_column()->get_slice(2).empty());
+    EXPECT_EQ(Filter({1, 1, 0}), filter);
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_paimon_variant_nullable) {
+    const std::string metadata(VariantMetadata::kEmptyMetadata);
+    const std::string one("\x0c\x01", 2);
+    const std::string two("\x0c\x02", 2);
+    const std::string three("\x0c\x03", 2);
+    const std::string four("\x0c\x04", 2);
+    auto array = create_variant_array({
+            {.value = one, .metadata = metadata},
+            {.value = two, .metadata = metadata},
+            {.outer_null = true, .value = std::string(), .metadata = std::string()},
+            {.value = three, .metadata = metadata},
+            {.value = four, .metadata = metadata},
+    });
+
+    TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+    TypeDescriptor raw_type;
+    ConvertFuncTree converter;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(array->type().get(), &variant_type, true, &raw_type, &converter,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+
+    auto column = ColumnHelper::create_column(variant_type, true);
+    Filter filter(1, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&converter, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+
+    // The slice has an internal Arrow offset. Starting at logical row 1 of the slice selects original rows 2 and 3,
+    // and appends them at the non-zero StarRocks column offset after the first batch.
+    auto sliced = array->Slice(1, 4);
+    filter.resize(3, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&converter, 2, sliced.get(), column.get(), 1, 1, &filter, nullptr));
+
+    ASSERT_EQ(3, column->size());
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    EXPECT_FALSE(nullable->is_null(0));
+    EXPECT_TRUE(nullable->is_null(1));
+    EXPECT_FALSE(nullable->is_null(2));
+    EXPECT_EQ(1, nullable->null_count());
+    const auto* variants = down_cast<const VariantColumn*>(nullable->data_column().get());
+    EXPECT_EQ(metadata, variants->metadata_column()->get_slice(0).to_string());
+    EXPECT_EQ(one, variants->remain_value_column()->get_slice(0).to_string());
+    EXPECT_TRUE(variants->metadata_column()->get_slice(1).empty());
+    EXPECT_TRUE(variants->remain_value_column()->get_slice(1).empty());
+    EXPECT_EQ(metadata, variants->metadata_column()->get_slice(2).to_string());
+    EXPECT_EQ(three, variants->remain_value_column()->get_slice(2).to_string());
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_reject_malformed_paimon_variant_layout) {
+    const std::string metadata(VariantMetadata::kEmptyMetadata);
+    const std::string one("\x0c\x01", 2);
+    auto canonical_schema = create_variant_array({{.value = one, .metadata = metadata}});
+    TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+    TypeDescriptor direct_raw_type;
+    ConvertFuncTree direct_converter;
+    bool direct_need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(canonical_schema->type().get(), &variant_type, false,
+                                                     &direct_raw_type, &direct_converter, direct_need_cast, false));
+    ASSERT_FALSE(direct_need_cast);
+    ASSERT_NE(nullptr, direct_converter.func);
+
+    auto wrong_schema = create_variant_array(
+            {{.value = one, .metadata = metadata}},
+            {arrow::field("metadata", arrow::binary(), false), arrow::field("value", arrow::binary(), false)});
+
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan_converter;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(wrong_schema->type().get(), &variant_type, false, &raw_type,
+                                                     &plan_converter, need_cast, false));
+    EXPECT_TRUE(need_cast);
+    EXPECT_EQ(TYPE_JSON, raw_type.type);
+    EXPECT_NE(nullptr, plan_converter.func);
+
+    auto column = VariantColumn::create();
+    Filter filter(1, 1);
+    auto status = direct_converter.func(wrong_schema.get(), 0, 1, column.get(), 0, nullptr, &filter, nullptr, nullptr);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(0, column->size());
 }
 
 // Helper: builds a StringViewArray from a vector of strings.

@@ -1252,6 +1252,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
 
+### paimon_reader_mode
+
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` はデフォルトの動作を維持し、対応する Raw File には StarRocks ネイティブ Reader を使用し、それ以外には JNI Reader を使用します。従来の変数 `paimon_force_jni_reader` は、この変数が `AUTO` の場合にのみ JNI Reader を強制します。`JNI` は常に JNI Reader を使用します。`NATIVE` は Paimon の `DataSplit` スキャン範囲に paimon-cpp ネイティブ Reader を使用し、その他の Split タイプには JNI Reader を使用します。`NATIVE` を使用するには、BE に paimon-cpp のサポートが組み込まれている必要があります。
+* **デフォルト**: AUTO
+* **データ型**: String
+* **導入バージョン**: v4.2
+
 ### parallel_exchange_instance_num
 
 上位ノードが実行プランで下位ノードからデータを受け取るために使用するエクスチェンジノードの数を設定するために使用されます。デフォルト値は -1 で、エクスチェンジノードの数は下位ノードの実行インスタンスの数と等しいことを意味します。この変数が 0 より大きく、下位ノードの実行インスタンスの数より小さい場合、エクスチェンジノードの数は設定値と等しくなります。

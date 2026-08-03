@@ -192,11 +192,15 @@ public:
     bool has_partition() const override { return false; }
     std::string_view get_paimon_native_table() const;
     std::string_view get_time_zone() const;
+    std::string_view get_paimon_table_path() const;
+    std::string_view get_paimon_table_schema_json() const;
     const TIcebergSchema* get_paimon_schema() const { return &_t_paimon_schema; }
 
 private:
     std::pmr::string _paimon_native_table;
     std::pmr::string _time_zone;
+    std::pmr::string _paimon_table_path;
+    std::pmr::string _paimon_table_schema_json;
     TIcebergSchema _t_paimon_schema;
 };
 
