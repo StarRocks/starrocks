@@ -26,5 +26,6 @@ const std::string Connector::BINLOG = "binlog";
 const std::string Connector::ICEBERG = "iceberg";
 const std::string Connector::BENCHMARK = "benchmark";
 const std::string Connector::CACHE_STATS = "cache_stats";
+const std::string Connector::LANCE = "lance";
 
 } // namespace starrocks::connector

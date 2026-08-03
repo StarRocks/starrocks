@@ -200,4 +200,68 @@ TEST_F(HiveTableDescriptorAddPartitionTest, ConcurrentInsertSameIdConvergesToOne
     ASSERT_EQ(thrift.partition_key_exprs, desc->thrift_partition_key_exprs());
 }
 
+class LanceTableDescriptorTest : public ::testing::Test {
+public:
+    void SetUp() override { _pool = std::make_unique<ObjectPool>(); }
+
+    // Minimal Lance TTableDescriptor. When with_uri is false the nested lanceTable
+    // struct is left unset, which is what a descriptor built before the Lance thrift
+    // fields landed would look like.
+    static TTableDescriptor make_lance_tdesc(bool with_uri, const std::string& uri = "") {
+        TTableDescriptor tdesc;
+        tdesc.__set_id(7);
+        tdesc.__set_tableType(TTableType::LANCE_TABLE);
+        tdesc.__set_tableName("lance_tbl");
+        tdesc.__set_dbName("lance_db");
+        if (with_uri) {
+            TLanceTable lance_table;
+            lance_table.__set_lance_dataset_uri(uri);
+            tdesc.__set_lanceTable(lance_table);
+        }
+        return tdesc;
+    }
+
+protected:
+    std::unique_ptr<ObjectPool> _pool;
+};
+
+TEST_F(LanceTableDescriptorTest, dataset_uri_is_read_from_thrift) {
+    LanceTableDescriptor desc(make_lance_tdesc(true, "s3://bucket/path/dataset.lance"));
+    ASSERT_EQ("s3://bucket/path/dataset.lance", desc.lance_dataset_uri());
+    ASSERT_NE(std::string::npos, desc.debug_string().find("s3://bucket/path/dataset.lance"));
+    ASSERT_NE(std::string::npos, desc.debug_string().find("LanceTable("));
+}
+
+// The constructor guards on both __isset bits; neither may crash or read garbage.
+TEST_F(LanceTableDescriptorTest, missing_lance_table_yields_empty_uri) {
+    LanceTableDescriptor desc(make_lance_tdesc(false));
+    ASSERT_TRUE(desc.lance_dataset_uri().empty());
+    ASSERT_NE(std::string::npos, desc.debug_string().find("LanceTable("));
+}
+
+TEST_F(LanceTableDescriptorTest, unset_uri_field_yields_empty_uri) {
+    TTableDescriptor tdesc = make_lance_tdesc(false);
+    // lanceTable present, but the uri field inside it is not set.
+    tdesc.__set_lanceTable(TLanceTable());
+    LanceTableDescriptor desc(tdesc);
+    ASSERT_TRUE(desc.lance_dataset_uri().empty());
+}
+
+// DescriptorTbl::create must dispatch LANCE_TABLE to LanceTableDescriptor rather
+// than falling through to the default DCHECK branch.
+TEST_F(LanceTableDescriptorTest, descriptor_tbl_creates_lance_descriptor) {
+    TDescriptorTable thrift_tbl;
+    thrift_tbl.tableDescriptors.push_back(make_lance_tdesc(true, "file:///tmp/ds.lance"));
+    thrift_tbl.__isset.tableDescriptors = true;
+
+    DescriptorTbl* tbl = nullptr;
+    // chunk_size is unused by DescriptorTbl::create; any value works.
+    ASSERT_OK(DescriptorTbl::create(nullptr, _pool.get(), thrift_tbl, &tbl, 4096));
+    ASSERT_NE(nullptr, tbl);
+
+    auto* desc = dynamic_cast<LanceTableDescriptor*>(tbl->get_table_descriptor(7));
+    ASSERT_NE(nullptr, desc);
+    ASSERT_EQ("file:///tmp/ds.lance", desc->lance_dataset_uri());
+}
+
 } // namespace starrocks

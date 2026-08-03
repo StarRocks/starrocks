@@ -21,6 +21,7 @@
         <module>odps-reader</module>
         <module>iceberg-metadata-reader</module>
         <module>kudu-reader</module>
+        <module>lance-reader</module>
         <module>common-runtime</module>
         <module>hadoop-lib</module>
     </modules>
