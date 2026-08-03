@@ -527,7 +527,7 @@ public class OptExternalPartitionPruner {
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
                     GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
-                            .setTableVersionRange(operator.getTvrVersionRange()).build();
+                            .setTableVersionRange(operator.getTvrVersionRange()).setLimit(operator.getLimit()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;
