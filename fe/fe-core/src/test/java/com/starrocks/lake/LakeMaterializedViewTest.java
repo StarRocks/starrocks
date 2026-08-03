@@ -22,12 +22,18 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.ExternalAccessController;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -41,6 +47,8 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
@@ -48,19 +56,33 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.bookmark.Bookmark;
+import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
@@ -78,6 +100,7 @@ import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -254,6 +277,83 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         starRocksAssert.dropMaterializedView("mv1");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+    }
+
+    @Test
+    public void testInternalStatementBypassesExternalAuthorization() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_ivm_auth (\n" +
+                "  dt DATE NOT NULL, k INT NOT NULL, v BIGINT\n" +
+                ") DUPLICATE KEY(dt, k)\n" +
+                "PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))\n" +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_ivm_auth\n" +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('refresh_mode' = 'INCREMENTAL')\n" +
+                "AS SELECT k, SUM(v) AS total, COUNT(*) AS row_count\n" +
+                "FROM base_ivm_auth GROUP BY k");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table baseTable = db.getTable("base_ivm_auth");
+        MaterializedView mv = (MaterializedView) db.getTable("mv_ivm_auth");
+        Assertions.assertTrue(baseTable.isCloudNativeTableOrMaterializedView());
+        Assertions.assertTrue(mv.isCloudNativeTableOrMaterializedView());
+
+        BaseTableInfo baseTableInfo = mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(baseTable))
+                .findFirst()
+                .orElseThrow();
+        Bookmark baseline = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(db.getId(), baseTable.getId(), BookmarkHolder.forMv(mv.getMvId()));
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap()
+                .put(baseTableInfo, TvrTableSnapshot.of(baseline.getBookmarkId()));
+
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE base_ivm_auth ADD PARTITION p2 VALUES LESS THAN ('2024-03-01')", connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, addPartition);
+
+        String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        AccessControlProvider provider = Authorizer.getInstance();
+        AccessController previousController = provider.getAccessControlOrDefault(catalog);
+        provider.setAccessControl(catalog, permissiveExternalController());
+
+        try {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+            Assertions.assertNotNull(task);
+            StatementBase statement = MVTestBase.getAnalyzedPlan(
+                    "EXPLAIN REFRESH MATERIALIZED VIEW mv_ivm_auth", connectContext);
+            Assertions.assertNotNull(statement);
+            ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+            TaskRun taskRun = taskManager.buildTaskRun(task, executeOption);
+            ExecPlan execPlan = taskManager.getMVRefreshExecPlan(taskRun, task, executeOption, statement);
+            MVTaskRunProcessor processor = (MVTaskRunProcessor) taskRun.getProcessor();
+            Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "state_union", "TABLE: mv_ivm_auth");
+            Assertions.assertFalse(taskRun.getRunCtx().isBypassAuthorizerCheck());
+        } finally {
+            provider.setAccessControl(catalog, previousController);
+        }
+    }
+
+    private static ExternalAccessController permissiveExternalController() {
+        return new ExternalAccessController() {
+            @Override
+            public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType) {
+            }
+
+            @Override
+            public void checkColumnAction(ConnectContext context, TableName tableName,
+                                          String column, PrivilegeType privilegeType) {
+            }
+
+            @Override
+            public void checkMaterializedViewAction(ConnectContext context, TableName tableName,
+                                                    PrivilegeType privilegeType) {
+            }
+        };
     }
 
     @Test
