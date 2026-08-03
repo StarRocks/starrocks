@@ -130,6 +130,7 @@ TEST_F(CrashWatchdogTest, StartLaunchesPollingThreadWhenEnabled) {
 TEST(CrashWatchdogDeathTest, ForcesExitWhenHandlerHangs) {
     EXPECT_EXIT(
             {
+                g_crash_watchdog_started.store(false);
                 set_process_is_crashing();
                 may_start_crash_watchdog(1);
                 while (true) {
