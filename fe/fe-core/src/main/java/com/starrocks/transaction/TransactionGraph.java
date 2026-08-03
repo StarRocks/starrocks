@@ -19,6 +19,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -175,6 +176,56 @@ public class TransactionGraph {
                     node = null;
                 }
             }
+        }
+        return txns.size() >= minBatchSize ? txns : new ArrayList<>();
+    }
+
+    /**
+     * Batch selection that also allows multi-table transactions. The batch is a dependency
+     * chain: starting from a dependency-free head transaction, it is extended with a
+     * successor of the current tail whose dependencies are all inside the batch. Because a
+     * successor of the tail depends on the tail directly, every transaction in the batch
+     * transitively depends on all transactions before it -- it would have to wait for them
+     * even without batching, so grouping them costs nothing. Transactions that are
+     * independent of the chain tail (parallel branches hanging off an earlier transaction)
+     * are never batched: batch visibility is all-or-nothing, and batching them would couple
+     * transactions that could otherwise publish in parallel.
+     *
+     * The returned list is in chain (hence topological) order, so any prefix cut downstream
+     * stays dependency-closed and per-partition commit versions appear in consecutive order.
+     *
+     * The size of ins of node with txnId must be zero.
+     */
+    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId) {
+        List<Long> txns = new ArrayList<>();
+        Node head = nodes.get(txnId);
+        if (head == null) {
+            return txns;
+        }
+        Set<Node> inBatch = new HashSet<>();
+        txns.add(head.txnId);
+        inBatch.add(head);
+        Node current = head;
+        while (txns.size() < maxBatchSize && current.outs != null) {
+            Node nextInChain = null;
+            List<Node> successors = current.outs.stream()
+                    .sorted(Comparator.comparingLong(n -> n.txnId))
+                    .collect(Collectors.toList());
+            for (Node next : successors) {
+                // A successor of the tail depends on the tail, and joins only when it has
+                // no dependency outside the batch: publishing it here would otherwise jump
+                // over a txn that has to become visible first.
+                if (next.ins == null || inBatch.containsAll(next.ins)) {
+                    nextInChain = next;
+                    break;
+                }
+            }
+            if (nextInChain == null) {
+                break;
+            }
+            txns.add(nextInChain.txnId);
+            inBatch.add(nextInChain);
+            current = nextInChain;
         }
         return txns.size() >= minBatchSize ? txns : new ArrayList<>();
     }
