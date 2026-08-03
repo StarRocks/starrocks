@@ -1011,12 +1011,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         //
         // CONCURRENCY INVARIANT: versionTime is read here on the daemon thread and written on executor threads
         // inside the supplyAsync bodies below. Correctness relies on publishingLakeTransactionsBatchTableId
-        // serializing publish attempts per table: the tableId is added before this method runs and removed only in
-        // the .thenRun that fires after the whole future chain (allOf of every per-partition writer) completes, so
-        // attempt N+1's read happens-after every attempt-N write. Two load-bearing preconditions must be preserved
-        // by future refactors: (1) keep the terminal .exceptionally on this chain (it guarantees the guard-set
-        // removal in .thenRun runs even on failure); (2) do not introduce a synchronous throw between the guard-set
-        // add and the .thenRun registration (it would leak the tableId and freeze the table's publish).
+        // serializing publish attempts per table: the batch's table ids are added before this method runs and
+        // removed only in the .thenRun that fires after the whole future chain (allOf of every per-partition writer)
+        // completes, so attempt N+1's read happens-after every attempt-N write. Two load-bearing preconditions must
+        // be preserved by future refactors: (1) keep the terminal .exceptionally on this chain (it guarantees the
+        // guard-set removal in .thenRun runs even on failure); (2) do not introduce a synchronous throw between the
+        // guard-set add and the .thenRun registration (it would leak the table ids and freeze their publish).
         // File-bundling tables cannot use the "skip already-published partition" optimization. For those tables
         // publishPartitionBatch recomputes a whole-partition carry-forward bundle against the CURRENTLY visible
         // index set (see collectFileBundlingCarryForwardTablets). If we skipped a partition that succeeded on an
@@ -1029,14 +1029,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // false while an ENABLE_FILE_BUNDLING alter concurrently turns it on — is defended by the version-adjacency
         // guards (that alter bumps nextVersion under the table WRITE lock, tripping trimBatchAtVersionGap / the
         // visibleVersion+1 check), and the value is re-read on the next cycle.
-        OlapTable batchTable =
-                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-        boolean fileBundling = batchTable != null && batchTable.isFileBundling();
+        // File-bundling is a per-table property, and with lake_enable_batch_publish_multi_table a single batch may
+        // mix file-bundling and non-file-bundling tables. Resolve it per partition from that partition's own table
+        // (memoized per table id) rather than once for the whole batch, so a bundling table's "always re-publish"
+        // rule is never mistakenly applied to a sibling non-bundling table's partitions (or vice versa).
+        Map<Long, Boolean> fileBundlingByTable = new HashMap<>();
         int skippedPublished = 0;
         int inBackoff = 0;
         int publishing = 0;
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
             List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
+            boolean fileBundling = fileBundlingByTable.computeIfAbsent(publishVersionData.getTableId(), tid -> {
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tid);
+                return table != null && table.isFileBundling();
+            });
             // A partition is already published only when every one of its per-transaction commit infos has a
             // positive versionTime. A freshly appended transaction joins with versionTime == 0, which correctly
             // forces the partition to re-publish the widened version range (idempotent on the BE side).
@@ -1087,8 +1094,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // Log at INFO only when the sticky retry actually skipped or backed off a partition, to avoid doubling
         // per-batch log volume on healthy clusters where every partition publishes on the first attempt.
         if (skippedPublished > 0 || inBackoff > 0) {
-            LOG.info("publish lake batch db:{} table:{} partitions={} skipped_published={} in_backoff={} publishing={}",
-                    dbId, tableId, publishVersionDataMap.size(), skippedPublished, inBackoff, publishing);
+            LOG.info("publish lake batch db:{} tables:{} partitions={} skipped_published={} in_backoff={} publishing={}",
+                    dbId, StringUtils.join(txnStateBatch.getTableIdList(), ","),
+                    publishVersionDataMap.size(), skippedPublished, inBackoff, publishing);
         }
 
         CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
