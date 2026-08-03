@@ -22,7 +22,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
@@ -115,6 +115,9 @@ Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     // Decrement the counter unconditionally so the parallelism bookkeeping stays correct even when finish() fails.
     const bool is_last_sinker = _num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1;
     if (st.ok() && is_last_sinker) {
+        // Audit statistics do not encode query status. As with other final sinks, capture
+        // counters when the last sinker enters FINISHING; later connector errors are propagated
+        // through fragment cancellation.
         _fragment_context->workgroup()->executors()->driver_executor()->report_audit_statistics(state->query_ctx(),
                                                                                                 state->fragment_ctx());
     }
