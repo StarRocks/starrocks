@@ -101,7 +101,7 @@ public class DataSkew {
 
         final var mcv = histogram.getMCV();
 
-        if (mcv == null) {
+        if (mcv.isEmpty()) {
             return new McvSkewInfo(false, AdditionalInfo.NO_MCV);
         }
 
@@ -209,7 +209,7 @@ public class DataSkew {
     }
 
     public static long getOverlappingMcvRowCount(Map<String, Long> mcvs, Map<String, Long> otherMcvs) {
-        if (mcvs == null || mcvs.isEmpty() || otherMcvs == null || otherMcvs.isEmpty()) {
+        if (mcvs.isEmpty() || otherMcvs.isEmpty()) {
             return 0;
         }
 
