@@ -768,8 +768,11 @@ public:
 
     absl::StatusOr<std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>> open(
             std::string_view path, const staros::starlet::fslib::ReadOptions& opts) override {
+        _opened_paths.emplace_back(path);
         return absl::UnimplementedError("MockStarletFileSystemForReplication::open not implemented");
     }
+
+    const std::vector<std::string>& opened_paths() const { return _opened_paths; }
 
     absl::StatusOr<std::unique_ptr<staros::starlet::fslib::WritableFile>> create(
             std::string_view path, const staros::starlet::fslib::WriteOptions& opts) override {
@@ -816,6 +819,9 @@ public:
 
 protected:
     absl::Status initialize(const staros::starlet::fslib::Configuration& conf) override { return absl::OkStatus(); }
+
+private:
+    std::vector<std::string> _opened_paths;
 };
 
 // Test fixture for testing the USE_STAROS code path in replicate_lake_remote_storage
@@ -937,6 +943,29 @@ protected:
     std::string _test_dir;
 };
 
+TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_uses_virtual_shard_uri) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    std::string observed_meta_dir;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_lake_remote_storage::src_meta_dir",
+                                          [&](void* arg) { observed_meta_dir = *static_cast<std::string*>(arg); });
+
+    auto request = build_request(true /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+
+    EXPECT_FALSE(status.ok());
+    EXPECT_EQ("staros://80001/path/to/db123/456/789/meta", observed_meta_dir);
+    ASSERT_FALSE(mock_fs->opened_paths().empty());
+    const auto expected_metadata_filename = tablet_metadata_filename(_src_tablet_id, 2);
+    const auto& opened_path = mock_fs->opened_paths().front();
+    ASSERT_GE(opened_path.size(), expected_metadata_filename.size());
+    EXPECT_EQ(expected_metadata_filename, opened_path.substr(opened_path.size() - expected_metadata_filename.size()));
+}
+
 // Test Case 1: has_full_path=true, new_fs_starlet returns nullptr
 TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure) {
     // SyncPoint makes new_fs_starlet return nullptr by setting an error status
@@ -946,6 +975,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
     });
 
     auto request = build_request(true /* with_full_path */);
+    // Use a dedicated shard id so another test's cached raw-path filesystem cannot bypass this failure injection.
+    request.__set_virtual_tablet_id(_virtual_tablet_id + 1);
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
