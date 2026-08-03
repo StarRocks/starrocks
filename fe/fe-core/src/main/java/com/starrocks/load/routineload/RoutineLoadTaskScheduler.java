@@ -139,8 +139,10 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         // after a premature clear, and BE slot counts must be reset from a clean state (clearBeTaskSlot).
         shutdownNowAndAwaitTermination("RoutineLoadTaskScheduler.scheduledExecutorService", scheduledExecutorService);
         shutdownNowAndAwaitTermination("RoutineLoadTaskScheduler.threadPool", threadPool);
-        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping;
-        // RoutineLoadMgr re-divides routine load jobs into tasks when the next leader activates.
+        // The task queue holds RoutineLoadTaskInfo refs that are leader-session bookkeeping. Dropping
+        // them is safe because RoutineLoadScheduler.onStopped() restores every RUNNING job to its
+        // durable NEED_SCHEDULE state, so the next leader re-divides those jobs into fresh tasks
+        // (only NEED_SCHEDULE jobs are divided - a job left RUNNING would never regain its tasks).
         // The slot watermark is reset so the next leader re-queries BE slot capacity.
         needScheduleTasksQueue.clear();
         lastBackendSlotUpdateTime = -1;
@@ -216,7 +218,8 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
             }, 1L, TimeUnit.SECONDS);
         } catch (RejectedExecutionException e) {
             // Race with onStopped(): scheduler was shut down between the guard above and
-            // schedule(). Safe to drop - the next leader will re-divide the routine load.
+            // schedule(). Safe to drop - RoutineLoadScheduler.onStopped() restores the job to
+            // NEED_SCHEDULE, so the next leader re-divides it into fresh tasks.
             LOG.info("RoutineLoadTaskScheduler scheduler shut down, drop delayPutToQueue for task {}",
                     routineLoadTaskInfo.getId());
         }

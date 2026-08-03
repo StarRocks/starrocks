@@ -2022,6 +2022,7 @@ public class GlobalStateMgr {
         runDemotionStage("abandonInFlightAgentTasks", this::abandonInFlightAgentTasks);
         runDemotionStage("sealJournalWriter", this::sealJournalWriter);
         runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
+        runDemotionStage("awaitJournalVisibleStateResets", this::awaitJournalVisibleStateResets);
         runDemotionStage("switchFrontendType", () -> feType = targetType);
         runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
         LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
@@ -2051,6 +2052,25 @@ public class GlobalStateMgr {
     private void abandonInFlightAgentTasks() {
         com.starrocks.task.AgentTaskQueue.abandonInFlightTasks(
                 new com.starrocks.common.Status(TStatusCode.CANCELLED, "leader is demoting"));
+    }
+
+    /**
+     * Wait for the leader-only daemons whose onStopped() rewrites JOURNAL-VISIBLE state (alter-job
+     * fields, routine-load job state) to fully quiesce before the follower replayer starts. Their
+     * resets restore shared objects to the last durable state, while the replayer mutates the SAME
+     * objects when it applies the new leader's journal - and replay takes no job monitor, so a reset
+     * running after (or interleaved with) replay would tear freshly replayed durable state (e.g. an
+     * optimize job left WAITING_TXN with its just-replayed tmpPartitionIds cleared) with nothing to
+     * ever repair it. Daemons whose onStopped() only drops leader-session transients (queues, pools,
+     * slot counts) stay fire-and-forget; the re-activation gate still covers those.
+     * The wait shares the leader_demotion_drain_timeout_sec budget (a fresh slice for this stage);
+     * a daemon stuck in onStopped() past it fails the stage and runDemotionStage exits the process -
+     * the pre-demotion behavior for a leader that cannot stop cleanly.
+     */
+    private void awaitJournalVisibleStateResets() {
+        LeaderDaemon.awaitQuiesced(
+                Lists.newArrayList(getSchemaChangeHandler(), getRollupHandler(), routineLoadScheduler),
+                Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
     }
 
     @VisibleForTesting

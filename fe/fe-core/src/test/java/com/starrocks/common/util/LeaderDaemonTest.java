@@ -21,6 +21,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -145,6 +146,34 @@ public class LeaderDaemonTest {
                 "worker must deregister from the running-instances registry on exit");
         Assertions.assertTrue(stopped.get(), "worker must run onStopped() on its own exit");
         Assertions.assertTrue(interrupted.get(), "default stopBestEffort interrupts the blocked worker");
+    }
+
+    @Test
+    public void testAwaitQuiescedWaitsForWorkerExitAndTimesOutOnStragglers(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        // Demotion orders specific daemons' onStopped() (journal-visible state resets) BEFORE the
+        // follower replayer starts via awaitQuiesced(list, timeout): it must block while the worker
+        // is alive, throw on a straggler (the stage runner turns that into a process exit), and
+        // return only after the worker fully exited - onStopped() included.
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+
+        daemon.start();
+        try {
+            Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+            Assertions.assertThrows(IllegalStateException.class,
+                    () -> LeaderDaemon.awaitQuiesced(List.of(daemon), 150L),
+                    "a still-running daemon must fail the bounded wait, not be skipped");
+        } finally {
+            daemon.stopBestEffort();
+        }
+        LeaderDaemon.awaitQuiesced(List.of(daemon), 5000L);
+        Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertTrue(stopped.get(), "quiesced implies onStopped() has completed");
     }
 
     private static void awaitQuiesced(LeaderDaemon daemon) throws InterruptedException {

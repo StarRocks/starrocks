@@ -1641,6 +1641,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         routineLoadTaskInfoList.clear();
     }
 
+    /**
+     * Restore this job to its last durable state on leader demotion. RUNNING is the only in-memory-only
+     * job state (the NEED_SCHEDULE -> RUNNING branch of unprotectUpdateState deliberately skips the
+     * journal), so the durable copy of a healthy job is always NEED_SCHEDULE: map it back and drop the
+     * leader-session task bookkeeping, and a re-elected leader in this same process re-divides the job
+     * exactly like a restarted FE would. Without this, the job stays RUNNING with its queued tasks
+     * already thrown away by demotion, and since only NEED_SCHEDULE jobs are divided, an idle job would
+     * never produce tasks again. MUST NOT write the journal - it is already sealed when this runs.
+     * Called from RoutineLoadScheduler.onStopped().
+     */
+    protected void resetToLastDurableStateOnDemotion() {
+        writeLock();
+        try {
+            if (state == JobState.RUNNING) {
+                executeNeedSchedule();
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public void update() throws StarRocksException {
         // check if db and table exist
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

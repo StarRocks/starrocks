@@ -81,6 +81,31 @@ public abstract class LeaderDaemon {
     }
 
     /**
+     * Block until every given daemon has fully quiesced: worker exited, onStopped() completed,
+     * {@link #isRunning} false. Used by leader demotion for the daemons whose onStopped() rewrites
+     * journal-visible state - those resets must complete before the follower replayer starts, so
+     * they cannot stay fire-and-forget like the rest of the daemons. Throws IllegalStateException
+     * on timeout; the demotion stage runner treats that as a failed stage (process exit).
+     */
+    public static void awaitQuiesced(List<LeaderDaemon> daemons, long timeoutMs) {
+        long deadlineMs = System.currentTimeMillis() + Math.max(1L, timeoutMs);
+        for (LeaderDaemon daemon : daemons) {
+            while (daemon.isRunning()) {
+                if (System.currentTimeMillis() >= deadlineMs) {
+                    throw new IllegalStateException("daemon " + daemon.getName() + " has not quiesced within "
+                            + timeoutMs + "ms");
+                }
+                try {
+                    Thread.sleep(10L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting for daemons to quiesce", e);
+                }
+            }
+        }
+    }
+
+    /**
      * Shut down a leader-session pool and wait — WITHOUT a deadline — until it actually terminates.
      * onStopped() implementations that own pools call this, so that when the worker finally clears
      * {@link #isRunning} at the tail of {@link #loop()} (after onStopped returns), the owned pools are
