@@ -1528,3 +1528,42 @@ SELECT approx_top_k(1);
 -- result:
 [{"item":1,"count":1}]
 -- !result
+-- name: test_approx_top_k_const_first_arg
+CREATE TABLE `t_const_first_arg` (
+  `c_id` INT(11) NOT NULL,
+  `c_grp` TINYINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 4
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t_const_first_arg` VALUES (1,1),(2,2),(3,1),(4,2),(5,3),(6,3),(7,1),(8,2);
+-- result:
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT), 3, 10) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+-- result:
+1	[{"item":1,"count":3}]
+2	[{"item":1,"count":3}]
+3	[{"item":1,"count":2}]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT), 3) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+-- result:
+1	[{"item":1,"count":3}]
+2	[{"item":1,"count":3}]
+3	[{"item":1,"count":2}]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT)) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+-- result:
+1	[{"item":1,"count":3}]
+2	[{"item":1,"count":3}]
+3	[{"item":1,"count":2}]
+-- !result
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K('a', 3, 10) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+-- result:
+1	[{"item":"a","count":3}]
+2	[{"item":"a","count":3}]
+3	[{"item":"a","count":2}]
+-- !result
