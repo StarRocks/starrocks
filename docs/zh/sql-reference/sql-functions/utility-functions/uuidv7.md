@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回一个按时间有序的 UUID v7，具有更好的数据库性能表现。"
 ---
 
 # uuid_v7

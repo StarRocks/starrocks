@@ -118,6 +118,13 @@ Status SortContext::_init_merger() {
             auto& partition_sorter = _chunks_sorter_partitions[i];
             ChunkPtr chunk;
             Status st = partition_sorter->get_next(&chunk, eos);
+            // Propagate non-EOF errors instead of silently dropping them.
+            // Without this, a spiller restore failure leaves the merger cursor in a
+            // not-eos / no-data limbo and the source operator hangs.
+            if (!st.ok() && !st.is_end_of_file()) {
+                _state->fragment_ctx()->cancel(st);
+                *eos = true;
+            }
             if (!st.ok() || *eos || chunk == nullptr) {
                 return false;
             }

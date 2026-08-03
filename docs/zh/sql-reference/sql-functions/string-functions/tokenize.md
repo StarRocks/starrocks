@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定的分词器将文本拆分解析为标记数组。"
 ---
 
 # tokenize

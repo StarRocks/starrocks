@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the number of elements in an array."
 ---
 
 # array_length

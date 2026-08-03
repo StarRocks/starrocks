@@ -193,4 +193,22 @@ public class AST2StringBuilderTest {
 
         Assertions.assertEquals(expected, actual);
     }
+
+    @Test
+    public void testCastStructInArrayEscapesFieldNames() throws Exception {
+        String sql = "SELECT cast(PARSE_JSON('{}') as array<struct<`a b` int>>)";
+        List<StatementBase> statementBase =
+                SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assertions.assertEquals(1, statementBase.size());
+        StatementBase baseStmt = statementBase.get(0);
+        Assertions.assertTrue(baseStmt instanceof QueryStatement);
+
+        QueryStatement queryStmt = (QueryStatement) baseStmt;
+        Analyzer.analyze(queryStmt, AnalyzeTestUtil.getConnectContext());
+
+        String expected = "SELECT CAST((parse_json('{}')) AS ARRAY<struct<`a b` int(11)>>)";
+        String actual = AstToStringBuilder.toString(queryStmt);
+
+        Assertions.assertEquals(expected, actual);
+    }
 }

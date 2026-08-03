@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Docker 開発イメージを使用して StarRocks ソースコードをコンパイルする方法。"
 ---
 
 # Docker を使用して StarRocks をコンパイルする

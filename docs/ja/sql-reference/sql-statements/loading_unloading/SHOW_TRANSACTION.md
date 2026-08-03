@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたトランザクション ID のトランザクション詳細を表示します。"
 ---
 
 # SHOW TRANSACTION

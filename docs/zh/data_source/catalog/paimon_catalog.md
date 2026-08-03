@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
 ---
 
@@ -22,7 +23,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
+Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
 
 ## Paimon to StarRocks data types
 

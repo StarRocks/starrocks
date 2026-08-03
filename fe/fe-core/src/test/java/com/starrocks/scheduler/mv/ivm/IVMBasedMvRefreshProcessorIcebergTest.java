@@ -17,24 +17,27 @@ package com.starrocks.scheduler.mv.ivm;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
-import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -64,12 +67,147 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "TABLE: unpartitioned_db.t0\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "TABLE: unpartitioned_db.t0\n" +
                                     "     TABLE VERSION: Delta@[1,2]");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithGroupByNoAggregate() throws Exception {
+        // Guards the row-id fix: GROUP BY-only refresh used to fail TypeChecker on the
+        // __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        doTestWith3RunsNoCheckRewrite("SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a GROUP BY id;",
+                plan -> {
+                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
+                            "TABLE: unpartitioned_db.t0\n" +
+                                    "     TABLE VERSION: Delta@[0,1]");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctNoAggregate() throws Exception {
+        // Statement-level SELECT DISTINCT used to pick AUTO_INCREMENT and crash refresh
+        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        doTestWith3RunsNoCheckRewrite("SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
+                plan -> {
+                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
+                            "TABLE: unpartitioned_db.t0\n" +
+                                    "     TABLE VERSION: Delta@[0,1]");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctOverJoin() throws Exception {
+        // DISTINCT over a join normalizes to GROUP BY a.id, b.data and rides the same __ROW_ID__
+        // merge path — covers the join scope.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT DISTINCT a.id, b.data FROM `iceberg0`.`unpartitioned_db`.`t0` a " +
+                        "INNER JOIN `iceberg0`.`partitioned_db`.`t1` b ON a.id = b.id;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctConstantOutput() throws Exception {
+        // Constant outputs are dropped from the group keys, so __ROW_ID__ encodes only id — the
+        // constant must not leak into the row-id encoding.
+        doTestWith3RunsNoCheckRewrite("SELECT DISTINCT 1, id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithSelectDistinctDuplicateKeys() throws Exception {
+        // Duplicate DISTINCT keys are deduped to match the refresh aggregate's grouping; otherwise
+        // the encoded __ROW_ID__ would differ from the merge join key and probe the wrong rows.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT DISTINCT id AS a, id AS b FROM `iceberg0`.`unpartitioned_db`.`t0`;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithGroupByAllConstantKey() throws Exception {
+        // GROUP BY 1 is a positional ordinal; after __ROW_ID__ is prepended as output column 1 it must
+        // still resolve to the constant output column (one global group), not to __ROW_ID__ -- else the
+        // merge re-encodes the row id and splits the group across snapshots.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT 1, count(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMWithGroupByOrdinalColumn() throws Exception {
+        // A positional GROUP BY ordinal pointing at a real column must resolve to that column after
+        // __ROW_ID__ is prepended (ordinal shifted past it), so the aggregate groups by id -- not by
+        // __ROW_ID__, which would re-encode the row id and split each group across refreshes.
+        doTestWith3RunsNoCheckRewrite(
+                "SELECT id, count(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY 1;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    PlanTestBase.assertContains(planStr, "from_binary");
                 }
         );
     }
@@ -82,7 +220,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                             "     TABLE: unpartitioned_db.t0\n" +
                                     "     PREDICATES: 1: id > 10\n" +
                                     "     MIN/MAX PREDICATES: 1: id > 10\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -104,7 +242,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     // First run: should have delta scan and snapshot/delta scans via UNION
                     PlanTestBase.assertContains(planStr, "TABLE: unpartitioned_db.t0");
                     PlanTestBase.assertContains(planStr, "TABLE: partitioned_db.t1");
-                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[MIN,1]");
+                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(planStr, "UNION");
                 },
                 plan -> {
@@ -129,7 +267,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     // First run: 3-table join with delta scans
                     PlanTestBase.assertContains(planStr, "TABLE: unpartitioned_db.t0");
                     PlanTestBase.assertContains(planStr, "TABLE: partitioned_db.t1");
-                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[MIN,1]");
+                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(planStr, "UNION");
                 },
                 plan -> {
@@ -150,7 +288,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
                             "  0:IcebergScanNode\n" +
                                     "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
@@ -169,7 +307,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
                             "  0:IcebergScanNode\n" +
                                     "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
@@ -190,11 +328,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  3:IcebergScanNode\n" +
                                     "     TABLE: unpartitioned_db.t0\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  0:IcebergScanNode\n" +
                                     "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -218,7 +356,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  0:IcebergScanNode\n" +
                                     "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  7:HASH JOIN\n" +
                                     "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
@@ -321,11 +459,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  3:IcebergScanNode\n" +
                                     "     TABLE: unpartitioned_db.t0\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
                             "  0:IcebergScanNode\n" +
                                     "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[MIN,1]");
+                                    "     TABLE VERSION: Delta@[0,1]");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -420,20 +558,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
-    public void testFullRefreshWithScanOperator() throws Exception {
-        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-    }
-
-    @Test
-    public void testFullRefreshWithTableFunctionOperator() throws Exception {
-        String query = "SELECT id, unnest FROM `iceberg0`.`unpartitioned_db`.`t0` as a, unnest(split(data, ','));";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
-    }
-
-    @Test
     public void testAutoRefreshWithScanOperator() throws Exception {
         String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
@@ -446,13 +570,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             String query = "SELECT * from emps;";
             createMaterializedViewWithRefreshMode(query, "incremental");
         });
-    }
-
-    @Test
-    public void testFullRefreshWithOlapScanOperator() throws Exception {
-        String query = "SELECT * from emps;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "full");
-        Assertions.assertEquals(MaterializedView.RefreshMode.FULL, mv.getCurrentRefreshMode());
     }
 
     @Test
@@ -472,10 +589,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         {
             advanceTableVersionTo(2);
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
-                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+            MVHybridRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
         }
         // Once a checkpoint exists, append-only changes can switch AUTO back to IVM.
         {
@@ -487,11 +604,29 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                             TvrDeltaStats.EMPTY)
             ));
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(refreshedMv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
-                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+            MVHybridRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
         }
+    }
+
+    @Test
+    public void testFirstFullRefreshOfAggregateIvmMvRebuildsRewrittenInsert() throws Exception {
+        // First refresh (no TVR baseline) of an aggregate IVM MV full-rebuilds through the
+        // hybrid -> PCT path, whose INSERT must use the re-derived rewritten query (the hidden
+        // __ROW_ID__/__AGG_STATE columns it adds), not the user query. Without the re-derive the
+        // positional INSERT mismatches the MV schema ("target column count doesn't match select").
+        // The other IVM tests seed a TVR baseline (skipping this path), so this is the only cover.
+        String query = "SELECT data, count(id) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY data;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        advanceTableVersionTo(2);
+        MVTaskRunProcessor proc = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(proc.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        Assertions.assertTrue(
+                ((MVHybridRefreshProcessor) proc.getMVRefreshProcessor()).getCurrentProcessor()
+                        instanceof MVPCTRefreshProcessor,
+                "first refresh with no baseline must full-rebuild via the PCT path");
     }
 
     @Test
@@ -503,10 +638,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         advanceTableVersionTo(2);
 
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         MaterializedView refreshedMv = getMv("test_mv1");
         TvrVersionRange checkpoint = refreshedMv.getRefreshScheme()
@@ -526,10 +661,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         ));
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
     }
 
     @Test
@@ -540,20 +675,20 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         advanceTableVersionTo(2);
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         MaterializedView refreshedMv = getMv("test_mv1");
         advanceTableVersionTo(3);
         mockListTableDeltaTraitsThrows("Starting snapshot (exclusive) 2 is not a parent ancestor of end snapshot 3");
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
     }
 
     @Test
@@ -566,13 +701,13 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         {
             advanceTableVersionTo(2);
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor);
         }
         // if the base table has retractable changes, the refresh processor should be full refresh
         {
             mockListTableDeltaTraits();
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor);
         }
     }
 
@@ -597,15 +732,15 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // Run 1: IVM fails (retractable changes) → fallback to PCT
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
         // Verify fallback to PCT
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // Verify canGenerateNextTaskRun is NOT blocked (the core fix)
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid1.getCurrentProcessor();
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid1.getCurrentProcessor();
         Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
                 "IVM→PCT fallback should allow multi-batch splitting (canGenerateNextTaskRun=true)");
 
@@ -629,11 +764,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         ));
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
         // Should switch back to IVM since delta[2,3] is append-only
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor,
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMRefreshProcessor,
                 "After PCT fallback persists checkpoint, next IVM refresh should recover");
     }
 
@@ -660,15 +795,15 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // First task_run: IVM fails (retractable changes) → fallback to PCT, batch 1
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
         // Verify fallback to PCT
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // Verify canGenerateNextTaskRun is allowed
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
         Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
                 "IVM→PCT fallback should allow multi-batch splitting");
 
@@ -704,13 +839,13 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             while (nextTaskRun != null) {
                 initAndExecuteTaskRun(nextTaskRun);
                 MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
-                BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
-                if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
-                    MVHybridBasedRefreshProcessor nextHybrid =
-                            (MVHybridBasedRefreshProcessor) refreshProcessor;
+                MVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+                if (refreshProcessor instanceof MVHybridRefreshProcessor) {
+                    MVHybridRefreshProcessor nextHybrid =
+                            (MVHybridRefreshProcessor) refreshProcessor;
                     nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
-                } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
-                    nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+                } else if (refreshProcessor instanceof MVPCTRefreshProcessor) {
+                    nextTaskRun = ((MVPCTRefreshProcessor) refreshProcessor).getNextTaskRun();
                 } else {
                     nextTaskRun = null;
                 }
@@ -752,9 +887,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // Run: IVM fails → fallback to PCT (single batch, unpartitioned MV)
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // After single-batch completes: TVR promoted, owner cleared
         MaterializedView refreshedMv = getMv("test_mv1");
@@ -789,10 +924,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental",
                 "`date`", Map.of("partition_refresh_number", "1"));
         Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+        seedTvrBaselineAtVersionZero(mv);
 
         advanceTableVersionTo(2);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVIVMRefreshProcessor);
 
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
         MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
@@ -813,22 +949,22 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybridProcessor =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybridProcessor =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         TaskRun nextTaskRun = hybridProcessor.getCurrentProcessor().getNextTaskRun();
         while (nextTaskRun != null) {
             initAndExecuteTaskRun(nextTaskRun);
             MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
-            BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
-            if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
-                MVHybridBasedRefreshProcessor nextHybrid =
-                        (MVHybridBasedRefreshProcessor) refreshProcessor;
+            MVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+            if (refreshProcessor instanceof MVHybridRefreshProcessor) {
+                MVHybridRefreshProcessor nextHybrid =
+                        (MVHybridRefreshProcessor) refreshProcessor;
                 nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
-            } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
-                nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+            } else if (refreshProcessor instanceof MVPCTRefreshProcessor) {
+                nextTaskRun = ((MVPCTRefreshProcessor) refreshProcessor).getNextTaskRun();
             } else {
                 nextTaskRun = null;
             }
@@ -850,9 +986,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(refreshedMv.getDbId());
         taskRun = withMVRefreshTaskRun(db.getFullName(), refreshedMv);
         mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        hybridProcessor = (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        hybridProcessor = (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
 
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
         MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
@@ -869,7 +1005,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
                     // Verify incremental scan
                     PlanTestBase.assertContains(planStr,
-                            "TABLE VERSION: Delta@[MIN,1]");
+                            "TABLE VERSION: Delta@[0,1]");
                     // Verify LEFT/RIGHT OUTER JOIN with __ROW_ID__
                     PlanTestBase.assertContains(planStr, "HASH JOIN");
                     PlanTestBase.assertContains(planStr, "equal join conjunct:");
@@ -928,7 +1064,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                         "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date, id;",
                 plan -> {
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
-                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[MIN,1]");
+                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[0,1]");
                     PlanTestBase.assertContains(planStr, "HASH JOIN");
                     PlanTestBase.assertContains(planStr, "state_union");
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
@@ -959,7 +1095,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
 
         // First batch completed — inspect the runtime pinnedTvrMap hydrated by
         // setupPinnedContextIfNeeded after the afterSyncHook installed the owner.
@@ -992,11 +1128,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
 
         // First batch should have generated a next batch (partition_refresh_number=1 on 4 partitions).
         TaskRun nextTaskRun = pctProcessor.getNextTaskRun();
@@ -1046,10 +1182,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Job A: first batch installs owner=A_jobId and creates nextTaskRun for batch 2.
         TaskRun jobARun1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor jobARun1Processor = getMVTaskRunProcessor(jobARun1);
-        MVHybridBasedRefreshProcessor jobAHybrid =
-                (MVHybridBasedRefreshProcessor) jobARun1Processor.getMVRefreshProcessor();
-        MVPCTBasedRefreshProcessor jobAPct =
-                (MVPCTBasedRefreshProcessor) jobAHybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor jobAHybrid =
+                (MVHybridRefreshProcessor) jobARun1Processor.getMVRefreshProcessor();
+        MVPCTRefreshProcessor jobAPct =
+                (MVPCTRefreshProcessor) jobAHybrid.getCurrentProcessor();
         TaskRun jobABatch2 = jobAPct.getNextTaskRun();
         Assertions.assertNotNull(jobABatch2, "Job A should generate a batch 2");
         String jobAId = jobARun1Processor.getMvTaskRunContext().getStatus().getStartTaskRunId();
@@ -1110,10 +1246,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Batch 1: IVM fails -> Hybrid fallback to PCT -> afterSyncHook freezes at S2.
         TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2, "Multi-batch fallback should generate batch 2");
 
@@ -1165,10 +1301,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // refresh_mode=pct routes through MVPCTBasedRefreshProcessor directly, not Hybrid.
         // Therefore no afterSyncHook is installed, no owner is written, and isPinnedMode()
         // returns false on every batch of this job.
-        Assertions.assertTrue(batch1Proc.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor,
+        Assertions.assertTrue(batch1Proc.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor,
                 "refresh_mode=pct must use MVPCTBasedRefreshProcessor directly (not Hybrid)");
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) batch1Proc.getMVRefreshProcessor();
 
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2,
@@ -1219,8 +1355,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) batch1Proc.getMVRefreshProcessor();
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2, "Pure PCT multi-batch must generate a next batch");
         // Pure PCT never carries PINNED_REFRESH_JOB_ID, which is exactly what signals the
@@ -1297,7 +1433,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor processor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(processor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        Assertions.assertTrue(processor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
 
         // After fallback batch 1, setupPinnedRangesIfNeeded should have written the snapshot id
         // into the task run's MVTaskRunExtraMessage. Pure PCT / non-pinned runs leave it empty.
@@ -1310,5 +1446,222 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Long snapshotId = pinnedSnapshotIdMap.values().iterator().next();
         Assertions.assertEquals(2L, snapshotId.longValue(),
                 "pinnedSnapshotIdMap value should match the PCT-synced snapshot id");
+    }
+
+    /**
+     * Verify the TVR version range consumed per base table is recorded on the task run's extra
+     * message so it is visible via information_schema.task_runs.EXTRA_MESSAGE.
+     */
+    @Test
+    public void testImvSourceVersionRangeRecordedOnExtraMessage() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        // Synthetic version: no Iceberg snapshot with this id exists on the mock native table,
+        // so commit-time resolution must degrade to an empty per-table map.
+        advanceTableVersionTo(999999L);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(TvrVersion.of(0L), TvrVersion.of(999999L)),
+                        TvrDeltaStats.EMPTY)));
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        Map<String, Map<String, String>> versionRanges = extraMessage.getImvSourceVersionRange();
+        Assertions.assertEquals(Map.of("start", "0", "end", "999999"),
+                versionRanges.get("iceberg0.unpartitioned_db.t0"),
+                "imvSourceVersionRange should record the consumed TVR range, got: " + versionRanges);
+        Assertions.assertTrue(extraMessage.toString().contains("\"imvSourceVersionRange\""),
+                "extra message JSON should contain imvSourceVersionRange: " + extraMessage);
+
+        Map<String, String> timestampRange =
+                extraMessage.getImvSourceTimestampRange().get("iceberg0.unpartitioned_db.t0");
+        Assertions.assertNotNull(timestampRange,
+                "imvSourceTimestampRange should have an entry per staged base table");
+        Assertions.assertTrue(timestampRange.isEmpty(),
+                "unresolvable snapshot ids should degrade to an empty map, got: " + timestampRange);
+    }
+
+    /**
+     * Verify commit times of the consumed snapshot range are recorded as imvSourceTimestampRange
+     * when the source snapshots are resolvable on the native Iceberg table.
+     */
+    @Test
+    public void testImvSourceTimestampRangeRecordedOnExtraMessage() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental", "`date`", null);
+
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        org.apache.iceberg.Table nativeTable = ((IcebergTable) MvUtils.getTableWithIdentifier(
+                mv.getBaseTableInfos().get(0)).get()).getNativeTable();
+        // Two real Iceberg commits so both range endpoints have resolvable commit times.
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 10, "date=2020-01-02");
+        long startSnapshotId = nativeTable.currentSnapshot().snapshotId();
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 10, "date=2020-01-03");
+        long endSnapshotId = nativeTable.currentSnapshot().snapshotId();
+
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = mv.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        for (BaseTableInfo info : mv.getBaseTableInfos()) {
+            tvrMap.put(info, TvrTableSnapshot.of(startSnapshotId));
+        }
+        advanceTableVersionTo(endSnapshotId);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(TvrVersion.of(startSnapshotId), TvrVersion.of(endSnapshotId)),
+                        TvrDeltaStats.EMPTY)));
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        String tableKey = "iceberg0.partitioned_db.t1";
+        Assertions.assertEquals(
+                Map.of("start", String.valueOf(startSnapshotId), "end", String.valueOf(endSnapshotId)),
+                extraMessage.getImvSourceVersionRange().get(tableKey),
+                "got: " + extraMessage.getImvSourceVersionRange());
+        Assertions.assertEquals(
+                Map.of("start", String.valueOf(nativeTable.snapshot(startSnapshotId).timestampMillis()),
+                        "end", String.valueOf(nativeTable.snapshot(endSnapshotId).timestampMillis())),
+                extraMessage.getImvSourceTimestampRange().get(tableKey),
+                "got: " + extraMessage.getImvSourceTimestampRange());
+    }
+
+    @Test
+    public void testIncrementalFirstRefreshRoutesToHybridForPctBaseline() throws Exception {
+        // Empty TVR baseline: factory must route to hybrid so PCT establishes the baseline.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+        Assertions.assertTrue(
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty());
+
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVHybridRefreshProcessor.class, mvTaskRunProcessor.getMVRefreshProcessor());
+    }
+
+    @Test
+    public void testIncrementalSubsequentRefreshUsesPureIvm() throws Exception {
+        // All base tables have a baseline: factory must route to pure IVM (no fallback).
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+        seedTvrBaselineAtVersionZero(mv);
+
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, mvTaskRunProcessor.getMVRefreshProcessor());
+    }
+
+    @Test
+    public void testIncrementalRefreshRoutesToHybridWhenAnyBaseTableMissingBaseline() throws Exception {
+        // Map non-empty but current BaseTableInfo has no entry (e.g. after a metadata repair
+        // that rewrote keys without updating baseTableInfoTvrVersionRangeMap). Factory must
+        // still route to hybrid so PCT can rebuild the missing baseline.
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = mv.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        BaseTableInfo current = mv.getBaseTableInfos().get(0);
+        BaseTableInfo stale = new BaseTableInfo(current.getCatalogName(), current.getDbName(),
+                current.getTableName(), "stale-table-identifier");
+        tvrMap.put(stale, TvrTableSnapshot.of(0L));
+
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVHybridRefreshProcessor.class, mvTaskRunProcessor.getMVRefreshProcessor());
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenNoDeltaTraits() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of());
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("no tvr delta traits"),
+                "expected 'no tvr delta traits' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeWhenLineageBroken() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraitsThrowsConnector(
+                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("snapshot ancestry broken"),
+                "expected 'snapshot ancestry broken' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("is not a parent ancestor"),
+                "expected original connector reason preserved in chain, got: " + chain);
+    }
+
+    private static String collectMessages(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        Throwable cur = t;
+        while (cur != null) {
+            sb.append(cur.getMessage()).append('\n');
+            if (cur.getCause() == cur) {
+                break;
+            }
+            cur = cur.getCause();
+        }
+        return sb.toString();
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesPartitionShapeChangeOnNonAppendOnly() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofRetractable(
+                        TvrTableDelta.of(0L, 1L), TvrDeltaStats.EMPTY)));
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("non-append-only"),
+                "expected 'non-append-only' in chain, got: " + chain);
+        Assertions.assertTrue(chain.contains("Drop and recreate"),
+                "expected drop-and-recreate guidance in chain, got: " + chain);
+    }
+
+    @Test
+    public void testIncrementalRefreshPropagatesNonAncestryConnectorError() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        String unrelatedConnectorMessage = "transient connector failure: io error reading manifest list";
+        mockListTableDeltaTraitsThrowsConnector(unrelatedConnectorMessage);
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains(unrelatedConnectorMessage),
+                "expected original connector message preserved in chain, got: " + chain);
+        Assertions.assertFalse(chain.contains("Drop and recreate"),
+                "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
+                "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains("INCREMENTAL materialized views do not support partition-shape"),
+                "partition-shape framing must not apply to non-ancestry connector failures, got: " + chain);
     }
 }

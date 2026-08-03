@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks provides a self-developed connector for Apache Flink to read data in bulk from a StarRocks cluster using SQL or DataStream."
 ---
 
 # 使用 Flink Connector 读取数据
@@ -32,10 +33,10 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 ## 前提条件
 
@@ -55,7 +56,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    OpenJDK 64-Bit Server VM (Temurin)(build 25.322-b06, mixed mode)
    ```
 
-2. 下载并解压 [Flink](https://flink.apache.org/downloads.html)。
+2. 下载并解压 [Flink](https://flink.apache.org/downloads/)。
 
    > **说明**
    >
@@ -82,7 +83,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    Starting taskexecutor daemon on host.
    ```
 
-您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/) 完成部署。
+您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation) 完成部署。
 
 ## 准备工作
 
@@ -358,4 +359,4 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ## 后续操作
 
-Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/zh/docs/try-flink/flink-operations-playground/#flink-webui-界面) 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。
+Flink 成功读取 StarRocks 中的数据后，您可以使用 Flink 官方的 Flink WebUI 界面观察读取任务，比如，可以在 **Metrics** 页面上查看 `totalScannedRows` 指标，从而获悉成功读取的数据行数。您还可以使用 Flink SQL 对读取的数据进行计算，比如 Join。

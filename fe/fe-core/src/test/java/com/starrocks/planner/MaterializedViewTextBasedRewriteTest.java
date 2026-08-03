@@ -15,17 +15,22 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.Map;
 import java.util.Set;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
@@ -428,5 +433,141 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
             MaterializedView expectedMV = getMv(MATERIALIZED_DB_NAME, "test_mv0");
             Assertions.assertEquals(expectedMV, actualMV);
         }
+    }
+
+    /**
+     * Regression test for the bug where a dropped MV still remains in MV_PLAN_CACHE_PENDING.
+     *
+     * Scenario (mirrors replay order during FE startup when isReady=false):
+     *   1. MV is created  → mv set active → cacheMaterializedView() → triggerLoadMVPlanCacheAsync() → enters pending
+     *   2. MV is dropped  → evictMaterializedViewCache() must also remove it from pending
+     *
+     * Without the fix, the dropped MV remains in MV_PLAN_CACHE_PENDING.
+     */
+    @Test
+    public void testEvictRemovesMvFromPendingCache() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return false;
+            }
+        };
+        String mvName = "test_mv_evict_pending";
+        String createMvSql = "create materialized view " + mvName + " distributed by random refresh manual " +
+                "as select user_id, time, sum(tag_id) from user_tags group by user_id, time";
+
+        starRocksAssert.withMaterializedView(createMvSql);
+        MaterializedView mv = getMv(MATERIALIZED_DB_NAME, mvName);
+        try {
+            mv.setActive();
+
+            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be in pending after triggerLoadMVPlanCacheAsync with isReady=false");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+
+            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be removed from pending after evictMaterializedViewCache");
+        }
+    }
+
+    /**
+     * Regression test for the bug where a dropped MV still remains in MV_PLAN_CACHE_PENDING.
+     *
+     * Scenario (mirrors replay order during FE startup when isReady=false):
+     *   1. MV is created  → mv set active → cacheMaterializedView() → triggerLoadMVPlanCacheAsync() → enters pending
+     *   2. MV is dropped  → evictMaterializedViewCache() must also remove it from pending
+     *   3. After FE ready → triggerPendingMVPlanCacheLoads() must not re-insert the dropped MV
+     *
+     * Without the fix, step 3 would load the stale MV object into MV_PLAN_CONTEXT_CACHE.
+     */
+    @Test
+    public void testEvictRemovesMvFromPendingCache2() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return false;
+            }
+        };
+        String mvName = "test_mv_evict_pending";
+        String createMvSql = "create materialized view " + mvName + " distributed by random refresh manual " +
+                "as select user_id, time, sum(tag_id) from user_tags group by user_id, time";
+
+        starRocksAssert.withMaterializedView(createMvSql);
+        MaterializedView mv = getMv(MATERIALIZED_DB_NAME, mvName);
+        try {
+            mv.setActive();
+
+            // MV should now be in pending.
+            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be in pending after triggerLoadMVPlanCacheAsync with isReady=false");
+        } finally {
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public boolean isReady() {
+                    return true;
+                }
+            };
+            starRocksAssert.dropMaterializedView(mvName);
+
+            // Simulate the racing condition: MV was dropped during replay, but its stale entry is still
+            // present in MV_PLAN_CACHE_PENDING
+            Map<Long, MaterializedView> pendingMap =
+                    Deencapsulation.getField(CachingMvPlanContextBuilder.getInstance(), "MV_PLAN_CACHE_PENDING");
+            pendingMap.put(mv.getId(), mv);
+
+            CachingMvPlanContextBuilder.getInstance().triggerPendingMVPlanCacheLoads();
+
+            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be removed from pending after triggerPendingMVPlanCacheLoads");
+
+            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv),
+                    "MV should not be cached after triggerPendingMVPlanCacheLoads");
+        }
+    }
+
+    /**
+     * Normal path
+     *
+     * Scenario (mirrors replay order during FE startup when isReady=false):
+     *   1. MV is created  → mv set active → cacheMaterializedView() → triggerLoadMVPlanCacheAsync() → enters pending
+     *   2. After FE ready → triggerPendingMVPlanCacheLoads() must re-insert the MV
+     *
+     */
+    @Test
+    public void testEvictRemovesMvFromPendingCache3() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return false;
+            }
+        };
+        String mvName = "test_mv_evict_pending";
+        String createMvSql = "create materialized view " + mvName + " distributed by random refresh manual " +
+                "as select user_id, time, sum(tag_id) from user_tags group by user_id, time";
+
+        starRocksAssert.withMaterializedView(createMvSql, name -> {
+            MaterializedView mv = getMv(MATERIALIZED_DB_NAME, mvName);
+            mv.setActive();
+
+            // MV should now be in pending.
+            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be in pending after triggerLoadMVPlanCacheAsync with isReady=false");
+
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public boolean isReady() {
+                    return true;
+                }
+            };
+
+            CachingMvPlanContextBuilder.getInstance().triggerPendingMVPlanCacheLoads();
+
+            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().isPending(mv),
+                    "MV should be removed from pending after triggerPendingMVPlanCacheLoads");
+
+            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv),
+                    "MV should be cached after triggerPendingMVPlanCacheLoads");
+        });
     }
 }

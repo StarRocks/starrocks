@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Enable Group Provider in StarRocks to authenticate and authorize user groups from external authentication systems for collective user management."
 sidebar_position: 30
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算参数x的自然对数（以e为底）。"
 ---
 
 # ln, dlog1, log

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 keywords:
   - SHOW PARTITIONS
+description: "SHOW PARTITIONS displays partition information for a table, including common and temporary partitions."
 ---
 
 # SHOW PARTITIONS

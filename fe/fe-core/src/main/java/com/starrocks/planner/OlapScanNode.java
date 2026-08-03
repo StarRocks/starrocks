@@ -129,7 +129,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+
+import javax.annotation.Nullable;
 
 public class OlapScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
@@ -139,7 +140,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -204,6 +204,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
+
+    // Set once the scan-range heap-safety warning has been evaluated for this scan node. MUST stay an
+    // instance field: a method-local flag makes planning quadratic in the number of physical
+    // partitions, which is the regression #64158 introduced and this field restores.
+    private boolean alreadyCheckedScanRangeNumSafe = false;
 
     boolean enableTopnFilterBackPressure = false;
     long backPressureThrottleTimeUpperBound = -1;
@@ -279,14 +284,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
         this.selectedPartitionIds = selectedPartitionIds;
+        this.selectedPartitionNum = selectedPartitionIds.size();
     }
 
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
-    }
-
-    public List<Long> getSelectedPartitionVersions() {
-        return selectedPartitionVersions;
     }
 
     public List<Expr> getPrunedPartitionPredicates() {
@@ -316,13 +318,78 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     @Override
     public int getBucketNums() {
-        int bucketNum = olapTable.getDefaultDistributionInfo().getBucketNum();
+        DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
+        if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            return getRangeDistributionBucketNums(distInfo);
+        }
+        // HASH path.
+        int bucketNum = distInfo.getBucketNum();
         if (getSelectedPartitionIds().size() <= 1) {
             for (Long pid : getSelectedPartitionIds()) {
                 bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
             }
         }
         return bucketNum;
+    }
+
+    private int getRangeDistributionBucketNums(DistributionInfo distInfo) {
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
+        if (dispatch != null) {
+            // getBucketNums() is invoked from ExecutionFragment.getOrCreateColocatedAssignment
+            // only when BackendSelectorFactory has chosen a colocate-dispatch path. Verify
+            // alignment HERE, after the dispatch decision: a misaligned ColocateRangeMgr
+            // would silently produce wrong join results under colocate dispatch.
+            // Non-colocate scans go through NormalBackendSelector and never reach this point.
+            //
+            // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
+            // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
+            // The second check closes the fill-vs-dispatch TOCTOU: the bucketSeq fill falls back to a
+            // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
+            // still works); if the group then re-aligns before this guard runs, comparing the built
+            // assignment against the aligned mapping catches the stale position pairing that would
+            // otherwise reach the colocate join and silently return wrong results.
+            //
+            // Invariant: the bucketSeq fill (getScanRangeLocations, optimizer or legacy path) always runs
+            // before backend selection reaches this guard, so tabletId2BucketSeq holds the whole scan's
+            // built assignment here — an empty map would itself be a not-built/stale state and fails closed.
+            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId, tabletId2BucketSeq);
+            return dispatch.bucketCount();
+        }
+        // Range distribution without a colocate group: RangeDistributionInfo always
+        // reports 1 (one tablet per partition by design).
+        return distInfo.getBucketNum();
+    }
+
+    /**
+     * Returns the physical partitions that actually contribute scan tablets.
+     * Optimizer path: derived from {@link #partitionToScanTabletMap} (skip
+     * empty entries — those were pruned out). Legacy path: every sub-partition
+     * of every selected logical partition.
+     */
+    private List<PhysicalPartition> getSelectedPhysicalPartitions() {
+        List<PhysicalPartition> result = new ArrayList<>();
+        if (partitionToScanTabletMap != null) {
+            for (Map.Entry<Long, List<Long>> entry : partitionToScanTabletMap.entrySet()) {
+                if (entry.getValue() == null || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(entry.getKey());
+                if (physicalPartition != null) {
+                    result.add(physicalPartition);
+                }
+            }
+            return result;
+        }
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                result.add(physicalPartition);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -562,10 +629,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
-        selectedPartitionVersions.add(visibleVersion);
 
         checkSomeAliveComputeNode();
-        boolean checkScanRangeSize = false;
 
         // Batch retrieve all tablets' location info in shared-data mode
         Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
@@ -693,11 +758,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             scanRangeLocations.setScan_range(scanRange);
 
             bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
-            if (!checkScanRangeSize) {
-                long scanRangeSize = getEstimatedScanRangeFootprint(scanRange);
-                checkIfScanRangeNumSafe(scanRangeSize);
-                checkScanRangeSize = true;
-            }
+            checkScanRangeNumSafeOnce(scanRange);
 
             result.add(scanRangeLocations);
         }
@@ -763,6 +824,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
          */
         Preconditions.checkState(scanBackendIds.size() == 0);
         Preconditions.checkState(scanTabletIds.size() == 0);
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(olapTable);
         for (Long partitionId : selectedPartitionIds) {
             final Partition partition = olapTable.getPartition(partitionId);
 
@@ -783,9 +845,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     scanTabletIds.addAll(allTabletIds);
                 }
 
-                for (int i = 0; i < allTabletIds.size(); i++) {
-                    tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                }
+                fillTabletId2BucketSeq(dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
                 addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
@@ -793,7 +853,70 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         }
     }
 
-    public void checkIfScanRangeNumSafe(long scanRangeSize) {
+    /**
+     * Fills {@code target} with the tablet-id → bucket-sequence assignment for {@code selectedIndex},
+     * applying the position-fallback policy shared by both scan-time producers of
+     * {@link #tabletId2BucketSeq} — this class's {@link #computeTabletInfo} and
+     * {@link com.starrocks.sql.plan.PlanFragmentBuilder}:
+     *
+     * <ul>
+     *   <li>range colocate and aligned — {@code dispatch != null} and
+     *       {@link RangeColocateScanDispatch#computeBucketSeq} returns a mapping — uses that mapping;</li>
+     *   <li>everything else (HASH, range non-colocate, or a transiently unaligned range colocate group
+     *       where {@code computeBucketSeq} returns {@code null}) falls back to position-based bucketSeq.</li>
+     * </ul>
+     *
+     * <p>Entries are added to {@code target} without clearing it, so a caller can accumulate the
+     * whole-scan assignment across sub-partitions. The dispatch-time alignment guard in
+     * {@link #getBucketNums()} fails closed on the colocate-dispatch path when the built assignment is a
+     * stale position fallback, so no unaligned observation needs to be recorded here.
+     */
+    public static void fillTabletId2BucketSeq(@Nullable RangeColocateScanDispatch dispatch,
+                                              MaterializedIndex selectedIndex,
+                                              List<Long> allTabletIds,
+                                              Map<Long, Integer> target) {
+        if (dispatch != null) {
+            Map<Long, Integer> rangeColocateMap = dispatch.computeBucketSeq(selectedIndex);
+            if (rangeColocateMap != null) {
+                target.putAll(rangeColocateMap);
+                return;
+            }
+        }
+        for (int i = 0; i < allTabletIds.size(); i++) {
+            target.put(allTabletIds.get(i), i);
+        }
+    }
+
+    /**
+     * Runs {@link #checkIfScanRangeNumSafe} the first time it is called on this scan node, and does
+     * nothing on every later call -- every call after the first is a single field read, so this is
+     * safe to call from the per-tablet loop.
+     *
+     * <p>The guard lives here rather than at the call site on purpose. The check is O(selected
+     * physical partitions), while callers run once per physical partition, so a caller-side guard is
+     * what made planning quadratic (#64158). Keeping it here means a new call site cannot
+     * reintroduce that by forgetting to hoist a flag.
+     *
+     * <p>{@code sampleScanRange} is only a size sample: {@link #getEstimatedScanRangeFootprint}
+     * measures it once per JVM and reuses that figure for every table thereafter.
+     */
+    private void checkScanRangeNumSafeOnce(TScanRange sampleScanRange) {
+        if (alreadyCheckedScanRangeNumSafe) {
+            return;
+        }
+        checkIfScanRangeNumSafe(getEstimatedScanRangeFootprint(sampleScanRange));
+        alreadyCheckedScanRangeNumSafe = true;
+    }
+
+    /**
+     * Warn when this scan node's scan ranges look large enough to threaten the FE heap.
+     * Diagnostic only: it never alters the plan.
+     *
+     * <p>O(selected physical partitions). Do not call directly from a per-partition or per-tablet
+     * loop -- go through {@link #checkScanRangeNumSafeOnce}.
+     */
+    @VisibleForTesting // package-private, not private: this JMockit version cannot fake private methods
+    void checkIfScanRangeNumSafe(long scanRangeSize) {
         long totalPartitionNum = 0;
         long totalTabletsNum = 0;
         for (long partitionId : selectedPartitionIds) {
@@ -1117,6 +1240,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             if (!scanTabletIds.isEmpty()) {
                 msg.lake_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
+
+            if (sample != null && sample.isUseSampling()) {
+                TTableSampleOptions sampleOptions = new TTableSampleOptions();
+                msg.lake_scan_node.setSample_options(sampleOptions);
+                sample.toThrift(sampleOptions);
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
@@ -1529,19 +1658,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                             .collect(Collectors.toSet());
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
-            List<Long> partitionIds = getSelectedPartitionIds();
+            // scanPartitionVersions is keyed by physical partition id and is populated in
+            // addScanRangeLocations() with exactly the physical partitions that were actually
+            // scanned, so it is the authoritative physicalPartitionId -> version source -- no need
+            // to re-derive physical ids by re-expanding getSelectedPartitionIds() (logical ids).
+            Map<Long, Long> partitionVersions = getScanPartitionVersions();
 
-            List<Long> physicalPartitionIds = new ArrayList<>();
-            for (Long partitionId : partitionIds) {
-                Partition partition = olapTable.getPartition(partitionId);
-                physicalPartitionIds.addAll(partition.getSubPartitions().stream()
-                        .map(PhysicalPartition::getId).collect(Collectors.toList()));
+            // Sanity check: every physical partition actually scanned must belong to a selected
+            // logical partition. Cheap and harmless; guards against the two structures drifting
+            // apart in the future.
+            Set<Long> selectedLogicalPartitionIds = Sets.newHashSet(getSelectedPartitionIds());
+            for (Long physicalPartitionId : partitionVersions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null &&
+                        selectedLogicalPartitionIds.contains(physicalPartition.getParentId()));
             }
 
-            List<Long> partitionVersions = getSelectedPartitionVersions();
-            Preconditions.checkState(physicalPartitionIds.size() == partitionVersions.size());
-            List<Pair<Long, Long>> partitionVersionAndIds = IntStream.range(0, physicalPartitionIds.size())
-                    .mapToObj(i -> Pair.create(partitionVersions.get(i), physicalPartitionIds.get(i)))
+            List<Pair<Long, Long>> partitionVersionAndIds = partitionVersions.entrySet().stream()
+                    .map(e -> Pair.create(e.getValue(), e.getKey()))
                     .sorted(Pair.comparingBySecond()).collect(Collectors.toList());
             scanNode.setSelected_partition_ids(
                     partitionVersionAndIds.stream().map(p -> p.second).collect(Collectors.toList()));
@@ -1573,6 +1707,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
+
+        if (sample != null && sample.isUseSampling()) {
+            TTableSampleOptions sampleOptions = new TTableSampleOptions();
+            sample.toThrift(sampleOptions);
+            scanNode.setSample_options(sampleOptions);
+        }
+
         planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
@@ -1665,7 +1806,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
         selectedPartitionNames.clear();
-        selectedPartitionVersions.clear();
         result.clear();
         scanBackendIds.clear();
         appliedDictStringColumns.clear();

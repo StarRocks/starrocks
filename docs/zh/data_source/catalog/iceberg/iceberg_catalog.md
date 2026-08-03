@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg catalog 是外部 catalog，支持无导入查询 Iceberg 数据及数据转换导入。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
 ---
@@ -83,6 +84,14 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 :::
 
+##### 通过 Catalog PROPERTIES 透传 HDFS 客户端配置
+
+除了将 **hdfs-site.xml** 拷贝到 FE/BE/CN 的 **conf** 目录之外，您还可以直接在 `CREATE EXTERNAL CATALOG` 的 `PROPERTIES` 中声明 HDFS 客户端配置（例如 HA 相关的 `dfs.nameservices`、`dfs.ha.namenodes.<ns>`、`dfs.namenode.rpc-address.<ns>.<nn>`、`dfs.client.failover.proxy.provider.<ns>`、`fs.defaultFS` 等）。FE 和 BE/CN 都会接收并应用这些配置。
+
+该方式的主要优势是支持**在同一个 StarRocks 集群中通过多个 Iceberg Catalog 同时访问多个独立的 HDFS HA 集群**。由于 FE/BE/CN 的 **conf** 目录中只能放置一份 **hdfs-site.xml**，多个 HDFS HA 集群的 nameservice 配置无法共存；而通过 Catalog PROPERTIES 透传时，每个 Catalog 可以独立携带各自集群的 HA 配置，互不干扰。
+
+完整的 HA 配置示例请参见下方 [示例 - HDFS](#示例) 一节。
+
 ---
 
 #### Kerberos 身份验证
@@ -153,6 +162,7 @@ Iceberg catalog 的描述。此参数是可选的。
 关于 StarRocks 如何与数据源的元存储集成的一组参数。选择与您的元存储类型匹配的选项卡：
 
 <Tabs groupId="metastore">
+
 <TabItem value="HIVE" label="Hive metastore" default>
 
 ##### Hive metastore
@@ -183,6 +193,7 @@ Iceberg catalog 的描述。此参数是可选的。
 描述：Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。<br />如果 Hive metastore 启用了高可用性（HA），您可以指定多个 metastore URI，并用逗号（`,`）分隔，例如 `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
 
 </TabItem>
+
 <TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
@@ -256,6 +267,7 @@ AWS Glue 的 `MetastoreParams`：
 有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 </TabItem>
+
 <TabItem value="REST" label="REST">
 
 ##### REST
@@ -507,6 +519,7 @@ PROPERTIES
 选择与您的存储类型匹配的选项卡：
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
@@ -792,6 +805,10 @@ Microsoft Azure 的 `StorageCredentialParams`：
 
 - 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
 
+  :::note
+  使用 Vended Credential 时，StarRocks 会直接使用 REST Catalog 下发的 Token 访问 GCS。此时 Catalog 上配置的 `gcp.gcs.impersonation_service_account` 将被忽略。
+  :::
+
 Google GCS 的 `StorageCredentialParams`：
 
 ###### gcp.gcs.service_account_email
@@ -833,7 +850,7 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
@@ -850,6 +867,7 @@ Google GCS 的 `StorageCredentialParams`：
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg catalog，具体取决于您使用的元存储类型，以便从您的 Iceberg 集群中查询数据。选择与您的存储类型匹配的选项卡：
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
@@ -994,6 +1012,75 @@ PROPERTIES
 );
 ```
 
+##### 访问启用了 HA 的 HDFS 集群
+
+如果目标 HDFS 集群启用了 HA，可以将 HA 配置直接写在 `PROPERTIES` 中：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA 配置
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### 同时访问多个 HDFS HA 集群
+
+如果您需要在同一个 StarRocks 集群上同时查询位于多个独立 HDFS HA 集群的 Iceberg 表，可以为每个 HDFS 集群分别创建一个 Catalog，并各自携带独立的 `dfs.nameservices` 等 HA 参数。各 Catalog 之间互不影响。
+
+```SQL
+-- Catalog A：访问 HDFS HA 集群 cluster_a
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B：访问另一个 HDFS HA 集群 cluster_b
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
+);
+```
+
 </TabItem>
 
 <TabItem value="MINIO" label="MinIO" >
@@ -1016,6 +1103,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
@@ -1408,13 +1496,13 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- 单位：秒  
+- 单位：秒
 - 默认值：`86500`
 - 描述：从上次访问开始，内存中缓存条目过期的时间。
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- 单位：秒  
+- 单位：秒
 - 默认值：`604800`，相当于一周
 - 描述：从上次访问开始，磁盘上缓存条目过期的时间。
 

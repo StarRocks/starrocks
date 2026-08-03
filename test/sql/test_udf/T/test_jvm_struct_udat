@@ -1,0 +1,48 @@
+-- name: test_jvm_struct_udat @no_arrow_flight_sql
+
+CREATE TABLE FUNCTION double_struct(struct<`key` int, `value` string>)
+RETURNS struct<`key` int, `value` string>
+PROPERTIES (
+    "symbol" = "DoubleStructA",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/struct_udat.jar"
+);
+
+CREATE AGGREGATE FUNCTION struct_agg(struct<`key` int, `value` string>)
+RETURNS array<struct<`key` int, `value` string>>
+PROPERTIES (
+    "symbol" = "StructAgg",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc/struct_udat.jar"
+);
+
+CREATE TABLE t_struct (
+    id INT,
+    stru1 struct<`key` int, `value` string>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+insert into t_struct SELECT generate_series, row(generate_series, generate_series) FROM TABLE(generate_series(1,  5));
+insert into t_struct SELECT generate_series, row(generate_series, generate_series) FROM TABLE(generate_series(1,  5));
+
+
+select * from t_struct,double_struct(stru1) order by 1, 2, 3;
+
+set streaming_preaggregation_mode = "force_streaming";
+select struct_agg(stru1) from t_struct;
+select id, struct_agg(stru1) from t_struct group by 1 order by 1;
+
+set streaming_preaggregation_mode = "auto";
+select struct_agg(stru1) from t_struct;
+select id, struct_agg(stru1) from t_struct group by 1 order by 1;
+
+
+set streaming_preaggregation_mode = "auto";
+select struct_agg(stru1) from t_struct;
+select id, struct_agg(stru1) from t_struct group by 1 order by 1;
+
+set new_planner_agg_stage=1;
+select struct_agg(stru1) from t_struct;
+select id, struct_agg(stru1) from t_struct group by 1 order by 1;

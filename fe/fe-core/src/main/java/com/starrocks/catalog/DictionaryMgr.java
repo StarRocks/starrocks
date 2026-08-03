@@ -637,18 +637,22 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             context.setQualifiedUser(UserIdentity.ROOT.getUser());
+            // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+            // with a fresh clone of defaultSessionVariable, which would discard every override
+            // applied below.
+            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Warehouse warehouse = manager.getBackgroundWarehouse();
+            context.setCurrentWarehouse(warehouse.getName());
             context.getSessionVariable().setTimeZone(TimeUtils.DEFAULT_TIME_ZONE);
             context.getSessionVariable().setEnablePipelineEngine(true);
             context.getSessionVariable().setPipelineDop(0);
             context.getSessionVariable().setEnableProfile(false);
+            context.getSessionVariable().setEnableMaterializedViewRewrite(false);
             context.getSessionVariable().setParallelExecInstanceNum(1);
             context.getSessionVariable().setQueryTimeoutS(3600); // 1h
             context.setQueryId(UUIDUtil.genUUID());
             context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
             context.setStartTime();
-            WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = manager.getBackgroundWarehouse();
-            context.setCurrentWarehouse(warehouse.getName());
             return context;
         }
 

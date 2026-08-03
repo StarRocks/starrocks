@@ -567,6 +567,54 @@ public class ShowGrantsExecutorTest {
     }
 
     /**
+     * Test case: MySQL-compatible SHOW GRANTS FOR CURRENT_USER() syntax
+     * Test point: Verify that SHOW GRANTS FOR CURRENT_USER() and SHOW GRANTS FOR CURRENT_USER
+     * parse successfully and produce identical results to plain SHOW GRANTS.
+     */
+    @Test
+    public void testShowGrantsForCurrentUserMysqlCompat() throws Exception {
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("compat_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Execute GRANT without a session user — consistent with other tests using DefaultAuthorizationProvider
+        ConnectContext adminCtx = new ConnectContext();
+        String grantSql = "grant SELECT on ALL TABLES IN ALL DATABASES to 'compat_user'@'%'";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, adminCtx);
+        DDLStmtExecutor.execute(grantStmt, adminCtx);
+
+        // Switch to compat_user session for the actual SHOW GRANTS tests
+        ConnectContext ctx = new ConnectContext();
+        UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithIp("compat_user", "%");
+        ctx.setCurrentUserIdentity(userIdentity);
+
+        // SHOW GRANTS FOR CURRENT_USER() — MySQL-compatible form with parentheses
+        ShowGrantsStmt stmtWithParens = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW GRANTS FOR CURRENT_USER()", ctx);
+        Assertions.assertNull(stmtWithParens.getUser(),
+                "SHOW GRANTS FOR CURRENT_USER() should resolve to current user (null UserRef)");
+
+        // SHOW GRANTS FOR CURRENT_USER — form without parentheses
+        ShowGrantsStmt stmtNoParens = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW GRANTS FOR CURRENT_USER", ctx);
+        Assertions.assertNull(stmtNoParens.getUser(),
+                "SHOW GRANTS FOR CURRENT_USER should resolve to current user (null UserRef)");
+
+        // Both variants must produce the same result as plain SHOW GRANTS
+        ShowResultSet baseResult = ShowExecutor.execute(
+                new ShowGrantsStmt((UserRef) null, NodePosition.ZERO), ctx);
+        ShowResultSet compatResult = ShowExecutor.execute(stmtWithParens, ctx);
+
+        Assertions.assertEquals(baseResult.getResultRows(), compatResult.getResultRows(),
+                "SHOW GRANTS FOR CURRENT_USER() must return same rows as SHOW GRANTS");
+    }
+
+    /**
      * Test case: Show grants for user with granted roles
      * Test point: Verify that when roles are granted to a user, the show grants result displays the role grants correctly
      */

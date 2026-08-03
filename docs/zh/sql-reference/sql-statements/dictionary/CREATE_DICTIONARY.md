@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE DICTIONARY creates a dictionary object based on an original table or view."
 ---
 
 import Beta from '../../../_assets/commonMarkdown/_beta.mdx'

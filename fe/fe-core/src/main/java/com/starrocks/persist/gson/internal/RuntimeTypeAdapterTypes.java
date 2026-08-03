@@ -65,6 +65,7 @@ import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.DateVariant;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -86,7 +87,10 @@ import com.starrocks.catalog.LargeIntVariant;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaxVariant;
+import com.starrocks.catalog.MinVariant;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -101,6 +105,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.StringVariant;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
@@ -394,7 +399,8 @@ public class RuntimeTypeAdapterTypes {
                 RuntimeTypeAdapterFactory.of(Function.class, "clazz")
                         .registerSubtype(ScalarFunction.class, "ScalarFunction")
                         .registerSubtype(AggregateFunction.class, "AggregateFunction")
-                        .registerSubtype(TableFunction.class, "TableFunction");
+                        .registerSubtype(TableFunction.class, "TableFunction")
+                        .registerSubtype(SqlFunction.class, "SqlFunction");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(Function.class, function_type_runtime_adapter_factory);
 
         final RuntimeTypeAdapterFactory<StorageVolumeMgr> storage_volume_mgr_type_runtime_adapter_factory =
@@ -443,7 +449,14 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(IntVariant.class, "IntVariant")
                         .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
                         .registerSubtype(StringVariant.class, "StringVariant")
-                        .registerSubtype(DateVariant.class, "DateVariant");
+                        .registerSubtype(DateVariant.class, "DateVariant")
+                        .registerSubtype(DecimalVariant.class, "DecimalVariant")
+                        // Canonical colocate boundaries serialized via SplittingTablet contain
+                        // NullVariant suffixes; MinVariant / MaxVariant cover the unbounded
+                        // sentinel cases observed in ColocateRange persistence.
+                        .registerSubtype(NullVariant.class, "NullVariant")
+                        .registerSubtype(MinVariant.class, "MinVariant")
+                        .registerSubtype(MaxVariant.class, "MaxVariant");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(Variant.class, variant_runtime_type_adapter_factory);
 
         final RuntimeTypeAdapterFactory<TvrVersionRange> tvr_delta_runtime_type_adapter_factory =

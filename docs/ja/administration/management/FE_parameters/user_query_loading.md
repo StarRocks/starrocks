@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
 ---
 
@@ -89,6 +90,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：プランフラグメントを送信する前に BRPC TalkTimeoutController に適用されるタイムアウト (ミリ秒単位)。`BackendServiceClient.sendPlanFragmentAsync` は、バックエンド `execPlanFragmentAsync` を呼び出す前にこの値を設定します。これは、BRPC がアイドル接続を接続プールから借りる際や送信を実行する際に待機する期間を管理します。超過した場合、RPC は失敗し、メソッドの再試行ロジックをトリガーする可能性があります。競合時に迅速に失敗させるにはこれを低く設定し、一時的なプール枯渇や低速ネットワークを許容するには高く設定します。注意: 非常に大きな値は、失敗検出を遅延させ、要求スレッドをブロックする可能性があります。
 - 導入時期：v3.3.11, v3.4.1, v3.5.0
+
+### `connector_table_analyze_scan_bytes_cap`
+
+- デフォルト：2147483648（2 GB）
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における主要なスキャンごとのバイト予算です。(パーティション, 列) ごとの各統計スキャンは、開いた split のバイトサイズを累積し、この予算に達すると早期に停止します（ソフト上限：最後の split は予算を超過する場合があります）。これにより、過大な単一パーティションや非パーティションテーブルは、失敗やタイムアウトの代わりに、上限付きの劣化サンプルとして収集されます。`0` 以下の値はこの次元が無制限であることを意味します。1 パーティションは列ごとに独立したスキャンを実行するため、収集する列数に合わせて調整してください。このパラメータと `connector_table_analyze_scan_files_cap`、`connector_table_analyze_scan_rows_cap` をすべて `0` 以下に設定すると、上限付きコスト収集が完全に無効化され、フルスキャンにフォールバックします。`ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における副次的なスキャンごとのファイル数予算です。統計スキャンは、この数のファイルを開いた時点で早期に停止し、非常に多数の小さなファイルで構成されるパーティションの収集コストを抑えます。`0` 以下の値はこの次元が無制限であることを意味します。`ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- デフォルト：10000000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における補助的なスキャンごとの推定行数予算です。統計スキャンは、スキャンした推定行数がこの予算に達した時点で早期に停止します。split ごとの行数は推定しかできない（レコード数はファイル単位で記録され、split 単位ではない）ため、これは主要な制御ではなく補助的なソフト予算です。デフォルト値は `connector_table_query_trigger_analyze_small_table_rows` と揃えられています。`0` 以下の値はこの次元が無制限であることを意味します。`ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
@@ -206,7 +234,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 可変: はい
 - 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
-- 導入バージョン: v3.4.0
+- 導入バージョン: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -350,6 +378,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：述語列収集を有効にするかどうか。無効にすると、クエリオプティマイゼーション中に述語列は記録されません。
+- 導入時期：-
+
+### `push_down_non_grouped_aggregate_below_union`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：物理プランにおいて、GROUP BY を持たない集約を Union の下にプッシュダウンするかどうか。
 - 導入時期：-
 
 ### `enable_query_queue_v2`
@@ -644,11 +681,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- デフォルト：MAX
+- デフォルト：PBE
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は、MBE (メモリベース)、PBE (並行性ベース)、MAX (MBE と PBE の最大値を取る)、MIN (MBE と PBE の最小値を取る) です。MBE は、予測されたメモリまたは計画コストをスロットあたりのメモリターゲットで割ってスロットを推定し、`totalSlots` で上限が設定されます。PBE は、フラグメントの並行性 (スキャン範囲のカウントまたはカーディナリティ / スロットあたりの行数) と CPU コストベースの計算 (スロットあたりの CPU コストを使用) からスロットを導出し、結果を [numSlots/2, numSlots] の範囲内に制限します。MAX と MIN は、MBE と PBE の最大値または最小値を取ることによってそれらを結合します。設定された値が無効な場合、デフォルト (`MAX`) が使用されます。
+- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は `PBE` (並行性ベース、デフォルト)、`MBE` (メモリコストベース)、`CBE` (CPU コストベース) です。PBE はスキャン並行性(ワーカー数を上限)からクエリのスロットを推定します。OLAP テーブルでは剪定後に残ったスキャン範囲数を使うため、非常に小さいクエリのみワーカー数を下回ります。connector/外部スキャンは単一スロットではなくフルパラレルスキャン(ワーカー数)として扱われます。MBE はクエリのメモリコストを `query_queue_v2_mem_bytes_per_slot` で割ってスロットを推定します。CBE は計画 CPU コストを `query_queue_v2_cpu_costs_per_slot` で割ってスロットを推定します。MBE と CBE のクエリごとのスロットは、さらに `number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。後方互換性のため、レガシー値 `MAX` と `MIN` は引き続き受け入れられ、デフォルトの推定器として扱われます。それ以外の値は構成検証で拒否されます。
 - 導入時期：v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -657,7 +694,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：システムの総クエリスロットを計算する際に使用される論理的な並行性「レイヤー」の数を制御します。Shared-nothing モードでは、総スロット = `query_queue_v2_concurrency_level` * BE の数 * BE ごとのコア数 (BackendResourceStat から派生)。マルチウェアハウスモードでは、実効並行性は max(1, `query_queue_v2_concurrency_level` / 4) にスケーリングされます。設定値が非正の場合、`4` として扱われます。この値を変更すると、totalSlots (したがって同時クエリ容量) が増減し、スロットごとのリソースに影響します。memBytesPerSlot はワーカーごとのメモリを (ワーカーごとのコア数 * 並行性) で割って導出され、CPU アカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスターサイズに比例して設定してください。非常に大きな値はスロットごとのメモリを減らし、リソースの断片化を引き起こす可能性があります。
+- 説明：デフォルトレベル `4` を基準とした容量レベルとして解釈されます。デフォルト (PBE) および CPU コストベース (CBE) の推定器では、システムの総クエリスロットは `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)` (BackendResourceStat から派生) として計算されます。メモリコストベース (MBE) の推定器では、総スロットは代わりにウェアハウスのメモリ予算から導出されます。設定値が非正の場合、`4` として扱われます。totalSlots は少なくとも `number_of_workers` になるようにクランプされます。この値を増やすと totalSlots (したがって同時クエリ容量) が増加します。デフォルト `4` では、総容量は `number_of_workers * cores_per_worker` に等しくなります。クラスターに必要な並行性に比例して設定してください。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -666,8 +703,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：planner CPU cost units
 - 変更可能：Yes
-- 説明：プランナー CPU コストからクエリが必要とするスロット数を推定するために使用されるスロットごとの CPU コストしきい値。スケジューラーは、スロットを整数 (`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) として計算し、結果を [1, totalSlots] の範囲にクランプします (totalSlots はクエリキュー V2 `V2` パラメーターから派生)。V2 コードは非正の設定を 1 に正規化するため (Math.max(1, value))、非正の値は事実上 `1` になります。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。並行性対リソースの粒度を制御するために、`query_queue_v2_num_rows_per_slot` および並行性設定と合わせて調整してください。
+- 説明：CPU コストベースの推定器 (CBE) が計画 CPU コストからクエリの必要スロット数を推定するために使用するスロットごとの CPU コストしきい値。スケジューラーはスロットを `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` として計算し、結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲にクランプします。非正の値は `1` に正規化されます。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：バイト
+- 変更可能：Yes
+- 説明：メモリコストベースの推定器 (MBE) が使用するスロットごとのメモリターゲット。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロットはウェアハウスのメモリ予算から導出され、クエリのスロットはその総メモリコストをこの値で割って推定され、`number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。非正の場合、Query Queue V2 はコアあたりの平均ワーカーメモリを使用します。
+- 導入時期：-
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -675,7 +721,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Rows
 - 変更可能：Yes
-- 説明：クエリごとのスロット数を推定する際に、単一のスケジューリングスロットに割り当てられるターゲットのソース行レコード数。StarRocks は、`estimated_slots` = (ソースノードのカーディナリティ) / `query_queue_v2_num_rows_per_slot` を計算し、その結果を [1, totalSlots] の範囲にクランプし、計算された値が非正の場合は最低 1 を強制します。totalSlots は利用可能なリソース (おおよそ DOP * `query_queue_v2_concurrency_level` * ワーカー/BE の数) から導出され、したがってクラスター/コア数に依存します。この値を増やすと、スロット数が減少し (各スロットがより多くの行を処理)、スケジューリングオーバーヘッドが減少します。減らすと、並行性が増加し (より多くの、より小さいスロット)、リソース制限まで増加します。
+- 説明：Query Queue V2 の既存のシリアライズ / デバッグ出力との後方互換性のために保持されています。PBE、MBE、CBE のスロット推定器では使用されなくなりました。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
@@ -761,7 +807,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- デフォルト：10
+- デフォルト：5
 - タイプ：Int
 - 単位：-
 - 変更可能：No
@@ -802,6 +848,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：統計情報のキャッシュが更新される間隔。
+- 導入時期：-
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：統計情報ジャーナルのリプレイ時に、Follower（および再起動リカバリ）が Connector（外部テーブル）統計情報キャッシュをどのようにリフレッシュするかを制御します。`true` の場合、ジャーナルに永続化されたテーブル UUID でキャッシュを無効化し、次回クエリ時に遅延ロードします。これにより、リプレイ中の外部テーブルメタデータ解決（`MetadataMgr.getTable`）を回避できます。この解決は Hive Metastore やオブジェクトストレージが遅い場合にジャーナルリプレイスレッドをブロックする可能性があります。`false`（デフォルト）の場合は従来の積極的なリフレッシュを使用し、既存の動作を維持します。この UUID が永続化される前に書き込まれた統計情報ジャーナルは、この設定に関係なく常に積極的なリフレッシュにフォールバックします。
+
+### `statistics_large_string_column_merge_threshold`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：デフォルトでは無効（`0`）。正の値を設定すると、統計情報の収集中、宣言長がこのしきい値を超える文字列カラム (`VARCHAR` / `CHAR`) の統計情報を収集するために、専用の SQL が単独で生成され、他のカラムとはまとめて収集されません。サンプリング統計と全量統計のいずれもこの方針に従います。これは単一統計 SQL の Exchange 段階のメモリピークを抑え、長い文字列カラムが他のカラムと併合された際に集約オペレーターの状態をさらに増幅させることを防ぐためです。`0` のままにすると、すべてのカラムは従来の併合バッチ収集経路で収集されます。なお、`STRING` は内部的に最大長の `VARCHAR` として表現されるため、この設定を正のしきい値で有効化すると、`STRING` カラムも単独の SQL に分離される可能性があります。
 - 導入時期：-
 
 ### `task_check_interval_second`

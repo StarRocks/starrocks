@@ -48,6 +48,7 @@ ADD_BE_LIB(Formats
         avro/cpp/column_reader.cpp
         avro/cpp/complex_column_reader.cpp
         avro/cpp/date_column_reader.cpp
+        avro/cpp/direct_column_reader.cpp
         avro/cpp/nullable_column_reader.cpp
         avro/cpp/numeric_column_reader.cpp
         avro/cpp/utils.cpp
@@ -64,6 +65,9 @@ ADD_BE_LIB(Formats
         orc/memory_stream/MemoryOutputStream.cc
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
+        parquet/column_materializer.cpp
+        parquet/lazy_materialization_context.cpp
+        parquet/read_range_planner.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
         parquet/column_reader_factory.cpp

@@ -114,6 +114,8 @@ select count(udtfdouble) from t0, udtfdouble(c1);
 -- !result
 select * from TABLE(udtfstring(""));
 -- result:
+
+
 -- !result
 select * from TABLE(udtfstring("▁▂▃▄▅▆▇█"));
 -- result:

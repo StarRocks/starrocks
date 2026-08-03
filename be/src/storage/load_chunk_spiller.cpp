@@ -149,23 +149,38 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
 }
 
 Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
-    if (_spiller == nullptr) {
-        // 1. alloc & prepare spiller
+    // Multiple memtable-flush threads share this LoadChunkSpiller and reach here concurrently
+    // on the first spill. std::call_once runs the init body exactly once: the winning thread
+    // builds the spiller while the others block until it returns, then every thread observes
+    // the fully-constructed `_spiller`. call_once establishes the happens-before edge, so the
+    // spiller and its prepared serde are visible without any manual atomics. `_prepare_status`
+    // caches the outcome; a failed init is reported to all callers instead of leaving a
+    // half-built spiller reachable (the crash this fix addresses).
+    std::call_once(_prepare_once, [&] {
+        // Build everything on a local first, so a half-initialized spiller is never published
+        // through `_spiller`. The previous code assigned `_spiller` before preparing its serde,
+        // which let a racing thread observe a non-null spiller whose serde encode context was
+        // still null and crash in ColumnarSerde::serialize().
         spill::SpilledOptions options;
         options.encode_level = 7;
         options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
-        _spiller = _spiller_factory->create(options);
-        RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
-        DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-        spill::SpillProcessMetrics metrics(_profile, _runtime_state->mutable_total_spill_bytes());
-        _spiller->set_metrics(metrics);
-        // 2. prepare serde
-        if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {
-            const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
-            RETURN_IF_ERROR(_spiller->serde()->prepare());
+        auto spiller = _spiller_factory->create(options);
+        if (_prepare_status = spiller->prepare(_runtime_state.get()); !_prepare_status.ok()) {
+            return;
         }
-    }
-    return Status::OK();
+        DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
+        spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
+        spiller->set_metrics(metrics);
+        // Prepare serde (creates the encode context) BEFORE publishing the spiller.
+        if (const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->empty()) {
+            const_cast<spill::ChunkBuilder*>(&spiller->chunk_builder())->chunk_schema()->set_schema(chunk_ptr);
+            if (_prepare_status = spiller->serde()->prepare(); !_prepare_status.ok()) {
+                return;
+            }
+        }
+        _spiller = std::move(spiller);
+    });
+    return _prepare_status;
 }
 
 Status LoadChunkSpiller::_do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output) {
@@ -190,8 +205,9 @@ Status LoadChunkSpiller::_do_spill(const Chunk& chunk, const spill::SpillOutputD
 
 class BlockGroupIterator : public ChunkIterator {
 public:
-    BlockGroupIterator(Schema schema, spill::Serde& serde, const std::vector<spill::BlockPtr>& blocks)
-            : ChunkIterator(std::move(schema)), _serde(serde), _blocks(blocks) {
+    BlockGroupIterator(Schema schema, spill::Serde& serde, const std::vector<spill::BlockPtr>& blocks,
+                       int64_t slot_idx = -1)
+            : ChunkIterator(std::move(schema)), _serde(serde), _blocks(blocks), _slot_idx(slot_idx) {
         auto& metrics = _serde.parent()->metrics();
         _options.read_io_timer = metrics.read_io_timer;
         _options.read_io_count = metrics.read_io_count;
@@ -232,6 +248,29 @@ public:
         return Status::EndOfFile("End of block group");
     }
 
+    // Like do_get_next(chunk), but also emits a per-row ordering key into `rssid_rowids`.
+    // For separate-sort-key PK tables the spill merge orders output by the sort key, so the
+    // primary keys reach the SST writer out of primary-key order and duplicate PKs within a
+    // load can no longer be collapsed by the merge. To let the downstream unsort SST writer
+    // pick the correct winner (last-flushed row wins), we encode the source flush order into
+    // each row: high 32 bits = slot_idx (memtable flush sequence), low 32 bits = a running
+    // rowid within this block group. Only the slot_idx half participates in the tie-break;
+    // within a single slot the memtable already deduped, so no duplicate PK shares a slot.
+    // NOTE: this reuses the `rssid_rowids` channel whose high bits normally carry a real rssid
+    // in compaction; here there is no source rssid, so we repurpose it to carry slot_idx.
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override {
+        RETURN_IF_ERROR(do_get_next(chunk));
+        if (rssid_rowids != nullptr) {
+            const size_t num_rows = chunk->num_rows();
+            rssid_rowids->reserve(rssid_rowids->size() + num_rows);
+            const uint64_t slot_hi = static_cast<uint64_t>(_slot_idx) << 32;
+            for (size_t i = 0; i < num_rows; i++) {
+                rssid_rowids->push_back(slot_hi | (_rowid++));
+            }
+        }
+        return Status::OK();
+    }
+
     void close() override {}
 
 private:
@@ -241,6 +280,9 @@ private:
     std::shared_ptr<spill::BlockReader> _reader;
     const std::vector<spill::BlockPtr>& _blocks;
     size_t _block_idx = 0;
+    int64_t _slot_idx = -1;
+    // Running rowid across all blocks in this group, used to build the low 32 bits of rssid_rowid.
+    uint32_t _rowid = 0;
 };
 
 size_t LoadChunkSpiller::total_bytes() const {
@@ -249,7 +291,8 @@ size_t LoadChunkSpiller::total_bytes() const {
 
 StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_tasks(size_t target_size,
                                                                                   size_t memory_usage_per_merge,
-                                                                                  bool do_sort, bool do_agg) {
+                                                                                  bool do_sort, bool do_agg,
+                                                                                  bool need_rssid_rowids) {
     SpillBlockInputTasks result;
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), result);
@@ -263,8 +306,8 @@ StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_task
     std::sort(groups.begin(), groups.end(),
               [](const BlockGroupPtrWithSlot& a, const BlockGroupPtrWithSlot& b) { return a.slot_idx < b.slot_idx; });
     for (auto& group : groups) {
-        merge_inputs.push_back(
-                std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.block_group->blocks()));
+        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(),
+                                                                    group.block_group->blocks(), group.slot_idx));
         current_input_bytes += group.block_group->data_size();
         result.total_block_bytes += group.block_group->data_size();
         result.total_blocks += group.block_group->blocks().size();
@@ -276,7 +319,8 @@ StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_task
         if (merge_inputs.size() > 0 &&
             (current_input_bytes >= target_size ||
              merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
-            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs, need_rssid_rowids)
+                                   : new_union_iterator(merge_inputs);
             auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
             RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
             result.iterators.push_back(merge_itr);
@@ -285,7 +329,8 @@ StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_task
         }
     }
     if (!merge_inputs.empty()) {
-        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        auto tmp_itr =
+                do_sort ? new_heap_merge_iterator(merge_inputs, need_rssid_rowids) : new_union_iterator(merge_inputs);
         auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
         RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         result.iterators.push_back(merge_itr);
@@ -301,7 +346,8 @@ StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_task
 }
 
 Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
-                                     std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
+                                     std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func,
+                                     bool need_rssid_rowids) {
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
@@ -332,8 +378,9 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
         merge_itr->close();
         return flush_func();
     };
-    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
-                     generate_spill_block_input_tasks(target_size, memory_usage_per_merge, do_sort, do_agg));
+    ASSIGN_OR_RETURN(
+            auto spill_block_iterator_tasks,
+            generate_spill_block_input_tasks(target_size, memory_usage_per_merge, do_sort, do_agg, need_rssid_rowids));
     for (const auto& itr : spill_block_iterator_tasks.iterators) {
         RETURN_IF_ERROR(merge_func(itr));
     }
@@ -382,7 +429,8 @@ bool LoadChunkSpiller::empty() {
 StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merge_task(size_t target_size,
                                                                                        size_t memory_usage_per_merge,
                                                                                        bool do_sort, bool do_agg,
-                                                                                       bool final_round) {
+                                                                                       bool final_round,
+                                                                                       bool need_rssid_rowids) {
     LoadSpillPipelineMergeTaskPtr result_task = std::make_unique<LoadSpillPipelineMergeTask>();
 
     // THREAD SAFETY: Lock held for entire operation because we're both reading and modifying
@@ -407,6 +455,10 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     std::sort(groups.begin(), groups.end(),
               [](const BlockGroupPtrWithSlot& a, const BlockGroupPtrWithSlot& b) { return a.slot_idx < b.slot_idx; });
 
+    // This batch consumes a prefix of the (now slot-sorted) groups, so groups[0] is its smallest slot.
+    // Record it so the consolidation step can restore flush order regardless of task registration order.
+    result_task->slot_idx = groups[0].slot_idx;
+
     // Tracks the last group index included in this task (used for cleanup at end)
     int64_t stop_idx = -1;
 
@@ -425,8 +477,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
         last_slot_idx = group.slot_idx;
 
         // Create iterator for this block group's data
-        merge_inputs.push_back(
-                std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.block_group->blocks()));
+        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(),
+                                                                    group.block_group->blocks(), group.slot_idx));
         current_input_bytes += group.block_group->data_size();
         result_task->total_block_bytes += group.block_group->data_size();
         result_task->total_block_groups++;
@@ -444,7 +496,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
             (current_input_bytes >= target_size ||
              merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
             // Build the merge iterator chain based on table type requirements
-            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs, need_rssid_rowids)
+                                   : new_union_iterator(merge_inputs);
             result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
             RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
             merge_inputs.clear();
@@ -457,7 +510,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     // they don't reach target_size. This ensures no orphaned blocks are left behind.
     // Non-final rounds can leave partial batches for next iteration.
     if (final_round && merge_inputs.size() > 0) {
-        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        auto tmp_itr =
+                do_sort ? new_heap_merge_iterator(merge_inputs, need_rssid_rowids) : new_union_iterator(merge_inputs);
         result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
         RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         merge_inputs.clear();

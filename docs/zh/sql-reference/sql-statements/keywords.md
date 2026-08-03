@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Reference list of reserved and non-reserved keywords in StarRocks SQL."
 ---
 
 # 关键字

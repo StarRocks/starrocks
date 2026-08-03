@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others
@@ -272,6 +273,15 @@ This topic introduces the following types of FE configurations:
 - Description: The type of object storage you use. In shared-data mode, StarRocks supports storing data in HDFS, Azure Blob (supported from v3.1.1 onwards), Azure Data Lake Storage Gen2 (supported from v3.4.1 onwards), Google Storage (with native SDK, supported from v3.5.1 onwards), and object storage systems that are compatible with the S3 protocol (such as AWS S3, and MinIO). Valid value: `S3` (Default), `HDFS`, `AZBLOB`, `ADLS2`, and `GS`. If you specify this parameter as `S3`, you must add the parameters prefixed by `aws_s3`. If you specify this parameter as `AZBLOB`, you must add the parameters prefixed by `azure_blob`. If you specify this parameter as `ADLS2`, you must add the parameters prefixed by `azure_adls2`. If you specify this parameter as `GS`, you must add the parameters prefixed by `gcp_gcs`. If you specify this parameter as `HDFS`, you only need to specify `cloud_native_hdfs_url`.
 - Introduced in: -
 
+### `enable_admin_skip_committed_txn`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the `ADMIN SKIP COMMITTED TRANSACTION` statement. When `false`, the statement is rejected with an error. This is an operator-only escape hatch for unblocking a publish-stuck `COMMITTED` transaction on a shared-data (lake) table; the stuck transaction's data contribution is discarded, while the partition's visible version still advances via a "no-op publish" (a new metadata file is written that carries no data changes from this transaction). Only supports lake tables with `file_bundling=true`; load and lake-compaction transaction types only (alter / schema-change are not yet supported). Enable only when an operator needs to manually unblock a stuck transaction, and disable again afterwards to prevent accidental use.
+- Introduced in: -
+
 ### `enable_load_volume_from_conf`
 
 - Default: false
@@ -487,6 +497,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold above which `PublishVersionDaemon` logs a per-phase breakdown (`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`) of a slow partition publish at the WARN level. Lower this value to capture sub-second jitter when investigating publish latency on a live cluster; raise it to silence routine slow-but-acceptable publishes. There is no behavior change at the default value.
+- Introduced in: v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - Default: false
@@ -605,6 +624,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
 - Introduced in: v3.2.0
+
+### `lake_enable_batch_publish_multi_table`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Introduced in: v4.1.5
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -907,7 +935,7 @@ This topic introduces the following types of FE configurations:
 
 ### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
+- Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
@@ -1013,6 +1041,33 @@ This topic introduces the following types of FE configurations:
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Background refresh interval for the JDBC table row-count cache. After this interval, the stale value is returned immediately while a reload runs asynchronously in the background. Overridable per-catalog via the catalog property `jdbc_row_count_cache_refresh_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- Default: 1200
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Hard eviction TTL for JDBC table row-count cache entries. Entries not accessed within this window are evicted. Must be greater than `jdbc_row_count_cache_refresh_sec`. Overridable per-catalog via the catalog property `jdbc_row_count_cache_expire_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_max_size`
+
+- Default: 10000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of entries in the JDBC table row-count cache per catalog. Limits memory growth for catalogs with large numbers of tables. Overridable per-catalog via the catalog property `jdbc_row_count_cache_max_size`.
+- Introduced in: -
+
 ### `jdbc_minimum_idle_connections`
 
 - Default: 1
@@ -1033,7 +1088,7 @@ This topic introduces the following types of FE configurations:
 
 ### `jwt_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1159,7 +1214,7 @@ This topic introduces the following types of FE configurations:
 
 ### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
+- Default: 8
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1231,7 +1286,7 @@ This topic introduces the following types of FE configurations:
 
 ### `oauth2_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1406,6 +1461,6 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 

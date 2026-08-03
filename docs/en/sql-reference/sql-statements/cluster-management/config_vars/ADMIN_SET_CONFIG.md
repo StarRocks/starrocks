@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SET CONFIG sets FE dynamic configuration items for the StarRocks cluster at runtime."
 ---
 
 # ADMIN SET CONFIG

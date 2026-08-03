@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks クラスタをアップグレード後に以前のバージョンにダウングレードして復旧する方法。"
 ---
 
 # StarRocks のダウングレード

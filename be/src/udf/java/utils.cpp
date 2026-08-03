@@ -36,6 +36,7 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::functi
             {
                 MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
                 SCOPED_SET_TRACE_INFO({}, state->query_id(), state->fragment_instance_id());
+                SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
                 DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
                 st = func();
             }

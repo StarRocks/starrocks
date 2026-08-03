@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
 ---
@@ -32,7 +33,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [统计报告](#统计报告)
 - [存储](#存储)
 
@@ -229,6 +230,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：Bytes
 - 是否动态：否
 - 描述：每个 Compaction 线程允许的最大内存大小。
+- 引入版本：-
+
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- 默认值：-1
+- 类型：Int
+- 单位：Percent
+- 是否动态：是
+- 描述：控制 Compaction 释放内部 Chunk 保留容量的时机。当前该参数仅在存算一体集群的主键表 Compaction 中生效。当当前 Compaction 任务的 Memory Tracker 使用量超过 `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100` 时，StarRocks 在重置内部 Chunk 时释放其保留容量。取值为负数时，关闭该行为。
 - 引入版本：-
 
 ### compaction_max_memory_limit_percent
@@ -463,15 +473,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 单位：-
 - 是否动态：是
 - 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
-- 引入版本：-
-
-### enable_pk_index_eager_build
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在导入和 Compaction 阶段即时构建 Primary Key 索引文件。开启后，系统会在数据写入时直接生成持久化的主键索引文件，提升后续查询性能。
 - 引入版本：-
 
 ### enable_pk_size_tiered_compaction_strategy
@@ -899,6 +900,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
+### pk_index_parallel_rebuild_mem_ratio
+
+- 默认值：50
+- 类型：Int
+- 单位：百分比（0-100）
+- 是否动态：是
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
+- 引入版本：-
+
+### lake_partial_update_thread_pool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 引入版本：v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- 默认值：2048
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：部分列更新线程池的任务队列大小。
+- 引入版本：v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - 默认值：10
@@ -950,7 +978,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：当 `enable_pk_index_eager_build` 设置为 `true` 后，导入或 Compaction 生成的数据大于该阈值时，系统才会即时构建主键索引文件。默认为 100MB。
+- 描述：导入或 Compaction 生成的数据大于该阈值时，系统会即时构建主键索引文件。默认为 100MB。
 - 引入版本：-
 
 ### primary_key_limit_size

@@ -22,4 +22,6 @@ Monitoring metrics are listed alphabetically in these files:
 - [a - c](./metric_details/a-c.md)
 - [d - h](./metric_details/d-h.md)
 - [i - p](./metric_details/i-p.md)
-- [q - z](./metric_details/q-z.md)
+- [q - r](./metric_details/q-r.md)
+- [s](./metric_details/s.md)
+- [t - z](./metric_details/t-z.md)

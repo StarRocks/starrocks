@@ -82,7 +82,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
             } else {
-                input_null_map = ColumnHelper::as_column<NullColumn>(std::move(*nullable->null_column()).mutate());
+                input_null_map = NullColumn::static_pointer_cast(Column::mutate(nullable->null_column()));
             }
         }
         DCHECK(data_column->is_map());

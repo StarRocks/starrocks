@@ -43,7 +43,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -77,7 +76,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -116,7 +116,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 
@@ -137,12 +137,25 @@ public class IndexInfoProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index meta id format: " + idxMetaIdStr);
         }
 
+        // Take per-table READ: getSchemaByIndexMetaId reads OlapTable.indexMetaIdToMeta
+        // which is a plain HashMap, so a concurrent ALTER (IX + table WRITE) can race
+        // with this get and produce undefined behavior. The lock pins the table while
+        // we resolve the schema reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
-            if (table.getType() == TableType.OLAP) {
+            // Cloud-native (lake) OLAP tables also carry per-index metadata and must resolve
+            // the schema by the requested index meta id. The old `getType() == OLAP` check
+            // excluded lake tables (whose type is CLOUD_NATIVE), so
+            // `SHOW PROC .../index_schema/<id>` fell into the else branch and returned the base
+            // index schema for every rollup on a shared-data table instead of that rollup's own
+            // declared columns. Keep materialized views on the getBaseSchema() path (as before):
+            // DESC on an async MV routes here with an index meta id that is not in the MV's own
+            // index-meta map, so getSchemaByIndexMetaId() would return an empty schema.
+            if (table.isOlapOrCloudNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
                 schema = olapTable.getSchemaByIndexMetaId(idxMetaId);
                 if (schema == null) {
@@ -158,7 +171,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 

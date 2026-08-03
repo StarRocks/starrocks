@@ -19,6 +19,8 @@
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
 
+#include <set>
+
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -33,10 +35,12 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -197,6 +201,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
+    // Server-side BRPC queue time: latency from RPC arrival on this server to handler entry.
+    // Used to attribute the FE-measured publish_rpc cost vs BE handler cost gap.
+    // cntl can be nullptr in unit tests, so guard the access.
+    int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
 
     if (!request->has_base_version()) {
         cntl->SetFailed("missing base version");
@@ -349,25 +357,58 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
                         auto score = compaction_score(_tablet_mgr, metadata);
-                        TabletMetadataPB* prealloc_metadata = nullptr;
+                        // Per-tablet stats returned to FE: for range-distribution tablets (every
+                        // publish) to drive real-time split/merge, and on first import (base_version==1)
+                        // for any tablet so FE can collect first-load statistics. Supersedes the
+                        // deprecated tablet_row_nums field; note num_rows here is the live-row count
+                        // (PK tablets subtract deletes) rather than that field's raw rowset row sum,
+                        // so a first load with intra-batch duplicate keys or deletes reports fewer
+                        // rows. Summed without delvec I/O (publish hot path).
+                        const bool emit_stats = metadata->has_range() || request->base_version() == 1;
+                        int64_t stats_num_rows = 0;
+                        int64_t stats_data_size = 0;
+                        if (emit_stats) {
+                            compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
+                        }
+                        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+                        TabletMetadataPB local_metadata;
+                        if (skip_write_tablet_metadata) {
+                            local_metadata.CopyFrom(*metadata);
+                            // Dual-write the legacy arrays into the RPC payload so an aggregator that
+                            // lacks the segment_metas refactor (a node not yet upgraded, or one rolled
+                            // back below this version) still persists metadata an old BE can read.
+                            // Mirrors the dual-write that every on-disk save performs.
+                            if (auto st = lake::normalize_tablet_metadata_before_save(&local_metadata); !st.ok()) {
+                                g_publish_version_failed_tasks << 1;
+                                LOG(WARNING) << "Fail to normalize aggregate-publish metadata: " << st
+                                             << " tablet_id=" << metadata->id();
+                                std::lock_guard l(response_mtx);
+                                response->mutable_failed_tablets()->Add(
+                                        tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                        tablet_info.get_tablet_ids_in_txn_logs().end());
+                                st.to_protobuf(response->mutable_status());
+                                return;
+                            }
+                        }
                         {
                             std::lock_guard l(response_mtx);
                             response->mutable_compaction_scores()->insert({metadata->id(), score});
-                            if (request->base_version() == 1) {
-                                int64_t row_nums = std::accumulate(
-                                        metadata->rowsets().begin(), metadata->rowsets().end(), 0,
-                                        [](int64_t sum, const auto& rowset) { return sum + rowset.num_rows(); });
-                                // Used to collect statistics when the partition is first imported
-                                response->mutable_tablet_row_nums()->insert({metadata->id(), row_nums});
+                            if (emit_stats) {
+                                auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
+                                stat->set_num_rows(stats_num_rows);
+                                stat->set_data_size(stats_data_size);
+                                // Compat shim: also mirror the first-load row count into the legacy
+                                // field so an old FE (BE-before-FE rolling upgrade) still collects
+                                // first-load statistics from ordinal 4; a new FE reads tablet_stats.
+                                // Nested here because base_version==1 implies emit_stats, so
+                                // stats_num_rows is the freshly computed value.
+                                if (request->base_version() == 1) {
+                                    (*response->mutable_deprecated_tablet_row_nums())[metadata->id()] = stats_num_rows;
+                                }
                             }
                             if (skip_write_tablet_metadata) {
-                                auto& map = *response->mutable_tablet_metas();
-                                prealloc_metadata = &map[metadata->id()];
+                                (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
                             }
-                        }
-                        // Move copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                        if (prealloc_metadata != nullptr) {
-                            prealloc_metadata->CopyFrom(*metadata);
                         }
                     } else {
                         if (res.status().is_resource_busy()) {
@@ -446,6 +487,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 for (auto& pair : tablet_metadatas) {
                                     copied_tablet_metas[pair.first].CopyFrom(*pair.second);
                                 }
+                                // Dual-write the legacy arrays into the RPC payload (see the non-reshard
+                                // publish path above) so an aggregator without the segment_metas refactor
+                                // persists old-readable metadata. If any fails, fail the whole reshard
+                                // task rather than publish a partial tablet_metas map.
+                                for (auto& pair : copied_tablet_metas) {
+                                    if (auto st = lake::normalize_tablet_metadata_before_save(&pair.second); !st.ok()) {
+                                        g_publish_version_failed_tasks << 1;
+                                        LOG(WARNING) << "Fail to normalize aggregate reshard metadata: " << st
+                                                     << " tablet_id=" << pair.first;
+                                        std::lock_guard l(response_mtx);
+                                        add_failed_tablets(response, resharding_tablet_info);
+                                        st.to_protobuf(response->mutable_status());
+                                        return;
+                                    }
+                                }
 
                                 std::lock_guard l(response_mtx);
                                 auto& response_tablet_metas = *response->mutable_tablet_metas();
@@ -510,13 +566,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txns=" << get_txn_ids_string(request) << ". cost=" << cost << "us\n"
-                  << trace->DumpToString();
-    } else if (is_slow) {
+    if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
-                  << "us, trace: " << trace->MetricsAsJSON();
+                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
@@ -527,10 +580,37 @@ struct RequestContext {
     std::unique_ptr<ResponseType> resp;
 };
 
+// The tablet ids an aggregate publish is expected to return metadata for, or an empty set meaning
+// "cannot tell, skip the coverage check".
+//
+// Only plain transactions are modelled, where the bundle must contain exactly the requested
+// tablet_ids. A reshard writes a set that has little to do with what was requested: which ids it
+// covers is decided inside handle_splitting_tablet / handle_merging_tablet / handle_identical_tablet
+// and differs per reshard kind and per txn type, and both sides of a split or merge get metadata at
+// the new version. Restating those rules here would duplicate them in a second place and risk
+// failing a legitimate reshard publish, so skip the coverage check whenever any sub-request carries
+// reshard info.
+static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRequest& request,
+                                                 std::set<int64_t>* expected) {
+    for (const auto& publish_req : request.publish_reqs()) {
+        if (publish_req.resharding_tablet_infos_size() > 0) {
+            expected->clear();
+            return;
+        }
+        for (auto tablet_id : publish_req.tablet_ids()) {
+            expected->insert(tablet_id);
+        }
+    }
+}
+
 struct AggregatePublishContext {
     bthread::Mutex mutex;
     bool has_failure{false};
     std::map<int64_t, TabletMetadata> tablet_metas;
+    // Union of what every sub-request was asked to publish, derived from the request rather than
+    // from the responses, so that a response silently short of a tablet cannot pass the check in
+    // put_bundle_tablet_metadata(). Empty for reshard publishes, which skip that check.
+    std::set<int64_t> expected_tablet_ids;
     std::unique_ptr<BThreadCountDownLatch> latch;
     PublishVersionResponse* response;
     Status publish_status = Status::OK();
@@ -555,8 +635,11 @@ struct AggregatePublishContext {
         for (const auto& [tid, score] : resp->compaction_scores()) {
             (*response->mutable_compaction_scores())[tid] = score;
         }
-        for (const auto& [tid, row_num] : resp->tablet_row_nums()) {
-            (*response->mutable_tablet_row_nums())[tid] = row_num;
+        for (const auto& [tid, stat] : resp->tablet_stats()) {
+            (*response->mutable_tablet_stats())[tid] = stat;
+        }
+        for (const auto& [tid, row_num] : resp->deprecated_tablet_row_nums()) {
+            (*response->mutable_deprecated_tablet_row_nums())[tid] = row_num;
         }
         for (auto& [tid, meta] : *resp->mutable_tablet_metas()) {
             // Use swap to avoid copy
@@ -600,7 +683,12 @@ struct AggregatePublishContext {
                 auto task = std::make_shared<CancellableRunnable>(
                         [&] {
                             DeferOp defer([&] { latch.count_down(); });
-                            publish_status = env->lake_tablet_manager()->put_bundle_tablet_metadata(tablet_metas);
+                            publish_status = env->lake_tablet_manager()->put_bundle_tablet_metadata(
+                                    tablet_metas, expected_tablet_ids);
+                            if (!publish_status.ok()) {
+                                g_aggregate_publish_version_failed_tasks << 1;
+                                LOG(WARNING) << "Fail to write bundle tablet metadata: " << publish_status;
+                            }
                         },
                         [&] {
                             publish_status = Status::Cancelled("put_bundle_tablet_metadata task has been cancelled");
@@ -646,6 +734,9 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     AggregatePublishContext ctx;
     ctx.response = response;
     ctx.latch = std::make_unique<BThreadCountDownLatch>(request->publish_reqs_size());
+    // Collected up front, over every sub-request: the loop below stops dispatching once one of
+    // them fails, and the expected set must describe the whole publish either way.
+    collect_expected_metadata_tablet_ids(*request, &ctx.expected_tablet_ids);
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
@@ -1373,6 +1464,9 @@ struct AggregateCompactContext {
             auto* next_txn_log = combined_txn_log.add_txn_logs();
             next_txn_log->CopyFrom(log);
             next_txn_log->set_partition_id(partition_id);
+            // These collected logs are persisted by put_combined_txn_log, which normalizes each received
+            // log on entry (after-load) before its dual-write before-save -- so an old compaction worker's
+            // legacy-shaped op_compaction output rowset keeps its segment names. No need to after-load here.
         }
     }
 
@@ -1626,11 +1720,22 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
 
     TEST_SYNC_POINT("LakeServiceImpl::vacuum:2");
 
+    // Anchor the deadline at the time the request is received: the FE caller waits at most
+    // |timeout_ms| from now, so once the deadline passes (whether the task waited in the
+    // thread pool queue or is in the middle of vacuuming) the task aborts itself instead of
+    // keeping a vacuum worker occupied for a response nobody reads. Requests without the
+    // field (older FE versions) carry no deadline and run to completion as before, and
+    // setting |lake_vacuum_enable_task_timeout| to false disables the deadline entirely.
+    int64_t deadline_ms = 0;
+    if (config::lake_vacuum_enable_task_timeout && request->has_timeout_ms() && request->timeout_ms() > 0) {
+        deadline_ms = butil::gettimeofday_ms() + request->timeout_ms();
+    }
+
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
                 DeferOp defer([&] { latch.count_down(); });
-                lake::vacuum(_tablet_mgr, *request, response);
+                lake::vacuum(_tablet_mgr, *request, response, deadline_ms);
             },
             [&] {
                 Status st = Status::Cancelled("vacuum task has been cancelled");
@@ -1713,7 +1818,8 @@ static Status check_missing_files(const TabletMetadata& metadata, const lake::Ta
 
     // segment
     for (const auto& rowset : metadata.rowsets()) {
-        for (const auto& seg_name : rowset.segments()) {
+        for (const auto& segment_metadata : rowset.segment_metas()) {
+            const auto& seg_name = segment_metadata.filename();
             RETURN_IF_ERROR(check_file(tablet_mgr->segment_location(tablet_id, seg_name), seg_name));
         }
     }
@@ -2031,7 +2137,14 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
             auto task = std::make_shared<CancellableRunnable>(
                     [&, metadata_pb, repair_status] {
                         DeferOp defer([&] { latch.count_down(); });
-                        auto metadata_ptr = std::make_shared<const TabletMetadataPB>(metadata_pb);
+                        // The repaired metadata arrives over RPC and may be legacy-shaped (produced by a
+                        // pre-feature BE during a mixed-version upgrade); normalize it on entry like every
+                        // other foreign-metadata persist path (after-load extends + back-fills segment_metas
+                        // from the legacy arrays) so put_tablet_metadata's no-extend dual-write before-save
+                        // cannot drop segment names. (The bundling branch above gets this via
+                        // put_bundle_tablet_metadata.)
+                        auto metadata_ptr = std::make_shared<TabletMetadataPB>(metadata_pb);
+                        lake::normalize_tablet_metadata_after_load(metadata_ptr.get());
                         auto st = _tablet_mgr->put_tablet_metadata(metadata_ptr);
                         st.to_protobuf(repair_status->mutable_status());
                     },

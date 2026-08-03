@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks クラスタをより新しいバージョンにアップグレードする方法。"
 ---
 
 # StarRocks のアップグレード

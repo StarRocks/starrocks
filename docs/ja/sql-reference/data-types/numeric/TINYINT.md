@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "1 バイト符号付き整数型で値の範囲は -128 から 127。"
 ---
 
 # TINYINT

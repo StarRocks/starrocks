@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
+description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Shared-data](#shared-data)
 - [Data Lake](#data-lake)
 - [Other](#other)
@@ -55,7 +56,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Rows
 - Is mutable: Yes
-- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded. The row count includes segment rows plus the tombstone (delete) rows recorded in del files, so a delete-heavy workload that produces a few large del files also counts toward this threshold; del files written by older versions that did not record a row count contribute 0.
 - Introduced in: -
 
 ### download_buffer_size
@@ -85,6 +86,24 @@ This topic introduces the following types of FE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_pk_preserve_txn_delete_order
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is disabled by default for downgrade safety: when enabled, a load can persist on-disk metadata that a BE rolled back to a version without this fix would misinterpret, potentially producing duplicate primary keys. Only enable it after the entire cluster has been upgraded to a version that supports this feature and you no longer intend to roll back. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Introduced in: -
+
+### lake_enable_protobuf_file_checksum
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Enable it only after the whole cluster has been upgraded to a version that understands the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -93,6 +112,57 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
+- Introduced in: v4.1.4
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Introduced in: v4.1.4
+
+### lake_put_txn_log_timeout_guard_ms
+
+- Default: -1
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout guard for writing a transaction log to object storage in a shared-data cluster (the `put_txn_log` and `put_combined_txn_log` paths). If writing a transaction log takes longer than this value, StarRocks dumps the stack trace of the slow thread to the BE log to help diagnose slow object-storage writes. Disabled by default (a value less than or equal to `0` disables the guard); set it to a positive value such as `4000` (4 seconds) to enable.
+- Introduced in: -
+
+### lake_rows_mapper_read_parallelism
+
+- Default: 32
+- Type: Int
+- Unit: sub-chunks
+- Is mutable: Yes
+- Description: Maximum number of in-flight `.lcrm` (lake compaction rows-mapper) sub-chunk reads kept by `RowsMapperIterator` during light Primary Key compaction publish in a shared-data cluster. Each sub-chunk is `lake_rows_mapper_sub_chunk_bytes` in size and never crosses a segment boundary; the iterator submits up to this many reads to the PK index execution thread pool and pipelines them against the caller's per-segment processing. Memory bound is `lake_rows_mapper_read_parallelism * lake_rows_mapper_sub_chunk_bytes`. Set to `1` to disable pipelining and fall back to sequential reads.
+
+### lake_rows_mapper_sub_chunk_bytes
+
+- Default: 4194304
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
+### lake_vacuum_min_batch_delete_size
+
+- Default: 200
+- Type: Int64
+- Unit: Number of files
+- Is mutable: Yes
+- Description: The number of stale files Vacuum batches into a single `DeleteObjects` request on a shared-data cluster. A larger batch amortizes per-call HTTP / auth / signing overhead and reduces the prefix-level request rate against the object store, at the cost of higher single-call latency and a larger replay cost when a transient error retries. Users running on AWS S3 are encouraged to raise this further (up to the protocol cap of 1000) where per-request server time is nearly batch-size insensitive.
 
 ### loop_count_wait_fragments_finish
 
@@ -391,7 +461,7 @@ This topic introduces the following types of FE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The read buffer size used when downloading lake segment files during lake replication. This value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more I/O calls. Tune according to network bandwidth, storage I/O characteristics, and the number of parallel replication threads.
-- Introduced in: -
+- Introduced in: v4.1.2
 
 ### lake_replication_max_file_copy_retry
 
@@ -400,7 +470,16 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
-- Introduced in: -
+- Introduced in: v4.1.2
+
+### lake_replication_file_copy_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Introduced in: v4.1.2
 
 ### lake_service_max_concurrency
 

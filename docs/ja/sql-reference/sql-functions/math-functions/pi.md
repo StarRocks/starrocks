@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "円周率の値を返します。"
 ---
 
 # pi

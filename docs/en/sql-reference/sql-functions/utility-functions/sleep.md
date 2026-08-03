@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Delays query execution for a specified number of seconds and returns whether the sleep completed without interruption."
 ---
 
 # sleep

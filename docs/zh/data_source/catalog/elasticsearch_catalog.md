@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.1 起支持 Elasticsearch catalog，可直接通过 SQL 分析 Elasticsearch 索引。"
 toc_max_heading_level: 4
 ---
 

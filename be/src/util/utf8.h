@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -148,6 +150,35 @@ static inline Slice utf8_char_start(const char* end) {
 
 static inline bool validate_ascii_fast(const char* src, size_t len) {
     return simdutf::validate_ascii(src, len);
+}
+
+// Returns the number of trailing bytes of [data, data+len) that form an incomplete
+// multi-byte UTF-8 sequence, i.e. a leading byte followed by fewer continuation bytes
+// than its encoded width requires. Returns 0 when the buffer already ends on a UTF-8
+// character boundary, or when the trailing bytes are not a clean truncation of a valid
+// sequence (e.g. a stray continuation byte or an invalid leading byte) -- those are
+// left for the downstream validator to reject.
+//
+// This is meant for inputs read in fixed-size chunks and handed to a UTF-8-validating
+// parser (e.g. simdjson's iterate_many, which raises UTF8_ERROR on a partial trailing
+// character): the returned bytes should be held back and prepended to the next chunk so
+// the split character can be completed.
+static inline size_t incomplete_trailing_utf8_len(const char* data, size_t len) {
+    // A UTF-8 character is at most 4 bytes, so an incomplete trailing sequence spans at
+    // most 3 bytes; scanning back at most 4 bytes always reaches its leading byte.
+    const size_t lookback = std::min<size_t>(len, 4);
+    for (size_t i = 1; i <= lookback; ++i) {
+        const auto b = static_cast<uint8_t>(data[len - i]);
+        if ((b & 0xC0) == 0x80) {
+            // continuation byte (10xxxxxx); keep scanning back for the leading byte.
+            continue;
+        }
+        // `b` is a leading byte (or ASCII) and `i` bytes of this character are present.
+        // If fewer than its encoded width are present, the trailing sequence is incomplete.
+        const size_t width = UTF8_BYTE_LENGTH_TABLE[b];
+        return i < width ? i : 0;
+    }
+    return 0;
 }
 
 } // namespace starrocks

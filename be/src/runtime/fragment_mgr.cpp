@@ -44,6 +44,7 @@
 #include "agent/master_info.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -772,6 +773,25 @@ void FragmentMgr::debug(std::stringstream& ss) {
     }
 }
 
+TQueryOptions FragmentMgr::build_external_query_options(const TScanOpenParams& params) {
+    TQueryOptions query_options;
+    query_options.batch_size = params.batch_size;
+    query_options.query_timeout = params.query_timeout;
+    // All scanners of one external query share the same query_id while each open_scanner request
+    // declares a single-instance fragment, so the QueryContext never satisfies is_dead() and always
+    // waits in the second-chance map after all its delivered fragments finish. Without an explicit
+    // query_delivery_timeout that wait falls back to query_timeout (3600s by default in the
+    // Spark/Flink connectors), which keeps the finished query's mem tracker lingering in query_pool
+    // for up to an hour. Bound the tail with the regular delivery-timeout default instead.
+    query_options.__set_query_delivery_timeout(pipeline::QueryContext::DEFAULT_EXPIRE_SECONDS);
+    query_options.mem_limit = params.mem_limit;
+    query_options.query_type = TQueryType::EXTERNAL;
+    // For spark sql / flink sql, we dont use page cache.
+    query_options.use_page_cache = false;
+    query_options.enable_profile = config::enable_profile_for_external_plan;
+    return query_options;
+}
+
 /*
  * 1. resolve opaqued_query_plan to thrift structure
  * 2. build TExecPlanFragmentParams
@@ -811,6 +831,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: "
+             << apache::thrift::ThriftDebugString(t_query_plan_info);
+
     *query_id = t_query_plan_info.query_id;
 
     // set up desc tbl
@@ -840,7 +863,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -857,8 +880,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         i++;
     }
 
-    LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
-              << apache::thrift::ThriftDebugString(t_query_plan_info);
     // assign the param used to execute PlanFragment
     TExecPlanFragmentParams exec_fragment_params;
     exec_fragment_params.protocol_version = (InternalServiceVersion::type)0;
@@ -908,15 +929,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     fragment_exec_params.__set_instances_number(1);
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
-    TQueryOptions query_options;
-    query_options.batch_size = params.batch_size;
-    query_options.query_timeout = params.query_timeout;
-    query_options.mem_limit = params.mem_limit;
-    query_options.query_type = TQueryType::EXTERNAL;
-    // For spark sql / flink sql, we dont use page cache.
-    query_options.use_page_cache = false;
-    query_options.enable_profile = config::enable_profile_for_external_plan;
-    exec_fragment_params.__set_query_options(query_options);
+    exec_fragment_params.__set_query_options(build_external_query_options(params));
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
     pipeline::FragmentExecutor fragment_executor;

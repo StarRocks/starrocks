@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +72,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " FROM (SELECT $columnName as column_key FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
                     " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
+
+    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbName.$tableName', NULL, $mcv, NOW()";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
@@ -122,7 +127,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                 }
             }
 
-            if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
+            if (shouldSkipHistogramBuckets(columnType)) {
+                sql = buildCollectMcvOnly(db, table, mostCommonValues, columnName);
+            } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.NONE) {
                 sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName,
                         columnType, false);
             } else if (ndvMode == StatsConstants.HistogramCollectBucketNdvMode.SAMPLE) {
@@ -155,6 +162,17 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
+    // Convert a sample ratio in (0, 1) into a percent string in (0, 100) for the SAMPLE('percent'=...) clause.
+    // Uses BigDecimal to avoid both binary float noise (e.g. 0.49999999999999994) and truncation to 0 for
+    // sub-1% ratios on very large tables (which used to produce the illegal SAMPLE('percent'='0')).
+    @VisibleForTesting
+    static String formatSamplePercent(double sampleRatio) {
+        BigDecimal percent = BigDecimal.valueOf(sampleRatio).multiply(BigDecimal.valueOf(100));
+        // Drop trailing zeros so integral percents stay clean (e.g. "50" not "50.00"), and avoid
+        // scientific notation that the SQL parser cannot consume.
+        return percent.stripTrailingZeros().toPlainString();
+    }
+
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName, double sampleRatio) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
@@ -166,7 +184,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("topN", topN);
 
         if (sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sample = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
+            String sample = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
             context.put("sampleClause", sample);
         } else {
             context.put("sampleClause", "");
@@ -258,13 +276,16 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                                          Map<String, String> mostCommonValues, String columnName, Type columnType,
                                          boolean withSampleNdv) {
         VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
+
         context.put("histogramFunction", buildHistogramFunction(database, table, sampleRatio, bucketNum, columnName,
                 withSampleNdv));
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
         if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sampleClause = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
+            String sampleClause = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
             context.put("sampleClause", sampleClause);
             context.put("randFilter", "TRUE");
         } else {
@@ -273,10 +294,14 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             context.put("sampleClause", "");
         }
 
-        addMcvToContext(context, mostCommonValues);
-        addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
-
         return buildInsertIntoHistogramStatistics(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
+    }
+
+    private String buildCollectMcvOnly(Database database, Table table, Map<String, String> mostCommonValues,
+                                       String columnName) {
+        VelocityContext context = buildBaseContext(database, table, columnName);
+        addMcvToContext(context, mostCommonValues);
+        return buildInsertIntoHistogramStatistics(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
     }
 
     private String buildCollectHistogramWithHllNdv(Database database, Table table, Map<String, String> mostCommonValues,

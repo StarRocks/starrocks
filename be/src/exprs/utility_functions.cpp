@@ -50,6 +50,8 @@
 #include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
+#include "util/uid_util.h"
+#include "util/uuid_generator.h"
 
 namespace starrocks {
 
@@ -94,6 +96,15 @@ StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, co
     } else {
         return ColumnHelper::create_const_null_column(1);
     }
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::query_id(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const TUniqueId& id = state->query_id();
+    if (id.hi == 0 && id.lo == 0) {
+        return ColumnHelper::create_const_null_column(1);
+    }
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(print_id(id), 1);
 }
 
 // UUID fixed 33 bytes.
@@ -231,6 +242,52 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Colum
     return result;
 }
 
+// UUID v7 generates time-ordered UUIDs according to RFC 9562
+// Returns a VARCHAR column with standard UUID format (8-4-4-4-12)
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+
+    auto res = BinaryColumn::create();
+    auto& bytes = res->get_bytes();
+    auto& offsets = res->get_offset();
+
+    offsets.resize(num_rows + 1);
+    bytes.resize(36 * num_rows);
+
+    char* ptr = reinterpret_cast<char*>(bytes.data());
+
+    for (int i = 0; i < num_rows; ++i) {
+        offsets[i + 1] = offsets[i] + 36;
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        std::string uuid_str = boost::uuids::to_string(uuid);
+        memcpy(ptr, uuid_str.c_str(), 36);
+        ptr += 36;
+    }
+
+    return res;
+}
+
+// UUID v7 numeric version - converts the UUID v7 to a 128-bit integer
+// Note: The byte order of the numeric representation depends on the system's endianness.
+// This is consistent with other numeric UUID conversions in the codebase and provides
+// a stable representation for comparison and storage purposes.
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+    auto result = Int128Column::create(num_rows);
+    auto& data = result->get_data();
+
+    for (int i = 0; i < num_rows; ++i) {
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        // Convert UUID bytes to int128_t
+        // Direct memcpy is used for consistency with existing uuid_numeric implementation
+        int128_t value;
+        memcpy(&value, uuid.data, 16);
+        data[i] = value;
+    }
+
+    return result;
+}
+
 StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
     auto column = columns[0];
     std::string msg = "assert_true failed due to false value";
@@ -307,6 +364,9 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
 
 StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Columns& columns) {
     static std::u8string kBar = u8"\u2593";
+    // Upper bound on the rendered bar length. The per-row result is a plain std::string that is
+    // NOT tracked by the MemTracker, so an unbounded width can exhaust BE memory (DoS).
+    constexpr int64_t kMaxBarWidth = 1000000;
     RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));
     RETURN_IF(!columns[1]->is_constant(), Status::InvalidArgument("argument[min] must be constant"));
     RETURN_IF(!columns[2]->is_constant(), Status::InvalidArgument("argument[max] must be constant"));
@@ -319,14 +379,18 @@ StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Column
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> builder(rows);
 
-    size_t min = viewer_min.value(0);
-    size_t max = viewer_max.value(0);
-    size_t width = viewer_width.value(0);
+    // Read as signed: width/min/max come from BIGINT and may legitimately be negative. Reading
+    // width into an unsigned size_t made a negative value (e.g. -1) wrap to SIZE_MAX and slip past
+    // the `width <= 0` guard, then drive an unbounded append loop below.
+    int64_t min = viewer_min.value(0);
+    int64_t max = viewer_max.value(0);
+    int64_t width = viewer_width.value(0);
     RETURN_IF(min >= max, Status::InvalidArgument("requirement: min < max"));
     RETURN_IF(width <= 0, Status::InvalidArgument("requirement: width > 0"));
+    RETURN_IF(width > kMaxBarWidth, Status::InvalidArgument("requirement: width <= 1000000"));
 
     for (size_t i = 0; i < rows; i++) {
-        size_t size = viewer_size.value(i);
+        int64_t size = viewer_size.value(i);
         RETURN_IF(size < min, Status::InvalidArgument("requirement: size >= min"));
         RETURN_IF(size > max, Status::InvalidArgument("requirement: size <= max"));
 

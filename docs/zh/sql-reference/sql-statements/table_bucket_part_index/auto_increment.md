@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AUTO_INCREMENT column attribute automatically assigns unique integer IDs to new records."
 keywords: ['zizeng']
 ---
 

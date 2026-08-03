@@ -1,0 +1,21 @@
+-- name: test_map_function_cow
+CREATE TABLE test_map
+    (c1 int,
+    c2 map<varchar(8), int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into test_map SELECT generate_series, map(generate_series, generate_series) FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+select count(c1),count(c2),count(mp) from ( select* from (select*,map_keys(l.c2) mp from test_map l ) t where mp[1] + c1 < 1000 and mp[1] + c1 > 100) t;
+-- result:
+449	449	449
+-- !result
+select count(c1),count(c2),count(mp) from ( select* from (select*,map_values(l.c2) mp from test_map l ) t where mp[1] + c1 < 1000 and mp[1] + c1 > 100) t;
+-- result:
+449	449	449
+-- !result

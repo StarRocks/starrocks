@@ -119,6 +119,7 @@ set(EXEC_FILES
     hdfs_scanner/hdfs_scanner_partition.cpp
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner_avro.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
@@ -128,6 +129,7 @@ set(EXEC_FILES
     file_scanner/json_scanner.cpp
     file_scanner/orc_scanner.cpp
     file_scanner/parquet_scanner.cpp
+    file_scanner/stream_source_meta.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
@@ -136,11 +138,13 @@ set(EXEC_FILES
     schema_scanner/schema_columns_scanner.cpp
     schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collation_character_set_applicability_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp
     schema_scanner/schema_triggers_scanner.cpp
     schema_scanner/schema_events_scanner.cpp
     schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp

@@ -30,6 +30,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
@@ -292,28 +293,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testAutoRefreshModeRejectsPartitionRefresh() throws Exception {
-        starRocksAssert.withMaterializedView("create materialized view test.mv_auto_to_refresh\n" +
-                "PARTITION BY k1\n" +
-                "distributed by hash(k2) buckets 3\n" +
-                "refresh manual\n" +
-                "properties (\n" +
-                "\"refresh_mode\" = \"auto\"\n" +
-                ")\n" +
-                "as select k1, k2, v1 from test.tbl_with_mv;");
-        try {
-            String sql = "REFRESH MATERIALIZED VIEW test.mv_auto_to_refresh " +
-                    "PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
-            Exception e = Assertions.assertThrows(Exception.class,
-                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-            Assertions.assertTrue(e.getMessage().contains(
-                    "Partition refresh is not supported for materialized views with refresh_mode=AUTO."));
-        } finally {
-            starRocksAssert.dropMaterializedView("test.mv_auto_to_refresh");
-        }
-    }
-
-    @Test
     public void testIncrementalRefreshModeRejectsPartitionRefresh() throws Exception {
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_to_refresh\n" +
@@ -333,6 +312,53 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                     "Partition refresh is not supported for materialized views with refresh_mode=INCREMENTAL."));
         } finally {
             starRocksAssert.dropMaterializedView("test.mv_incremental_to_refresh");
+        }
+    }
+
+    @Test
+    public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
+        // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
+        // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
+        // analyzer check from the IVM eligibility constraints of the CREATE path.
+        starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\n" +
+                "\"refresh_mode\" = \"pct\"\n" +
+                ")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "mv_incremental_force_refresh");
+            mv.getTableProperty().setMvRefreshMode("incremental");
+            mv.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental");
+
+            String sql = "REFRESH MATERIALIZED VIEW test.mv_incremental_force_refresh FORCE;";
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+            Assertions.assertTrue(e.getMessage().contains(
+                    "FORCE refresh is not supported for materialized views with refresh_mode=INCREMENTAL."),
+                    "expected FORCE rejection error, got: " + e.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_incremental_force_refresh");
+        }
+    }
+
+    @Test
+    public void testPctRefreshModeAllowsForceRefresh() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test.mv_pct_force_refresh\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "properties (\n" +
+                "\"refresh_mode\" = \"pct\"\n" +
+                ")\n" +
+                "as select k1, k2, v1 from test.tbl_with_mv;");
+        try {
+            String sql = "REFRESH MATERIALIZED VIEW test.mv_pct_force_refresh FORCE;";
+            // Should parse without error: FORCE is only blocked on INCREMENTAL/AUTO MVs.
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_pct_force_refresh");
         }
     }
 

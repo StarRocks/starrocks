@@ -329,6 +329,15 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   KeysType mvKeysType, OriginStatement origStmt,
                                                   QueryStatement queryStatement)
             throws DdlException, AnalysisException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                "Synchronous materialized view / rollup is not supported on " +
+                "tables with range distribution. Use an asynchronous " +
+                "materialized view instead: declare it with an explicit " +
+                "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a " +
+                "DISTRIBUTED BY clause, e.g. CREATE MATERIALIZED VIEW ... " +
+                "DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+        }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
             mvKeysType = olapTable.getKeysType();
@@ -583,7 +592,9 @@ public class MaterializedViewHandler extends AlterHandler {
                         }
                         break;
                     }
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    if (!column.getType().canDistributedBy()) {
+                        // JSON and other non-sortable types must not become rollup sort-key
+                        // columns (mirrors base-table key derivation in CreateTableAnalyzer).
                         break;
                     }
                     if (column.getType().isVarchar()) {
@@ -647,6 +658,12 @@ public class MaterializedViewHandler extends AlterHandler {
 
                     Column oneColumn = new Column(baseColumn);
                     if (isKey) {
+                        if (!baseColumn.getType().canDistributedBy()) {
+                            // JSON and other non-sortable types cannot be rollup key columns
+                            // (mirrors base-table key validation in ColumnDefAnalyzer).
+                            throw new DdlException(String.format(
+                                    "Invalid data type of key column '%s': '%s'", rollupColName, baseColumn.getType()));
+                        }
                         hasKey = true;
                         oneColumn.setIsKey(true);
                         oneColumn.setAggregationType(null, false);

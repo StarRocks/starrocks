@@ -797,6 +797,8 @@ public class DatabaseTransactionMgr {
         info.add(String.valueOf(txnState.getTimeoutMs()));
         info.add(String.valueOf(txnState.getPreparedTimeoutMs()));
         info.add(txnState.getErrMsg());
+        info.add(String.valueOf(txnState.isNoOpPublish()));
+        info.add(txnState.getNoOpPublishReason());
     }
 
     public TransactionStateSnapshot getLabelState(String label) {
@@ -863,6 +865,24 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Return the time in milliseconds that the oldest committed-but-not-yet-visible transaction has been
+    // pending publish, i.e. (currentTimeMs - oldest commit time). Returns 0 when there is no committed
+    // transaction. A continuously growing value indicates that version publishing is stuck or lagging
+    // behind commits.
+    public long getMaxCommittedTxnPendingPublishMs(long currentTimeMs) {
+        readLock();
+        try {
+            long oldestCommitTime = idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> transactionState.getTransactionStatus() == TransactionStatus.COMMITTED)
+                    .mapToLong(TransactionState::getCommitTime)
+                    .min()
+                    .orElse(0L);
+            return oldestCommitTime <= 0 ? 0L : Math.max(0L, currentTimeMs - oldestCommitTime);
+        } finally {
+            readUnlock();
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
@@ -912,6 +932,12 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Per-partition state carried across TransactionStates while building a
+    // TransactionStateBatch: previous version (must stay consecutive) and the
+    // materialized-index id snapshot (must stay identical across the batch).
+    private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
+    }
+
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
         List<TransactionStateBatch> result = new ArrayList<>();
         readLock();
@@ -919,9 +945,16 @@ public class DatabaseTransactionMgr {
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                        Config.lake_batch_publish_min_version_num,
-                        Config.lake_batch_publish_max_version_num, txnId);
+                List<Long> txnsWithDependency;
+                if (Config.lake_enable_batch_publish_multi_table) {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
+                            Config.lake_batch_publish_min_version_num,
+                            Config.lake_batch_publish_max_version_num, txnId);
+                } else {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                            Config.lake_batch_publish_min_version_num,
+                            Config.lake_batch_publish_max_version_num, txnId);
+                }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
@@ -933,45 +966,59 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
 
-                // Only single table transactions will be batched together.
-                Preconditions.checkState(states.get(0).getTableIdList().size() == 1);
+                // Without lake_enable_batch_publish_multi_table only single table transactions are
+                // batched together. With it, txns whose dependencies are all inside the batch are
+                // grouped regardless of table set, so the checks below iterate each txn's own
+                // table list.
 
-                long tableId = states.get(0).getTableIdList().get(0);
-
-                // check whether version is consequent
-                // for schema change will occupy a version
-                Map<Long, PartitionCommitInfo> versions = new HashMap<>();
+                // Cut the batch whenever a per-(table, partition) invariant breaks: version must stay
+                // consecutive (schema change can occupy a version) and the loaded materialized-index
+                // id snapshot must stay identical (so a SplitTabletJob window does not let one batch
+                // mix old + new tablet ids and produce overlapping PublishTabletInfo tasks on BE).
+                // Partition ids are globally unique, so one map keyed by partition id covers all tables.
+                Map<Long, PartitionCommitState> partitionCommitStates = new HashMap<>();
 
                 outerLoop:
                 for (int i = 0; i < states.size(); i++) {
                     TransactionState state = states.get(i);
-                    TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
-                    // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
                     // Handle special transaction types separately to prevent batching:
                     // 1. Replication transactions: may have non-consecutive versions
                     // 2. DELETE transactions: each delete predicate needs its own version
                     //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
-                    if (tableInfo == null
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    if (state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                             || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
 
-                    Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
-                    for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
-                        PartitionCommitInfo currTxnInfo = item.getValue();
-                        PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
-                        if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
-                            assert i > 0;
-                            // version is not consecutive
-                            // may schema change occupy a version
-                            states = states.subList(0, i);
+                    for (Long tableId : state.getTableIdList()) {
+                        TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+                        // TableCommitInfo could be null if the table has been dropped
+                        // before this transaction is committed.
+                        if (tableInfo == null) {
+                            states = states.subList(0, Math.max(i, 1));
                             break outerLoop;
                         }
-                        versions.put(item.getKey(), currTxnInfo);
+
+                        Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                        for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                            PartitionCommitInfo currTxnInfo = item.getValue();
+                            PartitionCommitState previousCommitState = partitionCommitStates.get(item.getKey());
+                            List<Long> currentLoadedIndexIds =
+                                    state.getPartitionLoadedIndexIdsWithoutLock(tableId, item.getKey());
+                            if (previousCommitState != null
+                                    && (previousCommitState.version() + 1 != currTxnInfo.getVersion()
+                                            || !Objects.equals(previousCommitState.loadedIndexIds(),
+                                                    currentLoadedIndexIds))) {
+                                assert i > 0;
+                                states = states.subList(0, i);
+                                break outerLoop;
+                            }
+                            partitionCommitStates.put(item.getKey(),
+                                    new PartitionCommitState(currTxnInfo.getVersion(), currentLoadedIndexIds));
+                        }
                     }
                 }
 
@@ -1625,6 +1672,161 @@ public class DatabaseTransactionMgr {
                 Collections.emptyList(), Collections.emptyList());
     }
 
+    /**
+     * Mark a COMMITTED but publish-stuck transaction as a no-op publish. The
+     * txn's data contribution is discarded; partition visible version still
+     * advances by writing a metadata file with no data changes from this txn.
+     * Used by the ADMIN SKIP COMMITTED TRANSACTION SQL.
+     *
+     * <p>Phase-1 scope: only supports load (incl. routine/stream) and
+     * compaction txns on lake tables with {@code file_bundling=true}.
+     * Alter / schema-change txns are rejected (will be supported in phase 2).
+     *
+     * <p>Behavior:
+     * <ol>
+     *   <li>Validate state is COMMITTED, source type is allowed, all affected
+     *       tables are lake + file_bundling.</li>
+     *   <li>Mark the txn with {@code isNoOpPublish=true} and persist to edit
+     *       log (durable before any BE RPC).</li>
+     *   <li>Return immediately. {@link PublishVersionDaemon} picks up the
+     *       flag on its next tick and propagates it to BE via
+     *       {@link com.starrocks.proto.TxnInfoPB#noOpPublish}, where BE's
+     *       publish loop bypasses txn-log loading and apply for this txn.</li>
+     * </ol>
+     *
+     * <p>Race resolution: if a publish RPC was already in flight when the
+     * admin command landed, FE waits for it to complete or fail naturally;
+     * subsequent retries (or the first retry after failure) pick up the
+     * persisted flag. If the in-flight publish happens to succeed first,
+     * the txn becomes VISIBLE normally and the no-op publish flag becomes a
+     * no-op itself (audit log records the race outcome).
+     */
+    public void markCommittedTransactionAsNoOpPublish(long transactionId, String reason) throws StarRocksException {
+        if (!Config.enable_admin_skip_committed_txn) {
+            throw new StarRocksException(
+                    "ADMIN SKIP COMMITTED TRANSACTION is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch for publish-stuck transactions; "
+                            + "use with care.");
+        }
+
+        TransactionState transactionState;
+        writeLock();
+        try {
+            transactionState = unprotectedGetTransactionState(transactionId);
+            if (transactionState == null) {
+                throw new StarRocksException("transaction " + transactionId + " does not exist");
+            }
+        } finally {
+            writeUnlock();
+        }
+
+        // Validate source type. Phase 1 supports load + lake-compaction only.
+        // See TransactionState.LoadJobSourceType for the canonical list.
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        switch (sourceType) {
+            case FRONTEND:
+            case BACKEND_STREAMING:
+            case INSERT_STREAMING:
+            case ROUTINE_LOAD_TASK:
+            case BATCH_LOAD_JOB:
+            case FRONTEND_STREAMING:
+            case BYPASS_WRITE:
+            case MULTI_STATEMENT_STREAMING:
+            case LAKE_COMPACTION:
+                break;
+            default:
+                throw new StarRocksException(
+                        "transaction " + transactionId + " has source type " + sourceType
+                                + " which is not supported by ADMIN SKIP COMMITTED TRANSACTION in this version. "
+                                + "Only load and lake-compaction txns are supported in phase 1; "
+                                + "alter/schema-change txns will be supported in a later release.");
+        }
+
+        // Validate all affected tables are lake + file_bundling. Per the design,
+        // non-file-bundling tables can have partial-publish states that this
+        // feature cannot make atomic; bundled mode's aggregator-write guarantees
+        // partition-wide atomicity for the no-op-publish path.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new StarRocksException("database " + dbId + " does not exist");
+        }
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
+                // Same posture as finishTransaction: a table dropped between
+                // commit and recovery has no live state to validate against;
+                // the partition-version advance is still safe because there is
+                // nothing left to be inconsistent with.
+                LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: table {} is dropped, skipping "
+                        + "file_bundling validation for txn {}", tableId, transactionId);
+                continue;
+            }
+            if (!(table instanceof OlapTable) || !((OlapTable) table).isCloudNativeTable()) {
+                throw new StarRocksException("table " + table.getName()
+                        + " is not a shared-data (lake) table; ADMIN SKIP COMMITTED TRANSACTION only "
+                        + "supports shared-data tables");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            if (!Boolean.TRUE.equals(olapTable.isFileBundling())) {
+                throw new StarRocksException("table " + table.getName()
+                        + " does not have file_bundling=true; ADMIN SKIP COMMITTED TRANSACTION only "
+                        + "supports lake tables with file_bundling enabled. "
+                        + "Enable it via: ALTER TABLE " + table.getName()
+                        + " SET ('file_bundling' = 'true'); or use other recovery paths "
+                        + "(drop partition / rebuild).");
+            }
+        }
+
+        // Mirrors the in-place-mutation pattern used elsewhere in this file
+        // (prepareTransaction, finishTransaction): take per-txn writeLock,
+        // mutate the canonical TransactionState directly, upsert + persist
+        // before releasing. The per-txn writeLock naturally serializes with
+        // finishTransaction, so there is no "stale copy" race window.
+        transactionState.writeLock();
+        try {
+            if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is already VISIBLE; cannot mark a finished transaction as no-op publish");
+            }
+            if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is already ABORTED; cannot mark an aborted transaction as no-op publish");
+            }
+            if (transactionState.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                throw new StarRocksException("transaction " + transactionId
+                        + " is in state " + transactionState.getTransactionStatus()
+                        + ", not COMMITTED; ADMIN SKIP COMMITTED TRANSACTION only handles COMMITTED txns. "
+                        + "PREPARED loads usually time out on their own or can be cancelled via the "
+                        + "loader-specific path (e.g. CANCEL LOAD for broker load, "
+                        + "POST /api/transaction/rollback for stream load).");
+            }
+            if (transactionState.isNoOpPublish()) {
+                // Idempotent: already marked. Just log and return.
+                LOG.info("transaction {} already marked as no-op publish (reason: {}), re-issue ignored",
+                        transactionId, transactionState.getNoOpPublishReason());
+                return;
+            }
+
+            transactionState.markAsNoOpPublish(reason);
+
+            writeLock();
+            try {
+                unprotectUpsertTransactionState(transactionState);
+            } finally {
+                writeUnlock();
+            }
+            persistTxnStateInTxnLevelLock(transactionState);
+
+            LOG.warn("ADMIN SKIP COMMITTED TRANSACTION: marked txn {} as no-op publish, reason='{}', "
+                    + "sourceType={}, affectedTables={}. PublishVersionDaemon will propagate the flag "
+                    + "to BE on next tick.",
+                    transactionId, reason, sourceType, transactionState.getTableIdList());
+        } finally {
+            transactionState.writeUnlock();
+        }
+    }
+
     private void processNotFoundTxn(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment) {
         if (txnCommitAttachment == null) {
             return;
@@ -1858,22 +2060,33 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getId(), transactionStateBatch.getTableId());
-        if (table == null) {
-            return true;
+        // one applier per table; a single-table batch loops exactly once
+        for (Long tableId : transactionStateBatch.getTableIdList()) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), tableId);
+            if (table == null) {
+                continue;
+            }
+            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         }
-        TransactionLogApplier applier = txnLogApplierFactory.create(table);
-        ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         return true;
     }
 
     public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIdList) {
+        return isPreviousTransactionsFinished(endTransactionId, tableIdList, Collections.emptySet());
+    }
+
+    public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIdList,
+                                                  Set<Long> excludeTransactionIds) {
         readLock();
         try {
             for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
                 if (entry.getValue().getDbId() != dbId || !isIntersectionNotEmpty(entry.getValue().getTableIdList(),
                         tableIdList) || !entry.getValue().isRunning()) {
+                    continue;
+                }
+                if (excludeTransactionIds.contains(entry.getKey())) {
                     continue;
                 }
                 if (entry.getKey() <= endTransactionId) {
@@ -1979,10 +2192,9 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
         // Locks are held to ensure that updates of visible version in the same batch are atomic,
         // so that intermediate versions cannot be seen.
+        List<Long> tableIdList = transactionStateBatch.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
-                List.of(transactionStateBatch.getTableId()),
-                LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(), tableIdList, LockType.WRITE);
         writeLock();
 
         try {
@@ -1997,8 +2209,7 @@ public class DatabaseTransactionMgr {
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
             writeUnlock();
-            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
-                    List.of(transactionStateBatch.getTableId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(), tableIdList, LockType.WRITE);
         }
     }
 
@@ -2113,15 +2324,20 @@ public class DatabaseTransactionMgr {
     }
 
     private boolean isTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
+        // Partition ids are globally unique, so one version map covers all tables of the batch.
         Map<Long, PartitionCommitInfo> versions = new HashMap<>();
         List<TransactionState> states = stateBatch.getTransactionStates();
-        long tableId = stateBatch.getTableId();
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getId(), tableId);
-        if (table != null) {
-            for (int i = 0; i < states.size(); i++) {
-                TransactionState state = states.get(i);
-                TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+        Map<Long, Table> tableCache = new HashMap<>();
+        for (int i = 0; i < states.size(); i++) {
+            TransactionState state = states.get(i);
+            for (TableCommitInfo tableInfo : state.getIdToTableCommitInfos().values()) {
+                long tableId = tableInfo.getTableId();
+                Table table = tableCache.computeIfAbsent(tableId,
+                        id -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), id));
+                if (table == null) {
+                    // table has been dropped
+                    continue;
+                }
 
                 Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                 for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {

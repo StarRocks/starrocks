@@ -15,18 +15,19 @@
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -83,7 +84,9 @@ class DecodeContext {
     Map<Integer, List<ScalarOperator>> stringExprsMap = Maps.newHashMap();
 
     // all string aggregate expressions
-    List<CallOperator> stringAggregateExprs = Lists.newArrayList();
+    Map<Integer, List<CallOperator>> stringAggregateExprs = Maps.newHashMap();
+
+    Map<Integer, ColumnRefSet> aggIdToSupportColumns = Maps.newHashMap();
 
     // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
@@ -107,6 +110,18 @@ class DecodeContext {
         rewriteGlobalDict();
         rewriteStringExpressions();
         rewriteStringAggregations();
+    }
+
+    private ColumnRefOperator getUseStringRef(ScalarOperator operator) {
+        if (operator.isColumnRef()) {
+            return (ColumnRefOperator) operator;
+        }
+        List<ColumnRefOperator> useStringRefs = operator.getColumnRefs();
+        if (useStringRefs.isEmpty()) {
+            return null;
+        }
+        Preconditions.checkState(useStringRefs.stream().distinct().count() == 1);
+        return useStringRefs.get(0);
     }
 
     private void rewriteStringRefToDictRef() {
@@ -143,6 +158,28 @@ class DecodeContext {
         }
     }
 
+    private boolean isNullSensitiveToRef(ScalarOperator op, int refId) {
+        if (!op.getUsedColumns().contains(refId)) {
+            return false;
+        }
+        if (op instanceof IsNullPredicateOperator) {
+            return true;
+        }
+        if (op instanceof CallOperator) {
+            String fn = ((CallOperator) op).getFnName();
+            if (FunctionSet.IFNULL.equalsIgnoreCase(fn) || FunctionSet.COALESCE.equalsIgnoreCase(fn)
+                    || FunctionSet.NULLIF.equalsIgnoreCase(fn) || FunctionSet.CONCAT_WS.equalsIgnoreCase(fn)) {
+                return true;
+            }
+        }
+        for (ScalarOperator child : op.getChildren()) {
+            if (isNullSensitiveToRef(child, refId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void rewriteGlobalDict() {
         GlobalDictRewriter dictRewriter = new GlobalDictRewriter();
         for (Integer stringId : stringRefToDefineExprMap.keySet()) {
@@ -157,6 +194,21 @@ class DecodeContext {
             // decode A: dictMapping(B, upper(B)) -> dictMapping(C, upper(lower(C)))
             ColumnRefOperator dictRef = stringRefToDictRefMap.get(factory.getColumnRef(stringId));
             ScalarOperator stringDefineExpr = stringRefToDefineExprMap.get(stringId);
+
+            // Check before flattening: if a NULL-sensitive expression is built on a DERIVED dict
+            // (one defined by another expression, not a base column), do NOT flatten it through the
+            // child define. Keep it referencing the intermediate dict directly, so producer and
+            // consumer build the dictionary the same way (a derived dict carries a synthetic NULL
+            // code that flattening would drop).
+            ColumnRefOperator keepUseRef = getUseStringRef(stringDefineExpr);
+            if (keepUseRef != null && !stringRefToDicts.containsKey(keepUseRef.getId())
+                    && stringRefToDefineExprMap.containsKey(keepUseRef.getId())
+                    && isNullSensitiveToRef(stringDefineExpr, keepUseRef.getId())) {
+                ColumnRefOperator keepDictRef = stringRefToDictRefMap.get(keepUseRef);
+                globalDictsExpr.put(dictRef.getId(),
+                        new DictMappingOperator(keepDictRef, stringDefineExpr.clone(), dictRef.getType()));
+                continue;
+            }
 
             ScalarOperator defineExpr = stringDefineExpr.accept(dictRewriter, null);
             List<ColumnRefOperator> defineUsedStringRef = defineExpr.getColumnRefs();
@@ -188,10 +240,15 @@ class DecodeContext {
     private void rewriteStringAggregations() {
         // rewrite string aggregate expression
         AggregateRewriter rewriter = new AggregateRewriter();
-        for (CallOperator aggFn : stringAggregateExprs) {
-            CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
-            stringExprToDictExprMap.put(aggFn, new1stAggFn);
-        }
+        stringAggregateExprs.forEach((aggId, aggFns) -> {
+            ColumnRefSet supportColumns = aggIdToSupportColumns.get(aggId);
+            Preconditions.checkNotNull(supportColumns);
+            rewriter.setSupportColumns(supportColumns);
+            for (CallOperator aggFn : aggFns) {
+                CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
+                stringExprToDictExprMap.put(aggFn, new1stAggFn);
+            }
+        });
     }
 
     // create a new dictionary column and assign the same property except for the type and column id
@@ -316,9 +373,12 @@ class DecodeContext {
     }
 
     private class AggregateRewriter extends BaseScalarOperatorShuttle {
+        private ColumnRefSet supportColumns;
+
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void ignore) {
-            return stringRefToDictRefMap.getOrDefault(variable, variable);
+            return supportColumns.contains(variable) ?
+                    stringRefToDictRefMap.getOrDefault(variable, variable) : variable;
         }
 
         @Override
@@ -361,6 +421,10 @@ class DecodeContext {
             Function fn = ExprUtils.getBuiltinFunction(call.getFnName(), argTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn,
                     call.isDistinct(), call.isRemovedDistinct());
+        }
+
+        void setSupportColumns(ColumnRefSet supportColumns) {
+            this.supportColumns = supportColumns;
         }
     }
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks has a simple architecture."
 ---
 import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
 

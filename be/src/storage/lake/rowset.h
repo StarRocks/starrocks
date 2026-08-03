@@ -95,9 +95,14 @@ public:
     // |rowid_range_per_segment|: if non-null, rowid_range_per_segment[i] specifies the row range
     // to scan for the i-th segment. If the pointer at index i is null, the entire segment is scanned.
     // The vector size must equal num_segments() if provided.
+    // |per_segment_stats|: if non-null, the i-th segment iterator is created with per_segment_stats[i]
+    // as its OlapReaderStatistics, so callers that later scan different segments concurrently do not
+    // race on one shared stats object; else all segments share |stats|. Size must equal the segment
+    // count if provided.
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
-            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr);
+            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr,
+            const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
@@ -107,7 +112,7 @@ public:
         if (_segment_range_end > 0) {
             return _segment_range_end - _segment_range_start;
         }
-        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
+        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segment_metas_size();
     }
 
     // only used in compaction
@@ -141,17 +146,29 @@ public:
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
+    // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() packs
+    // its result densely (segment-range start, partial-compaction trim, lost segments), so an
+    // element's index there is NOT its metadata position; consult per-segment metadata (e.g. shared())
+    // via `segment_meta_pos` -- the segment_metas() array position, not Segment::id()/segment_idx.
+    struct LoadedSegment {
+        SegmentPtr segment;           // nullptr if the segment was skipped, filtered out, or lost
+        int32_t segment_meta_pos = 0; // position in _metadata->segment_metas()
+    };
+
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+    Status load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
-                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
+    [[nodiscard]] Status load_segments(
+            std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
+            std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
+            const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -175,6 +192,10 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    // Set once get_segments_checked() materializes _segments. Keyed on an explicit flag (not
+    // _segments.empty()) so a zero-segment rowset loads once, and stays false on a transient
+    // failure so a retry re-attempts it (issue #75203).
+    bool _segments_loaded = false;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将日期按照指定的格式转化为字符串。"
 ---
 
 # date_format

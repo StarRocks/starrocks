@@ -14,6 +14,8 @@
 
 #include "storage/load_spill_pipeline_merge_context.h"
 
+#include <algorithm>
+
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
@@ -21,6 +23,8 @@
 #include "util/threadpool.h"
 
 namespace starrocks {
+
+LoadSpillPipelineMergeContext::LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
 
 LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
     _quit_flag.store(true);
@@ -32,6 +36,17 @@ LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
 void LoadSpillPipelineMergeContext::create_thread_pool_token() {
     std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
     if (_token == nullptr) {
+        _token = StorageEngine::instance()
+                         ->load_spill_block_merge_executor()
+                         ->create_tablet_internal_parallel_merge_token();
+    }
+}
+
+void LoadSpillPipelineMergeContext::init_parallel_merge() {
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token == nullptr) {
+        _writer->set_auto_flush(false);
+        _writer->try_enable_pk_index_eager_build();
         _token = StorageEngine::instance()
                          ->load_spill_block_merge_executor()
                          ->create_tablet_internal_parallel_merge_token();
@@ -55,6 +70,18 @@ Status LoadSpillPipelineMergeContext::merge_task_results() {
     if (_token != nullptr) {
         _token->wait();
     }
+
+    // Consolidate in flush (slot) order. Tasks are registered via add_merge_task() from concurrent eager
+    // merges (parallel flush) where generating a batch and registering its task are not atomic, so the
+    // registration order does NOT necessarily match the batch slot order. merge_other_writer() appends
+    // each task's segments/del files in the order iterated here and (for PK tables) derives del rssid /
+    // op_offset from the running segment count, so consolidating out of slot order would let an
+    // earlier-flush row/delete win over a later one. Sort by the batch's smallest slot_idx first.
+    std::stable_sort(_merge_tasks.begin(), _merge_tasks.end(),
+                     [](const std::shared_ptr<lake::TabletInternalParallelMergeTask>& a,
+                        const std::shared_ptr<lake::TabletInternalParallelMergeTask>& b) {
+                         return a->slot_idx() < b->slot_idx();
+                     });
 
     for (const auto& task : _merge_tasks) {
         // IMPORTANT: Check task status first to fail fast if any parallel merge task failed.

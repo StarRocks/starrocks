@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Queries roles that are activated for the current user."
 ---
 
 # current_role

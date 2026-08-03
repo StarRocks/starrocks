@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Before you import bitmap data into StarRocks, you need to serialize the data and encode the data as a Base64 string."
 ---
 
 # base64_to_bitmap

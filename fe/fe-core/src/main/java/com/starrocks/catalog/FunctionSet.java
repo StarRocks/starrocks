@@ -294,8 +294,11 @@ public class FunctionSet {
     // Utility functions:
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
+    public static final String QUERY_ID = "query_id";
     public static final String UUID = "uuid";
     public static final String UUID_NUMERIC = "uuid_numeric";
+    public static final String UUID_V7 = "uuid_v7";
+    public static final String UUID_V7_NUMERIC = "uuid_v7_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ISNOTNULL = "isnotnull";
@@ -775,6 +778,10 @@ public class FunctionSet {
                     .add(RAND)
                     .add(RANDOM)
                     .add(UUID)
+                    .add(UUID_NUMERIC)
+                    .add(UUID_V7)
+                    .add(UUID_V7_NUMERIC)
+                    .add(QUERY_ID)
                     .add(SLEEP)
                     .build();
 

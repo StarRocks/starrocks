@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a string repeated a specified number of times."
 ---
 
 # repeat

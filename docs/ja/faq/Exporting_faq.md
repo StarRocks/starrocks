@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aliyun OSS / AWS S3 へのデータバックアップとリストア方法。"
 ---
 
 # データエクスポート

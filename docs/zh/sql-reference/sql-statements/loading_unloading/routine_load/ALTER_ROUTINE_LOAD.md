@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "修改处于 PAUSED 状态的 Routine Load 导入作业。"
 ---
 
 # ALTER ROUTINE LOAD
@@ -91,8 +92,8 @@ FROM data_source
 
     数据源的相关属性。目前支持修改：
 
-    - `kafka_partitions` 和 `kafka_offsets`：需要注意的是，仅支持修改当前已经消费的 Kafka partition 的 offset，不支持新增 Kafka partition。
-    - `property.*`： 自定义的数据源 Kafka 相关参数，例如 `property.kafka_default_offsets`。
+    - `kafka_partitions` 和 `kafka_offsets`：需要注意的是，默认仅支持修改当前已经消费的 Kafka partition 的 offset，不支持新增 Kafka partition。如果同一语句中将 `property.kafka_partition_discovery` 设置为 `true`，则所列分区改为按 Kafka 主题实际存在的分区进行校验，因此也可以为固定分区列表之外的分区指定 offset。
+    - `property.*`： 自定义的数据源 Kafka 相关参数，例如 `property.kafka_default_offsets`。需要注意的是，`property.kafka_partition_discovery` 只能设置为 `true`，用于解除创建作业时固定的分区列表并重新开启分区自动发现。不支持改回 `false`，如需重新固定分区列表，请重建作业。
 
 ## 示例
 

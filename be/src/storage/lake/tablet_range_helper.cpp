@@ -27,6 +27,7 @@
 #include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/types.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
 
@@ -99,7 +100,7 @@ static StatusOr<Datum> datum_from_type_min(LogicalType type) {
     }
 }
 
-Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
+Status TabletRangeHelper::validate_tablet_range(const TabletRangePB& tablet_range_pb) {
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         return Status::OK();
     }
@@ -125,29 +126,102 @@ Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_ran
     return Status::OK();
 }
 
+// The value old rows of a segment read for a sort-key column added later by a metadata-only fast schema
+// evolution, mirroring DefaultValueColumnIterator::init: a declared default of the literal "NULL", or no
+// declared default on a nullable column, reads as NULL; otherwise the declared default parsed to its type.
+static StatusOr<DatumVariant> read_time_default(const TabletColumn& column) {
+    const TypeInfoPtr& type_info = get_type_info(column);
+    Datum datum;
+    if (column.has_default_value()) {
+        if (column.default_value() == "NULL") {
+            datum.set_null();
+        } else {
+            RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, column.default_value(), nullptr));
+        }
+    } else if (column.is_nullable()) {
+        datum.set_null();
+    } else {
+        return Status::Corruption(
+                fmt::format("added sort-key column {} has no default and is not nullable", column.name()));
+    }
+    return DatumVariant(type_info, datum);
+}
+
+// Whether two range-bound values are the SAME sort-key value, comparing semantically (variant kind,
+// logical type, and decoded value) rather than by raw proto bytes. The FE re-encodes a reprojected
+// range's leading Variants -- and a reshard persists boundary Variants through a different path -- so
+// byte-identical protos are not guaranteed even when the value is unchanged (e.g. an optional type or
+// variant_type field present on one side and defaulted on the other). Used to check that a trailing ADD
+// preserves the existing range prefix without spuriously rejecting an equivalent re-encoding.
+static Status validate_variant_type_shape(const VariantPB& value) {
+    if (!value.has_type()) {
+        return Status::OK();
+    }
+    const auto& type = value.type();
+    if (type.types_size() != 1) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must contain exactly one node, got {}", type.types_size()));
+    }
+    const auto& node = type.types(0);
+    if (static_cast<TTypeNodeType::type>(node.type()) != TTypeNodeType::SCALAR || !node.has_scalar_type()) {
+        return Status::InvalidArgument(
+                fmt::format("range-bound variant type must be scalar (node_type={}, has_scalar_type={})", node.type(),
+                            node.has_scalar_type()));
+    }
+    return Status::OK();
+}
+
+static StatusOr<bool> leading_value_preserved(const VariantPB& old_value, const VariantPB& new_value) {
+    if (old_value.variant_type() != new_value.variant_type()) {
+        return false;
+    }
+    if (old_value.has_type() != new_value.has_type()) {
+        return false;
+    }
+    RETURN_IF_ERROR(validate_variant_type_shape(old_value));
+    RETURN_IF_ERROR(validate_variant_type_shape(new_value));
+    if (old_value.has_type()) {
+        const auto old_type = TypeDescriptor::from_protobuf(old_value.type());
+        const auto new_type = TypeDescriptor::from_protobuf(new_value.type());
+        if (old_type.type != new_type.type) {
+            return false;
+        }
+    }
+    // Only NORMAL_VALUE carries a payload to compare; NULL/MIN/MAX are fully described by variant_type.
+    if (old_value.variant_type() != VariantTypePB::NORMAL_VALUE) {
+        return true;
+    }
+    Datum old_datum;
+    Datum new_datum;
+    RETURN_IF_ERROR(DatumVariant::from_proto(old_value, &old_datum));
+    RETURN_IF_ERROR(DatumVariant::from_proto(new_value, &new_datum));
+    const auto type_info = get_type_info(TypeDescriptor::from_protobuf(old_value.type()));
+    if (type_info == nullptr) {
+        return false;
+    }
+    return type_info->cmp(old_datum, new_datum) == 0;
+}
+
 StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangePB& tablet_range_pb,
-                                                              const TabletSchemaCSPtr& tablet_schema,
-                                                              MemPool* mem_pool) {
+                                                              const TabletSchemaCSPtr& tablet_schema, MemPool* mem_pool,
+                                                              const TabletSchemaCSPtr& current_schema) {
     SeekRange tablet_range;
-    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
+    RETURN_IF_ERROR(validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return tablet_range;
     }
     const auto& sort_key_idxes = tablet_schema->sort_key_idxes();
     DCHECK(!sort_key_idxes.empty());
-    auto parse_bound_to_seek_tuple = [&](const TuplePB& tuple) -> StatusOr<SeekTuple> {
-        const int n = tuple.values_size();
-        if (n != sort_key_idxes.size()) {
-            return Status::Corruption(
-                    fmt::format("Unexpected number of values in TabletRangePB bound value, expected: {}, actual: {}",
-                                sort_key_idxes.size(), n));
-        }
+    const size_t seg_arity = sort_key_idxes.size();
 
+    // Decode the leading `seg_arity` values of a bound with `tablet_schema` so the SeekTuple's positional
+    // field ids align with the target segment.
+    auto decode_leading = [&](const TuplePB& tuple) -> StatusOr<SeekTuple> {
         Schema schema;
         std::vector<Datum> values;
-        values.reserve(n);
-        for (int i = 0; i < n; i++) {
+        values.reserve(seg_arity);
+        for (size_t i = 0; i < seg_arity; i++) {
             const int idx = sort_key_idxes[i];
             schema.append_sort_key_idx(idx);
             auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
@@ -160,18 +234,77 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
         return SeekTuple(std::move(schema), std::move(values));
     };
 
+    // Sign of (added-column defaults D) minus (a bound's dropped trailing values at [seg_arity, m)), a
+    // lexicographic NULL-aware comparison. D comes from `current_schema`'s sort-key columns [seg_arity, m):
+    // for an old segment every row reads those columns as their default, so D vs the trailing decides how a
+    // boundary-prefix row routes.
+    auto compare_default_to_trailing = [&](const TuplePB& tuple) -> StatusOr<int> {
+        const int m = tuple.values_size();
+        if (current_schema == nullptr) {
+            return Status::Corruption("current schema is required to project a wider range bound");
+        }
+        const auto& cur_sort_key_idxes = current_schema->sort_key_idxes();
+        if (static_cast<int>(cur_sort_key_idxes.size()) < m) {
+            return Status::Corruption(fmt::format("current schema sort-key arity {} < range bound arity {}",
+                                                  cur_sort_key_idxes.size(), m));
+        }
+        VariantTuple default_trailing;
+        VariantTuple bound_trailing;
+        default_trailing.reserve(m - seg_arity);
+        bound_trailing.reserve(m - seg_arity);
+        for (int i = static_cast<int>(seg_arity); i < m; i++) {
+            ASSIGN_OR_RETURN(auto d, read_time_default(current_schema->column(cur_sort_key_idxes[i])));
+            default_trailing.append(std::move(d));
+            DatumVariant bound_value;
+            RETURN_IF_ERROR(bound_value.from_proto(tuple.values(i)));
+            bound_trailing.append(std::move(bound_value));
+        }
+        return default_trailing.compare(bound_trailing);
+    };
+
+    // Decode a bound into a SeekTuple and its (possibly projected) inclusivity.
+    auto build_bound = [&](const TuplePB& tuple, bool pb_included, bool is_lower, SeekTuple* out_tuple,
+                           bool* out_included) -> Status {
+        const int m = tuple.values_size();
+        if (m < static_cast<int>(seg_arity)) {
+            return Status::Corruption(fmt::format(
+                    "Unexpected number of values in TabletRangePB bound value, expected at least: {}, actual: {}",
+                    seg_arity, m));
+        }
+        ASSIGN_OR_RETURN(*out_tuple, decode_leading(tuple));
+        if (m == static_cast<int>(seg_arity)) {
+            *out_included = pb_included;
+            return Status::OK();
+        }
+        // The bound is wider than this segment's sort key: project it onto the leading `seg_arity` columns
+        // and derive inclusivity from D (what old rows read for the dropped columns) vs the trailing values.
+        // A boundary-prefix row (prefix, D) is on the >= side of a lower bound iff D >= trailing, and on the
+        // < side of an upper bound iff D < trailing.
+        ASSIGN_OR_RETURN(const int cmp, compare_default_to_trailing(tuple));
+        if (is_lower) {
+            *out_included = pb_included ? (cmp >= 0) : (cmp > 0);
+        } else {
+            *out_included = pb_included ? (cmp <= 0) : (cmp < 0);
+        }
+        return Status::OK();
+    };
+
     SeekTuple lower;
     SeekTuple upper;
+    bool inclusive_lower = tablet_range_pb.lower_bound_included();
+    bool inclusive_upper = tablet_range_pb.upper_bound_included();
     if (tablet_range_pb.has_lower_bound()) {
-        ASSIGN_OR_RETURN(lower, parse_bound_to_seek_tuple(tablet_range_pb.lower_bound()));
+        RETURN_IF_ERROR(build_bound(tablet_range_pb.lower_bound(), tablet_range_pb.lower_bound_included(),
+                                    /*is_lower=*/true, &lower, &inclusive_lower));
     }
     if (tablet_range_pb.has_upper_bound()) {
-        ASSIGN_OR_RETURN(upper, parse_bound_to_seek_tuple(tablet_range_pb.upper_bound()));
+        RETURN_IF_ERROR(build_bound(tablet_range_pb.upper_bound(), tablet_range_pb.upper_bound_included(),
+                                    /*is_lower=*/false, &upper, &inclusive_upper));
     }
 
     tablet_range = SeekRange(std::move(lower), std::move(upper));
-    tablet_range.set_inclusive_lower(tablet_range_pb.lower_bound_included());
-    tablet_range.set_inclusive_upper(tablet_range_pb.upper_bound_included());
+    tablet_range.set_inclusive_lower(inclusive_lower);
+    tablet_range.set_inclusive_upper(inclusive_upper);
     return tablet_range;
 }
 
@@ -179,7 +312,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
 StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                                      const TabletSchemaCSPtr& tablet_schema) {
     SstSeekRange sst_seek_range;
-    RETURN_IF_ERROR(_validate_tablet_range(tablet_range_pb));
+    RETURN_IF_ERROR(validate_tablet_range(tablet_range_pb));
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
         // (-inf, +inf)
         return sst_seek_range;
@@ -301,6 +434,133 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
         pb_range.set_upper_bound_included(t_range.upper_bound_included);
     }
     return pb_range;
+}
+
+// Whether two TuplePB messages denote the same sort-key value, compared position by
+// position with leading_value_preserved — i.e. semantically (variant kind, logical type,
+// decoded value), not by raw proto bytes. Used by validate_new_tablet_ranges to detect
+// zero-width ranges, adjacency-tile mismatches, and endpoint mismatches against the parent
+// tablet's range.
+//
+// A byte-level comparison here (MessageDifferencer::Equals) rejected every
+// external-boundaries split of a tablet that already had an explicit bound, because the two
+// sides of that comparison are produced by different serializers: the parent's bound was
+// written by BE and the new-tablet bounds arrive from FE. BE's TypeDescriptor::to_protobuf
+// always sets PScalarType::len (be/src/types/type_descriptor.cpp) while FE's
+// TypeSerializer.scalarTypeToProtobuf sets it only for CHAR/VARCHAR/VARBINARY/HLL, and
+// PScalarType::len is `optional`, so for an integer or date sort key the encodings differ
+// byte-for-byte while denoting the same type. leading_value_preserved already documents and
+// handles exactly this hazard for the trailing-sort-key-ADD check; the endpoint checks need
+// the same treatment.
+//
+// The consequence of rejecting was not a failed split but a wedged table: the split fell
+// back to an identical tablet, so the layout never changed, TableAlignmentLatch suppressed
+// further alignment, the range-colocate group never re-stabilised, and the size-driven split
+// stayed blocked behind the unstable-group guard in SplitTabletJobFactory. Parents with no
+// bound were unaffected because tuple_bound_equal short-circuits on absence, which is why
+// alignment only ever failed once a tablet had already been split.
+namespace {
+StatusOr<bool> tuple_pb_equal(const TuplePB& lhs, const TuplePB& rhs) {
+    if (lhs.values_size() != rhs.values_size()) {
+        return false;
+    }
+    for (int i = 0; i < lhs.values_size(); ++i) {
+        ASSIGN_OR_RETURN(bool equal, leading_value_preserved(lhs.values(i), rhs.values(i)));
+        if (!equal) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Same as tuple_pb_equal but treats "neither side has the bound" as equal —
+// used at the first.lower / last.upper endpoint checks where the parent range
+// may be unbounded.
+StatusOr<bool> tuple_bound_equal(bool lhs_has, const TuplePB& lhs, bool rhs_has, const TuplePB& rhs) {
+    if (lhs_has != rhs_has) return false;
+    if (!lhs_has) return true;
+    return tuple_pb_equal(lhs, rhs);
+}
+} // namespace
+
+Status TabletRangeHelper::validate_new_tablet_ranges(
+        const TabletRangePB& old_tablet_range,
+        const google::protobuf::RepeatedPtrField<TabletRangePB>& new_tablet_ranges) {
+    if (new_tablet_ranges.empty()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: new_tablet_ranges is empty");
+    }
+
+    // 0. The old tablet's own range must be well-formed too — otherwise our
+    //    "first.lower matches old.lower" / "last.upper matches old.upper"
+    //    checks below could be comparing against a malformed reference.
+    RETURN_IF_ERROR(validate_tablet_range(old_tablet_range));
+
+    // 1. Each new-tablet range must be individually well-formed, and the two
+    //    bounds (when both set) must not denote the same value (catches zero-width
+    //    children). Strict semantic ordering (lower < upper) requires a
+    //    schema for type-aware comparison and is the caller's responsibility
+    //    (e.g., compute_split_ranges_from_external_boundaries compares via
+    //    the tablet schema).
+    for (const auto& r : new_tablet_ranges) {
+        RETURN_IF_ERROR(validate_tablet_range(r));
+        if (r.has_lower_bound() && r.has_upper_bound()) {
+            ASSIGN_OR_RETURN(bool zero_width, tuple_pb_equal(r.lower_bound(), r.upper_bound()));
+            if (zero_width) {
+                return Status::InvalidArgument(
+                        "validate_new_tablet_ranges: range with lower_bound == upper_bound (zero-width)");
+            }
+        }
+    }
+
+    // 2. First range's lower bound must match the old tablet's lower bound.
+    const auto& first = new_tablet_ranges[0];
+    ASSIGN_OR_RETURN(bool first_lower_matches,
+                     tuple_bound_equal(first.has_lower_bound(), first.lower_bound(), old_tablet_range.has_lower_bound(),
+                                       old_tablet_range.lower_bound()));
+    if (!first_lower_matches) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound != old_tablet_range.lower_bound");
+    }
+    if (first.has_lower_bound() && !first.lower_bound_included()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: first.lower_bound must be inclusive when set");
+    }
+
+    // 3. Last range's upper bound must match the old tablet's upper bound.
+    const auto& last = new_tablet_ranges[new_tablet_ranges.size() - 1];
+    ASSIGN_OR_RETURN(bool last_upper_matches,
+                     tuple_bound_equal(last.has_upper_bound(), last.upper_bound(), old_tablet_range.has_upper_bound(),
+                                       old_tablet_range.upper_bound()));
+    if (!last_upper_matches) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound != old_tablet_range.upper_bound");
+    }
+    if (last.has_upper_bound() && last.upper_bound_included()) {
+        return Status::InvalidArgument("validate_new_tablet_ranges: last.upper_bound must be exclusive when set");
+    }
+
+    // 4. Adjacent ranges must tile exactly: ranges[i].upper == ranges[i+1].lower,
+    //    upper exclusive on the left, lower inclusive on the right.
+    for (int i = 0; i + 1 < new_tablet_ranges.size(); ++i) {
+        const auto& current_range = new_tablet_ranges[i];
+        const auto& next_range = new_tablet_ranges[i + 1];
+        if (!current_range.has_upper_bound() || !next_range.has_lower_bound()) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: gap at boundary {} (interior bounds must be set)", i));
+        }
+        if (current_range.upper_bound_included() || !next_range.lower_bound_included()) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: invalid bound flags at boundary {} "
+                                "(left must be exclusive, right must be inclusive)",
+                                i));
+        }
+        ASSIGN_OR_RETURN(bool tiles, tuple_pb_equal(current_range.upper_bound(), next_range.lower_bound()));
+        if (!tiles) {
+            return Status::InvalidArgument(
+                    fmt::format("validate_new_tablet_ranges: gap or overlap at boundary {} "
+                                "(ranges[i].upper_bound != ranges[i+1].lower_bound)",
+                                i));
+        }
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

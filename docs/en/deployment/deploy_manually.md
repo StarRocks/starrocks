@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to manually deploy a shared-nothing StarRocks cluster where BE nodes handle both storage and computing."
 ---
 
 import ManualPrep from '../_assets/deployment/manual_prep.mdx'

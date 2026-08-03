@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v3.5.0以降、Group Provider で LDAP/Apache Ranger 等の外部システムからユーザーグループ情報を取得・管理します。"
 sidebar_position: 30
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された秒数を日付に加算します。"
 ---
 
 # seconds_add

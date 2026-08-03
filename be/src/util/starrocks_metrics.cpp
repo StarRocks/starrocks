@@ -63,6 +63,10 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
 
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
+
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
@@ -80,7 +84,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
-    REGISTER_STARROCKS_METRIC(delta_writer_pk_preload_duration_us);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
     REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
@@ -122,6 +125,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
     REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_count);
 
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
@@ -278,6 +282,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
     REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
     REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_hit_count);
+    REGISTER_STARROCKS_METRIC(block_cache_miss_count);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,

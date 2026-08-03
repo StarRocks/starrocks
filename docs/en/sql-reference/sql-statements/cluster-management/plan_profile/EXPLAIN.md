@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXPLAIN shows the logical or physical execution plans for a query statement."
 ---
 
 # EXPLAIN

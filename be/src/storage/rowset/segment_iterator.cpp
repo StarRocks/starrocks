@@ -38,6 +38,7 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -111,6 +112,14 @@ public:
     ~SegmentIterator() override = default;
 
     void close() override;
+
+    // Public entry point used by segment_seek_range_to_rowid_range(). The caller
+    // must ensure the segment's short-key index has already been loaded; this
+    // does not touch any other iterator state, so it is safe to invoke before
+    // do_init() / do_get_next().
+    StatusOr<std::optional<Range<>>> resolve_range_to_rowid_range(const SeekRange& range) {
+        return _seek_range_to_rowid_range(range);
+    }
 
 protected:
     Status do_get_next(Chunk* chunk) override;
@@ -2931,6 +2940,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
 }
 
 Status SegmentIterator::_rewrite_predicates() {
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
@@ -3111,10 +3122,19 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
     pred_tree = PredicateTree::create(std::move(new_root));
 }
 
+// Prefer the new double field (which can carry sub-1% values such as 0.5); fall back to the legacy
+// integer field for backward compatibility with an old FE that does not set probability_percent_v2.
+static double sample_probability_percent(const TTableSampleOptions& opts) {
+    if (opts.__isset.probability_percent_v2) {
+        return opts.probability_percent_v2;
+    }
+    return static_cast<double>(opts.probability_percent);
+}
+
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
     size_t rows_per_block = _segment->num_rows_per_block();
     size_t total_rows = _segment->num_rows();
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
 
     auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
@@ -3131,7 +3151,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     int32_t num_data_pages = column_reader->num_data_pages();
     PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
     auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
 
@@ -3149,9 +3169,10 @@ Status SegmentIterator::_apply_data_sampling() {
     RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-    RETURN_IF(_opts.sample_options.probability_percent <= 0, Status::InvalidArgument("probability_percent must > 0"));
+    RETURN_IF(sample_probability_percent(_opts.sample_options) <= 0,
+              Status::InvalidArgument("probability_percent must > 0"));
 
-    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.probability_percent || _opts.sample_options.__isset.probability_percent_v2);
     DCHECK(_opts.sample_options.__isset.random_seed);
     DCHECK(_opts.sample_options.__isset.sample_method);
 
@@ -3272,7 +3293,33 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.segment_rows = num_rows();
 
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
+            // Column-mode partial update rewrites a column into a delta column group
+            // (.cols) file and leaves the base segment untouched, so the base segment's
+            // inverted index still reflects pre-update values. Mirror _apply_bitmap_index:
+            // take the index from the DCG segment when the column has been rewritten, so
+            // the index stays consistent with the data actually returned.
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            } else {
+                std::shared_ptr<TabletIndex> index_meta;
+                RETURN_IF_ERROR(segment_ptr->tablet_schema().get_indexes_for_column(ucid, GIN, index_meta));
+                if (index_meta != nullptr) {
+                    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                    if (imp_type != InvertedImplementType::BUILTIN) {
+                        // Standalone (CLucene) inverted indexes are not produced by the DCG
+                        // writer, and the base segment's copy is stale for this column, so no
+                        // index is served. Ordinary predicates (e.g. equality) then evaluate
+                        // on the fresh column data. MATCH predicates cannot be evaluated
+                        // without an index and fail with an explicit error -- preferable to
+                        // silently filtering on pre-update values. Compaction rewrites the
+                        // base segment and restores index acceleration.
+                        continue;
+                    }
+                }
+            }
+            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(
                     ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
             _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
         }
@@ -3605,6 +3652,41 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
         return new_projection_iterator(schema, seg_iter);
     }
+}
+
+StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
+                                                                          const SeekRange& range,
+                                                                          const LakeIOOptions& lake_io_opts) {
+    if (segment == nullptr) {
+        return Status::InvalidArgument("segment is null");
+    }
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+
+    // Schema is only used by the iterator's constructor; _seek_range_to_rowid_range
+    // picks the right schema from range.lower()/range.upper() on each side.
+    Schema iterator_schema;
+    if (!range.upper().empty()) {
+        iterator_schema = range.upper().schema();
+    } else if (!range.lower().empty()) {
+        iterator_schema = range.lower().schema();
+    } else {
+        // (-inf, +inf): the full segment.
+        return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
+    }
+
+    // SegmentReadOptions::stats is documented as required by ColumnIterator init
+    // (sanity_check() CHECK_NOTNULLs it). SegmentReadOptions::fs is required by
+    // _init_column_iterator_by_cid, which opens a RandomAccessFile on the
+    // segment's file. Supply both from locals — nothing downstream inspects the
+    // accumulated stats here.
+    OlapReaderStatistics local_stats;
+    ASSIGN_OR_RETURN(auto file_system, FileSystem::CreateSharedFromString(segment->file_info().path));
+    SegmentReadOptions read_options;
+    read_options.lake_io_opts = lake_io_opts;
+    read_options.stats = &local_stats;
+    read_options.fs = std::move(file_system);
+    SegmentIterator iterator(segment, iterator_schema, read_options);
+    return iterator.resolve_range_to_rowid_range(range);
 }
 
 } // namespace starrocks

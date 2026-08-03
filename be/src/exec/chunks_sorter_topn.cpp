@@ -749,7 +749,7 @@ void ChunksSorterTopn::_rank_pruning() {
 
     const auto& merged_runs = _merged_runs;
     for (int i = 0; i < merged_runs.num_chunks(); ++i) {
-        if (target_index > merged_runs.at(i).num_rows()) {
+        if (target_index >= merged_runs.at(i).num_rows()) {
             target_index -= merged_runs.at(i).num_rows();
         } else {
             index_in_runs = i;

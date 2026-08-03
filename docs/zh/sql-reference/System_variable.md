@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 系统变量可通过 SET 命令动态设置，支持全局和会话范围的配置。"
 keywords: ['session','variable']
 ---
 
@@ -187,7 +188,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### array_low_cardinality_optimize
 
 * **作用域**: Session
-* **描述**: 控制优化器是否将 ARRAY&lt;VARCHAR&gt; 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 ARRAY&lt;VARCHAR&gt; 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，ARRAY&lt;VARCHAR&gt; 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
+* **描述**: 控制优化器是否将 `ARRAY<VARCHAR>` 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 `ARRAY<VARCHAR>` 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，`ARRAY<VARCHAR>` 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
 * **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.3.0, v3.4.0, v3.5.0
@@ -197,6 +198,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端。无实际作用。
 * 默认值：1
 * 类型：Int
+
+### avro_use_jni_reader
+
+* **作用域**: Session
+* **描述**: 控制 StarRocks 在扫描 Hive 等外部 Catalog 中的 Avro 数据时，是否使用基于 JNI 的 Avro Reader。启用后（`true`），FE 会在 Avro scan range 上设置该会话变量，BE 会优先选择 `HdfsAvroScanner`，而不是原生 Avro 扫描路径。当前该变量主要用于兼容性兜底。
+
+  当前限制：`CHAR(n)` 列在 JNI 与非 JNI Avro Reader 之间并不完全兼容。对于写入 `CHAR(10)` 列的 Avro 值 `Char`，当前原生 Reader 会保留未补空格的值，而不会返回带 6 个尾部空格的 `Char`；JNI Reader 的行为可能不同。为了避免切换 `avro_use_jni_reader` 后结果不一致，当前不建议依赖 `CHAR(n)` 的补空格语义；如条件允许，建议优先使用 `VARCHAR`。
+* **默认值**: `true`
+* **数据类型**: boolean
+* **引入版本**: v4.1.1
 
 ### binary_encoding_format
 
@@ -223,6 +234,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：秒
 * 类型：String
 * 引入版本：v3.1
+
+### blacklist_backup_routing
+
+* **范围**：Session
+* **描述**：在 shared-data（存算分离）模式下，若某次扫描在规划中偏好的计算节点不在本查询当前可使用的计算节点范围内（例如节点宕机或出现在主机黑名单上），则规划器需另选备份计算节点。本变量控制在该候选集合中如何挑选备份节点。`RANDOM` 在候选集中均匀随机选取。`CIRCULAR` 在按 id 排好序的节点环上、从主节点起向后寻找第一个可用候选（确定性、与旧版行为类似）。哪些节点可作为备份还受 `skip_black_list` 影响：默认会排除位于主机黑名单上的节点；`skip_black_list` 为 `true` 时，位于黑名单的节点在集群中仍属可用时，也可能被选为备份。
+
+* **默认值**：`CIRCULAR`
+* **类型**：String
+* **合法取值**：`CIRCULAR`、`RANDOM`
+* **引入版本**：-
 
 ### catalog（3.2.4 及以后）
 
@@ -346,7 +367,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
   * Hive 表中未指定 `compression_codec` 属性。
   * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
-  * `INSERT INTO FILES` 时未设置 `compression` 属性。 
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
@@ -871,6 +892,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.3
 
+### enable_tablet_pre_split
+
+* 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
+* 默认值：true
+* 引入版本：v4.1.0
+
 ### enable_topn_runtime_filter
 
 * 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
@@ -1261,7 +1288,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
   * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
-  * `always`：总是缓存数据。 
+  * `always`：总是缓存数据。
   * `never` 永不缓存数据。
 * 默认值：auto
 * 引入版本：v3.3.2
@@ -1347,7 +1374,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：100
 * 引入版本：v3.0
 
-### resource_group 
+### resource_group
 
 * **描述**: 此会话指定的 resource group
 * **默认值**: ""
@@ -1380,6 +1407,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
+
+### allow_lake_without_partition_filter
+
+* 描述：是否允许对湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）进行无分区过滤条件的查询。当设置为 `false` 时，未包含有效分区过滤条件的查询将被拒绝，以防止意外的全表扫描。
+* 作用域：Session
+* 默认值：`true`
+* 数据类型：Boolean
+* 别名：`allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* 描述：单张湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）允许扫描的最大分区数。设置为 `0` 表示无限制。超出限制时查询将报错。注意：对于增量式枚举分片的 catalog 类型（Iceberg、Delta Lake），分区数限制在 scan-range 分发阶段检查，查询可能在执行中途失败而非被立即拒绝。
+* 作用域：Session
+* 默认值：`0`（无限制）
+* 数据类型：Int
+* 别名：`scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 
@@ -1440,6 +1483,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
 * `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
 * `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+* `STRUCT_CAST_BY_NAME`：在 STRUCT 类型之间进行类型转换时，启用基于名称的字段匹配，而非默认的基于位置的匹配。启用此模式后，源 Struct 中的字段将根据字段名称（不区分大小写）与目标 Struct 中的字段进行匹配，无论它们的声明顺序如何。源 Struct 中存在而目标 Struct 中缺失的字段将被忽略；目标 Struct 中存在而源 Struct 中缺失的字段将被填充为 NULL。此模式同时影响 FE 类型解析（UNION ALL 的通用超类型计算和可转换性检查）以及 BE 转换评估（CastStructExpr 中的运行时字段重新排序）。当对 STRUCT 列执行 UNION ALL 操作时，若各分支中字段的定义顺序不同，此模式尤为有用。
 
 不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
 

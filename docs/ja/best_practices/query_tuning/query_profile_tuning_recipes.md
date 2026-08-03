@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
-keywords: ['profile', 'query']
+description: "症状から根本原因、実証済みの修正までを示す、StarRocks クエリチューニング実践ガイド。"
+keywords: ['profile', 'query', 'チューニング']
 sidebar_position: 40
 ---
 

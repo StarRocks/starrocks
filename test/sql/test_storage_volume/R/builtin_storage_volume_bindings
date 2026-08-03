@@ -1,4 +1,4 @@
--- name: test_builtin_sv_no_lock_leak @cloud
+-- name: test_builtin_sv_no_lock_leak @cloud @sequential
 CREATE STORAGE VOLUME IF NOT EXISTS sv_${uuid0} type = s3 LOCATIONS = ('s3://${oss_bucket}/test_sv_lock_${uuid0}') COMMENT 'lock leak regression test sv' PROPERTIES ("aws.s3.endpoint"="${oss_endpoint}", "aws.s3.region"="${oss_region}", "aws.s3.use_aws_sdk_default_behavior" = "false", "enabled"="true", "aws.s3.access_key" = "${oss_ak}", "aws.s3.secret_key" = "${oss_sk}");
 -- result:
 -- !result

@@ -42,7 +42,7 @@ public class IcebergSnapshotsTable extends MetadataTable {
 
     public static IcebergSnapshotsTable create(String catalogName, String originDb, String originTable) {
         return new IcebergSnapshotsTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()

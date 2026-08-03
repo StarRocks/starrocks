@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "URLからホスト部分を抽出します。"
 ---
 
 # url_extract_host

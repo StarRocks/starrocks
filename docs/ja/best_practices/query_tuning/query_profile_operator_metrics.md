@@ -1,7 +1,8 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks クエリプロファイルから出力される演算子別メトリクスの権威ある参照情報。"
+keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
-keywords: ['profile', 'query']
 ---
 
 # Query Profile Metrics
@@ -249,9 +250,10 @@ Exchange Operator がクエリのボトルネックになる可能性のある�
 | BytesPassThrough | 目的地のノードが現在のノードである場合、データはネットワークを介して送信されず、パススルーデータと呼ばれます。このメトリクスはそのようなパススルーデータのサイズを示します。パススルーは `enable_exchange_pass_through` によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
 | CompressTime | 圧縮時間。 |
-| CompressedBytes | 圧縮されたデータのサイズ。 |
-| OverallThroughput | スループットレート。 |
-| NetworkTime | データパケットの送信にかかった時間（受信後の処理時間を除く）。 |
+| CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
+| CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |
+| OverallThroughput | スループット率。 |
+| NetworkTime | データパケット転送にかかった時間（受信後の処理時間を除く）。 |
 | NetworkBandwidth | 推定ネットワーク帯域幅。 |
 | WaitTime | 送信者キューが満杯のための待機時間。 |
 | OverallTime | 送信プロセス全体の総時間、つまり最初のデータパケットの送信から最後のデータパケットの正しい受信の確認まで。 |

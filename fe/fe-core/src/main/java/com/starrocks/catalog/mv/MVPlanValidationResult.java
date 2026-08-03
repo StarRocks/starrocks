@@ -36,16 +36,32 @@ public class MVPlanValidationResult {
         }
     }
 
+    public enum Reason {
+        OK,
+        MV_INACTIVE,
+        QUERY_REWRITE_DISABLED,
+        UNSUPPORTED_DEFINITION,
+        // reserved; not yet produced
+        STALE,
+        UNKNOWN
+    }
+
     private final Status status;
+    private final Reason reasonCode;
     private final String reason;
 
-    public MVPlanValidationResult(Status status, String message) {
+    public MVPlanValidationResult(Status status, Reason reasonCode, String message) {
         this.status = status;
+        this.reasonCode = reasonCode;
         this.reason = message != null ? message : "";
     }
 
     public Status getStatus() {
         return status;
+    }
+
+    public Reason getReasonCode() {
+        return reasonCode;
     }
 
     public String getReason() {
@@ -57,21 +73,30 @@ public class MVPlanValidationResult {
     }
 
     public static MVPlanValidationResult valid() {
-        return new MVPlanValidationResult(Status.VALID, null);
+        return new MVPlanValidationResult(Status.VALID, Reason.OK, null);
+    }
+
+    public static MVPlanValidationResult invalid(Reason reasonCode, String message) {
+        return new MVPlanValidationResult(Status.INVALID, reasonCode, message);
     }
 
     public static MVPlanValidationResult invalid(String message) {
-        return new MVPlanValidationResult(Status.INVALID, message);
+        return invalid(Reason.UNSUPPORTED_DEFINITION, message);
+    }
+
+    public static MVPlanValidationResult unknown(Reason reasonCode, String message) {
+        return new MVPlanValidationResult(Status.UNKNOWN, reasonCode, message);
     }
 
     public static MVPlanValidationResult unknown(String message) {
-        return new MVPlanValidationResult(Status.UNKNOWN, message);
+        return unknown(Reason.UNKNOWN, message);
     }
 
     @Override
     public String toString() {
         return "MVPlanValidationResult{" +
                 "status=" + status +
+                ", reasonCode=" + reasonCode +
                 ", reason='" + reason + '\'' +
                 '}';
     }

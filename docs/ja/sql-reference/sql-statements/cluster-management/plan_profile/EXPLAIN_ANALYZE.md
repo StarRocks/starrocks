@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXPLAIN ANALYZE は、指定された SQL ステートメントを実行し、そのステートメントの Query Profile を表示します。"
 ---
 
 # EXPLAIN ANALYZE

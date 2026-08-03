@@ -28,7 +28,7 @@ void PipelineTimerTask::waitUtilFinished() {
     _latch.wait();
 }
 
-void PipelineTimerTask::unschedule(PipelineTimer* timer) {
+void PipelineTimerTask::unschedule_and_wait(PipelineTimer* timer) {
     int rc = timer->unschedule(this);
     if (rc == 1) {
         waitUtilFinished();

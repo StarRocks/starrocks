@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to upgrade a StarRocks cluster to a newer version."
 ---
 
 # Upgrade StarRocks

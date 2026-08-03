@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SMALLINT is a 2-byte signed integer."
 ---
 
 # SMALLINT

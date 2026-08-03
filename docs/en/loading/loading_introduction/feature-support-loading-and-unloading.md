@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
+description: "Reference for file format, data source, and feature support across StarRocks data loading and unloading methods."
 ---
 
 # Feature Support: Data Loading and Unloading

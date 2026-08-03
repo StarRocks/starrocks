@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 ---
 
@@ -272,6 +273,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 您使用的对象存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS、Azure Blob（v3.1.1 起支持）、Azure Data Lake Storage Gen2（v3.4.1 起支持）、Google Storage（带原生 SDK，v3.5.1 起支持）以及与 S3 协议兼容的对象存储系统（如 AWS S3 和 MinIO）中。有效值：`S3`（默认）、`HDFS`、`AZBLOB`、`ADLS2` 和 `GS`。如果您将此参数指定为 `S3`，则必须添加以 `aws_s3` 为前缀的参数。如果您将此参数指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的参数。如果您将此参数指定为 `ADLS2`，则必须添加以 `azure_adls2` 为前缀的参数。如果您将此参数指定为 `GS`，则必须添加以 `gcp_gcs` 为前缀的参数。如果您将此参数指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
 - 引入版本: -
 
+### `enable_admin_skip_committed_txn`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用 `ADMIN SKIP COMMITTED TRANSACTION` 语句。值为 `false` 时该语句会被拒绝并报错。这是面向运维的应急通道，用于解除存算分离（lake）表上某个已 `COMMITTED` 但 publish 卡死的事务的阻塞；卡死事务的数据贡献会被丢弃，但分区可见版本仍会通过一次"no-op publish"（写出一份不含该事务数据变更的新元数据文件）正常推进。仅支持 `file_bundling=true` 的 lake 表；仅支持导入和 lake-compaction 类型事务（alter / schema change 暂不支持）。仅在运维需要手动解除卡死事务时打开，使用完毕后请重新关闭，避免被误用。
+- 引入版本: -
+
 ### `enable_load_volume_from_conf`
 
 - 默认值: false
@@ -487,6 +497,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- 默认值: 3000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 该阈值用于控制 `PublishVersionDaemon` 在分区发布耗时超过此值时，以 WARN 级别打印各阶段耗时明细（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）。在线上集群排查发布延迟时，可调小该值以捕获亚秒级抖动；可调大该值以屏蔽常规的、可接受的慢发布。在默认值下行为无变化。
+- 引入版本: v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - 默认值: false
@@ -614,6 +633,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（存算分离）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `lake_publish_version_max_threads` 的线程池大小影响。
 - 引入版本: v3.2.0
+
+### `lake_enable_batch_publish_multi_table`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
+- 引入版本: v4.1.5
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -1012,6 +1040,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 true 时，新创建的 JDBC Catalog 将默认设置元数据缓存的过期时间。
 - 引入版本: -
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- 默认值: 600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存的后台刷新间隔。超过此间隔后，立即返回旧值，同时在后台异步重新加载。可通过 Catalog 属性 `jdbc_row_count_cache_refresh_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- 默认值: 1200
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存条目的强制淘汰 TTL。在此时间窗口内未访问的条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。可通过 Catalog 属性 `jdbc_row_count_cache_expire_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_max_size`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 每个 JDBC Catalog 的行数缓存最大条目数。限制表数量较多的 Catalog 的内存增长。可通过 Catalog 属性 `jdbc_row_count_cache_max_size` 按 Catalog 覆盖。
+- 引入版本: -
+
 ### `jdbc_minimum_idle_connections`
 
 - 默认值: 1
@@ -1405,5 +1460,5 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在物化视图创建和 CTAS 操作中，是否更倾向于为固定长度的 varchar 列使用 string 类型。
+- 描述: 在物化视图创建中，是否更倾向于为固定长度的 char/varchar 列使用 string 类型。
 - 引入版本: v4.0.0

@@ -159,7 +159,17 @@ public class QueryAnalyzer {
      * (e.g. JDBC).
      */
     public void analyzeExternalTablesOnly(StatementBase node) {
-        new ExternalTablesOnlyVisitor().process(node);
+        analyzeExternalTablesOnly(node, false);
+    }
+
+    /**
+     * Pre-resolve external tables without touching internal table metadata.
+     * When {@code refreshFilesystemExternalTables} is true, filesystem-backed external tables referenced from an
+     * INSERT query are refreshed before lock acquisition so connector/filesystem metadata I/O stays out of the
+     * internal meta-lock critical path.
+     */
+    public void analyzeExternalTablesOnly(StatementBase node, boolean refreshFilesystemExternalTables) {
+        new ExternalTablesOnlyVisitor(refreshFilesystemExternalTables).process(node);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -324,8 +334,19 @@ public class QueryAnalyzer {
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         // for recursive cte analyze
         private String currentRecursiveCTE = null;
+        // Fallback for cyclic view detection when there is no session; the shared path lives on the
+        // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
+        // scalar/IN/EXISTS subquery spawns.
+        private final Set<String> localViewExpansionStack = new HashSet<>();
 
         public Visitor() {
+        }
+
+        // Stable keys of the views currently being expanded on the resolution path. Shared via the
+        // session so a cycle routed through a subquery (which gets its own QueryAnalyzer/Visitor) is
+        // still observed; only when session is null do we fall back to the per-Visitor set.
+        private Set<String> viewExpansionStack() {
+            return session != null ? session.getViewExpansionPath() : localViewExpansionStack;
         }
 
         public Scope process(ParseNode node, Scope scope) {
@@ -691,6 +712,7 @@ public class QueryAnalyzer {
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
                 }
+                table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
                 Relation r;
                 if (table instanceof View) {
@@ -698,20 +720,7 @@ public class QueryAnalyzer {
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
 
-                    // If tableRelation is an object that needs to be rewritten by policy,
-                    // then when it is changed to ViewRelation, both the view and the table
-                    // after the view is parsed also need to inherit this rewriting logic.
-                    if (tableRelation.isNeedRewrittenByPolicy()) {
-                        viewRelation.setNeedRewrittenByPolicy(true);
-
-                        new AstTraverser<Void, Void>() {
-                            @Override
-                            public Void visitRelation(Relation relation, Void context) {
-                                relation.setNeedRewrittenByPolicy(true);
-                                return null;
-                            }
-                        }.visit(queryStatement);
-                    }
+                    inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -722,6 +731,7 @@ public class QueryAnalyzer {
                             connectorView.getType());
                     view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
+                    inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
@@ -767,6 +777,25 @@ public class QueryAnalyzer {
                 }
                 return relation;
             }
+        }
+
+        // If tableRelation is an object that needs to be rewritten by policy,
+        // then when it is changed to ViewRelation, both the view and the table
+        // after the view is parsed also need to inherit this rewriting logic.
+        private void inheritPolicyRewriteFlag(TableRelation tableRelation, ViewRelation viewRelation,
+                                              QueryStatement queryStatement) {
+            if (!tableRelation.isNeedRewrittenByPolicy()) {
+                return;
+            }
+
+            viewRelation.setNeedRewrittenByPolicy(true);
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(queryStatement);
         }
 
         // convert FileTableFunctionRelation to ValuesRelation if only list files
@@ -1413,6 +1442,14 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            // Views have no CREATE-time cycle check (ALTER VIEW can close a cycle), so guard
+            // here to avoid unbounded recursion -> StackOverflowError during analysis.
+            String viewKey = viewExpansionKey(node);
+            Set<String> viewExpansionStack = viewExpansionStack();
+            if (!viewExpansionStack.add(viewKey)) {
+                throw new CyclicViewException(
+                        "View " + node.getName() + " contains a cycle in its definition");
+            }
             boolean isRelationAliasCaseInSensitive = false;
             if (ConnectContext.get() != null) {
                 isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
@@ -1424,10 +1461,15 @@ public class QueryAnalyzer {
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (CyclicViewException e) {
+                // Let the cycle error surface as-is; re-wrapping it at every enclosing view would
+                // bury the real reason behind a misleading "references invalid table(s)" prefix.
+                throw e;
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
+                viewExpansionStack.remove(viewKey);
                 if (ConnectContext.get() != null && node.getView().isHiveView()) {
                     ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
                 }
@@ -1447,7 +1489,7 @@ public class QueryAnalyzer {
                 // view created in previous use originField.getOriginExpression().type as column
                 // types in its schema, it is incorrect, so use originField.type instead.
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
-                        originField.getOriginExpression());
+                        originField.getOriginExpression(), true, originField.isNullable());
                 fields.add(field);
             }
 
@@ -1463,6 +1505,21 @@ public class QueryAnalyzer {
             collector.process(node, viewScope);
 
             return viewScope;
+        }
+
+        // Returns a key that is stable across re-resolutions of the same logical view, for cycle
+        // detection. Internal (olap) views carry a persistent catalog id, so the id is used.
+        // Connector views (hive/iceberg/paimon) are rebuilt with a freshly generated id on every
+        // metadata lookup (see IcebergApiConverter.toView), so their id changes on each expansion
+        // and cannot detect re-entry; their fully-qualified name is stable instead, because
+        // connector view bodies qualify their table references (ConnectorView.formatRelations).
+        private String viewExpansionKey(ViewRelation node) {
+            View view = node.getView();
+            if (view.isOlapView()) {
+                return "id:" + view.getId();
+            }
+            TableName name = node.getName();
+            return "name:" + (name == null ? view.getName() : name.toString());
         }
 
         @Override
@@ -1838,6 +1895,11 @@ public class QueryAnalyzer {
      */
     private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
         private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
+        private final boolean refreshFilesystemExternalTables;
+
+        private ExternalTablesOnlyVisitor(boolean refreshFilesystemExternalTables) {
+            this.refreshFilesystemExternalTables = refreshFilesystemExternalTables;
+        }
 
         public void process(StatementBase node) {
             visit(node);
@@ -1913,6 +1975,9 @@ public class QueryAnalyzer {
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
                 Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
                 if (table != null) {
+                    if (refreshFilesystemExternalTables && table.isExternalTableWithFileSystem()) {
+                        table = refreshFilesystemExternalTable(catalogName, dbName, tableName, table);
+                    }
                     // Validate constraints similar to resolveTable
                     PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
                     if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
@@ -1924,6 +1989,13 @@ public class QueryAnalyzer {
                 // The main visitor will handle it correctly.
             }
             return null;
+        }
+
+        private Table refreshFilesystemExternalTable(String catalogName, String dbName,
+                                                     TableName tableName, Table resolvedTable) {
+            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 
         @Override

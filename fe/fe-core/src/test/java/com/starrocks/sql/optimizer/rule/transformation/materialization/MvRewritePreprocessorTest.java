@@ -24,6 +24,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -59,6 +60,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -769,7 +771,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             MaterializedView mv = getMv(DB_NAME, mvName);
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
             String status = mv.getQueryRewriteStatus();
-            Assertions.assertTrue(status.equalsIgnoreCase("UNKNOWN: MV plan is not in cache, valid check is unknown"));
+            Assertions.assertEquals("UNKNOWN", status);
         });
     }
 
@@ -1665,6 +1667,112 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     int expectedOrder = Long.compare(id1, id2);
                     Assertions.assertEquals(expectedOrder, compareResult);
                 });
+    }
+
+    @Test
+    public void testRewriteRejectedForIncrementalMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_imv distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_imv");
+                    // IVMAnalyzer rejects INCREMENTAL on non-Iceberg, so set the property directly.
+                    mv.getTableProperty().setMvRefreshMode("incremental");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                            result.getReasonCode());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=INCREMENTAL"),
+                            "expected reason to mention INCREMENTAL, got: " + result.getReason());
+                });
+    }
+
+    @Test
+    public void testRewriteRejectedForAutoMv() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_rewrite_auto distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_rewrite_auto");
+                    mv.getTableProperty().setMvRefreshMode("auto");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                            result.getReasonCode());
+                    Assertions.assertTrue(result.getReason().contains("refresh_mode=AUTO"),
+                            "expected reason to mention AUTO, got: " + result.getReason());
+                });
+    }
+
+    @Test
+    public void testValidationReasonInactive() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_reason_inactive distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_reason_inactive");
+                    mv.setInactiveAndReason("manually set inactive");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.MV_INACTIVE, result.getReasonCode());
+                });
+    }
+
+    @Test
+    public void testValidationReasonQueryRewriteDisabled() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_reason_disabled distributed by random " +
+                        "properties('enable_query_rewrite'='false') " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_reason_disabled");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.INVALID, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.QUERY_REWRITE_DISABLED,
+                            result.getReasonCode());
+                });
+    }
+
+    @Test
+    public void testValidationReasonOk() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_reason_ok distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_reason_ok");
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), true, false,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.VALID, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.OK, result.getReasonCode());
+                });
+    }
+
+    @Test
+    public void testValidationReasonUnknownWhenPlanNotCached() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_reason_unknown distributed by random " +
+                        "as select v1, sum(v3) as total from t0 group by v1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "test_reason_unknown");
+                    CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+                    MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(
+                            connectContext, mv, ImmutableSet.of(), false, true,
+                            connectContext.getSessionVariable().getOptimizerExecuteTimeout());
+                    Assertions.assertEquals(MVPlanValidationResult.Status.UNKNOWN, result.getStatus());
+                    Assertions.assertEquals(MVPlanValidationResult.Reason.UNKNOWN, result.getReasonCode());
+                });
+    }
+
+    @Test
+    public void testQueryRewriteStillFiresAfterReasonRefactor() throws Exception {
+        createAndRefreshMv("create materialized view test_rewrite_guard distributed by random " +
+                "as select v1, sum(v3) as total from t0 group by v1");
+        String plan = getFragmentPlan("select v1, sum(v3) from t0 group by v1");
+        PlanTestBase.assertContains(plan, "test_rewrite_guard");
+        dropMv(DB_NAME, "test_rewrite_guard");
     }
 
     @Test

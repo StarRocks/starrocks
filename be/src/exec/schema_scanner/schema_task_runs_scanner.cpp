@@ -40,7 +40,8 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
-        {"PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true}};
+        {"PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"TASK_SOURCE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -332,6 +333,20 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     }
                 } else {
                     nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 18: {
+            // TASK_SOURCE
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(18);
+                if (task_run_info.__isset.task_source) {
+                    const std::string* str = &task_run_info.task_source;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
                 }
             }
             break;

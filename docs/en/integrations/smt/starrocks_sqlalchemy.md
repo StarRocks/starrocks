@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Schema management and migration
+description: "How to manage StarRocks schemas using SQLAlchemy, Alembic, and sqlacodegen for schema migration."
 sidebar_label: Schema Migration
 ---
 

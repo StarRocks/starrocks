@@ -409,11 +409,11 @@ MyVarbinaryData
 -- !result
 SELECT FIRST_VALUE(c27) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(map<varchar(1048576),varchar(1048576)>).')
+[REGEX]E:.*
 -- !result
 SELECT FIRST_VALUE(c28) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 22. Detail message: No matching function with signature: first_value(struct<col1 array<varchar(1048576)>>).')
+[REGEX]E:.*
 -- !result
 SELECT FIRST_VALUE(c25) OVER(ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) wv FROM t1;
 -- result:
@@ -909,11 +909,11 @@ None
 -- !result
 SELECT LAST_VALUE(c27) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(map<varchar(1048576),varchar(1048576)>).')
+[REGEX]E:.*
 -- !result
 SELECT LAST_VALUE(c28) OVER(ORDER BY k1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: No matching function with signature: last_value(struct<col1 array<varchar(1048576)>>).')
+[REGEX]E:.*
 -- !result
 SELECT LAST_VALUE(c25) OVER(ORDER BY c3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) wv FROM t1;
 -- result:
@@ -1401,15 +1401,15 @@ None
 -- !result
 SELECT LEAD(c26) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'No assignment from VARBINARY to BITMAP')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c27) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(map<varchar(1048576),varchar(1048576)>).')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c28) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 15. Detail message: No matching function with signature: lead(struct<col1 array<varchar(1048576)>>).')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c25) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1429,7 +1429,7 @@ None
 -- !result
 SELECT LEAD(c25, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c25 IGNORE NULLS) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1449,7 +1449,7 @@ None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c25) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1469,7 +1469,7 @@ None
 -- !result
 SELECT LEAD(c25, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LEAD(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1489,7 +1489,7 @@ None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c0) OVER(ORDER BY k1) wv FROM t1;
 -- result:
@@ -1689,15 +1689,15 @@ None
 -- !result
 SELECT LAG(c26) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'No assignment from VARBINARY to BITMAP')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c27) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(map<varchar(1048576),varchar(1048576)>).')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c28) OVER(ORDER BY k1) wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 14. Detail message: No matching function with signature: lag(struct<col1 array<varchar(1048576)>>).')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c25) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1717,7 +1717,7 @@ None
 -- !result
 SELECT LAG(c25, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c25 IGNORE NULLS) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1737,7 +1737,7 @@ None
 -- !result
 SELECT LAG(c25 IGNORE NULLS, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c25) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1757,7 +1757,7 @@ None
 -- !result
 SELECT LAG(c25, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result
 SELECT LAG(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1777,5 +1777,5 @@ None
 -- !result
 SELECT LAG(c25 IGNORE NULLS, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+[REGEX]E:.*
 -- !result

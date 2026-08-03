@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "The StarRocks Information Schema is a database within each StarRocks instance."
 ---
 
 # Information Schema

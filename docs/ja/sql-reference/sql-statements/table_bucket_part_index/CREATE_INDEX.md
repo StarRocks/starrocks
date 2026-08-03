@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Bitmap、N-Gram Bloom Filter、Full-Text 逆索引、Vector インデックスを作成します。"
 ---
 
 # CREATE INDEX
@@ -57,10 +58,10 @@ PROPERTIES (
 );
 ```
 
-`sales_records` の `item_id` 列にビットマップインデックス `index` を作成します。
+`sales_records` の `item_id` 列にビットマップインデックス `index3` を作成します。
 
 ```SQL
-CREATE INDEX index ON sales_records (item_id) USING BITMAP COMMENT '';
+CREATE INDEX index3 ON sales_records (item_id) USING BITMAP COMMENT '';
 ```
 
 ## 関連する SQL

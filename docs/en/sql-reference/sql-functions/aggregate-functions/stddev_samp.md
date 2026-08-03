@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the sample standard deviation of an expression."
 ---
 
 # stddev_samp

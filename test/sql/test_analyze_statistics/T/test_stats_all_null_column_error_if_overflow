@@ -1,0 +1,30 @@
+-- name: test_stats_all_null_column_error_if_overflow @sequential
+ori_sql_mode=select @@GLOBAL.sql_mode;
+set global sql_mode = 'ERROR_IF_OVERFLOW';
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+CREATE TABLE `all_null_decimal` (
+  `k1` int,
+  `c1` decimal(20,8)
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO all_null_decimal VALUES (1, null), (2, null), (3, null);
+analyze table all_null_decimal;
+-- an all-NULL decimal column persists empty-string min/max into the stats table
+select column_name, length(`max`), length(`min`) from default_catalog._statistics_.column_statistics where table_name='analyze_test_${uuid0}.all_null_decimal' and column_name='c1';
+-- loading these stats back must not fail even when the internal statistics session
+-- inherits ERROR_IF_OVERFLOW from the global sql_mode (cast('' as decimal) would throw)
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait column stats cache load under ERROR_IF_OVERFLOW"}
+  result=explain costs select c1 from all_null_decimal;
+  CHECK: re.search("c1-->.*ESTIMATE", ${result}) != None
+} END LOOP
+set global sql_mode = '${ori_sql_mode}';
+drop database analyze_test_${uuid0};
+
+CLEANUP {
+    set global sql_mode = '${ori_sql_mode}';
+    drop database if exists analyze_test_${uuid0};
+} END CLEANUP

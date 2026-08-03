@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "schemataはデータベースに関する情報を提供します。"
 ---
 
 # schemata

@@ -212,6 +212,8 @@ vectorized_functions = [
     [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
     [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
     [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10359, '__iceberg_transform_timestamptz_bucket', True, False, 'INT', ['DATETIME', 'INT'],
+     'MathFunctions::iceberg_bucket_timestamptz_datetime'],
     [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
@@ -657,11 +659,19 @@ vectorized_functions = [
 
     [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
     [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50622, '__iceberg_transform_timestamptz_year', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime'],
     [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
     [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50632, '__iceberg_transform_timestamptz_month', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime'],
     [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
     [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50642, '__iceberg_transform_timestamptz_day', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime'],
     [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
+    [50651, '__iceberg_transform_timestamptz_hour', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -808,7 +818,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', False, False, 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array'],
     [90600, 'bitmap_max', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max'],
     [90700, 'bitmap_min', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min'],
-    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap'],
+    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap',
+     'BitmapFunctions::base64_to_bitmap_prepare', 'BitmapFunctions::base64_to_bitmap_close'],
     [90801, 'bitmap_to_base64', False, True, 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64'],
     [90900, 'array_to_bitmap', False, False, 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap'],
     [91000, 'sub_bitmap', False, False, 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap'],
@@ -838,6 +849,9 @@ vectorized_functions = [
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
+    [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
+    [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",

@@ -177,9 +177,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
+            rowset->add_segment_metas()->set_filename(file.path);
         }
 
         writer->close();

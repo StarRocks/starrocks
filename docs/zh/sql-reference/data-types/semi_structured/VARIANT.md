@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "VARIANT 类型仅支持 Iceberg Catalog 中的表。"
 ---
 
 # VARIANT
@@ -8,23 +9,23 @@ displayed_sidebar: docs
 VARIANT 类型仅支持 Iceberg Catalog 中的表，不支持 StarRocks 原生表。
 :::
 
-自 v4.1 起,StarRocks 支持 VARIANT 数据类型,用于查询 Parquet 格式的 Iceberg 表中的半结构化数据。本文介绍 VARIANT 的基本概念,以及 StarRocks 如何查询 VARIANT 类型数据并通过 VARIANT 函数进行处理。
+从 v4.1 版本起，StarRocks 支持 VARIANT 数据类型，用于查询 Parquet 格式的 Iceberg 表中的半结构化数据。本文介绍 VARIANT 的基本概念，以及 StarRocks 如何查询 VARIANT 类型数据并通过 VARIANT 函数对其进行处理。
 
 ## 什么是 VARIANT
 
-VARIANT 是一种半结构化数据类型,可以存储不同数据类型的值,包括基本类型(整数、浮点数、字符串、布尔值、日期、时间戳)和复杂类型(结构体、映射、数组)。VARIANT 数据以二进制格式编码,以实现高效的存储和查询。
+VARIANT 是一种半结构化数据类型，可以存储不同数据类型的值，包括基本类型（整数、浮点数、字符串、布尔值、日期、时间戳）和复杂类型（结构体、映射、数组）。VARIANT 数据以二进制格式编码，以实现高效的存储和查询。
 
-VARIANT 类型在处理来自 Apache Iceberg 表的数据时特别有用,这些表使用带有 variant 编码的 Parquet 格式,允许灵活的模式演化和异构数据的高效存储。
+VARIANT 类型在处理使用 Parquet 格式并采用 variant 编码的 Apache Iceberg 表数据时尤为有用，它支持灵活的 Schema 演进以及异构数据的高效存储。
 
-有关 Parquet variant 编码格式的更多信息,请参阅 [Parquet Variant 编码规范](https://github.com/apache/parquet-format/blob/master/VariantEncoding.md)。
+有关 Parquet variant 编码格式的更多信息，请参阅[Parquet Variant 编码规范](https://github.com/apache/parquet-format/blob/master/VariantEncoding.md)。
 
 ## 使用 VARIANT 数据
 
 ### 从 Iceberg 表查询 VARIANT 类型数据
 
-StarRocks 支持从以 Parquet 格式存储的 Iceberg 表中查询 VARIANT 类型数据。查询使用 Parquet variant 编码的 Iceberg 表时,会自动识别 VARIANT 列。
+StarRocks 支持从以 Parquet 格式存储的 Iceberg 表中查询 VARIANT 类型数据。在查询使用 Parquet variant 编码的 Iceberg 表时，VARIANT 列会被自动识别。
 
-查询包含 VARIANT 列的 Iceberg 表示例:
+查询包含 VARIANT 列的 Iceberg 表示例：
 
 ```SQL
 -- 查询包含 VARIANT 列的表
@@ -34,11 +35,11 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-### 从 VARIANT 数据提取值
+### 从 VARIANT 数据中提取值
 
-StarRocks 提供了多个函数来从 VARIANT 数据中提取类型化的值。
+StarRocks 提供了多个函数，用于从 VARIANT 数据中提取带类型的值。
 
-示例 1:使用类型化的 getter 函数提取基本值。
+示例 1：使用带类型的 getter 函数提取基本类型值。
 
 ```SQL
 SELECT
@@ -49,7 +50,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-示例 2:使用 JSON 路径表达式导航嵌套结构。
+示例 2：使用 JSON 路径表达式导航嵌套结构。
 
 ```SQL
 SELECT
@@ -59,7 +60,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-示例 3:访问数组元素。
+示例 3：访问数组元素。
 
 ```SQL
 SELECT
@@ -68,7 +69,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-示例 4:查询嵌套的 variant 数据并返回 VARIANT 类型。
+示例 4：查询嵌套 variant 数据并返回 VARIANT 类型。
 
 ```SQL
 SELECT
@@ -77,7 +78,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-示例 5:检查 VARIANT 值的类型。
+示例 5：检查 VARIANT 值的类型。
 
 ```SQL
 SELECT
@@ -88,7 +89,7 @@ FROM iceberg_catalog.db.table_with_variants;
 
 ### 将 JSON 转换为 VARIANT
 
-StarRocks 支持将 JSON 值转换为 VARIANT。如果输入是 STRING，请先转换为 JSON。
+StarRocks 支持将 JSON 值转换为 VARIANT。如果输入为 STRING，请先将其转换为 JSON。
 
 ```SQL
 SELECT
@@ -103,7 +104,7 @@ FROM db.table_with_json;
 
 ### 将 VARIANT 数据转换为 SQL 类型
 
-您可以使用 CAST 函数将 VARIANT 数据转换为标准 SQL 类型:
+您可以使用 CAST 函数将 VARIANT 数据转换为标准 SQL 类型：
 
 ```SQL
 SELECT
@@ -114,7 +115,7 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
-复杂类型也可以从 VARIANT 转换:
+复杂类型也可以从 VARIANT 进行转换：
 
 ```SQL
 SELECT
@@ -126,50 +127,50 @@ FROM iceberg_catalog.db.table_with_variants;
 
 ### 将 SQL 类型转换为 VARIANT
 
-您可以将 SQL 值转换为 VARIANT。支持的输入类型包括 BOOLEAN、整数类型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME，以及复杂类型（ARRAY、MAP、STRUCT）。对于 MAP，编码时会将键转换为字符串。HLL、BITMAP、PERCENTILE 和 VARBINARY 暂不支持。
+您可以将 SQL 值转换为 VARIANT。支持的输入类型包括 BOOLEAN、整数类型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME 以及复杂类型（ARRAY、MAP、STRUCT）。对于 MAP，键在编码时会被转换为字符串。不支持 HLL、BITMAP、PERCENTILE 和 VARBINARY 等类型。
 
 ```SQL
 SELECT
     CAST(123 AS VARIANT) AS v_int,
     CAST(3.14 AS VARIANT) AS v_double,
-    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST(CAST('12.34' AS DECIMAL(10, 2)) AS VARIANT) AS v_decimal,
     CAST('hello' AS VARIANT) AS v_string,
     CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
 ```
 
 ## VARIANT 函数
 
-VARIANT 函数可用于查询和提取 VARIANT 列中的数据。有关详细信息,请参阅各个函数的文档:
+VARIANT 函数可用于查询和提取 VARIANT 列中的数据。有关详细信息，请参阅各函数文档：
 
-- [variant_query](../../sql-functions/variant-functions/variant_query.md):查询 VARIANT 值中的路径并返回 VARIANT
-- [get_variant](../../sql-functions/variant-functions/get_variant.md):从 VARIANT 提取类型化的值(整数、布尔值、双精度浮点数、字符串)
-- [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md):返回 VARIANT 值的类型名称
+- [variant_query](../../sql-functions/variant-functions/variant_query.md)：查询 VARIANT 值中的路径并返回 VARIANT
+- [get_variant](../../sql-functions/variant-functions/get_variant.md)：从 VARIANT 中提取带类型的值（int、bool、double、string）
+- [variant_typeof](../../sql-functions/variant-functions/variant_typeof.md)：返回 VARIANT 值的类型名称
 
 ## VARIANT 路径表达式
 
-VARIANT 函数使用 JSON 路径表达式来导航数据结构。路径语法类似于 JSON 路径:
+VARIANT 函数使用 JSON 路径表达式来导航数据结构。路径语法与 JSON 路径类似：
 
 - `$` 表示 VARIANT 值的根
 - `.` 用于访问对象字段
-- `[index]` 用于访问数组元素(基于 0 的索引)
-- 包含特殊字符(如点)的字段名可以用引号括起来:`$.\"field.name\"`
+- `[index]` 用于访问数组元素（从 0 开始索引）
+- 包含特殊字符（如点号）的字段名可以加引号：`$."field.name"`
 
-路径表达式示例:
+路径表达式示例：
 
 ```plaintext
-$                      -- 根元素
-$.field                -- 对象字段访问
-$.nested.field         -- 嵌套字段访问
-$.\"field.with.dots\"    -- 带引号的字段名
-$[0]                   -- 第一个数组元素
-$.array[1]             -- 数组字段的第二个元素
-$.users[0].name        -- 嵌套数组访问
-$.config[\"key\"]        -- Map 风格访问
+$                      -- Root element
+$.field                -- Object field access
+$.nested.field         -- Nested field access
+$."field.with.dots"    -- Quoted field name
+$[0]                   -- First array element
+$.array[1]             -- Second element of array field
+$.users[0].name        -- Nested array access
+$.config["key"]        -- Map-style access
 ```
 
 ## 数据类型转换
 
-当从带有 variant 编码的 Parquet 文件读取数据时,支持以下类型转换:
+从具有 variant 编码的 Parquet 文件读取数据时，支持以下类型转换：
 
 | Parquet Variant 类型 | StarRocks VARIANT 类型 |
 | -------------------- | ------------ |
@@ -184,10 +185,10 @@ $.config[\"key\"]        -- Map 风格访问
 | MAP | Object |
 | ARRAY | Array |
 
-## 限制和注意事项
+## 限制与注意事项
 
-- VARIANT 类型支持从带有 variant 编码的 Parquet 格式 Iceberg 表中读取数据，并支持通过 StarRocks 文件写入器写出 Parquet 文件（未分片的 variant 编码）。
+- VARIANT 支持从 Parquet 格式的 Iceberg 表中读取具有 variant 编码的数据，以及使用 StarRocks 文件写入器写入 Parquet 文件（非分片 variant 编码）。
 - VARIANT 值的大小限制为 16 MB。
-- 当前仅支持读写未分片的 variant 值。
-- VARIANT 可通过 JSON 值或支持的 SQL 类型（包括 ARRAY、MAP、STRUCT）转换生成。
+- 目前读写均仅支持非分片 variant 值。
+- VARIANT 可通过从 JSON 值或支持的 SQL 类型（包括 ARRAY、MAP 和 STRUCT）进行类型转换来创建。
 - 嵌套结构的最大深度取决于底层 Parquet 文件结构。

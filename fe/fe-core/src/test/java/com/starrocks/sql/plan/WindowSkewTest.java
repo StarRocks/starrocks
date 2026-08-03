@@ -284,7 +284,7 @@ class WindowSkewTest extends PlanTestBase {
     void testWindowWithComplexPartition() throws Exception {
         OlapTable table = getOlapTable("window_skew_table");
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
-        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.2).build();
 
         setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);

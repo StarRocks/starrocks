@@ -35,6 +35,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/integral_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types_fwd_decl.h"
@@ -229,6 +230,7 @@ StatusOr<ChunkPtr> LookUpOperator::pull_chunk(RuntimeState* state) {
 Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
     for (int32_t i = 0; i < _max_io_tasks; i++) {
         auto processor = _processors[i];
+        int32_t driver_id = CurrentThread::current().get_driver_id();
 
         auto lookup_task_ctx = std::make_shared<LookUpTaskContext>();
         bool is_running = processor->is_running();
@@ -249,8 +251,11 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
             task.priority = OlapScanNode::compute_priority(_submit_io_task_counter->double_value());
             task.task_group = down_cast<const LookUpOperatorFactory*>(_factory)->io_task_group();
             task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
-            task.work_function = [wp = _query_ctx, this, state, idx = i, create_ts = MonotonicNanos()](auto& ctx) {
+            task.work_function = [wp = _query_ctx, this, state, idx = i, driver_id = driver_id,
+                                  create_ts = MonotonicNanos()](auto& ctx) {
                 if (auto sp = wp.lock()) {
+                    SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     auto& processor = _processors[idx];
                     [[maybe_unused]] int64_t start_time = MonotonicNanos();
                     DeferOp defer([&] {

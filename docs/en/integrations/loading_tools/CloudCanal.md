@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use BladePipe to replicate data in real time from databases and message queues into StarRocks."
 ---
 
 # BladePipe
@@ -30,13 +31,13 @@ BladePipe presents a visualized management interface, allowing you to easily cre
 
 :::info
 
-For more information on supported functions and parameter settings, refer to [BladePipe Connections](https://doc.bladepipe.com/dataMigrationAndSync/connection/mysql2?target=StarRocks).
+For more information on supported functions and parameter settings, refer to [BladePipe Connections](https://www.bladepipe.com/docs/dataMigrationAndSync/connection/mysql2/?target=StarRocks).
 
 :::
 
 ## Installation
 
-Follow the instructions in [Install BladePipe Worker (Docker)](https://doc.bladepipe.com/productOP/docker/install_worker_docker) or [Install BladePipe Worker (Binary)](https://doc.bladepipe.com/productOP/binary/install_worker_binary) to download and install a BladePipe Worker.
+[BladePipe](https://www.bladepipe.com/docs/quick/quick_start/)
 
 ## Example
 
@@ -57,7 +58,7 @@ Taking a MySQL instance as an example, the following section describes how to mi
 
 ### Create DataJob
 
-1. Click **DataJob** > [**Create DataJob**](https://doc.bladepipe.com/operation/job_manage/create_job/create_full_incre_task).
+1. Click **DataJob** > [**Create DataJob**](https://www.bladepipe.com/docs/operation/job_manage/create_job/create_full_incre_task/).
 
 2. Select the source and target DataSources, and click **Test Connection** to ensure the connection to the source and target DataSources are both successful.
 

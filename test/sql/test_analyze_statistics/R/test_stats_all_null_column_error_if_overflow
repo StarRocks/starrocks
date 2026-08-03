@@ -1,0 +1,49 @@
+-- name: test_stats_all_null_column_error_if_overflow @sequential
+[UC]ori_sql_mode=select @@GLOBAL.sql_mode;
+-- result:
+
+-- !result
+set global sql_mode = 'ERROR_IF_OVERFLOW';
+-- result:
+-- !result
+create database analyze_test_${uuid0};
+-- result:
+-- !result
+use analyze_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `all_null_decimal` (
+  `k1` int,
+  `c1` decimal(20,8)
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO all_null_decimal VALUES (1, null), (2, null), (3, null);
+-- result:
+-- !result
+analyze table all_null_decimal;
+-- result:
+[REGEX].*OK.*
+-- !result
+select column_name, length(`max`), length(`min`) from default_catalog._statistics_.column_statistics where table_name='analyze_test_${uuid0}.all_null_decimal' and column_name='c1';
+-- result:
+c1	0	0
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait column stats cache load under ERROR_IF_OVERFLOW"}
+  result=explain costs select c1 from all_null_decimal;
+  CHECK: re.search("c1-->.*ESTIMATE", ${result}) != None
+} END LOOP
+set global sql_mode = '${ori_sql_mode}';
+-- result:
+-- !result
+drop database analyze_test_${uuid0};
+-- result:
+-- !result
+CLEANUP {
+    set global sql_mode = '${ori_sql_mode}';
+    drop database if exists analyze_test_${uuid0};
+} END CLEANUP

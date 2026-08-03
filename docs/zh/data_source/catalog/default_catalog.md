@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Default Catalog 是 StarRocks 内部数据目录，用于查询 StarRocks 内部数据。"
 ---
 
 # Default catalog

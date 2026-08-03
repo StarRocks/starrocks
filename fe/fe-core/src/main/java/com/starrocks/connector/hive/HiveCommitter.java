@@ -21,7 +21,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.TableName;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
@@ -64,12 +63,10 @@ import static java.util.Objects.requireNonNull;
 public class HiveCommitter {
     private static final Logger LOG = LogManager.getLogger(HiveCommitter.class);
     private static final int PARTITION_COMMIT_BATCH_SIZE = 20;
-    private static final String BACKGROUND_THREAD_NAME_PREFIX = "background-refresh-others-fe-metadata-";
     private final HiveTable table;
     private final HiveMetastoreOperations hmsOps;
     private final RemoteFileOperations fileOps;
     private final Executor updateStatsExecutor;
-    private final Executor refreshOthersFeExecutor;
     private final AtomicBoolean fsTaskCancelled = new AtomicBoolean(false);
     private final List<CompletableFuture<?>> fsTaskFutures = new ArrayList<>();
     private final Queue<DirectoryCleanUpTask> clearTasksForAbort = new ConcurrentLinkedQueue<>();
@@ -82,13 +79,18 @@ public class HiveCommitter {
     private final Path stagingDir;
 
     public HiveCommitter(HiveMetastoreOperations hmsOps, RemoteFileOperations fileOps, Executor updateStatsExecutor,
-                         Executor refreshOthersFeExecutor, HiveTable table, Path stagingDir) {
+                         HiveTable table, Path stagingDir) {
         this.hmsOps = hmsOps;
         this.fileOps = fileOps;
         this.updateStatsExecutor = updateStatsExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.table = table;
         this.stagingDir = stagingDir;
+    }
+
+    @Deprecated
+    public HiveCommitter(HiveMetastoreOperations hmsOps, RemoteFileOperations fileOps, Executor updateStatsExecutor,
+                         Executor refreshOthersFeExecutor, HiveTable table, Path stagingDir) {
+        this(hmsOps, fileOps, updateStatsExecutor, table, stagingDir);
     }
 
     public void commit(List<PartitionUpdate> partitionUpdates) {
@@ -170,19 +172,10 @@ public class HiveCommitter {
                     .collect(Collectors.toList());
         }
 
-        refreshOthersFeExecutor.execute(() -> {
-            LOG.info("Start to refresh others fe hive metadata cache on {}.{}.{}.{}",
-                    catalogName, dbName, tableName, partitionNames);
-            try {
-                GlobalStateMgr.getCurrentState().refreshOthersFeTable(
-                        new TableName(catalogName, dbName, tableName), partitionNames, false);
-            } catch (DdlException e) {
-                LOG.error("Failed to refresh others fe hive metdata cache", e);
-                throw new StarRocksConnectorException(e.getMessage());
-            }
-            LOG.info("Finish to refresh others fe hive metadata cache on {}.{}.{}.{}",
-                    catalogName, dbName, tableName, partitionNames);
-        });
+        LOG.info("Submit async refresh others fe hive metadata cache on {}.{}.{}.{}",
+                catalogName, dbName, tableName, partitionNames);
+        GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
+                new TableName(catalogName, dbName, tableName), partitionNames);
     }
 
     private void prepareAppendTable(PartitionUpdate pu, HivePartitionStats updateStats) {

@@ -230,4 +230,14 @@ public class SqlServerSchemaResolverTest {
         }
     }
 
+    @Test
+    public void testGetPartitions() {
+        SqlServerSchemaResolver sqlServerSchemaResolver = new SqlServerSchemaResolver();
+        List<Partition> partitions = sqlServerSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
+                Table.TableType.JDBC, Lists.newArrayList()));
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals("tbl1", partitions.get(0).getPartitionName());
+        Assertions.assertTrue(partitions.get(0).getModifiedTime() > 0);
+    }
+
 }

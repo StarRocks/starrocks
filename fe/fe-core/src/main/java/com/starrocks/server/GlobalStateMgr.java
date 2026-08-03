@@ -199,6 +199,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -277,9 +278,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -377,6 +379,7 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
+    private boolean deployerListenerRegistered = false;
 
     private HAProtocol haProtocol = null;
 
@@ -532,6 +535,8 @@ public class GlobalStateMgr {
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
     private final ExecutorService queryDeployExecutor;
+    private final ThreadPoolExecutor refreshOtherFeDispatchExecutor;
+    private final ThreadPoolExecutor refreshOtherFeRpcExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
@@ -865,6 +870,17 @@ public class GlobalStateMgr {
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
                         "query-deploy", true);
+        this.refreshOtherFeDispatchExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_dispatch_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_dispatch_executor_thread_num * 4),
+                "refresh-other-fe-dispatch",
+                true);
+        this.refreshOtherFeRpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                Config.refresh_other_fe_rpc_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
+                "refresh-other-fe-rpc",
+                true);
+        getConfigRefreshDaemon().registerListener(this::refreshOtherFeExecutorConfig);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
 
@@ -874,6 +890,28 @@ public class GlobalStateMgr {
         this.jwkMgr = new JwkMgr();
 
         this.tabletReshardJobMgr = new TabletReshardJobMgr();
+    }
+
+    private void refreshOtherFeExecutorConfig() {
+        try {
+            if (Config.refresh_other_fe_dispatch_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeDispatchExecutor, Config.refresh_other_fe_dispatch_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_dispatch_executor_thread_num={}",
+                        Config.refresh_other_fe_dispatch_executor_thread_num);
+            }
+
+            if (Config.refresh_other_fe_rpc_executor_thread_num > 0) {
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        refreshOtherFeRpcExecutor, Config.refresh_other_fe_rpc_executor_thread_num);
+            } else {
+                LOG.warn("ignore invalid config refresh_other_fe_rpc_executor_thread_num={}",
+                        Config.refresh_other_fe_rpc_executor_thread_num);
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to refresh refresh-other-FE executor config", e);
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -1547,6 +1585,12 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
             StarMgrServer.getCurrentState().startCheckpointWorker();
+        }
+        // Register listeners that need a fully-constructed GlobalStateMgr (e.g. classes whose
+        // own static initializer transitively touches MetricRepo / getCurrentState()).
+        if (!deployerListenerRegistered) {
+            Deployer.registerConfigListener(configRefreshDaemon);
+            deployerListenerRegistered = true;
         }
         configRefreshDaemon.start();
 
@@ -2546,6 +2590,11 @@ public class GlobalStateMgr {
         refreshOthersFeTable(tableName, partitionNames, true);
     }
 
+    /**
+     * Refresh external table metadata on every peer FE and wait for all peer RPCs to finish.
+     * This method is synchronous from the caller's perspective, while the per-peer RPC fan-out
+     * is still bounded by {@code refreshOtherFeRpcExecutor}.
+     */
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         if (allFrontends.size() == 0) {
@@ -2557,8 +2606,7 @@ public class GlobalStateMgr {
                 continue;
             }
 
-            resultMap.put(fe.getHost(), refreshOtherFesTable(
-                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+            resultMap.put(fe.getHost(), submitRefreshOtherFeRpc(fe, tableName, partitions));
         }
 
         String errMsg = "";
@@ -2586,8 +2634,47 @@ public class GlobalStateMgr {
         }
     }
 
-    public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
-                                                List<String> partitions) {
+    /**
+     * Enqueue a background "refresh other FE" job and return immediately to the caller.
+     * The dispatched task eventually reuses {@link #refreshOthersFeTable(TableName, List, boolean)}
+     * so asynchronous and synchronous refreshes share the same peer RPC concurrency limit.
+     */
+    public Future<?> refreshOthersFeTableAsync(TableName tableName, List<String> partitions) {
+        List<String> partitionsSnapshot = partitions == null ? List.of() : new ArrayList<>(partitions);
+        try {
+            return refreshOtherFeDispatchExecutor.submit(() -> {
+                try {
+                    refreshOthersFeTable(tableName, partitionsSnapshot, false);
+                } catch (Throwable t) {
+                    LOG.error("Async refresh others fe failed on {}.{}.{} with partitions {}",
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, t);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            LOG.error("Async refresh others fe dispatch rejected on {}.{}.{} with partitions {}",
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, e);
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private Future<TStatus> submitRefreshOtherFeRpc(Frontend fe, TableName tableName, List<String> partitions) {
+        TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+        try {
+            return refreshOtherFeRpcExecutor.submit(() -> refreshOtherFeTableRpc(thriftAddress, tableName, partitions));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("Refresh other FE rpc enqueue rejected for {}", thriftAddress, e);
+            return CompletableFuture.completedFuture(buildRefreshOtherFeRejectedStatus(e));
+        }
+    }
+
+    private TStatus buildRefreshOtherFeRejectedStatus(RejectedExecutionException e) {
+        TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+        status.setError_msgs(Lists.newArrayList(e.getMessage()));
+        return status;
+    }
+
+    private TStatus refreshOtherFeTableRpc(TNetworkAddress thriftAddress, TableName tableName,
+                                           List<String> partitions) {
         int timeout;
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
@@ -2595,30 +2682,24 @@ public class GlobalStateMgr {
             timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
         }
 
-        FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
-            TRefreshTableRequest request = new TRefreshTableRequest();
-            request.setCatalog_name(tableName.getCatalog());
-            request.setDb_name(tableName.getDb());
-            request.setTable_name(tableName.getTbl());
-            request.setPartitions(partitions);
-            try {
-                TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        thriftAddress,
-                        timeout,
-                        client -> client.refreshTable(request));
-                return response.getStatus();
-            } catch (Exception e) {
-                LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList(e.getMessage()));
-                return status;
-            }
-        });
-
-        new Thread(task).start();
-
-        return task;
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name(tableName.getCatalog());
+        request.setDb_name(tableName.getDb());
+        request.setTable_name(tableName.getTbl());
+        request.setPartitions(partitions);
+        try {
+            TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddress,
+                    timeout,
+                    client -> client.refreshTable(request));
+            return response.getStatus();
+        } catch (Exception e) {
+            LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return status;
+        }
     }
 
     private boolean supportRefreshTableType(Table table) {
@@ -2678,26 +2759,36 @@ public class GlobalStateMgr {
                 lockedDbMap.put(dbId, db);
             }
 
-            // lock all dbs
-            for (Database db : lockedDbMap.values()) {
-                locker.lockDatabase(db.getId(), LockType.READ);
-            }
-            LOG.info("acquired all the dbs' read lock.");
-
-            long journalId = getMaxJournalId();
-            File dumpFile = new File(Config.meta_dir, "image." + journalId);
-            dumpFilePath = dumpFile.getAbsolutePath();
+            // Track the dbs actually locked. lockDatabase() can throw (deadlock victim / interrupt),
+            // so on a partial acquisition we must release only what we hold. Releasing a never-locked
+            // db throws IllegalMonitorStateException, which would abort the finally before unlock()
+            // runs and strand the global meta lock indefinitely.
+            List<Database> lockedDbs = new ArrayList<>();
             try {
-                LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
-            } catch (IOException e) {
-                LOG.error("failed to dump image to {}", dumpFilePath, e);
+                // lock all dbs
+                for (Database db : lockedDbMap.values()) {
+                    locker.lockDatabase(db.getId(), LockType.READ);
+                    lockedDbs.add(db);
+                }
+                LOG.info("acquired all the dbs' read lock.");
+
+                long journalId = getMaxJournalId();
+                File dumpFile = new File(Config.meta_dir, "image." + journalId);
+                dumpFilePath = dumpFile.getAbsolutePath();
+                try {
+                    LOG.info("begin to dump {}", dumpFilePath);
+                    saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
+                } catch (IOException e) {
+                    LOG.error("failed to dump image to {}", dumpFilePath, e);
+                }
+            } finally {
+                // unlock only the dbs we actually locked
+                for (Database db : lockedDbs) {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
             }
         } finally {
-            // unlock all
-            for (Database db : lockedDbMap.values()) {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
+            // Always release the global meta lock, even if db-lock acquisition or release above threw.
             unlock();
         }
 

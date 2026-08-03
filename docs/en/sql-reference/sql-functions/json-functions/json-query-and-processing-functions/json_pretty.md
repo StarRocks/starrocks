@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Formats a JSON document into an easy-to-read, indented string format."
 ---
 
 # json_pretty

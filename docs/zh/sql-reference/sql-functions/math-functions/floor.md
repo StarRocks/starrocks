@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回不大于x的最大整数值。"
 ---
 
 # floor, dfloor

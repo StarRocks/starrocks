@@ -50,6 +50,8 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
@@ -70,6 +72,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class CoordinatorTest extends PlanTestBase {
@@ -302,4 +305,75 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, instances.size());
 
     }
+
+    private static java.lang.reflect.Method handleErrorExecutionMethod() throws NoSuchMethodException {
+        java.lang.reflect.Method m = DefaultCoordinator.class.getDeclaredMethod(
+                "handleErrorExecution", Status.class,
+                com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.class, Throwable.class);
+        m.setAccessible(true);
+        return m;
+    }
+
+    @Test
+    public void testHandleErrorExecutionSuppressesCancelAfterEos() throws Exception {
+        // After the receiver got EOS (returnedAllResults=true), an in-flight stage-2 deploy that races
+        // with our QUERY_FINISHED cancel returns CANCELLED on the BE. Those are not real errors and must
+        // not surface as "[reason=INTERNAL_ERROR] [msg=null]" to the client.
+        // Covers DefaultCoordinator.handleErrorExecution guard at line ~766.
+        Deencapsulation.setField(coordinator, "returnedAllResults", true);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+
+        for (String beMsg : new String[] {"Query terminates prematurely", "QueryFinished", "Cancelled"}) {
+            ctx.getState().reset();
+            Status cancelled = new Status(TStatusCode.CANCELLED, beMsg);
+            Assertions.assertDoesNotThrow(
+                    () -> handle.invoke(coordinator, cancelled, null, null),
+                    "handleErrorExecution must swallow post-EOS cancel: " + beMsg);
+            Assertions.assertTrue(
+                    ctx.getState().getErrorMessage() == null || ctx.getState().getErrorMessage().isEmpty(),
+                    "post-EOS cancel must not set client error, msg was: " + ctx.getState().getErrorMessage());
+        }
+    }
+
+    @Test
+    public void testHandleErrorExecutionStillThrowsBeforeEos() throws Exception {
+        // Sanity: when EOS has not been delivered, a non-internal CANCELLED still falls through to the
+        // default branch and surfaces — i.e. the new guard must not swallow real pre-EOS errors.
+        Deencapsulation.setField(coordinator, "returnedAllResults", false);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+        Status cancelled = new Status(TStatusCode.CANCELLED, "some real cancel reason");
+        java.lang.reflect.InvocationTargetException ite = Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> handle.invoke(coordinator, cancelled, null, null));
+        Assertions.assertInstanceOf(StarRocksException.class, ite.getCause());
+    }
+
+    @Test
+    public void testClearExternalResourcesOnlyOnce() {
+        AtomicInteger clearCount = new AtomicInteger();
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
+            @Override
+            public void clear() {
+                clearCount.incrementAndGet();
+            }
+
+            @Override
+            public java.util.List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+                return Collections.emptyList();
+            }
+
+            @Override
+            protected void toThrift(TPlanNode msg) {
+            }
+        };
+        DefaultCoordinator coordinatorWithScan = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, Lists.newArrayList(), Collections.singletonList(scanNode), new TDescriptorTable(), null);
+
+        coordinatorWithScan.clearExternalResources();
+        coordinatorWithScan.clearExternalResources();
+
+        Assertions.assertEquals(1, clearCount.get());
+    }
+
 }

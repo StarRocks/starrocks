@@ -55,6 +55,14 @@ public class JDBCTable extends Table {
     private String dbName;
     private List<Column> partitionColumns;
 
+    // Transient marker used by information_schema.tables to avoid fetching JDBC
+    // REMARKS more than once for the same cached table instance.
+    private transient boolean commentFetched;
+
+    // Transient: original JDBC column types (java.sql.Types) from the external database.
+    // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
+    private transient Map<String, Integer> originalJdbcColumnTypes;
+
     public JDBCTable() {
         super(TableType.JDBC);
     }
@@ -106,6 +114,14 @@ public class JDBCTable extends Table {
         return partitionColumns;
     }
 
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        return originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        this.originalJdbcColumnTypes = originalJdbcColumnTypes;
+    }
+
     public Map<String, String> getConnectInfo() {
         if (connectInfo == null) {
             this.connectInfo = new HashMap<>();
@@ -134,6 +150,14 @@ public class JDBCTable extends Table {
     public boolean isMySQLCompatible() {
         String uri = getJdbcUri();
         return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -246,9 +270,17 @@ public class JDBCTable extends Table {
                 if (delimiterIndex > 0) {
                     String urlPrefix = uri.substring(0, delimiterIndex);
                     String urlSuffix = uri.substring(delimiterIndex + 1);
-                    tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    if (urlPrefix.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(urlPrefix + dbName + "?" + urlSuffix);
+                    } else {
+                        tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                    }
                 } else {
-                    tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    if (uri.endsWith("/")) {
+                        tJDBCTable.setJdbc_url(uri + dbName);
+                    } else {
+                        tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                    }
                 }
             }
             tJDBCTable.setJdbc_table(jdbcTable);

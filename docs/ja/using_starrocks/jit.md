@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Enable and configure JIT (just-in-time) compilation for expressions in StarRocks to accelerate expression evaluation in query execution."
 sidebar_position: 130
 ---
 

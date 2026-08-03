@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hive catalog は Hive データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 ---
 
@@ -195,6 +196,7 @@ Hive データをクエリする前に、Hive メタストアノードのホス�
 | aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | hive.metastore.glue.catalogid | No       | 使用する AWS Glue Data Catalog の ID。指定しない場合、現在の AWS アカウントのカタログが使用されます。別の AWS アカウントの Glue Data Catalog にアクセスする（クロスアカウントアクセス）必要がある場合は、このパラメータを指定する必要があります。 |
+| aws.glue.resource_share_type  | No       | AWS Glue の `GetDatabases` API に送信される `ResourceShareType` を設定することで、`SHOW DATABASES` が一覧表示するデータベースを制御します。大文字小文字を区別しません。有効な値：`FOREIGN`（AWS Resource Access Manager 経由で他のアカウントからあなたのアカウントに共有されたデータベース）、`FEDERATED`（JDBC 接続など、外部データソースを参照するデータベース）、`ALL`（ローカルデータベースに加えて前述の両方）。指定しない場合、ローカルデータベースのみが一覧表示されます。このパラメータは一覧表示にのみ影響します。StarRocks がデータベースにクエリを実行する際は、`hive.metastore.glue.catalogid` で設定された単一のアカウントが引き続き使用されるため、一覧に表示された `FOREIGN` データベースは、`hive.metastore.glue.catalogid` をその所有者アカウントに設定するか、自身の Data Catalog にその[resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html) を作成しない限りクエリできません。また `FEDERATED` データベースは Hive 互換のデータベースではないため、この Catalog 経由ではクエリできません。 |
 
 AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue にアクセスするための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 

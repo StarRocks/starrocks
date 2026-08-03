@@ -120,6 +120,10 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
         DCHECK(_sstable_map.empty());
+        // Diagnostic: every multi_get on a standalone fileset queries exactly one sstable.
+        // Compared with `pindex_init_sst_cnt`, this lets us tell whether a lazy-SST-open
+        // refactor (defer Table::Open until first touch) would actually skip work.
+        TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", 1);
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
     // 1. divide key_indexes into different groups according to sstables
@@ -140,6 +144,7 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
         }
     }
     // 2. multi get from each sstable
+    TRACE_COUNTER_INCREMENT("pindex_sstables_queried_cnt", sstable_key_indexes_map.size());
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
     }

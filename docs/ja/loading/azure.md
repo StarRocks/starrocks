@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Azure Blob Storage、Azure Data Lake Storage から INSERT+FILES()、Broker Load、Spark Load を使用してデータをロードする方法。"
 toc_max_heading_level: 4
 keywords: ['Broker Load']
 ---

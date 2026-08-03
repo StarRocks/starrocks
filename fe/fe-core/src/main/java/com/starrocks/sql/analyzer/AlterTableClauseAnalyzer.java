@@ -248,6 +248,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
@@ -539,6 +541,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                     "Random distribution table already supports automatic scaling and does not require optimization");
         }
 
+        if (olapTable.isRangeDistribution()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "OPTIMIZE is not supported on tables with range " +
+                            "distribution, because it redistributes data and would " +
+                            "violate range tablet boundaries.");
+        }
+
         // set the sort keys into OptimizeClause
         List<String> sortKeys = genOptimizeClauseSortKeys(clause);
         clause.setSortKeys(sortKeys);
@@ -553,6 +562,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 int idx = columnNames.indexOf(column);
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
+                }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
                 }
                 sortKeyIdxes.add(idx);
             }
@@ -1062,6 +1078,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
             Column afterColumn = table.getColumn(colPos.getLastCol());
+            if (afterColumn == null) {
+                throw new SemanticException("Column[" + colPos.getLastCol() + "] does not exist");
+            }
             if (afterColumn.isGeneratedColumn()) {
                 throw new SemanticException("Can not modify column after Generated Column");
             }

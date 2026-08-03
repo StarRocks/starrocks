@@ -60,7 +60,7 @@ private:
 TEST_F(DownloadUtilTest, test_normal) {
     ASSERT_FALSE(fs::path_exist(_dest_file));
     auto url = fmt::format("file://{}", _source_file);
-    ASSERT_OK(DownloadUtil::download(url, _dest_file, _source_md5));
+    ASSERT_OK(DownloadUtil::download(url, _dest_file, _source_md5, TCloudConfiguration{}));
     ASSERT_TRUE(fs::path_exist(_dest_file));
     ASSERT_EQ(_source_md5, fs::md5sum(_dest_file).value());
 
@@ -73,7 +73,7 @@ TEST_F(DownloadUtilTest, test_normal) {
 TEST_F(DownloadUtilTest, test_wrong_md5) {
     ASSERT_FALSE(fs::path_exist(_dest_file));
     auto url = fmt::format("file://{}", _source_file);
-    ASSERT_ERROR(DownloadUtil::download(url, _dest_file, "xxxxxx"));
+    ASSERT_ERROR(DownloadUtil::download(url, _dest_file, "xxxxxx", TCloudConfiguration{}));
     ASSERT_FALSE(fs::path_exist(_dest_file));
 
     std::set<std::string> dirs;
@@ -96,7 +96,7 @@ TEST_F(DownloadUtilTest, test_long_filename) {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const std::string url = "http://127.0.0.1/a.txt";
     const std::string checksum = "aaa";
-    Status st = DownloadUtil::download(url, target_file, checksum);
+    Status st = DownloadUtil::download(url, target_file, checksum, TCloudConfiguration{});
     ASSERT_FALSE(st.ok()) << st;
 }
 

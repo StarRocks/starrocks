@@ -100,6 +100,24 @@ public class RangeColocateTableTest {
     }
 
     @Test
+    public void testHasColocateGroupMatchesIndexForRange() throws Exception {
+        String sql = "create table t_colocate_range_prop (k1 int, k2 int, v1 int)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1', 'colocate_with' = 'rg_prop:k1');";
+        starRocksAssert.withTable(sql);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_colocate_range_prop");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+
+        // A range-colocate table joins table2Group and gets its group property set on the same
+        // addTableToGroup path as hash-colocate, so hasColocateGroup() stays equivalent to
+        // isColocateTable() for the range case too.
+        Assertions.assertTrue(table.hasColocateGroup());
+        Assertions.assertEquals(colocateTableIndex.isColocateTable(table.getId()), table.hasColocateGroup());
+    }
+
+    @Test
     public void testSecondTableJoinsExistingRangeColocateGroup() throws Exception {
         String sql1 = "create table t_colocate_join1 (k1 int, k2 int, v1 int)\n" +
                 "order by(k1, k2)\n" +

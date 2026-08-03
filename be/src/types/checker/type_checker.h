@@ -21,7 +21,7 @@
  * 1. XML Configuration-based Type Mapping (Recommended)
  *    - Type mappings can be defined in XML configuration files
  *    - Location specified via STARROCKS_TYPE_CHECKER_CONFIG environment variable
- *    - Default location: $STARROCKS_HOME/conf/type_checker_config.xml
+ *    - Default location: $STARROCKS_HOME/lib/type_checker_config.xml
  *    - Provides dynamic type registration without recompilation
  *    - See type_checker_xml_loader.h for XML format details
  * 

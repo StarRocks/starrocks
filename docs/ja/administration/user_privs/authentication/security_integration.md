@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "セキュリティインテグレーションで外部認証システム（LDAP・OAuth等）と StarRocks を統合してユーザー認証を行います。"
 sidebar_position: 20
 ---
 

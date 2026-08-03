@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "session_variables 提供 Session 变量的信息。"
 ---
 
 # session_variables

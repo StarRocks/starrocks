@@ -140,14 +140,19 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         MaterializedView mv = starRocksAssert.getMv("test", mvName);
         String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
-            // alter
+            // alter — ASYNC is kept as a legacy synonym; SCHEDULE is the preferred keyword
+            // for the EVERY form and is what SHOW CREATE displays.
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
-            // verify
             mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-            Assertions.assertTrue(showCreateStmt.contains(refresh),
+            // SHOW CREATE rewrites "ASYNC ... EVERY ..." to "SCHEDULE ... EVERY ..." but leaves
+            // bare ASYNC (no EVERY) unchanged.
+            String expected = refresh.contains("EVERY")
+                    ? refresh.replaceFirst("^ASYNC", "SCHEDULE")
+                    : refresh;
+            Assertions.assertTrue(showCreateStmt.contains(expected),
                     String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt));
             Assertions.assertEquals(taskDefinition, mv.getTaskDefinition());
         }

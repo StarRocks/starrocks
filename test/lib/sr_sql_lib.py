@@ -1153,7 +1153,7 @@ class StarrocksSQLApiLib(object):
 
             old_this_res_len = len(this_res)
             actual_res, actual_res_log, var, order = self.execute_single_statement(
-                _each_cmd, _cmd_id_str, record_mode, this_res, var_key=exec_id, conn=conn
+                _each_cmd, _cmd_id_str, record_mode and not uncheck, this_res, var_key=exec_id, conn=conn
             )
 
             if record_mode:
@@ -3314,6 +3314,17 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_not_contains(self, query, *expects):
+        """
+        assert query result does not contain expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) < 0,
+                "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
+            )
+
     def assert_query_contains_times(self, query, expect, expected_times: int):
         """
         Assert query result contains `expect` exactly `expected_times` times.
@@ -3390,6 +3401,60 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 str(res["result"]).find(expect) > 0,
                 "assert expect %s is not found in plan:\n %s" % (expect, plan_string),
             )
+
+    def get_col_stats_from_explain_costs(self, query, col_name):
+        """
+        Run EXPLAIN COSTS and return the column statistics line for the given column.
+        The returned string (e.g. 'col_name-->[min, max, nullFrac, size, ndv] TYPE') is
+        captured by --record so it can be validated on future runs without hardcoding values.
+        """
+        sql = "explain costs %s" % query
+        res = self.execute_sql(sql, True)
+        plan_string = "\n".join(item[0] for item in res["result"])
+        for line in plan_string.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("* %s-->" % col_name):
+                return stripped.lstrip("* ")
+        return None
+
+    def get_query_stats_source(self, query, table):
+        """
+        Execute `query` with profiling enabled and return the StatsSource recorded in the query
+        profile for the scan whose table label ends with `table` (the label is the qualified table
+        name, e.g. 'catalog.db.tbl', so passing just 'tbl' is enough). Returns one of
+        NONE / ANALYZE / TABLE_METADATA, or None if no matching StatsSource entry is found.
+        """
+        # Enable synchronous profile so it is available immediately after the query returns.
+        self.execute_sql("set enable_profile = true", True)
+        self.execute_sql("set enable_async_profile = false", True)
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "run query failed: %s" % res["msg"])
+
+        query_id = self.get_last_query_id()
+        tools.assert_true(query_id is not None, "failed to get last query id for: %s" % query)
+
+        profile_res = self.execute_sql("select get_query_profile('%s')" % query_id, True)
+        tools.assert_true(profile_res["status"], "get query profile failed: %s" % profile_res["msg"])
+        profile_text = "\n".join(str(item[0]) for item in profile_res["result"])
+
+        # StatsSource entries render as "- <qualified_table_name>: <SOURCE>" under the
+        # "StatsSource:" section of the profile.
+        for line in profile_text.split("\n"):
+            m = re.match(r"-\s+(\S+):\s+(NONE|ANALYZE|TABLE_METADATA)\s*$", line.strip())
+            if m and (m.group(1) == table or m.group(1).endswith("." + table)):
+                return m.group(2)
+        return None
+
+    def assert_stats_source(self, query, table, expect_source):
+        """
+        Assert the StatsSource of the scan on `table` in the query profile of `query`
+        equals `expect_source` (one of NONE / ANALYZE / TABLE_METADATA).
+        """
+        actual = self.get_query_stats_source(query, table)
+        tools.assert_equal(
+            expect_source, actual,
+            "stats source of table [%s] expect [%s] but got [%s]" % (table, expect_source, actual),
+        )
 
     def assert_show_stats_meta_contains(self, predicate, *expects):
         """
@@ -3782,9 +3847,11 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return query_detail
 
             # To ensure that the output string is in a JSON-compatible format that can be processed by the
-            # function `parse_json()` in StarRocks, escaping is required.
+            # function `parse_json()` in StarRocks, escaping is required. Single quotes are doubled
+            # because the caller embeds the result in a single-quoted SQL literal (parse_json('...')),
+            # and fields like userIdentity contain quotes ('root'@'%').
             def escaped_str(s):
-                return s.replace('\n', r'\n').replace('"', r'\"')
+                return s.replace('\n', r'\n').replace('"', r'\"').replace("'", "''")
 
             escaped_detail = {}
             for key, value in query_detail.items():

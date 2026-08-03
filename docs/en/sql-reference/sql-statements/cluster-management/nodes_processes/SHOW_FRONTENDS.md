@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW FRONTENDS views the information of all FE nodes in the cluster, including their IP addresses, ports, roles, and status."
 ---
 
 # SHOW FRONTENDS

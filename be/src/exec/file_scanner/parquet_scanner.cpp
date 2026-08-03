@@ -14,6 +14,7 @@
 
 #include "exec/file_scanner/parquet_scanner.h"
 
+#include <arrow/compute/api.h>
 #include <fmt/format.h>
 
 #include "column/chunk.h"
@@ -113,10 +114,15 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
         if (array_ptr == nullptr) {
-            (void)column->append_nulls(_batch->num_rows());
+            (void)column->append_nulls(num_elements);
         } else {
-            RETURN_IF_ERROR(convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
-                                                    _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx));
+            auto st = convert_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
+                                              _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
+            if (!st.ok()) {
+                return st.clone_and_prepend(strings::Substitute("file=$0 column=$1 batch_row_range=[$2,$3)",
+                                                                _conv_ctx.current_file, slot_desc->col_name(),
+                                                                _batch_start_idx, _batch_start_idx + num_elements));
+            }
         }
     }
 
@@ -177,6 +183,12 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
 Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
                                   TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
                                   bool strict_mode) {
+    if (arrow_type->id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(arrow_type);
+        return build_dest(dictionary_type->value_type().get(), type_desc, is_nullable, raw_type_desc, conv_func,
+                          need_cast, strict_mode);
+    }
+
     auto at = arrow_type->id();
     auto lt = type_desc->type;
     conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
@@ -322,13 +334,31 @@ Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_
                                                const arrow::Array* array, Column* column, size_t batch_start_idx,
                                                size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
-    // for timestamp type, state->timezone which is specified by user. convert function
-    // obtains timezone from array. thus timezone in array should be rectified to
-    // state->timezone.
+    if (array->type_id() == ArrowTypeId::DICTIONARY) {
+        auto* dictionary_type = down_cast<const arrow::DictionaryType*>(array->type().get());
+        auto sliced_array = array->Slice(batch_start_idx, num_elements);
+        auto decoded_array_res = arrow::compute::Cast(*sliced_array, dictionary_type->value_type());
+        if (!decoded_array_res.ok()) {
+            return Status::InternalError(decoded_array_res.status().ToString());
+        }
+        return convert_array_to_column(conv_func, num_elements, decoded_array_res->get(), column, 0, chunk_start_idx,
+                                       chunk_filter, conv_ctx);
+    }
+
+    // Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+    // isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+    // `timezone`) and must be displayed identically regardless of session
+    // timezone. Only rectify the column timezone to the session timezone when it
+    // is already timezone-aware (non-empty Arrow tz): an isAdjustedToUTC=true
+    // column, or a top-level INT96 column that ParquetReaderWrap::_rectify_int96_timezone()
+    // re-tagged as UTC. Naive INT64 columns keep their wall-clock value and are
+    // read as UTC by the downstream converter.
     if (array->type_id() == ArrowTypeId::TIMESTAMP) {
         auto* timestamp_type = down_cast<arrow::TimestampType*>(array->type().get());
         auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-        mutable_timezone = conv_ctx->state->timezone();
+        if (!mutable_timezone.empty()) {
+            mutable_timezone = conv_ctx->state->timezone();
+        }
     }
 
     uint8_t* null_data;

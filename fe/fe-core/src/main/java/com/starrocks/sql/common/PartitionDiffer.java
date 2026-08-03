@@ -38,7 +38,7 @@ public abstract class PartitionDiffer {
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
     protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
-    // Pinned ranges keyed by Table.getTableIdentifier(). Empty means no pinning.
+    // Pinned ranges keyed by Table.getUUID(). Empty means no pinning.
     protected Map<String, TvrVersionRange> pinnedRangeByTableIdentifier = Collections.emptyMap();
 
     public PartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
@@ -52,7 +52,7 @@ public abstract class PartitionDiffer {
     }
 
     protected TvrVersionRange pinnedRangeFor(Table table) {
-        return pinnedRangeByTableIdentifier.get(table.getTableIdentifier());
+        return pinnedRangeByTableIdentifier.get(table.getUUID());
     }
 
     /**

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ファイル外部テーブルでメタストアなしに、HDFS、S3 の Parquet、ORC ファイルをクエリ。"
 ---
 
 # ファイル外部テーブル

@@ -106,6 +106,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _write_txn_log = table_sink.write_txn_log;
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _is_multi_statements_txn = table_sink.is_multi_statements_txn;
+    _enable_lake_per_partition_coordinator_txn_log = table_sink.enable_lake_per_partition_coordinator_txn_log;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -879,6 +880,12 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 }
 
 Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
+    // close_wait() may be entered again after cancellation; _span must not be touched after End()
+    if (_close_wait_done) {
+        return close_status.ok() ? _close_wait_status : close_status;
+    }
+    _close_wait_done = true;
+
     DeferOp end_span([&] { _span->End(); });
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);
@@ -891,12 +898,14 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
 
     if (_tablet_sink_sender == nullptr) {
+        _close_wait_status = close_status;
         return close_status;
     }
     Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile, _write_txn_log);
     if (!status.ok()) {
         _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
+    _close_wait_status = status;
     return status;
 }
 

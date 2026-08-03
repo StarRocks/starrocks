@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_compactions テーブルは Compaction タスクの統計情報を提供。"
 ---
 
 # be_compactions

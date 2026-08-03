@@ -49,7 +49,8 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context, bool use_cache,
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
                                bool* cache_hit_out = nullptr);
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
@@ -125,6 +126,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
 
+    if (_tnode.analytic_node.analytic_functions.empty()) {
+        return Status::InternalError(
+                strings::Substitute("analytic_functions is empty in analytic node (plan_node_id=$0)", _tnode.node_id));
+    }
     _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
     if (_is_merge_funcs) {
         for (size_t i = 1; i < _tnode.analytic_node.analytic_functions.size(); i++) {
@@ -376,7 +381,8 @@ Status Analytor::open(RuntimeState* state) {
                 {
                     SCOPED_TIMER(_udaf_load_timer);
                     st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                 _agg_fn_ctxs[i], use_cache, use_cache ? &cache_hit : nullptr);
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
                 }
                 if (use_cache) {
                     if (cache_hit) {
@@ -456,8 +462,13 @@ void Analytor::close(RuntimeState* state) {
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
     _remove_unused_rows(state);
 
+    // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
+    // computation are checked against the BE memory limit, including the column data copied while upgrading
+    // BinaryColumn to LargeBinaryColumn in upgrade_if_overflow.
+    TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     return _check_has_error();
 }
@@ -657,8 +668,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
-                TRY_CATCH_BAD_ALLOC(
-                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
+                _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column);
 
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
@@ -666,13 +676,13 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+            _append_column(chunk_size, _partition_columns[i].get(), column);
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
-            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+            _append_column(chunk_size, _order_columns[i].get(), column);
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }

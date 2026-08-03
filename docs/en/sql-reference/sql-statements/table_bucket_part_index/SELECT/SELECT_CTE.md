@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "CTE"
+description: "You can use a common table expression (CTE) to define a temporary result set that you can reference possibly multiple times within the scope of a SQL statement."
 ---
 
 # Common Table Expression
@@ -164,7 +165,7 @@ Querying organizational hierarchy is one of the most common use cases for Recurs
         FROM employees e
         INNER JOIN org_hierarchy oh ON e.manager_id = oh.employee_id
     )
-    SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+    SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=10) */
         employee_id,
         name,
         title,
@@ -209,7 +210,7 @@ cte2 AS (
     UNION ALL
     SELECT n + 1 FROM cte2 WHERE n < 15
 )
-SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=10) */
     'cte1' AS source,
     n
 FROM cte1

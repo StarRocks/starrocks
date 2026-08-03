@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks をデプロイする前のサーバーのハードウェアおよびソフトウェア要件。"
 ---
 
 # デプロイの前提条件

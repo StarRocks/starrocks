@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在の日付と時刻を返します。"
 ---
 
 # now, current_timestamp, localtime, localtimestamp

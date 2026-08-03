@@ -27,14 +27,27 @@
 
 namespace starrocks {
 
+std::unique_ptr<BlockDataSample> DataSample::make_block_sample(double probability_percent, int64_t random_seed,
+                                                               size_t rows_per_block, size_t total_rows) {
+    return std::make_unique<BlockDataSample>(probability_percent, random_seed, rows_per_block, total_rows);
+}
+
+std::unique_ptr<PageDataSample> DataSample::make_page_sample(double probability_percent, int64_t random_seed,
+                                                             size_t num_pages, PageIndexer page_indexer) {
+    return std::make_unique<PageDataSample>(probability_percent, random_seed, num_pages, std::move(page_indexer));
+}
+
 StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) {
-    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+    RETURN_IF(_probability_percent <= 0 || _probability_percent >= 100,
               Status::InvalidArgument("percent should be in (0, 100)"));
     std::mt19937 mt(_random_seed);
     std::bernoulli_distribution dist(_probability_percent / 100.0);
 
     size_t sampled_blocks = 0;
-    size_t total_blocks = _total_rows / _rows_per_block;
+    // Round up: a partial trailing block (or a table smaller than one block) still counts as one block,
+    // matching the loop below and the fallback. Floor division would undercount the population (0 for a
+    // sub-block table) and could even make sample_size exceed sample_population_size.
+    size_t total_blocks = (_total_rows + _rows_per_block - 1) / _rows_per_block;
     RowIdSparseRange sampled_ranges;
     for (size_t i = 0; i < _total_rows; i += _rows_per_block) {
         if (dist(mt)) {
@@ -43,11 +56,16 @@ StatusOr<RowIdSparseRange> BlockDataSample::sample(OlapReaderStatistics* stats) 
         }
     }
 
-    if (sampled_blocks == 0) {
-        std::uniform_int_distribution<size_t> uniform(0, total_blocks);
-        size_t block = uniform(mt);
+    if (sampled_blocks == 0 && _total_rows > 0) {
+        // No block was hit by the Bernoulli pass (very likely for a small percent, e.g. sub-1%). Pick one
+        // block uniformly so the sample is non-empty. The random value is a block *index* in
+        // [0, total_blocks - 1]; convert it to a row offset just like the main loop above. (The previous code
+        // used the block index directly as a row id, which biased the fallback sample to the head of the
+        // table, and used an inclusive upper bound that could point one block past the end.)
+        std::uniform_int_distribution<size_t> uniform(0, total_blocks - 1);
+        size_t start_row = uniform(mt) * _rows_per_block;
         sampled_blocks++;
-        sampled_ranges.add(RowIdRange(block, std::min(block + _rows_per_block, _total_rows)));
+        sampled_ranges.add(RowIdRange(start_row, std::min(start_row + _rows_per_block, _total_rows)));
     }
 
     stats->sample_size += sampled_blocks;
@@ -253,7 +271,7 @@ void SortableZoneMap::build_histogram(size_t buckets) {
 }
 
 StatusOr<RowIdSparseRange> PageDataSample::sample(OlapReaderStatistics* stats) {
-    RETURN_IF(_probability_percent == 0 || _probability_percent == 100,
+    RETURN_IF(_probability_percent <= 0 || _probability_percent >= 100,
               Status::InvalidArgument("percent should be in (0, 100)"));
     if (_zonemap) {
         _prepare_histogram(stats);
@@ -298,7 +316,7 @@ bool PageDataSample::_has_histogram() const {
 // Build a histogram based on zonemap to make the data sampling more even
 // Without histogram, page sampling may fall into local optimal but not global uniform
 void PageDataSample::_prepare_histogram(OlapReaderStatistics* stats) {
-    size_t expected_pages = _probability_percent * _num_pages / 100;
+    size_t expected_pages = static_cast<size_t>(_probability_percent * _num_pages / 100.0);
     if (expected_pages <= 1) {
         return;
     }
@@ -325,9 +343,10 @@ StatusOr<RowIdSparseRange> PageDataSample::_bernoulli_sample(OlapReaderStatistic
         }
     }
 
-    if (sampled_pages == 0) {
-        // provide at least one page
-        std::uniform_int_distribution<size_t> uniform(0, _num_pages);
+    if (sampled_pages == 0 && _num_pages > 0) {
+        // Provide at least one page. The page index must stay in [0, _num_pages - 1]; the previous
+        // inclusive upper bound could pass _num_pages to the indexer and read one page past the end.
+        std::uniform_int_distribution<size_t> uniform(0, _num_pages - 1);
         auto [first_ordinal, last_ordinal] = _page_indexer(uniform(mt));
         sampled_ranges.add(RowIdRange(first_ordinal, last_ordinal));
         sampled_pages++;

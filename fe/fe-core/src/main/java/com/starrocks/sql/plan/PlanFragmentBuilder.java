@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.RowPositionDescriptor;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -42,6 +43,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -101,6 +103,7 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.RangeColocateScanDispatch;
 import com.starrocks.planner.RawValuesNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
@@ -153,6 +156,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
@@ -976,18 +980,28 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                // Filter out empty partitions from all selected partitions, original selected partition ids may be
-                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+
+                // Filter out logical partitions that have no non-empty physical sub-partition. The result
+                // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
+                // other consumer of getSelectedPartitionIds()/setSelectedPartitionIds() in this codebase --
+                // restricted to those logical partitions with at least one non-empty physical sub-partition.
                 // eg:
                 // partition        : 10001 -> (tablet_1)
                 //  subpartition1   : 10002 -> (tablet_2)
-                //  subpartition2   : 10004 -> (tablet_3)
-                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                //  subpartition2   : 10004 -> (empty)
+                // original selected partition id: 10001
                 // after:
-                // selected partition ids   : 10002
+                // selected partition ids   : 10001 (unchanged -- still the logical id, deduplicated)
                 // selected tablet ids      : tablet_2
                 // total tablets num        : 1
-                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
+                Set<Long> selectedNonEmptyPartitionIds = Sets.newLinkedHashSet();
+                // Accumulate the whole-scan bucketSeq across every sub-partition into one map (rather than a
+                // fresh per-sub-partition map that overwrites), so the dispatch-time alignment guard in
+                // OlapScanNode.getBucketNums() validates the complete assignment instead of only the last
+                // sub-partition's slice. This mirrors the legacy OlapScanNode.computeScanRangeLocations path.
+                Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -997,21 +1011,18 @@ public class PlanFragmentBuilder {
                             continue;
                         }
                         selectedNonEmptyPartitionIds.add(partitionId);
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        for (int i = 0; i < allTabletIds.size(); i++) {
-                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                        }
-                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                        OlapScanNode.fillTabletId2BucketSeq(
+                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
                     }
                 }
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
@@ -1591,8 +1602,17 @@ public class PlanFragmentBuilder {
 
             // Iceberg table scan slots are always nullable because the source data
             // is not governed by StarRocks NOT NULL constraints and may contain nulls.
+            // Widen both the slot descriptors AND the shared column refs. Downstream
+            // fragment building rebuilds tuples from ColumnRefOperator.isNullable()
+            // (e.g. the UNNEST outer columns in visitPhysicalTableFunction); if a ref
+            // for a required (NOT NULL) Iceberg column still reports not-null while the
+            // runtime column produced by the scan is nullable, the aggregator group-by
+            // nullability check rejects it with "error nullablel column".
             for (SlotDescriptor slotDescriptor : tupleDescriptor.getSlots()) {
                 slotDescriptor.setIsNullable(true);
+            }
+            for (ColumnRefOperator columnRefOperator : node.getColRefToColumnMetaMap().keySet()) {
+                columnRefOperator.setNullable(true);
             }
 
             // partition id generator
@@ -1855,7 +1875,11 @@ public class PlanFragmentBuilder {
                                 scanNode.setLabel(constantOperator.getVarchar());
                                 break;
                             case "JOB_ID":
-                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)) {
+                                // task_runs and materialized_view_refresh_jobs key JOB_ID by a string (UUID), so
+                                // skip the numeric push-down and let the predicate be a normal scan filter.
+                                if (!scanNode.getTableName().equalsIgnoreCase(TaskRunsSystemTable.NAME)
+                                        && !scanNode.getTableName().equalsIgnoreCase(
+                                                MaterializedViewRefreshJobsSystemTable.NAME)) {
                                     scanNode.setJobId(constantOperator.getBigint());
                                 }
                                 break;
@@ -3154,17 +3178,8 @@ public class PlanFragmentBuilder {
         }
 
         private boolean isColocateJoin(OptExpression optExpression) {
-            // through the required properties type check if it is colocate join
-            return optExpression.getRequiredProperties().stream().allMatch(
-                    physicalPropertySet -> {
-                        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
-                            return false;
-                        }
-                        HashDistributionDesc.SourceType hashSourceType =
-                                ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                        .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
-                    });
+            return optExpression.getRequiredProperties().stream().allMatch(physicalPropertySet ->
+                    DistributionSpecHelper.supportColocate(physicalPropertySet.getDistributionProperty().getSpec()));
         }
 
         public boolean isShuffleJoin(OptExpression optExpression) {
@@ -3174,12 +3189,10 @@ public class PlanFragmentBuilder {
                         if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
                             return false;
                         }
-                        HashDistributionDesc.SourceType hashSourceType =
+                        HashDistributionDesc desc =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
-                                        .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_JOIN) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_ENFORCE) ||
-                                hashSourceType.equals(HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                                        .getHashDistributionDesc();
+                        return desc.isShuffleLike();
                     });
         }
 
@@ -3652,7 +3665,19 @@ public class PlanFragmentBuilder {
                         context.getDescTbl().addSlotDescriptor(udtfOutputTuple, new SlotId(columnRefOperator.getId()));
                 slotDesc.setType(columnRefOperator.getType());
                 slotDesc.setIsMaterialized(true);
-                slotDesc.setIsNullable(columnRefOperator.isNullable());
+                // Outer (pass-through) columns are materialized by the child, whose slot reflects
+                // the true runtime nullability. That can be wider than the logical colRef -- e.g. a
+                // required (NOT NULL) Iceberg column, or an expression derived from one, whose runtime
+                // column is nullable. Prefer the child slot so we never declare a NOT NULL outer slot
+                // over a nullable runtime column (which the aggregator rejects with the group-by
+                // "error nullablel column" check). This only widens; fn-result columns have no child
+                // SlotRef in the map yet, so they keep the colRef nullability.
+                boolean nullable = columnRefOperator.isNullable();
+                Expr childOutputExpr = context.getColRefToExpr().get(columnRefOperator);
+                if (childOutputExpr instanceof SlotRef) {
+                    nullable |= ((SlotRef) childOutputExpr).getDesc().getIsNullable();
+                }
+                slotDesc.setIsNullable(nullable);
 
                 context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
             }
@@ -4563,6 +4588,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
 
@@ -4573,6 +4599,7 @@ public class PlanFragmentBuilder {
                     slotDescriptor.setColumn(columnRefOperatorColumnMap.get(columnRefOperator));
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setIsNullable(columnRefOperator.isNullable());
+                    slotDescriptor.setIsOutputColumn(true);
                     context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
                 }
                 List<ColumnRefOperator> fetchRefColumns = rowIdToFetchRefColumns.get(entry.getKey());

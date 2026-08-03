@@ -278,11 +278,13 @@ public enum ErrorCode {
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
-            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select statements"),
+            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select/show statements"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER(5306, new byte[] {'2', '5', 'P', '0', '1'},
             "Explicit transaction only support single update/delete before insert statement"),
     ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
+            "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
 
     /**
      * 5400 - 5499: Internal error

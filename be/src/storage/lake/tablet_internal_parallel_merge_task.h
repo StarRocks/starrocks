@@ -51,10 +51,16 @@ public:
      * @param schema - Table schema (borrowed, outlives task)
      * @param quit_flag - Shared cancellation flag (nullptr or points to context's atomic)
      * @param write_io_timer - Shared I/O metrics counter (borrowed)
+     * @param op_aware - Whether the merge input carries a trailing hidden __op column (set by the sink
+     *                   only when the memtable actually kept it, i.e. a PK load with an op slot and the
+     *                   preserve-order feature on). When true, run() splits each merged chunk into upsert
+     *                   rows and net-deleted keys. Passed explicitly rather than inferred from the last
+     *                   column name, so a real user column named "__op" is never mistaken for the op column.
      */
     TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
                                     std::unique_ptr<LoadSpillPipelineMergeTask> task, const Schema* schema,
-                                    std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer);
+                                    std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer,
+                                    bool op_aware, bool need_rssid_rowids = false);
 
     ~TabletInternalParallelMergeTask();
 
@@ -80,6 +86,10 @@ public:
      */
     const std::unique_ptr<TabletWriter>& writer() const { return _writer; }
 
+    // Smallest slot_idx (memtable flush order) of this task's merge batch. Used to consolidate task
+    // results in flush order, since tasks may be registered out of order under concurrent eager merge.
+    int64_t slot_idx() const;
+
 private:
     // Owned writer clone for independent parallel writes
     std::unique_ptr<TabletWriter> _writer;
@@ -103,6 +113,15 @@ private:
 
     // Shared I/O metrics counter (borrowed)
     RuntimeProfile::Counter* _write_io_timer = nullptr;
+
+    // Whether the merge input carries a trailing hidden __op column (see ctor). Drives the op-aware
+    // upsert/delete split in run(); never inferred from the last column name.
+    const bool _op_aware = false;
+
+    // When true (separate-sort-key PK unsort path), the merge output carries a per-row ordering key
+    // (rssid_rowids) that the writer needs to resolve duplicate primary keys by last-flushed-wins.
+    // Independent of _op_aware; when both are set, the op-split forwards the selected rssid_rowids.
+    bool _need_rssid_rowids = false;
 };
 
 } // namespace lake

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回字符串的 32 位循环冗余校验（CRC）值。"
 ---
 
 # crc32

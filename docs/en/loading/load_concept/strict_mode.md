@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How strict mode affects data loading in StarRocks: what it controls, how to enable it, and when to use it to reject rows with invalid column type conversions."
 ---
 
 # Strict mode

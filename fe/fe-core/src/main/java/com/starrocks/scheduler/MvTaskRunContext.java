@@ -21,6 +21,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PartitionNameSetMap;
@@ -66,6 +68,8 @@ public class MvTaskRunContext extends TaskRunContext {
     private Map<Table, PCellSortedSet> refBaseTableToCellMap;
     // mv to its partition range/list cell.
     private PCellSortedSet mvToCellMap;
+    private PCTPartitionTopology partitionTopology;
+    private PCTRefreshScope refreshScope;
 
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
@@ -96,6 +100,7 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setRefBaseTableMVIntersectedPartitions(
             Map<Table, PCellSetMapping> refBaseTableMVIntersectedPartitions) {
         this.refBaseTableMVIntersectedPartitions = refBaseTableMVIntersectedPartitions;
+        rebuildPartitionTopology();
     }
 
     public Map<String, Map<Table, PCellSortedSet>> getMvRefBaseTableIntersectedPartitions() {
@@ -105,6 +110,23 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setMvRefBaseTableIntersectedPartitions(
             Map<String, Map<Table, PCellSortedSet>> mvRefBaseTableIntersectedPartitions) {
         this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
+        rebuildPartitionTopology();
+    }
+
+    public PCTPartitionTopology getPartitionTopology() {
+        return partitionTopology;
+    }
+
+    public void setPartitionTopology(PCTPartitionTopology partitionTopology) {
+        this.partitionTopology = partitionTopology;
+    }
+
+    public PCTRefreshScope getRefreshScope() {
+        return refreshScope;
+    }
+
+    public void setRefreshScope(PCTRefreshScope refreshScope) {
+        this.refreshScope = refreshScope;
     }
 
     public boolean hasNextBatchPartition() {
@@ -141,6 +163,7 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setRefBaseTableToCellMap(Map<Table, PCellSortedSet> refBaseTableToCellMap) {
         this.refBaseTableToCellMap = refBaseTableToCellMap;
+        rebuildPartitionTopology();
     }
 
     public Map<Table, PartitionNameSetMap> getExternalRefBaseTableMVPartitionMap() {
@@ -158,6 +181,15 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setMVToCellMap(PCellSortedSet mvToCellMap) {
         this.mvToCellMap = mvToCellMap;
+        rebuildPartitionTopology();
+    }
+
+    private void rebuildPartitionTopology() {
+        this.partitionTopology = new PCTPartitionTopology(
+                mvToCellMap == null ? PCellSortedSet.of() : mvToCellMap,
+                refBaseTableToCellMap == null ? Map.of() : refBaseTableToCellMap,
+                refBaseTableMVIntersectedPartitions == null ? Map.of() : refBaseTableMVIntersectedPartitions,
+                mvRefBaseTableIntersectedPartitions == null ? Map.of() : mvRefBaseTableIntersectedPartitions);
     }
 
     public ExecPlan getExecPlan() {

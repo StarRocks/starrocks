@@ -154,9 +154,8 @@ protected:
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
-            auto* segs = rowset->mutable_segments();
             for (const auto& file : writer->segments()) {
-                segs->Add()->assign(file.path);
+                rowset->add_segment_metas()->set_filename(file.path);
             }
 
             writer->close();

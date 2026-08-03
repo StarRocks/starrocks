@@ -70,7 +70,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
                 "  2:EXCHANGE");
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar>)");
+        assertContains(plan, "CAST(3: c2 AS struct<`a` int(11), `b` varchar>)");
 
         sql = "select index_struct[1].`index` from index_struct_nest";
         plan = getFragmentPlan(sql);
@@ -84,13 +84,14 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[/c1/a]");
 
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
+        assertVerbosePlanContains(sql,
+                "Pruned type: 2 <-> [struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>]");
     }
 
     @Test
     public void testStructMultiSelect() throws Exception {
         String sql = "select c2.a, c2.b from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [struct<`a` int(11), `b` int(11)>]");
     }
 
     @Test
@@ -117,7 +118,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "[/c2/a]");
 
         sql = "select sum(c2.b) as t from test group by c2.a";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [struct<`a` int(11), `b` int(11)>]");
 
         sql = "select count(c1.b[10].a) from test";
         assertVerbosePlanContains(sql, "[/c1/b/INDEX/a]");
@@ -132,21 +133,23 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testSelectPredicate() throws Exception {
         String sql = "select c0 from test where (c0+c2.a)>5";
-        assertVerbosePlanContains(sql, "[struct<a int(11), b int(11)>]");
+        assertVerbosePlanContains(sql, "[struct<`a` int(11), `b` int(11)>]");
     }
 
     @Test
     public void testSelectStar() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select *, c1.b[10].a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
         assertVerbosePlanContains(sql,
-                "Pruned type: 4 <-> [STRUCT<a int(11), b int(11), c STRUCT<a int(11), b int(11)>, d ARRAY<int(11)>>]");
+                "Pruned type: 2 <-> [struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [struct<`a` int(11), `b` int(11)>]");
+        assertVerbosePlanContains(sql,
+                "Pruned type: 4 <-> [struct<`a` int(11), `b` int(11), `c` struct<`a` int(11), `b` int(11)>, " +
+                        "`d` array<int(11)>>]");
         sql = "select * from index_struct_nest where index_struct[1].`index` = 5";
-        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<index bigint(20), char_col varchar(1048576)>>]");
+        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<`index` bigint(20), `char_col` varchar(1048576)>>]");
         sql = "select index_struct from index_struct_nest where index_struct[1].`index` = 5";
-        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<index bigint(20), char_col varchar(1048576)>>]");
+        assertVerbosePlanContains(sql, "2 <-> [ARRAY<struct<`index` bigint(20), `char_col` varchar(1048576)>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -155,7 +158,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         // test for CommonSubOperator
         String sql = "select abs(index_struct[1].`index`) + abs(index_struct[1].`index`) from index_struct_nest";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [ARRAY<struct<index bigint(20)>>]");
+        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [ARRAY<struct<`index` bigint(20)>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -222,11 +225,11 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
 
     @Test
     public void testCast() throws Exception {
-        String sql = "select cast(row(null, null, null) as STRUCT<a int, b MAP<int, int>, c ARRAY<INT>>); ";
+        String sql = "select cast(row(null, null, null) as STRUCT<a int, b MAP<int, int>, c ARRAY<INT>>)";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
-                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
-                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+                "result: struct<`col1` boolean, `col2` boolean, `col3` boolean>; args nullable: true; " +
+                "result nullable: true] as struct<`a` int(11), `b` map<int(11),int(11)>, `c` array<int(11)>>)");
     }
 
     @Test
@@ -235,8 +238,9 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
                         "  |  output columns:\n" +
-                        "  |  5 <-> [2: c1, struct<a int(11), b array<struct<a int(11), b int(11)>>>, true].b[true][111]",
-                "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
+                        "  |  5 <-> [2: c1, struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>, " +
+                        "true].b[true][111]",
+                "Pruned type: 2 <-> [struct<`a` int(11), `b` array<struct<`a` int(11), `b` int(11)>>>]");
     }
 
     @Test
@@ -244,21 +248,22 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         // no project on input, and no project on tf, no prune
         String sql = "select c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         sql = "select c2 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         sql = "select c2, c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         // project on input, no project on tf, prune
         sql = "select c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        assertVerbosePlanContains(sql,
+                "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` int(11)>>>]");
         // output contains the complete column, no prune
         sql = "select c3 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
-                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11), " +
+                "`c3_sub1_sub2` int(11)>>, `c3_sub2` int(11)>]");
         sql = "select c3, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
-                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11), " +
+                "`c3_sub1_sub2` int(11)>>, `c3_sub2` int(11)>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -267,20 +272,22 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         // no project on input, and project on tf, prune
         String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
         // no project on input, and project on tf all subfiled, no prune
         sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         sql = "select c2_struct, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         // project on input, project on tf, prune
         sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         // project on input, project on tf but all subfiled, prune
         sql = "select c3_struct.c3_sub1_sub1, c3_struct.c3_sub1_sub2 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` " +
+                "int(11)>>>]");
         sql = "select c3_struct.c3_sub1_sub1, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` " +
+                "int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -288,9 +295,9 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     public void testNoOutputOnTF() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select c1 from array_struct_nest, unnest(c2) as t(c2_struct) where c2_struct.c2_sub1 > 0;";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
         sql = "select c1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct) where c3_struct.c3_sub1_sub1 > 0;";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -299,8 +306,8 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c2) as t(c_struct), " +
                 "unnest(c3.c3_sub1) as tt(c3_struct) where c_struct.c2_sub1 > 10";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -309,7 +316,21 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest cross join " +
                 "unnest(c3.c3_sub1) as t(c3_struct) where c1 > 0;";
-        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    // Reproduces SIGSEGV scenario where two UNNESTs share the same input array column.
+    @Test
+    public void testTwoUnnestsOnSameArrayColumn() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(c1), sum(case when t2.c2_sub2 is not null then 1 else 0 end) " +
+                "from array_struct_nest, unnest(c2) as t(t1), unnest(c2) as tt(t2) " +
+                "where t1.c2_sub1 = 5";
+        String plan = getVerboseExplain(sql);
+        // After fix: both c2_sub1 (used by t1.c2_sub1 in WHERE) and c2_sub2 (used by t2.c2_sub2) must
+        // be retained in the pruned type, otherwise BE crashes when reading the missing field.
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -349,5 +370,23 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         sql = "select count(distinct map{'a': 1})";
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
+    @Test
+    public void testUnnestDerivedInputOutputWidthRegression() throws Exception {
+        // Regression guard: for a derived UNNEST input c3.c3_sub1 (a synthesized ColumnRef, not a
+        // scan ref) only c3_sub1_sub1 is used, so the scan is pruned to struct<c3_sub1_sub1>. The
+        // UNNEST output type must EQUAL that pruned input element, not stay full struct<c3_sub1_sub1,
+        // c3_sub1_sub2>. Before this fix canSafelyPruneUnnestOutput() treated every non-scan input as
+        // unsafe and left the output wider than its input element, mismatching shuffle decode /
+        // StructColumn::append on non-OLAP scans.
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        String plan = getVerboseExplain(sql);
+        // scan side is pruned to a single-field element:
+        assertContains(plan, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        // therefore the UNNEST output MUST also be the single-field element - not the full 2-field struct:
+        assertContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11)>]");
+        assertNotContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` int(11)>]");
+        FeConstants.runningUnitTest = false;
     }
 }

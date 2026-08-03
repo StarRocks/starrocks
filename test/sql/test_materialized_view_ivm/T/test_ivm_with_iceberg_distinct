@@ -1,0 +1,84 @@
+-- name: test_ivm_with_iceberg_distinct
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table dist_base (
+  k int,
+  v bigint
+);
+insert into dist_base values (1, 10), (1, 10), (2, 20);
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+set enable_materialized_view_rewrite = false;
+-- A SELECT DISTINCT MV is accepted at CREATE but used to crash on the first incremental
+-- refresh (__ROW_ID__ BIGINT vs from_binary VARCHAR). Refresh must dedup, never duplicate.
+CREATE MATERIALIZED VIEW test_mv1
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT DISTINCT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (2, 20), (3, 30);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+SELECT k, v FROM test_mv1 ORDER BY k, v;
+DROP MATERIALIZED VIEW test_mv1;
+-- Duplicate DISTINCT keys (a and b are the same expr k) must collapse to one group key, matching
+-- the refresh aggregate; otherwise the encoded __ROW_ID__ keys differ from the merge join probe.
+CREATE MATERIALIZED VIEW test_mv_dup
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT DISTINCT k AS a, k AS b FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base;
+[UC]REFRESH MATERIALIZED VIEW test_mv_dup WITH SYNC MODE;
+SELECT count(*) FROM test_mv_dup;
+SELECT a, b FROM test_mv_dup ORDER BY a, b;
+DROP MATERIALIZED VIEW test_mv_dup;
+-- GROUP BY 1 is a positional ordinal; after __ROW_ID__ is prepended it must still resolve to the
+-- constant output column (one global group), not __ROW_ID__ -- else the count splits per snapshot.
+CREATE MATERIALIZED VIEW test_mv_const
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT 1 AS c, count(v) AS cnt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base GROUP BY 1;
+[UC]REFRESH MATERIALIZED VIEW test_mv_const WITH SYNC MODE;
+SELECT c, cnt FROM test_mv_const;
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (4, 40);
+[UC]REFRESH MATERIALIZED VIEW test_mv_const WITH SYNC MODE;
+SELECT c, cnt FROM test_mv_const;
+DROP MATERIALIZED VIEW test_mv_const;
+-- A positional GROUP BY ordinal pointing at a real column must resolve to that column after
+-- __ROW_ID__ is prepended; otherwise it groups by __ROW_ID__ and one key splits across refreshes.
+CREATE MATERIALIZED VIEW test_mv_ord
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, count(v) AS cnt FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base GROUP BY 1;
+[UC]REFRESH MATERIALIZED VIEW test_mv_ord WITH SYNC MODE;
+SELECT k, cnt FROM test_mv_ord ORDER BY k;
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base values (2, 20);
+[UC]REFRESH MATERIALIZED VIEW test_mv_ord WITH SYNC MODE;
+SELECT k, cnt FROM test_mv_ord ORDER BY k;
+DROP MATERIALIZED VIEW test_mv_ord;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.dist_base force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};
+drop database db_${uuid0} force;

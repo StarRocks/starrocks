@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "元のMapのキーと値にLambda式を適用し、新しいMapを生成します。"
 ---
 
 # map_apply

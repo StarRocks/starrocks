@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "创建 Pipe 定义 INSERT INTO SELECT FROM FILES 语句用于数据导入。"
 ---
 
 # CREATE PIPE

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to configure StarRocks CBO (Cost-based Optimizer) with statistics collection and histograms to optimize query execution plans."
 sidebar_position: 10
 ---
 
@@ -209,7 +210,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | 自动全量采集任务命中 Sample 策略时，如果表中 Predicate Column 特别多并且超过配置项，则不会转为对 Predicate Column 的全量采集，保持对所有列的抽样采集。当前配置项控制该行为中 Predicate Column 的最大值。 |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自动采集时若发现表中的列数超过配置项，则仅会采集 Predicate Column 的列统计信息。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE 对 Predicate Column 的同步和持久化间隔周期。 |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 信息在 FE 中缓存淘汰时间。 |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 在 FE 中的 TTL（小时），vacuum 会清理更旧的数据；为负数时关闭 vacuum。 |
 | enable_predicate_columns_collection         | BOOLEAN | TRUE     | 是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。 |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | 是否允许手动采集 ARRAY 类型列的 NDV 信息。 |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | 是否允许自动采集 ARRAY 类型列的 NDV 信息。 |
@@ -634,7 +635,7 @@ KILL ANALYZE <ID>
 
 ## 采集外表的统计信息
 
-从 3.2 版本起，支持采集 Hive、Iceberg、Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 Delta Lake 表的统计信息，并支持采集 STRUCT 子列的统计信息。自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集统计信息。
+从 3.2 版本起，支持采集 Hive、Iceberg、Hudi 表的统计信息。**采集的语法和内表相同，支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集**。自 v3.3.0 起，支持采集 Delta Lake 表的统计信息，并支持采集 STRUCT 子列的统计信息。自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集统计信息。自 v3.4.0 起，还支持手动抽样采集（`ANALYZE TABLE ... SAMPLE`）。目前 Histogram 仅支持 Hive 外表。
 
 收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
@@ -663,7 +664,7 @@ partition_name:
 对外表采集统计信息时，有如下限制：
 
 - 目前只支持采集 Hive、Iceberg、Hudi、Delta Lake（自 v3.3.0 起） 表的统计信息。
-- 目前只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集、查询触发采集（自 v3.4.0 起），不支持抽样采集。
+- 目前支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集、查询触发采集（自 v3.4.0 起）、手动抽样采集（自 v3.4.0 起）。Histogram 仅支持 Hive 外表。
 - 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
 - 对于自动采集任务：
   - 只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
@@ -672,7 +673,7 @@ partition_name:
   - 目前只有 Leader FE 节点可以触发收集任务。
   - 仅支持检查 Hive、Iceberg 外表的分区变动，只收集数据发生变动分区的统计信息。对于 Delta Lake/Hudi 外表，系统会收集整表的统计信息。
   - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
-  - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
+  - Iceberg 表 Partition Evolution 统计信息的收集功能在 4.0 及更高版本中已启用。
 
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the hyperbolic sine of the argument."
 ---
 
 # sinh

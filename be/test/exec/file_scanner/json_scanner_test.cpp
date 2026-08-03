@@ -22,12 +22,14 @@
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "util/byte_buffer.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -36,7 +38,9 @@ class JsonScannerTest : public ::testing::Test {
 protected:
     std::unique_ptr<JsonScanner> create_json_scanner(const std::vector<TypeDescriptor>& types,
                                                      const std::vector<TBrokerRangeDesc>& ranges,
-                                                     const std::vector<std::string>& col_names) {
+                                                     const std::vector<std::string>& col_names,
+                                                     size_t file_size_limit = 1024 * 1024,
+                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {}) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -75,6 +79,10 @@ protected:
 
         for (int i = 0; i < types.size(); i++) {
             params->src_slot_ids.emplace_back(i);
+        }
+
+        if (!meta_cols.empty()) {
+            params->__set_stream_source_meta_columns(meta_cols);
         }
 
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
@@ -1563,6 +1571,127 @@ TEST_F(JsonScannerTest, test_duplicate_key) {
 
     EXPECT_EQ("[1, 1]", chunk->debug_row(0));
     EXPECT_EQ("[2, 2]", chunk->debug_row(1));
+}
+
+static TRoutineLoadMetaColumn json_meta_desc(int32_t slot_id, TStreamSourceMetaKind::type kind) {
+    TRoutineLoadMetaColumn d;
+    d.__set_slot_id(slot_id);
+    d.__set_kind(kind);
+    return d;
+}
+
+TEST_F(JsonScannerTest, test_source_metadata_fill) {
+    // Hidden source-metadata slots follow (or interleave with) the payload columns; the routine-load FE
+    // derives them from the INCLUDE METADATA clause. BE_TEST reads json from a file rather than the
+    // Kafka pipe, so the per-message metadata is injected via set_test_stream_meta(). Metadata-value
+    // formatting itself is covered by stream_source_meta_test; this covers the JsonReader integration:
+    // slot interception (object-order and jsonpath), positional jsonpath alignment, and the
+    // payload-field-name-collides-with-a-metadata-alias skip.
+    std::string filename = "./be/test/exec/test_data/json_scanner/meta_test.json";
+    write_json_to_file(filename, R"({"id": 42, "payload": "hello"})");
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
+    meta.set_topic("orders");
+    meta.set_partition(7);
+    meta.set_offset(100);
+    meta.add_header("trace-id", "xyz");
+
+    // by-name path (no jsonpath): metadata slots follow the two payload columns, filled from meta.
+    {
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BIGINT);                             // id (payload)
+        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload
+        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 2)
+        types.emplace_back(TYPE_INT);                                // partition (meta, slot 3)
+        types.emplace_back(TYPE_BIGINT);                             // offset (meta, slot 4)
+        types.emplace_back(
+                TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(64),
+                                                TypeDescriptor::create_varchar_type(64))); // headers (slot 5)
+
+        std::vector<TRoutineLoadMetaColumn> meta_cols = {
+                json_meta_desc(2, TStreamSourceMetaKind::TOPIC), json_meta_desc(3, TStreamSourceMetaKind::PARTITION),
+                json_meta_desc(4, TStreamSourceMetaKind::OFFSET), json_meta_desc(5, TStreamSourceMetaKind::HEADERS)};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_LOCAL;
+        range.__isset.jsonpaths = false;
+        range.__set_path(filename);
+        ranges.emplace_back(range);
+
+        auto scanner = create_json_scanner(types, ranges, {"id", "payload", "mt_topic", "mt_part", "mt_off", "mt_hdr"},
+                                           1024 * 1024, meta_cols);
+        scanner->set_test_stream_meta(&meta);
+        ASSERT_OK(scanner->open());
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_EQ(6, chunk->num_columns());
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(42, chunk->get(0)[0].get_int64());
+        EXPECT_EQ("hello", chunk->get(0)[1].get_slice());
+        EXPECT_EQ("orders", chunk->get(0)[2].get_slice());
+        EXPECT_EQ(7, chunk->get(0)[3].get_int32());
+        EXPECT_EQ(100, chunk->get(0)[4].get_int64());
+        EXPECT_EQ(1, chunk->get(0)[5].get_map().size());
+    }
+
+    // jsonpath path: a metadata slot sits BETWEEN the two payload columns; the positional
+    // slot->jsonpath mapping must skip it (meta_count shift) for the payload columns to stay aligned.
+    {
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BIGINT);                             // id (payload, jsonpath[0])
+        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // topic (meta, slot 1)
+        types.emplace_back(TypeDescriptor::create_varchar_type(20)); // payload (payload, jsonpath[1])
+
+        std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_LOCAL;
+        range.__isset.jsonpaths = true;
+        range.jsonpaths = R"(["$.id", "$.payload"])";
+        range.__set_path(filename);
+        ranges.emplace_back(range);
+
+        auto scanner = create_json_scanner(types, ranges, {"id", "mt_topic", "payload"}, 1024 * 1024, meta_cols);
+        scanner->set_test_stream_meta(&meta);
+        ASSERT_OK(scanner->open());
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_EQ(3, chunk->num_columns());
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(42, chunk->get(0)[0].get_int64());       // jsonpath[0] -> $.id
+        EXPECT_EQ("orders", chunk->get(0)[1].get_slice()); // metadata, transparent to jsonpath mapping
+        EXPECT_EQ("hello", chunk->get(0)[2].get_slice());  // jsonpath[1] -> $.payload, via meta_count shift
+    }
+
+    // collision: a payload field ("payload") shares its name with a metadata alias; the metadata value
+    // must win and the payload field must not overwrite it (object-order skip path).
+    {
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BIGINT);                             // id (payload)
+        types.emplace_back(TypeDescriptor::create_varchar_type(64)); // payload (meta TOPIC, slot 1)
+
+        std::vector<TRoutineLoadMetaColumn> meta_cols = {json_meta_desc(1, TStreamSourceMetaKind::TOPIC)};
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_LOCAL;
+        range.__isset.jsonpaths = false;
+        range.__set_path(filename);
+        ranges.emplace_back(range);
+
+        auto scanner = create_json_scanner(types, ranges, {"id", "payload"}, 1024 * 1024, meta_cols);
+        scanner->set_test_stream_meta(&meta);
+        ASSERT_OK(scanner->open());
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_EQ(2, chunk->num_columns());
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(42, chunk->get(0)[0].get_int64());
+        EXPECT_EQ("orders", chunk->get(0)[1].get_slice()); // metadata wins over the "payload" json field
+    }
 }
 
 } // namespace starrocks

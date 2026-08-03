@@ -28,7 +28,7 @@ import TabItem from '@theme/TabItem';
 
 ### Docker
 
-- Docker セットアップ: Mac の場合は、[Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/) に定義されている手順に従ってください。Spark-SQL クエリを実行するには、少なくとも 5 GB のメモリと 4 つの CPU を Docker に割り当ててください (Docker → Preferences → Advanced を参照)。そうしないと、メモリの問題で Spark-SQL クエリが終了される可能性があります。
+- Docker セットアップ: Mac の場合は、[Install Docker Desktop on Mac](https://docs.docker.com/desktop/setup/install/mac-install/) に定義されている手順に従ってください。Spark-SQL クエリを実行するには、少なくとも 5 GB のメモリと 4 つの CPU を Docker に割り当ててください (Docker → Preferences → Advanced を参照)。そうしないと、メモリの問題で Spark-SQL クエリが終了される可能性があります。
 - Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL クライアント

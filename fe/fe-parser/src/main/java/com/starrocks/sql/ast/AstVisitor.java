@@ -608,6 +608,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

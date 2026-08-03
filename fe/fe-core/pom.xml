@@ -26,7 +26,7 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>main</version>
+        <version>4.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -117,6 +117,13 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>fe-grammar</artifactId>
+        </dependency>
+
+        <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+             jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+        <dependency>
+            <groupId>org.tukaani</groupId>
+            <artifactId>xz</artifactId>
         </dependency>
 
         <dependency>
@@ -535,12 +542,38 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <exclusions>
+                <!-- CVE-2026-10050: Jetty client-side Digest auth bypass. jetty-security
+                     is only reachable via Hadoop's embedded HttpServer2, which StarRocks
+                     never instantiates (it uses Hadoop purely as an FS client). -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-security</artifactId>
+                </exclusion>
+                <!-- jetty-http is consumed only by the unused Jetty server stack
+                     (jetty-server/servlet/webapp) and the excluded jetty-client.
+                     Raw references elsewhere (kudu-client, hive-apache, paimon-s3/oss)
+                     sit in server-side or metrics-binder classes never loaded by FE. -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-http</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+            <exclusions>
+                <!-- CVE-2026-10050: the vulnerable DigestAuthentication.apply() lives in
+                     jetty-client, pulled via hadoop-yarn-client -> websocket-client. The
+                     YARN websocket timeline client is unused by StarRocks. -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-client</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -659,6 +692,13 @@ under the License.
         <dependency>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-common</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-core
+             Used by the tablet pre-split meta-tier sampler to read ORC stripe statistics. -->
+        <dependency>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
         </dependency>
 
         <dependency>
@@ -863,6 +903,16 @@ under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-memory-netty</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-compression</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>

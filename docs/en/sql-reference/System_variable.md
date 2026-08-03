@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['session variable']
+description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
 ---
 
 # System variables
@@ -224,6 +225,16 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 
 Used for MySQL client compatibility. No practical usage.
 
+### avro_use_jni_reader
+
+* **Scope**: Session
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), the FE sets this session variable on Avro scan ranges and the BE chooses `HdfsAvroScanner` instead of the native Avro scanner path. This option can be used as a compatibility fallback when the native reader does not meet your needs.
+
+  Current limitation: `CHAR(n)` columns are not fully compatible between the JNI and non-JNI Avro readers. For Avro values such as `Char` read into a `CHAR(10)` column, the current native reader keeps the unpadded value instead of returning `Char` followed by six spaces, while the JNI reader may behave differently. To avoid inconsistent results, we recommend not relying on `CHAR(n)` padding semantics when switching `avro_use_jni_reader`, and using `VARCHAR` instead when possible.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v4.1.1
+
 ### big_query_profile_threshold
 
 * **Description**: Used to set the threshold for big queries. When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_threshold`, a profile is generated for that query.
@@ -233,6 +244,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: Second
 * **Data type**: String
 * **Introduced in**: v3.1
+
+### blacklist_backup_routing
+
+* **Scope**: Session
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Default**: `CIRCULAR`
+* **Data type**: String
+* **Valid values**: `CIRCULAR`, `RANDOM`
+* **Introduced in**: -
 
 ### broadcast_row_limit
 
@@ -425,6 +445,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: ""
 * **Data type**: String
 * **Introduced in**: v3.4.0
+
+### custom_session_name (session)
+
+* **Description**: Used to specify custom name of current session, analog of `applicationName` or `program_name` in DMBS like MySQL or PostgreSQL. Can be set using `SET SESSION custom_session_name = 'my session name';`. Value can be found in audit logs in `customSessionName` field.
+* **Default**: ""
+* **Data type**: String
+* **Introduced in**: v4.1.0
 
 ### datacache_sharing_work_period
 
@@ -968,7 +995,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: true 
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_shared_scan
@@ -1059,6 +1086,12 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
 * **Default**: true
 * **Introduced in**: v2.3
+
+### enable_tablet_pre_split
+
+* **Description**: Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to `true` so the FE Config gates (`enable_tablet_pre_split_for_*`) remain the primary on/off switch. Set this to `false` for a session whose load you want to leave undisturbed. Both the matching Config flag and this session variable must be `true` for pre-split to run.
+* **Default**: true
+* **Introduced in**: v4.1.0
 
 ### enable_topn_runtime_filter
 
@@ -1581,7 +1614,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
-### resource_group 
+### resource_group
 
         * **Description**: The specified resource group of this session
         * **Default**: ""
@@ -1615,6 +1648,22 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
+
+### allow_lake_without_partition_filter
+
+* **Description**: Whether to allow queries on lake tables (Hive, Iceberg, Delta Lake, Paimon, etc.) without a partition filter predicate. When set to `false`, queries that do not contain a valid partition predicate on these tables will be rejected to prevent accidental full-table scans.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Alias**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **Description**: The maximum number of partitions allowed to be scanned for a single lake table (Hive, Iceberg, Delta Lake, Paimon, etc.). When set to `0`, no limit is applied. When exceeded, the query will return an error. Note that for catalog types that enumerate splits incrementally (Iceberg, Delta Lake), the limit check is performed during scan-range dispatch and the query may fail mid-execution rather than being rejected upfront.
+* **Scope**: Session
+* **Default**: `0` (No limit)
+* **Data type**: Int
+* **Alias**: `scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 
@@ -1699,6 +1748,7 @@ Used to specify the SQL mode to accommodate certain SQL dialects. Valid values i
 * `SORT_NULLS_LAST`: places NULL values at the end after sorting.
 * `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
 * `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+* `STRUCT_CAST_BY_NAME`: enables name-based field matching when casting between STRUCT types, rather than the default position-based matching. When this mode is enabled, fields in the source struct are matched to fields in the target struct by field name (case-insensitively), regardless of the order in which they are declared. Fields present in the source but absent in the target are ignored; fields present in the target but absent in the source are filled with NULL. This mode affects both the FE type resolution (common supertype computation for UNION ALL and castability checks) and the BE cast evaluation (runtime field reordering in CastStructExpr). This is particularly useful when performing UNION ALL on STRUCT columns whose fields are defined in different orders across branches.
 
 You can set only one SQL mode, for example:
 

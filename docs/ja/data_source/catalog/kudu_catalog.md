@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.3 以降の Kudu catalog で、Apache Kudu からデータをインジェストせずにクエリおよび変換ロード。"
 ---
 import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 

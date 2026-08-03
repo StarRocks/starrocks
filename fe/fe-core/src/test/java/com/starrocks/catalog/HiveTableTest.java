@@ -298,6 +298,9 @@ public class HiveTableTest {
 
             Assertions.assertTrue(table instanceof HiveTable);
             HiveTable hiveTable = (HiveTable) table;
+            if (targetFormat.equals("AVRO")) {
+                hiveTable.setAvroSchemaJson("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}");
+            }
             List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
             TTableDescriptor tTableDescriptor = hiveTable.toThrift(partitions);
 
@@ -305,6 +308,12 @@ public class HiveTableTest {
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getSerde_lib(), serde);
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_names(), "col2");
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_types(), "INT");
+            if (targetFormat.equals("AVRO")) {
+                Assertions.assertEquals("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}",
+                        tTableDescriptor.getHdfsTable().getAvro_schema_json());
+            } else {
+                Assertions.assertFalse(tTableDescriptor.getHdfsTable().isSetAvro_schema_json());
+            }
         }
     }
 

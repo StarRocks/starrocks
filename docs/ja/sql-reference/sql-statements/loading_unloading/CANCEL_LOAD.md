@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Broker Load、Spark Load、または INSERT ロードジョブをキャンセルします。"
 ---
 
 # CANCEL LOAD

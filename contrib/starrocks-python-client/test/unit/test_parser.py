@@ -147,6 +147,50 @@ class TestDataTypeParser:
     @pytest.mark.parametrize(
         "type_str",
         [
+            (
+                "struct<"
+                "headers array<struct<key varchar(65533) COMMENT '', value varchar(65533) COMMENT ''>> COMMENT '', "
+                "payload struct<event_id bigint COMMENT '', labels map<string, string> COMMENT ''> COMMENT ''"
+                ">"
+            ),
+            (
+                "struct<"
+                "headers array<struct<key varchar(65533) COMMENT 'header key', value varchar(65533) COMMENT 'header value'>> COMMENT 'headers comment', "
+                "payload struct<event_id bigint COMMENT 'event id', labels map<string, string> COMMENT 'label map'> COMMENT 'payload comment'"
+                ">"
+            ),
+            (
+                "struct<"
+                "headers array<struct<key varchar(65533) COMMENT 'owner''s key', value varchar(65533) COMMENT 'has \"double\" quotes'>> COMMENT 'headers \"meta\"', "
+                "payload struct<event_id bigint COMMENT 'id', labels map<string, string> COMMENT 'labels'> COMMENT 'payload''s comment'"
+                ">"
+            ),
+        ],
+    )
+    def test_nested_complex_types_with_inline_comments(self, type_str):
+        expected_type = datatype.STRUCT(
+            (
+                "headers",
+                datatype.ARRAY(
+                    datatype.STRUCT(
+                        ("key", datatype.VARCHAR(65533)),
+                        ("value", datatype.VARCHAR(65533)),
+                    )
+                ),
+            ),
+            (
+                "payload",
+                datatype.STRUCT(
+                    ("event_id", datatype.BIGINT),
+                    ("labels", datatype.MAP(datatype.STRING, datatype.STRING)),
+                ),
+            ),
+        )
+        assert repr(parse_data_type(type_str)) == repr(expected_type)
+
+    @pytest.mark.parametrize(
+        "type_str",
+        [
             "invalid_type",
             # "varchar(10, 2)",
         ],

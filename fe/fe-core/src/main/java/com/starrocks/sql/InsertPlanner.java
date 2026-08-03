@@ -61,7 +61,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -72,7 +71,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
@@ -124,6 +122,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -133,6 +132,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -287,19 +287,6 @@ public class InsertPlanner {
         }
     }
 
-    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
-        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
-        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
-            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
-                if (t.getValue().isExternalTableWithFileSystem()) {
-                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
-                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
-                }
-            }
-        }
-    }
-
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -317,17 +304,15 @@ public class InsertPlanner {
                     && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
             Set<String> columnsToFilter = preserveRowLineage
                     ? IcebergTable.ICEBERG_META_COLUMNS.stream()
-                            .filter(col -> !col.equals(IcebergTable.ROW_ID)
-                                    && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
-                            .collect(Collectors.toSet())
+                    .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                            && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                    .collect(Collectors.toSet())
                     : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
             outputFullSchema = outputFullSchema.stream().filter(col ->
                     !columnsToFilter.contains(col.getName())).toList();
         }
-
-        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -598,6 +583,9 @@ public class InsertPlanner {
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
+        // Retractable IVM: pre-place the sink __op control column as a fixed trailing output before optimize,
+        // so it flows into the sink tuple by position; IvmRewriter binds its value to __ACTION__.
+        boolean ivmOpPreplaced = preplaceIvmLoadOpColumn(session, targetTable, outputColumns, columnRefFactory);
         PreOptimizePlanContext preOptimizePlanContext = preparePreOptimizePlanContext(
                 insertStmt, session.getSessionVariable(), targetTable, outputColumns, columnRefFactory, logicalPlan);
 
@@ -610,6 +598,11 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            if (session.getSessionVariable().isEnableIVMRefresh()) {
+                // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
+                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
+            }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     preOptimizePlanContext.root,
@@ -620,13 +613,41 @@ public class InsertPlanner {
         //8. Build fragment exec plan
         boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                 || targetTable instanceof MysqlTable);
+        List<String> sinkColNames = queryRelation.getColumnOutputNames();
+        if (ivmOpPreplaced) {
+            sinkColNames = new ArrayList<>(sinkColNames);
+            sinkColNames.add(Load.LOAD_OP_COLUMN);
+        }
         ExecPlan execPlan;
         try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
             execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
         }
         return execPlan;
+    }
+
+    // Pre-place the sink __op control column (Load.LOAD_OP_COLUMN) as a fixed trailing output for a
+    // retractable PRIMARY KEY IVM refresh: append it to outputColumns and outputFullSchema (last) so it
+    // gets a trailing tuple slot and OUTPUT expr; IvmRewriter binds its value to __ACTION__.
+    private boolean preplaceIvmLoadOpColumn(ConnectContext session, Table targetTable,
+                                            List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory) {
+        if (!session.getSessionVariable().isEnableIVMRefresh()
+                || !(targetTable instanceof OlapTable olapTable)
+                || olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Idempotent across optimistic-lock retries (buildExecPlanWithRetry runs this per attempt):
+        // strip a prior attempt's __op before re-appending, or the columns accumulate a duplicate.
+        outputColumns.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        outputColumns.add(columnRefFactory.create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false));
+        Column opColumn = new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT);
+        opColumn.setIsAllowNull(false);
+        List<Column> extendedSchema = new ArrayList<>(outputFullSchema);
+        extendedSchema.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        extendedSchema.add(opColumn);
+        outputFullSchema = extendedSchema;
+        return true;
     }
 
     private PreOptimizePlanContext preparePreOptimizePlanContext(InsertStmt insertStmt,
@@ -1010,6 +1031,8 @@ public class InsertPlanner {
 
         for (PartitionField field : spec.fields()) {
             String sourceColumnName = icebergSchema.findColumnName(field.sourceId());
+            boolean isTimestampWithZone =
+                    icebergSchema.findType(field.sourceId()).equals(Types.TimestampType.withZone());
             int sourceColumnIndex = -1;
             for (int i = 0; i < fullSchema.size(); i++) {
                 if (fullSchema.get(i).getName().equalsIgnoreCase(sourceColumnName)) {
@@ -1034,7 +1057,7 @@ public class InsertPlanner {
                 case DAY:
                 case HOUR: {
                     String funcName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX +
-                            transform.name().toLowerCase();
+                            (isTimestampWithZone ? "timestamptz_" : "") + transform.name().toLowerCase();
                     Type[] argTypes = new Type[] {sourceRef.getType()};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -1057,7 +1080,9 @@ public class InsertPlanner {
                         partitionColumnIDs.add(sourceRef.getId());
                         break;
                     }
-                    String funcName = FunctionSet.ICEBERG_TRANSFORM_BUCKET;
+                    String funcName = isTimestampWithZone
+                            ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "timestamptz_bucket"
+                            : FunctionSet.ICEBERG_TRANSFORM_BUCKET;
                     Type[] argTypes = new Type[] {sourceRef.getType(), com.starrocks.type.IntegerType.INT};
                     Function fn = ExprUtils.getBuiltinFunction(funcName, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

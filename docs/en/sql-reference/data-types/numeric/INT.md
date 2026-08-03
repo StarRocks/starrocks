@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "INT is a 4-byte signed integer."
 ---
 
 # INT

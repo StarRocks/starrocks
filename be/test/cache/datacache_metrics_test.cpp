@@ -60,6 +60,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
     ASSERT_NE(nullptr, metrics->get_metric("datacache_meta_used_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_count"));
 }
 
 // Test that metrics have correct initial values
@@ -74,6 +76,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
     ASSERT_GE(instance->datacache_meta_used_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_hit_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_miss_bytes.value(), 0);
+    ASSERT_GE(instance->block_cache_hit_count.value(), 0);
+    ASSERT_GE(instance->block_cache_miss_count.value(), 0);
 }
 
 // Test metrics update through hook mechanism
@@ -95,6 +99,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
     ASSERT_GE(instance->datacache_meta_used_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_hit_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_miss_bytes.value(), 0);
+    ASSERT_GE(instance->block_cache_hit_count.value(), 0);
+    ASSERT_GE(instance->block_cache_miss_count.value(), 0);
 
     // Used bytes should not exceed quota bytes
     ASSERT_LE(instance->datacache_mem_used_bytes.value(), instance->datacache_mem_quota_bytes.value());
@@ -113,6 +119,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     auto meta_used_metric = metrics->get_metric("datacache_meta_used_bytes");
     auto hit_bytes_metric = metrics->get_metric("block_cache_hit_bytes");
     auto miss_bytes_metric = metrics->get_metric("block_cache_miss_bytes");
+    auto hit_count_metric = metrics->get_metric("block_cache_hit_count");
+    auto miss_count_metric = metrics->get_metric("block_cache_miss_count");
 
     ASSERT_NE(nullptr, mem_quota_metric);
     ASSERT_NE(nullptr, mem_used_metric);
@@ -121,6 +129,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_NE(nullptr, meta_used_metric);
     ASSERT_NE(nullptr, hit_bytes_metric);
     ASSERT_NE(nullptr, miss_bytes_metric);
+    ASSERT_NE(nullptr, hit_count_metric);
+    ASSERT_NE(nullptr, miss_count_metric);
 
     // Quota/used metrics should be gauge type
     ASSERT_EQ(MetricType::GAUGE, mem_quota_metric->type());
@@ -133,7 +143,11 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_EQ(MetricType::COUNTER, hit_bytes_metric->type());
     ASSERT_EQ(MetricType::COUNTER, miss_bytes_metric->type());
 
-    // All should have BYTES unit
+    // Hit/miss count totals should be counter type with NOUNIT
+    ASSERT_EQ(MetricType::COUNTER, hit_count_metric->type());
+    ASSERT_EQ(MetricType::COUNTER, miss_count_metric->type());
+
+    // All byte metrics should have BYTES unit
     ASSERT_EQ(MetricUnit::BYTES, mem_quota_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, mem_used_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, disk_quota_metric->unit());
@@ -141,6 +155,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_EQ(MetricUnit::BYTES, meta_used_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, hit_bytes_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, miss_bytes_metric->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, hit_count_metric->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, miss_count_metric->unit());
 }
 
 #else // !WITH_STARCACHE

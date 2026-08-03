@@ -98,52 +98,6 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
     return Status::OK();
 }
 
-Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
-        return Status::OK();
-    }
-
-    if (!context->is_notnull_constant_column(1)) {
-        return Status::OK();
-    }
-
-    ColumnPtr path = context->get_constant_column(1);
-    auto path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path);
-    std::string path_str(path_value.data, path_value.size);
-    // Must remove or replace the escape sequence.
-    path_str.erase(std::remove(path_str.begin(), path_str.end(), '\\'), path_str.end());
-    if (path_str.empty()) {
-        return Status::OK();
-    }
-
-    std::vector<std::string> path_exprs;
-    try {
-        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
-                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
-        path_exprs.assign(tok.begin(), tok.end());
-    } catch (const boost::escaped_list_error& e) {
-        return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
-    }
-    auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
-
-    context->set_function_state(scope, parsed_paths);
-    VLOG(10) << "prepare json path. size: " << parsed_paths->size();
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
-        if (parsed_paths != nullptr) {
-            delete parsed_paths;
-            VLOG(10) << "close json path";
-        }
-    }
-
-    return Status::OK();
-}
-
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
 #define HANDLE_SIMDJSON_ERROR(err, msg)                                                          \
@@ -329,6 +283,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));
@@ -397,6 +354,9 @@ StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& column
             JsonValue json_value;
             auto st = JsonValue::parse(raw, &json_value);
             if (!st.ok()) {
+                if (context != nullptr && context->allow_throw_exception()) {
+                    return st;
+                }
                 result.append_null();
             } else {
                 result.append(std::move(json_value));
@@ -553,17 +513,19 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
-                if (p.key.find('.') != std::string::npos) {
-                    in_flat = false;
-                }
-                if (in_flat) {
-                    flat_path += "." + p.key;
+                // A key containing the '.' separator is still a valid flat level once wrapped in
+                // quotes (the inverse of JsonFlatPath::split_path, matching SubfieldAccessPathNormalizer
+                // on the FE); only a key whose name itself contains a '"' is unrepresentable and falls
+                // back to extraction from the reconstructed JSON via real_path.
+                if (in_flat && p.key.find('"') == std::string::npos) {
+                    flat_path += (p.key.find('.') == std::string::npos) ? "." + p.key : ".\"" + p.key + "\"";
                     if (p.array_selector->type != NONE) {
                         state->real_path.paths.emplace_back("", p.array_selector);
                         in_flat = false;
                     }
                     continue;
                 }
+                in_flat = false;
                 state->real_path.paths.emplace_back(p);
             }
 

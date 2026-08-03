@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP STATS deletes CBO statistics, which include basic statistics and histograms."
 ---
 
 # DROP STATS

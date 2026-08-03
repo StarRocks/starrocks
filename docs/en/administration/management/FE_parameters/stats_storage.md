@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+description: "FE configuration parameters for statistics collection and storage settings."
 ---
 
 # FE Configuration - Statistics and Storage
@@ -77,6 +78,33 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
+
+### `enable_external_predicate_columns_collection`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to record predicate column usage (columns used in WHERE/JOIN/GROUP BY) for external (non-native) tables during query optimization. StarRocks uses this usage information to narrow down which columns ANALYZE collects statistics for on wide external tables. When disabled, external table predicate columns are not recorded, and ANALYZE falls back to collecting statistics for all columns.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- Default: 168
+- Type: Long
+- Unit: Hours
+- Is mutable: Yes
+- Description: The time-to-live (TTL) of recorded external table predicate column usage. Entries whose `last_used` timestamp is older than this value are removed by the periodic vacuum job. Set to a negative value (e.g. -1) to disable vacuum. Defaults to a week because external table ANALYZE runs far less frequently than for internal tables, so a short TTL (matching the internal table's 24-hour default) would evict usage information between two collections.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The TTL of the in-memory cache that serves external table predicate column queries (for example, during automatic ANALYZE column selection). A shorter value makes newly recorded usage visible sooner but increases the query load on the underlying storage table; a longer value reduces that load at the cost of staleness.
+- Introduced in: v4.2.0
 
 ## Storage
 
@@ -513,7 +541,7 @@ This topic introduces the following types of FE configurations:
 - Default: 300
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
@@ -553,6 +581,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of new tablets that an old tablet can be split into.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- Default: 2147483648 (2 GB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. Should be no larger than `tablet_reshard_target_size`.
+- Introduced in: v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - Default: 259200000 (72 hours)
@@ -561,3 +598,94 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_files`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM FILES()` loads. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_broker_load`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
+- Introduced in: v4.1.0
+
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads (INSERT-from-OLAP-table). On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_pre_submit_timeout_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Wall-clock budget for the pre-submit phase of Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). On expiry the coordinator skips pre-split and the load proceeds against the original single tablet. Default 300s: the data-tier sampler can take tens of seconds on large datasets / slow object storage (a ~40GB many-file Parquet load sampled in ~78s in testing), and this budget mainly bites large loads — exactly the ones pre-split benefits; small loads sample in well under a second regardless. The load stays `PENDING` for at most this long during sampling, so keep it below the load's own timeout.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_post_submit_wait_seconds`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Maximum time the coordinator will wait for an admitted Sample-Based Tablet Pre-Split reshard job to reach `FINISHED`. Both INSERT-from-FILES and Broker Load synchronously wait and on expiry **proceed without abort** — the load then plans against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); the `tablet_pre_split_post_submit_hard_cap` counter records the timeout. The strict `runPreSplit` wrapper used by tests aborts the calling load via `PreSplitPostSubmitTimeoutException`. For Broker Load the wait runs after the broker pending task resolves file statuses but before `beginTxn` opens `T_load` — it occupies a `pending_load_task_scheduler` thread for at most this many seconds per table, so size `max_broker_load_job_concurrency` accordingly when many concurrent Broker Loads target a pre-splittable layout. **Operator note:** the Broker Load remains `PENDING` in `SHOW LOAD` during the wait and is still subject to its own `timeoutSecond` — set this well below the smallest Broker Load timeout in normal use.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_sample_byte_limit`
+
+- Default: 16777216 (16 MiB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Soft byte cap on the FE-side accumulation buffer of the data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_meta_tier_overlap_threshold`
+
+- Default: 0.3
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum overlap fraction tolerated when Sample-Based Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. Above this threshold the cumulative-row count stops being monotone in sorted-min order so meta tier falls back to data tier (row sampling).
+- Introduced in: v4.1.0
+
+### `tablet_pre_split_max_partitions_per_load`
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Introduced in: v4.1.0
+
+#### Rolling back Sample-Based Tablet Pre-Split
+
+To disable the feature safely before a downgrade or during a production rollback:
+
+1. Set all three pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, and `enable_tablet_pre_split_for_insert_from_table`. New loads will skip pre-split immediately.
+2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
+3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
+
+#### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
+
+The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Two operational caveats apply:
+
+- **Broker Load triggering-load asymmetry.** The multi-partition pre-split hook fires from `BrokerLoadJob.createLoadingTask` **after** `task.prepare()` has built the load's sink plan against the catalog as it existed at that moment. For Broker Load, pre-created partitions and the post-reshard tablet layout are therefore only visible to **subsequent** loads on the same table — the triggering Broker Load itself runs against the original layout and uses BE runtime auto-create for any partitions it touches. INSERT-from-FILES (where the hook fires before `StatementPlanner.plan()`) is unaffected and benefits in the same load.
+- **Pre-created partition leak on subsequent INSERT failure.** When pre-create succeeds and the triggering INSERT later fails for unrelated reasons (FILES schema mismatch, BE crash, load timeout, etc.), the empty pre-created partitions remain in the catalog. This matches the semantics of `ALTER TABLE ADD PARTITION`, which also leaves a partition behind on subsequent failure. Operators who care can drop the empty partitions manually with `ALTER TABLE ... DROP PARTITION`; in practice empty partitions are cheap and the next retry of the load will reuse them.
+
+#### Production deployment guidance
+
+Set `enable_execute_script_on_frontend = false` in production. Sample-Based Tablet Pre-Split exposes no SQL surface that depends on FE-side script execution; the production code paths sample through the connector + planner directly. Leaving `enable_execute_script_on_frontend = true` widens the FE attack surface without enabling any pre-split functionality, so the safe default for production clusters is to keep it off.

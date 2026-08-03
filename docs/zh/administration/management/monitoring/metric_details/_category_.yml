@@ -1,0 +1,7 @@
+position: 100
+label: '指标详情'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index
+  title: '指标详情'

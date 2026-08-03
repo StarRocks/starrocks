@@ -274,7 +274,7 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
         auto byte_buffer = ByteBuffer::allocate_with_tracker(buf.size(), 0, ByteBufferMetaType::KAFKA).value();
         byte_buffer->put_bytes(buf.data(), buf.size());
         byte_buffer->flip_to_read();
-        KafkaByteBufferMeta* meta = dynamic_cast<KafkaByteBufferMeta*>(byte_buffer->meta());
+        StreamMessageMeta* meta = dynamic_cast<StreamMessageMeta*>(byte_buffer->meta());
         EXPECT_TRUE(meta != nullptr);
         meta->set_partition(1);
         meta->set_offset(5);
@@ -289,7 +289,7 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
     auto buf = res.value();
     EXPECT_EQ(buf->remaining(), 42000021);
     EXPECT_EQ(std::string_view(R"({"foo": 1, "bar": 2})"), std::string_view(buf->ptr, 20));
-    KafkaByteBufferMeta* meta = dynamic_cast<KafkaByteBufferMeta*>(buf->meta());
+    StreamMessageMeta* meta = dynamic_cast<StreamMessageMeta*>(buf->meta());
     EXPECT_TRUE(meta != nullptr);
     EXPECT_EQ(1, meta->partition());
     EXPECT_EQ(5, meta->offset());

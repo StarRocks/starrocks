@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "routinesはStarRocksで実装されていないプレースホルダービューです。"
 ---
 
 # routines

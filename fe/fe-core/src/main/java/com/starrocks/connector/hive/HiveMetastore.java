@@ -74,7 +74,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void createDb(String dbName, Map<String, String> properties) {
         String location = properties.getOrDefault(LOCATION_PROPERTY, "");
-        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
         Database database = new Database(dbId, dbName, location);
         client.createDatabase(HiveMetastoreApiConverter.toMetastoreApiDatabase(database));
     }
@@ -128,6 +128,10 @@ public class HiveMetastore implements IHiveMetastore {
             if (AcidUtils.isFullAcidTable(table)) {
                 throw new StarRocksConnectorException(String.format(
                         "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
+            }
+            if (table.getParameters() != null && AcidUtils.isInsertOnlyTable(table.getParameters())) {
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(insert only), sr didn't support it yet", dbName, tableName));
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);

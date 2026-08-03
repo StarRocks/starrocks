@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回表达式的总体标准差，支持作为窗口函数使用。"
 ---
 
 
@@ -24,11 +25,6 @@ STDDEV(expr)
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
 ![image](../../../_assets/stddevpop_formula.png)
-
-<!--$$
-\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
-$$ -->
-
 
 ## 示例
 

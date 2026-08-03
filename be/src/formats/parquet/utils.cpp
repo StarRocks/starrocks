@@ -239,4 +239,26 @@ bool ParquetUtils::has_non_null_binary_value(const Column* input_column, size_t 
     return column->is_binary();
 }
 
+bool is_unsigned_integer(const tparquet::SchemaElement& schema_element) {
+    // The modern logical type is authoritative when present, and only the INTEGER
+    // logical type carries signedness; any other logical type is therefore not an
+    // unsigned integer. Only fall back to the legacy converted type when no logical
+    // type is set, so a contradictory UINT_* converted type cannot override it.
+    if (schema_element.__isset.logicalType) {
+        return schema_element.logicalType.__isset.INTEGER && !schema_element.logicalType.INTEGER.isSigned;
+    }
+    if (schema_element.__isset.converted_type) {
+        switch (schema_element.converted_type) {
+        case tparquet::ConvertedType::UINT_8:
+        case tparquet::ConvertedType::UINT_16:
+        case tparquet::ConvertedType::UINT_32:
+        case tparquet::ConvertedType::UINT_64:
+            return true;
+        default:
+            return false;
+        }
+    }
+    return false;
+}
+
 } // namespace starrocks::parquet

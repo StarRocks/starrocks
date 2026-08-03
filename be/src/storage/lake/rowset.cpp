@@ -109,7 +109,7 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
           _segment_range_end(segment_end) {
     DCHECK(segment_start >= 0);
     DCHECK(segment_end > segment_start);
-    DCHECK(segment_end <= _metadata->segments_size());
+    DCHECK(segment_end <= _metadata->segment_metas_size());
 
     auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
     if (_tablet_metadata->rowset_to_schema().empty() ||
@@ -144,9 +144,20 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
         return std::optional<SeekRange>{};
     }
 
+    // _tablet_schema is this rowset's own (for an old rowset, archived) schema, so the SeekRange's
+    // positional field ids align with the rowset's segments. A range persisted by a newer build after a
+    // metadata-only trailing sort-key add can carry a bound arity wider than _tablet_schema's sort key;
+    // create_seek_range_from projects it onto _tablet_schema's leading columns, comparing the added
+    // columns' read-time defaults -- taken from the current tablet schema -- against the dropped trailing
+    // bound values. This build never writes such a range; it only tolerates one on read (downgrade-safe).
+    TabletSchemaCSPtr current_schema =
+            _tablet_metadata != nullptr ? GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first
+                                        : nullptr;
+
     // Do not use mem_pool here. SeekRange will reference the data owned by protobuf metadata,
     // and metadata lifetime is guaranteed to outlive rowset iterators.
-    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr));
+    ASSIGN_OR_RETURN(auto range,
+                     TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr, current_schema));
     return std::optional<SeekRange>(std::move(range));
 }
 
@@ -158,15 +169,15 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
         op_compaction->mutable_output_rowset()->mutable_range()->CopyFrom(metadata().range());
     }
 
-    std::vector<SegmentPtr> segments;
+    std::vector<LoadedSegment> segments;
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = lake_io_opts;
-    std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>> not_used_segments;
+    std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>> not_used_segments;
     RETURN_IF_ERROR(load_segments(&segments, seg_options, &not_used_segments));
 
     bool clear_file_size_info = false;
-    bool clear_encryption_meta = (metadata().segments_size() != metadata().segment_encryption_metas_size());
+    auto* output_rowset = op_compaction->mutable_output_rowset();
 
     // NOTE: segments order must be kept, always already compacted segments, then compacted new segments,
     //       at last uncompacted segments, otherwise it will have data consistency problem for tables like
@@ -175,91 +186,62 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
     // 1. add already compacted segments first
     auto& already_compacted_segments = not_used_segments.first;
     for (size_t i = 0; i < metadata().next_compaction_offset(); ++i) {
-        op_compaction->mutable_output_rowset()->add_segments(metadata().segments(i));
-        StatusOr<int64_t> size_or = already_compacted_segments[i]->get_data_size();
+        auto* segment_meta = output_rowset->add_segment_metas();
+        segment_meta->CopyFrom(metadata().segment_metas(i));
+        StatusOr<int64_t> size_or = already_compacted_segments[i].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
             file_size = *size_or;
-            op_compaction->mutable_output_rowset()->add_segment_size(file_size);
+            segment_meta->set_size(file_size);
         } else {
             clear_file_size_info = true;
-            LOG(WARNING) << "unable to get file size for segment " << metadata().segments(i) << " for tablet "
-                         << _tablet_id << " when collecting uncompacted segment info, error: " << size_or.status();
+            LOG(WARNING) << "unable to get file size for segment " << metadata().segment_metas(i).filename()
+                         << " for tablet " << _tablet_id
+                         << " when collecting uncompacted segment info, error: " << size_or.status();
         }
-        if (!clear_encryption_meta) {
-            op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
-                    metadata().segment_encryption_metas(i));
-        }
-        if (i < metadata().shared_segments_size()) {
-            op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
-        }
-        if (i < metadata().segment_metas_size()) {
-            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
-        }
-        uncompacted_num_rows += already_compacted_segments[i]->num_rows();
+        uncompacted_num_rows += already_compacted_segments[i].segment->num_rows();
         uncompacted_data_size += file_size;
     }
 
     // 2. add compacted segments in this round
-    op_compaction->set_new_segment_offset(op_compaction->output_rowset().segments_size());
+    op_compaction->set_new_segment_offset(output_rowset->segment_metas_size());
     // For rowsets with sparse segment_idx, new compacted segments must use fresh ids that do not
     // collide with any remaining old segments copied into output_rowset.
-    uint32_t next_segment_id = metadata().segments_size() > 0 ? get_max_segment_idx(metadata()) + 1
-                                                              : op_compaction->output_rowset().segments_size();
+    uint32_t next_segment_id = metadata().segment_metas_size() > 0 ? get_max_segment_idx(metadata()) + 1
+                                                                   : output_rowset->segment_metas_size();
     for (const auto& file : writer->segments()) {
-        op_compaction->mutable_output_rowset()->add_segments(file.path);
-        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
-        op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
-        if (metadata().shared_segments_size() > 0) {
-            op_compaction->mutable_output_rowset()->add_shared_segments(false);
-        }
-        if (metadata().segment_metas_size() > 0) {
-            auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
-            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-            segment_meta->set_num_rows(file.num_rows);
-            segment_meta->set_segment_idx(next_segment_id++);
-        }
+        file.to_proto(next_segment_id++, output_rowset->add_segment_metas());
     }
     op_compaction->set_new_segment_count(writer->segments().size());
 
     // 3. set next compaction offset
-    op_compaction->mutable_output_rowset()->set_next_compaction_offset(op_compaction->output_rowset().segments_size());
+    output_rowset->set_next_compaction_offset(output_rowset->segment_metas_size());
 
     // 4. add uncompacted segments
     auto& uncompacted_segments = not_used_segments.second;
     for (size_t i = metadata().next_compaction_offset() + _compaction_segment_limit, idx = 0;
-         i < metadata().segments_size(); ++i, ++idx) {
-        op_compaction->mutable_output_rowset()->add_segments(metadata().segments(i));
-        StatusOr<int64_t> size_or = uncompacted_segments[idx]->get_data_size();
+         i < metadata().segment_metas_size(); ++i, ++idx) {
+        auto* segment_meta = output_rowset->add_segment_metas();
+        segment_meta->CopyFrom(metadata().segment_metas(i));
+        StatusOr<int64_t> size_or = uncompacted_segments[idx].segment->get_data_size();
         int64_t file_size = 0;
         if (size_or.ok()) {
             file_size = *size_or;
-            op_compaction->mutable_output_rowset()->add_segment_size(file_size);
+            segment_meta->set_size(file_size);
         } else {
             clear_file_size_info = true;
-            LOG(WARNING) << "unable to get file size for segment " << metadata().segments(i) << " for tablet "
-                         << _tablet_id << " when collecting uncompacted segment info, error: " << size_or.status();
-        }
-        if (!clear_encryption_meta) {
-            op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
-                    metadata().segment_encryption_metas(i));
-        }
-        if (i < metadata().shared_segments_size()) {
-            op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
-        }
-        if (i < metadata().segment_metas_size()) {
-            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
+            LOG(WARNING) << "unable to get file size for segment " << metadata().segment_metas(i).filename()
+                         << " for tablet " << _tablet_id
+                         << " when collecting uncompacted segment info, error: " << size_or.status();
         }
 
-        uncompacted_num_rows += uncompacted_segments[idx]->num_rows();
+        uncompacted_num_rows += uncompacted_segments[idx].segment->num_rows();
         uncompacted_data_size += file_size;
     }
     if (clear_file_size_info) {
-        op_compaction->mutable_output_rowset()->mutable_segment_size()->Clear();
-    }
-    if (clear_encryption_meta) {
-        op_compaction->mutable_output_rowset()->mutable_segment_encryption_metas()->Clear();
+        for (auto& segment_metadata : *output_rowset->mutable_segment_metas()) {
+            segment_metadata.clear_size();
+        }
     }
     return Status::OK();
 }
@@ -290,6 +272,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.sample_options = options.sample_options;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
@@ -359,7 +342,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         }
     }
 
-    std::vector<SegmentPtr> segments;
+    std::vector<LoadedSegment> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
     RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
 
@@ -369,7 +352,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i];
+        auto& seg_ptr = segments[i].segment;
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
             continue;
@@ -379,7 +362,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         }
 
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+        // Consult shared() by the segment's true metadata position, recorded at load time. The loaded
+        // position i is NOT the metadata index in segment-range / partial-compaction modes.
+        const int32_t meta_pos = segments[i].segment_meta_pos;
+        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
@@ -442,7 +428,7 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                           OlapReaderStatistics* stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
-    std::vector<SegmentPtr> segments;
+    std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
@@ -453,10 +439,28 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
+    // Contract: callers downstream (SegmentPKIterator + LakePrimaryIndex
+    // publish) require each emitted chunk's physical rowids to form a single
+    // contiguous run. The only filter applied below is the optional
+    // tablet_range over a PK-sorted segment, which preserves contiguity. Any
+    // future change adding delete vector, row predicates, runtime filters,
+    // rowid_range_option, or sparse ranges/short_key_ranges would silently
+    // break the downstream `base + i` arithmetic. For delvec-aware reads,
+    // use get_each_segment_iterator_with_delvec instead.
+    DCHECK(seg_options.delvec_loader == nullptr);
+    DCHECK(seg_options.delete_predicates.empty());
+    DCHECK(seg_options.pred_tree.empty());
+    DCHECK(seg_options.pred_tree_for_zone_map.empty());
+    DCHECK(seg_options.runtime_filter_preds.empty());
+    DCHECK(seg_options.rowid_range_option == nullptr);
+    DCHECK(seg_options.ranges.empty());
+    DCHECK(seg_options.short_key_ranges.empty());
+
     for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i];
+        auto& seg_ptr = segments[i].segment;
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+        const int32_t meta_pos = segments[i].segment_meta_pos;
+        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
@@ -474,13 +478,21 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
         const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
-        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
+        const std::vector<SparseRangePtr>* rowid_range_per_segment,
+        const std::vector<OlapReaderStatistics*>* per_segment_stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
-    std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    std::vector<LoadedSegment> segments;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_iter_with_delvec_us");
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    // Size the result up front so each iterator is written to its segment's position. The returned
+    // vector must stay positionally aligned with `segments`: callers index it by segment position to
+    // derive the rssid (rowset id + segment idx), skip null entries, and assert the size equals the
+    // segment count. A segment that produces no iterator (e.g. fully pruned by zonemap predicate
+    // filtering) is left as the default null, never compacting away its slot.
+    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
@@ -497,9 +509,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     for (int i = 0; i < segments.size(); i++) {
-        auto& seg_ptr = segments[i];
+        auto& seg_ptr = segments[i].segment;
+        // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
+        // shared stats object; otherwise all segments share `stats`.
+        if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
+            seg_options.stats = (*per_segment_stats)[i];
+        }
         seg_options.tablet_range = std::nullopt;
-        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
+        const int32_t meta_pos = segments[i].segment_meta_pos;
+        if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
@@ -511,12 +529,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave seg_iterators[i] as the default null placeholder, preserving alignment.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
 }
@@ -527,17 +546,26 @@ RowsetId Rowset::rowset_id() const {
     return rowset_id;
 }
 
-std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
+StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    // Lock-free lazy init: callers must serialize calls on a given Rowset (the split morsel queues
+    // hold _mutex; lake Rowsets are per-reader over immutable metadata). Not std::call_once -- that
+    // marks init done even on a transient failure and would defeat the retry (issue #75203).
+    if (_segments_loaded) {
         return _segments;
     }
-
-    auto segments_or = segments(true);
-    if (!segments_or.ok()) {
-        return {};
-    }
-    _segments = std::move(segments_or.value());
+    // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
+    // _segments_loaded stays false so a later call retries.
+    ASSIGN_OR_RETURN(auto segs, segments(true));
+    _segments = std::move(segs);
+    _segments_loaded = true;
     return _segments;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    // Best-effort shim for callers that tolerate an empty result on a transient failure; callers
+    // that must not proceed on failure use get_segments_checked() and check the Status.
+    auto res = get_segments_checked();
+    return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -546,14 +574,29 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
-    std::vector<SegmentPtr> segments;
+    std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = lake_io_opts;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr));
+    RETURN_IF_ERROR(load_segments(&loaded, seg_options, nullptr));
+    std::vector<SegmentPtr> segments;
+    segments.reserve(loaded.size());
+    for (auto& ls : loaded) {
+        segments.emplace_back(std::move(ls.segment));
+    }
     return segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
+    std::vector<LoadedSegment> loaded;
+    RETURN_IF_ERROR(load_segments(&loaded, fill_cache, buffer_size));
+    segments->reserve(segments->size() + loaded.size());
+    for (auto& ls : loaded) {
+        segments->emplace_back(std::move(ls.segment));
+    }
+    return Status::OK();
+}
+
+Status Rowset::load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size) {
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts.fill_data_cache = fill_cache;
     seg_options.lake_io_opts.fill_metadata_cache = fill_cache;
@@ -561,40 +604,24 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
     return load_segments(segments, seg_options, nullptr);
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                             std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
+                             std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
                              const std::unordered_set<int>* skip_segment_idxs) {
 #if !defined BE_TEST && !defined(BUILD_FORMAT_LIB)
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
 
-    segments->reserve(segments->size() + metadata().segments_size());
+    segments->reserve(segments->size() + metadata().segment_metas_size());
 
     size_t footer_size_hint = 16 * 1024;
     int32_t seg_idx = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
 
-    // RowsetMetaData upgrade from old version may not have the field of segment_size
-    auto segment_size_size = metadata().segment_size_size();
-    auto segment_file_size = metadata().segments_size();
-    auto bundle_file_offsets_size = metadata().bundle_file_offsets_size();
-    bool has_segment_size = segment_size_size == segment_file_size;
-    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
-            << "segment_size size != segment file size, tablet: " << _tablet_id << ", rowset: " << metadata().id()
-            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
-    LOG_IF(ERROR, bundle_file_offsets_size > 0 && segment_size_size != bundle_file_offsets_size)
-            << "segment_size size != bundle file offsets size, tablet: " << _tablet_id
-            << ", rowset: " << metadata().id() << ", segment file size: " << segment_file_size
-            << ", bundle file offsets size: " << bundle_file_offsets_size
-            << ", segment_size size: " << segment_size_size;
-
-    const auto& files_to_size = metadata().segment_size();
-    const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
     // Determine segment range based on mode
     int32_t seg_start = 0;
-    int32_t seg_end = metadata().segments_size();
+    int32_t seg_end = metadata().segment_metas_size();
     if (is_segment_range_mode()) {
         seg_start = _segment_range_start;
         seg_end = _segment_range_end;
@@ -604,8 +631,9 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     // segments vector and metadata. We use a vector of (index, future) pairs to track
     // which index each loaded segment should be placed at.
     struct SegmentLoadFuture {
-        int target_idx;
+        int target_idx; // destination slot in the output `segments` vector (only the use_index_mapping path)
         uint32_t segment_id;
+        int32_t segment_meta_pos; // position in _metadata->segment_metas(); stored into LoadedSegment
         std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
     };
     std::vector<SegmentLoadFuture> segment_futures;
@@ -626,16 +654,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     bool use_index_mapping = _parallel_load && skip_segment_idxs != nullptr && !skip_segment_idxs->empty();
     int base_idx = segments->size();
     if (use_index_mapping) {
-        segments->resize(base_idx + metadata().segments_size());
+        segments->resize(base_idx + metadata().segment_metas_size());
     }
 
     auto check_status_at_index = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id,
-                                     int target_idx) -> Status {
+                                     int target_idx, int32_t meta_pos) -> Status {
         if (segment_or.ok()) {
             if (use_index_mapping) {
-                (*segments)[target_idx] = std::move(segment_or.value());
+                (*segments)[target_idx] = LoadedSegment{std::move(segment_or.value()), meta_pos};
             } else {
-                segments->emplace_back(std::move(segment_or.value()));
+                segments->emplace_back(LoadedSegment{std::move(segment_or.value()), meta_pos});
             }
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
             LOG(WARNING) << "Ignored lost segment " << seg_name;
@@ -649,16 +677,17 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     // For segment range mode, seg_idx should match the original segment index
     seg_idx = seg_start;
     for (index = seg_start; index < seg_end; index++) {
-        const auto& seg_name = metadata().segments(index);
+        const auto& segment_meta = metadata().segment_metas(index);
+        const auto& seg_name = segment_meta.filename();
         int current_idx = base_idx + seg_idx;
         uint32_t segment_id = get_segment_idx(metadata(), index);
 
         // Skip segments that are filtered by metadata filter
         if (skip_segment_idxs != nullptr && skip_segment_idxs->count(seg_idx) > 0) {
             if (!use_index_mapping) {
-                segments->emplace_back(nullptr);
+                segments->emplace_back(LoadedSegment{nullptr, index});
             }
-            // When use_index_mapping is true, the slot is already nullptr from resize
+            // When use_index_mapping is true, the slot is already default (nullptr) from resize
             seg_idx++;
             continue;
         }
@@ -671,21 +700,15 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
             segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
         }
         auto segment_info = FileInfo{.path = segment_path, .fs = seg_options.fs};
-        if (LIKELY(has_segment_size)) {
-            segment_info.size = files_to_size.Get(index);
+        // RowsetMetaData upgraded from an old version may not have per-segment size.
+        if (LIKELY(segment_meta.has_size())) {
+            segment_info.size = segment_meta.size();
         }
-        if (bundle_file_offsets_size > 0) {
-            segment_info.bundle_file_offset = files_to_offset.Get(index);
+        if (segment_meta.has_bundle_file_offset()) {
+            segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
         }
-        auto segment_encryption_metas_size = metadata().segment_encryption_metas_size();
-        if (segment_encryption_metas_size > 0) {
-            if (index >= segment_encryption_metas_size) {
-                string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}", _tablet_id,
-                                         metadata().id(), index, segment_encryption_metas_size);
-                LOG(ERROR) << msg;
-                return Status::Corruption(msg);
-            }
-            segment_info.encryption_meta = metadata().segment_encryption_metas(index);
+        if (segment_meta.has_encryption_meta()) {
+            segment_info.encryption_meta = segment_meta.encryption_meta();
         }
 
         if (_parallel_load) {
@@ -711,17 +734,19 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
                              << ", try to load segment serially, seg_id: " << segment_id;
                 auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,
                                                             lake_io_opts.fill_metadata_cache, _tablet_schema);
-                if (auto status = check_status_at_index(segment_or, seg_name, segment_id, captured_idx); !status.ok()) {
+                if (auto status = check_status_at_index(segment_or, seg_name, segment_id, captured_idx, index);
+                    !status.ok()) {
                     return status;
                 }
             } else {
-                segment_futures.push_back({captured_idx, segment_id, task->get_future()});
+                segment_futures.push_back({captured_idx, segment_id, index, task->get_future()});
             }
             seg_idx++;
         } else {
             auto segment_or = _tablet_mgr->load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
-            if (auto status = check_status_at_index(segment_or, seg_name, segment_id, current_idx); !status.ok()) {
+            if (auto status = check_status_at_index(segment_or, seg_name, segment_id, current_idx, index);
+                !status.ok()) {
                 return status;
             }
             seg_idx++;
@@ -732,7 +757,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         auto result_pair = f.future.get();
         auto segment_or = result_pair.first;
         // In segment range mode, target_idx - base_idx gives the actual segment ID
-        if (auto status = check_status_at_index(segment_or, result_pair.second, f.segment_id, f.target_idx);
+        if (auto status = check_status_at_index(segment_or, result_pair.second, f.segment_id, f.target_idx,
+                                                f.segment_meta_pos);
             !status.ok()) {
             return status;
         }
@@ -749,7 +775,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
                     segments->begin() + metadata().next_compaction_offset() + _compaction_segment_limit,
                     segments->end());
             LOG(INFO) << "tablet: " << tablet_id() << ", version: " << _tablet_metadata->version()
-                      << ", rowset: " << metadata().id() << ", total segments: " << metadata().segments_size()
+                      << ", rowset: " << metadata().id() << ", total segments: " << metadata().segment_metas_size()
                       << ", compacted segments: " << not_used_segments->first.size()
                       << ", uncompacted segments: " << not_used_segments->second.size();
         }

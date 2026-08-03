@@ -26,6 +26,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "exec/file_scanner/json_scanner.h"
+#include "exec/file_scanner/stream_source_meta.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -160,11 +161,24 @@ Status AvroScanner::open() {
     }
     ++_counter->num_files_read;
 
-    for (const auto& desc : _src_slot_descriptors) {
+    _meta_col_by_slot_id = build_stream_source_meta_columns(_scan_range.params.stream_source_meta_columns);
+    int column_index = 0;
+    for (size_t i = 0; i < _src_slot_descriptors.size(); ++i) {
+        const auto& desc = _src_slot_descriptors[i];
         if (desc == nullptr) {
             continue;
         }
         _slot_desc_dict.emplace(desc->col_name(), desc);
+        // Remember the intermediate avro type per slot so the no-jsonpath path can dispatch
+        // _construct_column on the source column's type rather than the destination type.
+        _slot_id_to_avro_type.emplace(desc->id(), _avro_types[i]);
+        // A hidden metadata slot is filled from the message meta, not the payload. The by-name null-fill
+        // path iterates chunk columns, so key its descriptor by chunk column index (the append order in
+        // _create_src_chunk, which skips null slots just like this loop).
+        if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
+            _meta_col_by_index.emplace(column_index, m->second);
+        }
+        column_index++;
     }
     _init_data_idx_to_slot_once = false;
     return Status::OK();
@@ -201,23 +215,41 @@ void AvroScanner::_report_error(const std::string& line, const std::string& err_
     _state->append_error_msg_to_file(line, err_msg);
 }
 
-Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk) {
+Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk, const StreamMessageMeta* meta) {
     size_t slot_size = _src_slot_descriptors.size();
     size_t jsonpath_size = _json_paths.size();
+    // Hidden metadata columns carry no jsonpath, so they are transparent to the positional
+    // slot->jsonpath mapping: a jsonpath maps to the i-th non-metadata slot. This keeps payload columns
+    // aligned even when a metadata column sits before jsonpath-backed columns.
+    size_t meta_count = 0;
     for (size_t i = 0; i < slot_size; i++) {
         if (_src_slot_descriptors[i] == nullptr) {
             continue;
         }
         auto column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_src_slot_descriptors[i]->id()));
-        if (UNLIKELY(i >= jsonpath_size)) {
+        // Hidden source-metadata slots are filled from the message meta (by slot id), not the payload,
+        // before the jsonpath extraction below.
+        if (auto it = _meta_col_by_slot_id.find(_src_slot_descriptors[i]->id());
+            UNLIKELY(it != _meta_col_by_slot_id.end())) {
+            RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
+            meta_count++;
+            continue;
+        }
+        size_t jp = i - meta_count;
+        if (UNLIKELY(jp >= jsonpath_size)) {
             column->append_nulls(1);
             continue;
         }
         avro_value_t output_value;
-        auto st = _extract_field(avro_value, _json_paths[i], &output_value);
+        auto st = _extract_field(avro_value, _json_paths[jp], &output_value);
         if (LIKELY(st.ok())) {
-            RETURN_IF_ERROR(_construct_column(output_value, column, _src_slot_descriptors[i]->type(),
-                                              _src_slot_descriptors[i]->col_name()));
+            // Dispatch on the intermediate avro type (which matches the source column created in
+            // _create_src_chunk), not the destination type. Otherwise a complex column whose
+            // intermediate type differs from the destination (e.g. MAP<VARCHAR,VARCHAR> vs
+            // MAP<VARCHAR,DATE>) would be written by a writer chosen for the destination and crash
+            // on down_cast. The cast stage converts the intermediate column to the destination type.
+            RETURN_IF_ERROR(
+                    _construct_column(output_value, column, _avro_types[i], _src_slot_descriptors[i]->col_name()));
         } else if (st.is_not_found()) {
             column->append_nulls(1);
         } else {
@@ -232,6 +264,9 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     DCHECK_EQ(0, chunk->num_rows());
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         avro_value_t avro_value;
+        // Routine-load source-metadata for this message (null for non-routine-load); read from the pipe
+        // buffer below, or injected by the test in BE_TEST.
+        const StreamMessageMeta* meta = nullptr;
 #ifdef BE_TEST
         // In general, we want to test component injection schemastr.
         avro_schema_error_t error;
@@ -264,6 +299,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             return Status::InternalError(err_msg);
         }
         free(avro_as_json);
+        meta = _test_meta;
 #else
         const uint8_t* data{};
         size_t length = 0;
@@ -275,6 +311,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         }
         data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
         length = _parser_buf->remaining();
+        meta = stream_source_meta_of(_parser_buf);
         serdes_schema_t* schema;
         serdes_err_t err =
                 serdes_deserialize_avro(_serdes, &avro_value, &schema, data, length, _err_buf, sizeof(_err_buf));
@@ -290,7 +327,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         size_t chunk_row_num = chunk->num_rows();
         Status st = Status::OK();
         if (!_json_paths.empty()) {
-            st = _construct_row(avro_value, chunk);
+            st = _construct_row(avro_value, chunk, meta);
         } else {
             if (!_init_data_idx_to_slot_once) {
                 size_t element_count;
@@ -311,7 +348,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
 
                 _init_data_idx_to_slot_once = true;
             }
-            st = _construct_row_without_jsonpath(avro_value, chunk);
+            st = _construct_row_without_jsonpath(avro_value, chunk, meta);
         }
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -329,7 +366,8 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
     return Status::OK();
 }
 
-Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk) {
+Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_value, Chunk* chunk,
+                                                    const StreamMessageMeta* meta) {
     _found_columns.assign(chunk->num_columns(), false);
     size_t element_count = _data_idx_to_fieldname.size();
     avro_value_t element_value;
@@ -353,8 +391,16 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
                 continue;
             }
             auto slot_desc = itr->second;
+            // A metadata alias is filled from the message meta in the null-fill pass, never from the
+            // payload; if a payload field uses the same name, skip it (cache as id = -1) so metadata wins.
+            if (_meta_col_by_slot_id.find(slot_desc->id()) != _meta_col_by_slot_id.end()) {
+                slot_info.id = -1;
+                continue;
+            }
             slot_info.id = slot_desc->id();
-            slot_info.type = slot_desc->type();
+            // Store the intermediate avro type (not the destination type) so _construct_column
+            // dispatches on the type the source column was built with. See _construct_row.
+            slot_info.type = _slot_id_to_avro_type[slot_desc->id()];
             slot_info.key = key;
             int column_index = chunk->get_index_by_slot_id(slot_info.id);
             _found_columns[column_index] = true;
@@ -375,7 +421,13 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
     for (int i = 0; i < _found_columns.size(); i++) {
         if (UNLIKELY(!_found_columns[i])) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
-            column->append_nulls(1);
+            // A hidden metadata slot always lands here (the by-name resolve above skips any same-named
+            // payload field); fill it from the message meta, NULL when the buffer carries none.
+            if (auto it = _meta_col_by_index.find(i); it != _meta_col_by_index.end()) {
+                RETURN_IF_ERROR(fill_stream_source_meta_column(it->second.kind, meta, column));
+            } else {
+                column->append_nulls(1);
+            }
         }
     }
     return Status::OK();
@@ -459,6 +511,66 @@ Status AvroScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
+// Build the intermediate avro load type for a destination slot type. Complex types (ARRAY / MAP /
+// STRUCT) recurse so they are loaded natively; directly-representable scalars are kept as-is and
+// everything else is loaded as VARCHAR(MAX), with the cast stage converting to the destination type
+// (the cast factory supports recursive ARRAY/MAP/STRUCT casts). This mirrors
+// JsonUtils::construct_json_type. Avro map keys are always strings, so a map's intermediate key
+// type is forced to a string type regardless of the destination key type.
+static TypeDescriptor construct_avro_type(const TypeDescriptor& slot_type) {
+    switch (slot_type.type) {
+    case TYPE_ARRAY: {
+        TypeDescriptor avro_type(TYPE_ARRAY);
+        avro_type.children.emplace_back(construct_avro_type(slot_type.children[0]));
+        return avro_type;
+    }
+    case TYPE_MAP: {
+        TypeDescriptor avro_type(TYPE_MAP);
+        const auto& key_type = slot_type.children[0];
+        if (key_type.type == TYPE_CHAR) {
+            avro_type.children.emplace_back(TypeDescriptor::create_char_type(key_type.len));
+        } else if (key_type.type == TYPE_VARCHAR) {
+            avro_type.children.emplace_back(TypeDescriptor::create_varchar_type(key_type.len));
+        } else {
+            avro_type.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+        }
+        avro_type.children.emplace_back(construct_avro_type(slot_type.children[1]));
+        return avro_type;
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor avro_type(TYPE_STRUCT);
+        avro_type.field_names = slot_type.field_names;
+        for (const auto& child : slot_type.children) {
+            avro_type.children.emplace_back(construct_avro_type(child));
+        }
+        return avro_type;
+    }
+
+    // Treat these types as what they are.
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_BIGINT:
+    case TYPE_INT:
+    case TYPE_BOOLEAN:
+    case TYPE_SMALLINT:
+    case TYPE_TINYINT:
+        return TypeDescriptor{slot_type.type};
+
+    case TYPE_CHAR:
+        return TypeDescriptor::create_char_type(slot_type.len);
+
+    case TYPE_VARCHAR:
+        return TypeDescriptor::create_varchar_type(slot_type.len);
+
+    case TYPE_JSON:
+        return TypeDescriptor::create_json_type();
+
+    // Treat other types as VARCHAR.
+    default:
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+}
+
 Status AvroScanner::_construct_avro_types() {
     size_t slot_size = _src_slot_descriptors.size();
     _avro_types.resize(slot_size);
@@ -467,79 +579,7 @@ Status AvroScanner::_construct_avro_types() {
         if (slot_desc == nullptr) {
             continue;
         }
-
-        switch (slot_desc->type().type) {
-        case TYPE_ARRAY: {
-            TypeDescriptor json_type(TYPE_ARRAY);
-            TypeDescriptor* child_type = &json_type;
-
-            const TypeDescriptor* slot_type = &(slot_desc->type().children[0]);
-            while (slot_type->type == TYPE_ARRAY) {
-                slot_type = &(slot_type->children[0]);
-
-                child_type->children.emplace_back(TYPE_ARRAY);
-                child_type = &(child_type->children[0]);
-            }
-
-            // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
-            if (slot_type->type == TYPE_FLOAT || slot_type->type == TYPE_DOUBLE || slot_type->type == TYPE_BIGINT ||
-                slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT || slot_type->type == TYPE_TINYINT) {
-                // Treat these types as what they are.
-                child_type->children.emplace_back(slot_type->type);
-            } else if (slot_type->type == TYPE_VARCHAR) {
-                auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
-                child_type->children.emplace_back(varchar_type);
-            } else if (slot_type->type == TYPE_CHAR) {
-                auto char_type = TypeDescriptor::create_char_type(slot_type->len);
-                child_type->children.emplace_back(char_type);
-            } else if (slot_type->type == TYPE_JSON) {
-                child_type->children.emplace_back(TypeDescriptor::create_json_type());
-            } else {
-                // Treat other types as VARCHAR.
-                auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-                child_type->children.emplace_back(varchar_type);
-            }
-
-            _avro_types[column_pos] = std::move(json_type);
-            break;
-        }
-
-        // Treat these types as what they are.
-        case TYPE_FLOAT:
-        case TYPE_DOUBLE:
-        case TYPE_BIGINT:
-        case TYPE_INT:
-        case TYPE_BOOLEAN:
-        case TYPE_SMALLINT:
-        case TYPE_TINYINT: {
-            _avro_types[column_pos] = TypeDescriptor{slot_desc->type().type};
-            break;
-        }
-
-        case TYPE_CHAR: {
-            auto char_type = TypeDescriptor::create_char_type(slot_desc->type().len);
-            _avro_types[column_pos] = std::move(char_type);
-            break;
-        }
-
-        case TYPE_VARCHAR: {
-            auto varchar_type = TypeDescriptor::create_varchar_type(slot_desc->type().len);
-            _avro_types[column_pos] = std::move(varchar_type);
-            break;
-        }
-
-        case TYPE_JSON: {
-            _avro_types[column_pos] = TypeDescriptor::create_json_type();
-            break;
-        }
-
-        // Treat other types as VARCHAR.
-        default: {
-            auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            _avro_types[column_pos] = std::move(varchar_type);
-            break;
-        }
-        }
+        _avro_types[column_pos] = construct_avro_type(slot_desc->type());
     }
     return Status::OK();
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MySQLデータベースの現在のバージョンを返します。"
 ---
 
 # version

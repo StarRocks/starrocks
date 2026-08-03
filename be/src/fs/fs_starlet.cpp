@@ -217,6 +217,20 @@ public:
         return std::move(stats);
     }
 
+    io::IoStatsSnapshot get_io_stats_snapshot() const override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return {};
+        }
+        const auto& s = (*stream_st)->get_io_stats();
+        return {
+                s.bytes_read_local_disk,  s.bytes_read_remote,  s.bytes_write_local_disk, s.bytes_write_remote,
+                s.io_count_local_disk,    s.io_count_remote,    s.io_ns_read_local_disk,  s.io_ns_read_remote,
+                s.io_ns_write_local_disk, s.io_ns_write_remote, s.prefetch_hit_count,     s.prefetch_wait_finish_ns,
+                s.prefetch_pending_ns,
+        };
+    }
+
 private:
     ReadOnlyFilePtr _file_ptr;
 };
@@ -560,7 +574,16 @@ public:
     }
 
     StatusOr<uint64_t> get_file_size(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::get_file_size");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto fst = (*fs_st)->stat(pair.first);
+        if (!fst.ok()) {
+            return to_status(fst.status());
+        }
+        return fst->size;
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
@@ -635,6 +658,16 @@ private:
         if (_shard_fs != nullptr) {
             return _shard_fs;
         }
+#ifdef BE_TEST
+        // Mirrors the hook in `new_fs_starlet(shard_id, ...)` at the bottom of this file.
+        // Tests can inject either a mock filesystem or a failure status here without
+        // having to stand up a real StarOS worker / starlet runtime.
+        absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
+        TEST_SYNC_POINT_CALLBACK("StarletFileSystem::get_shard_filesystem", &fs_st);
+        if (!absl::IsUnimplemented(fs_st.status())) {
+            return fs_st;
+        }
+#endif
         return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 

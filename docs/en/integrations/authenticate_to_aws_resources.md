@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: AWS
-description: "This topic describes how to authenticate with AWS"
+description: "How to configure StarRocks to authenticate with AWS for accessing S3 and other AWS resources."
 ---
 
 # Authenticate to AWS resources
@@ -18,7 +18,7 @@ However, this authentication method still can be seen as a cluster-level safe ac
 
 ### Assumed role-based authentication
 
-Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to gain access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html).
+Unlike instance profile-based authentication, the assumed role-based authentication method supports assuming an AWS IAM role to gain access to your AWS resources. For more information, see [Assuming a role](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-sharing-logs.html).
 
 ### IAM user-based authentication
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "诊断和排查 StarRocks FE 堆内存问题。"
 sidebar_label: "FE 内存 FAQ"
 ---
 

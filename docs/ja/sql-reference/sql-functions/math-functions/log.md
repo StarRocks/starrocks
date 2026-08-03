@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値の対数を指定された基数で計算します。"
 ---
 
 # log

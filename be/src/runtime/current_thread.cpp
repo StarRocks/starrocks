@@ -14,6 +14,7 @@
 
 #include "runtime/current_thread.h"
 
+#include "common/logging.h"
 #include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 
@@ -36,6 +37,10 @@ void init_tls_thread_status_offset() {
         g_tls_thread_status_tpoff =
                 static_cast<int64_t>(reinterpret_cast<uintptr_t>(&tls_thread_status)) - static_cast<int64_t>(tp);
     }
+
+    LOG(INFO) << "[eBPF] tls_thread_status tpoff=" << g_tls_thread_status_tpoff
+              << " query_id_offset=" << CurrentThread::query_id_offset()
+              << " module_type_offset=" << CurrentThread::module_type_offset();
 }
 
 CurrentThread::~CurrentThread() {

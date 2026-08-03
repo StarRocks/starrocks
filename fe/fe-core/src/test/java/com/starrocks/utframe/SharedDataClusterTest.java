@@ -22,6 +22,7 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -40,6 +41,16 @@ public class SharedDataClusterTest extends TestWithFeService {
 
     @Test
     public void createStorageVolumeTestInSharedDataMode() throws Exception {
+        boolean oldVal = Config.enable_storage_volume_access_check;
+        Config.enable_storage_volume_access_check = false;
+        try {
+            createStorageVolumeTestInSharedDataModeImpl();
+        } finally {
+            Config.enable_storage_volume_access_check = oldVal;
+        }
+    }
+
+    private void createStorageVolumeTestInSharedDataModeImpl() throws Exception {
         // StorageVolume is a specific feature for shared-data mode
         String svName = "my_s3_volume";
         String svSql = "CREATE STORAGE VOLUME " + svName + " " +

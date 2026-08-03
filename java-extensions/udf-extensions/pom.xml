@@ -43,13 +43,22 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.9</version>
         </dependency>
     </dependencies>
 
     <build>
         <finalName>udf-extensions</finalName>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- UDFHelper reflectively accesses the private java.nio.DirectByteBuffer
+                         constructor, which requires java.nio to be opened. This mirrors the
+                         JAVA_OPTS used by the backend when launching the UDF JVM (conf/be.conf). -->
+                    <argLine>@{argLine} --add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>

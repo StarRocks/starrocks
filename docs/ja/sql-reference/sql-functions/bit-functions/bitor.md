@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの数値式のビット単位のORを返します。"
 ---
 
 # bitor

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY 是扩展数据类型，支持多维嵌套、数组切片、比较和过滤操作。"
 ---
 
 # ARRAY

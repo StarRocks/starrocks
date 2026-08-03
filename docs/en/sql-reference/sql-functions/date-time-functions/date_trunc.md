@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Truncates a time value based on the specified date part, such as year, day, hour, or minute."
 ---
 
 # date_trunc

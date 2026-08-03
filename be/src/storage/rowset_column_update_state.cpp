@@ -212,9 +212,10 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     for (uint32_t idx = start_idx; idx < end_idx; idx++) {
         _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-        // build `rss_rowid_to_update_rowid`
+        // build `rss_rowid_to_update_rowid`; non-lake update files are read in full, so
+        // physical == logical and the segment base is 0.
         _partial_update_states[idx].read_version = read_version;
-        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid());
+        TRY_CATCH_BAD_ALLOC(_partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0));
         _partial_update_states[idx].inited = true;
     }
     int64_t t_end = MonotonicMillis();
@@ -239,8 +240,9 @@ Status RowsetColumnUpdateState::_resolve_conflict(Tablet* tablet, uint32_t rowse
         TRY_CATCH_BAD_ALLOC({
             _partial_update_states[idx].src_rss_rowids.clear();
             _upserts[idx]->split_src_rss_rowids(idx, _partial_update_states[idx].src_rss_rowids);
-            // rebuild rss_rowid_to_update_rowid
-            _partial_update_states[idx].build_rss_rowid_to_update_rowid();
+            // rebuild rss_rowid_to_update_rowid; non-lake path reads update files in full,
+            // so physical == logical and the segment base is 0.
+            _partial_update_states[idx].build_rss_rowid_to_update_rowid(/*base=*/0);
         });
     }
     int64_t t_end = MonotonicMillis();
@@ -397,6 +399,10 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // Deliberately no segment_file_mark: a mark would make standalone (CLucene) inverted
+    // indexes collide with the base segment's (same rowset id + segment id), so the
+    // SegmentWriter skips them for .cols files. Footer-inlined (builtin) inverted indexes
+    // are still written and served to readers through the DCG segment.
     auto segment_writer =
             std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
@@ -492,6 +498,10 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segme
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // These are full-row segments appended to the rowset, so give the writer a real file
+    // mark: standalone (CLucene) inverted indexes land at the path readers derive from
+    // (rowset path, rowset id, segment id). Mirrors RowsetUpdateState's segment rewrite.
+    writer_options.segment_file_mark = {rowset->rowset_path(), rowset->rowset_id().to_string()};
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, tablet_schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     return std::move(segment_writer);

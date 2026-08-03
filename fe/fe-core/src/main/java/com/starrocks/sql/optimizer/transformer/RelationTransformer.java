@@ -35,17 +35,15 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.PointerType;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
+import com.starrocks.sql.analyzer.QueryPeriodResolver;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -93,8 +91,10 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -579,7 +579,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
-            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+            RangeDistributionSpec rangeSpec = DistributionSpecHelper
+                    .buildRangeDistributionSpecSkeleton(olapTable, columnMetaToColRefMap);
+            distributionSpec = rangeSpec != null
+                    ? rangeSpec
+                    : DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
@@ -799,31 +803,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     }
 
     private Optional<ConnectorTableVersion> resolveQueryPeriod(Optional<Expr> version, QueryPeriod.PeriodType type) {
-        if (version.isEmpty()) {
-            return Optional.empty();
-        }
-        ScalarOperator result;
-        try {
-            Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
-            ExpressionAnalyzer.analyzeExpression(version.get(), new AnalyzeState(), scope, session);
-            ExpressionMapping expressionMapping = new ExpressionMapping(scope);
-            result = SqlToScalarOperatorTranslator.translate(version.get(), expressionMapping, new ColumnRefFactory());
-        } catch (Exception e) {
-            throw new SemanticException("Failed to resolve query period [type: %s, value: %s]. msg: %s",
-                    type.toString(), version.get().toString(), e.getMessage());
-        }
-
-        if (!(result instanceof ConstantOperator)) {
-            if (version.get() instanceof FunctionCallExpr) {
-                throw new SemanticException("Invalid datetime function: [type: %s, value: %s]. " +
-                        "The function requirement must be inferred in frontend.", type.toString(), version.get().toString());
-            } else {
-                throw new SemanticException("Invalid version value. [type: %s, value: %s]",
-                        type.toString(), version.get().toString());
-            }
-        }
-        PointerType pointerType = type == QueryPeriod.PeriodType.TIMESTAMP ? PointerType.TEMPORAL : PointerType.VERSION;
-        return Optional.of(new ConnectorTableVersion(pointerType, (ConstantOperator) result));
+        return QueryPeriodResolver.resolve(version, type, session);
     }
 
     @Override
@@ -1380,14 +1360,19 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             commonType = leftType;
         }
 
-        Type[] argTypes = new Type[] {leftType, rightType};
+        ScalarOperator leftCasted = leftType.equals(commonType)
+                ? leftOp : foldCast(new CastOperator(commonType, leftOp, true));
+        ScalarOperator rightCasted = rightType.equals(commonType)
+                ? rightOp : foldCast(new CastOperator(commonType, rightOp, true));
+
+        Type[] argTypes = new Type[] {commonType, commonType};
         com.starrocks.catalog.Function coalesceFunction =
                 com.starrocks.sql.ast.expression.ExprUtils.getBuiltinFunction(
                         FunctionSet.COALESCE, argTypes,
                         com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         return new CallOperator(FunctionSet.COALESCE, commonType,
-                Lists.newArrayList(leftOp, rightOp), coalesceFunction);
+                Lists.newArrayList(leftCasted, rightCasted), coalesceFunction);
     }
 
     /**

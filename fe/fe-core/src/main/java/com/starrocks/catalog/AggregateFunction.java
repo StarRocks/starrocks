@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
@@ -254,6 +255,7 @@ public class AggregateFunction extends Function {
         String objectFile;
         String symbolName;
         private boolean isolationType = true;
+        CloudConfiguration cloudConfiguration;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -308,6 +310,11 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder cloudConfiguration(CloudConfiguration cloudConfiguration) {
+            this.cloudConfiguration = cloudConfiguration;
+            return this;
+        }
+
         public void setIntermediateType(Type intermediateType) {
             this.intermediateType = intermediateType;
         }
@@ -320,6 +327,7 @@ public class AggregateFunction extends Function {
             fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
             fn.setIsolationType(isolationType);
+            fn.setCloudConfiguration(cloudConfiguration);
             return fn;
         }
     }
@@ -423,6 +431,10 @@ public class AggregateFunction extends Function {
         properties.put(CreateFunctionStmt.MD5_CHECKSUM, checksum);
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
+        // isolationType defaults to true (isolated); surface it so users can tell whether the
+        // function was created with isolation = "shared".
+        properties.put(CreateFunctionStmt.ISOLATION_KEY,
+                isolationType ? CreateFunctionStmt.ISOLATION_ISOLATED : CreateFunctionStmt.ISOLATION_SHARED);
         return new Gson().toJson(properties);
     }
 

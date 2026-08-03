@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "File external table is a special type of external table."
 ---
 
 # File external table

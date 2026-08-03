@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Understand the core principles of Data Cache and how to accelerate data queries with Data Cache."
 ---
 
 # Data Cache

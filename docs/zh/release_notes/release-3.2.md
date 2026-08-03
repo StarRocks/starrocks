@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表创建、主键索引持久化、性能优化和 Bug 修复。"
 ---
 
 # StarRocks version 3.2

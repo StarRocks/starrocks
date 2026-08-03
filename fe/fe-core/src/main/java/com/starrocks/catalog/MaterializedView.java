@@ -198,10 +198,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
          */
         PCT,
         /**
-         * FULL: Full refresh mode, refresh all partitions of the materialized view.
-         */
-        FULL,
-        /**
          * INCREMENTAL: Incremental refresh mode, only refresh the incremental changed rows since the last refresh.
          */
         INCREMENTAL;
@@ -216,10 +212,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public boolean isIncremental() {
             return this == INCREMENTAL;
-        }
-
-        public boolean isFull() {
-            return this == FULL;
         }
 
         public boolean isIncrementalOrAuto() {
@@ -536,6 +528,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         private AsyncRefreshContext asyncRefreshContext;
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
+        // Wall-clock confirm time of the last successful refresh run, not the base-table data version (see lastRefreshTime).
+        @SerializedName(value = "lastFreshnessConfirmedAt")
+        private long lastFreshnessConfirmedAt;
 
         public MvRefreshScheme() {
             this.moment = RefreshMoment.IMMEDIATE;
@@ -595,10 +590,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastRefreshTime = lastRefreshTime;
         }
 
+        public long getLastFreshnessConfirmedAt() {
+            return lastFreshnessConfirmedAt;
+        }
+
+        public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+            this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+        }
+
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
+            res.lastFreshnessConfirmedAt = this.lastFreshnessConfirmedAt;
             if (this.asyncRefreshContext != null) {
                 res.asyncRefreshContext = this.asyncRefreshContext.copy();
             }
@@ -612,6 +616,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", type=" + type +
                     ", asyncRefreshContext=" + asyncRefreshContext +
                     ", lastRefreshTime=" + lastRefreshTime +
+                    ", lastFreshnessConfirmedAt=" + lastFreshnessConfirmedAt +
                     '}';
         }
     }
@@ -713,9 +718,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
     // otherwise the incremental refresh may cause incorrect result.
-    // 0: no encode row id
-    // 1: encode_sort_key
-    // 2: encode_fingerprint_sha256
+    // Keys of IvmOpUtils.ENCODE_ROW_ID_FUNCTION_MAP, chosen by IvmOpUtils.deduceEncodeRowIdVersion():
+    // 0 is encode_sort_key, 1 is encode_fingerprint_sha256.
+    // "No row id" is not a value here -- it is expressed by the mv having no __ROW_ID__ column, so the
+    // default 0 is indistinguishable from an append-only mv. Test for the column, not for this field.
     @SerializedName(value = "encodeRowIdVersion")
     private int encodeRowIdVersion = 0;
 
@@ -889,8 +895,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return formatInsertSql("insert overwrite");
     }
 
-    public String getIVMTaskDefinition() {
-        return formatInsertSql("INSERT INTO");
+    public String getTaskDefinition(String selectSql) {
+        return formatInsertSql("insert overwrite", selectSql);
+    }
+
+    public String getIVMTaskDefinition(String selectSql) {
+        return formatInsertSql("INSERT INTO", selectSql);
     }
 
     /**
@@ -900,25 +910,34 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * which {@code InsertAnalyzer} rejects if listed explicitly.
      */
     private String formatInsertSql(String insertKeyword) {
+        return formatInsertSql(insertKeyword, getMVQueryDefinedSql());
+    }
+
+    private String formatInsertSql(String insertKeyword, String selectSql) {
         String targetSpec = hasAutoIncrementColumn()
                 ? String.format("`%s` (%s)", getName(), queryProducedColumnList())
                 : String.format("`%s`", getName());
-        return String.format("%s %s %s", insertKeyword, targetSpec, getMVQueryDefinedSql());
+        return String.format("%s %s %s", insertKeyword, targetSpec, selectSql);
     }
 
     /**
-     * Backtick-quoted schema columns in <strong>query projection order</strong>, excluding
-     * columns the storage engine fills in itself (AUTO_INCREMENT / generated). Sort-key
-     * reorder may permute schema order; the INSERT column list must still match the query's
-     * SELECT order so values line up correctly.
+     * Schema columns in <strong>query projection order</strong>, excluding columns the storage
+     * engine fills in itself (AUTO_INCREMENT / generated). Sort-key reorder may permute schema
+     * order; a column list paired with the defined query must follow the query's SELECT order
+     * so values line up correctly.
      */
-    private String queryProducedColumnList() {
+    private List<Column> queryProducedColumns() {
         // getOrderedOutputColumns(true) returns query-output-order columns, already excluding
         // generated (via baseSchemaWithoutGeneratedColumn) and AUTO_INCREMENT columns (which
         // are marked NO_QUERY_OUTPUT in queryOutputIndices). Defensive !isAutoIncrement
         // filter covers the identity-queryOutputIndices edge case.
         return getOrderedOutputColumns(true).stream()
                 .filter(col -> !col.isAutoIncrement())
+                .collect(Collectors.toList());
+    }
+
+    private String queryProducedColumnList() {
+        return queryProducedColumns().stream()
                 .map(col -> "`" + col.getName() + "`")
                 .collect(Collectors.joining(", "));
     }
@@ -979,6 +998,53 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    // Per-base-table data version time as a JSON map {catalog.db.table: datetime}, vs LAST_REFRESH_TIME which is
+    // their single MAX. External/lake base tables report the partition source modified time; OLAP base tables report
+    // the visible-version commit time. "{}" when no base table has a recorded time.
+    public String getBaseTableRefreshVersionTimesJson() {
+        MvRefreshScheme scheme = getRefreshScheme();
+        if (scheme == null || scheme.getAsyncRefreshContext() == null) {
+            return "{}";
+        }
+        AsyncRefreshContext ctx = scheme.getAsyncRefreshContext();
+        Map<String, String> result = new LinkedHashMap<>();
+        // External/lake base tables, keyed by BaseTableInfo; stored time is the connector's native unit.
+        for (Map.Entry<BaseTableInfo, Map<String, BasePartitionInfo>> entry :
+                ctx.getBaseTableInfoVisibleVersionMap().entrySet()) {
+            long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+            if (maxRefreshTime > 0) {
+                result.put(entry.getKey().getReadableString(),
+                        TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+            }
+        }
+        // OLAP base tables, keyed by table id; stored time is the partition visible-version commit time (millis).
+        List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+        if (baseTableInfos != null) {
+            Map<Long, BaseTableInfo> idToBaseTableInfo = new HashMap<>();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                idToBaseTableInfo.put(baseTableInfo.getTableId(), baseTableInfo);
+            }
+            for (Map.Entry<Long, Map<String, BasePartitionInfo>> entry :
+                    ctx.getBaseTableVisibleVersionMap().entrySet()) {
+                BaseTableInfo baseTableInfo = idToBaseTableInfo.get(entry.getKey());
+                long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+                if (baseTableInfo != null && maxRefreshTime > 0) {
+                    result.put(baseTableInfo.getReadableString(),
+                            TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+                }
+            }
+        }
+        return result.isEmpty() ? "{}" : GsonUtils.GSON.toJson(result);
+    }
+
+    private static long maxPartitionRefreshTime(Map<String, BasePartitionInfo> partitionInfos) {
+        return partitionInfos.values().stream()
+                .mapToLong(BasePartitionInfo::getLastRefreshTime)
+                .filter(t -> t > 0)
+                .max()
+                .orElse(0L);
     }
 
     public void setWarehouseId(long warehouseId) {
@@ -1197,8 +1263,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
         long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+        if (mvStaleness < 0) {
+            // A base table's refresh timestamp regressed below the MV's own refresh timestamp, e.g. after an
+            // Iceberg `rollback_to_snapshot`/`rollback_to_timestamp`. Treat as outdated rather than trusting a
+            // negative staleness, otherwise the MV would be served as fresh without re-checking base tables.
+            LOG.debug("MV is outdated because base tables' lastRefreshTime {} is before MV's lastRefreshTime {}",
+                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId));
+            return false;
+        }
         if (mvStaleness > this.maxMVRewriteStaleness) {
-            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             LOG.debug("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
                             "MV's lastRefreshTime {}) is greater than the staleness config {}",
                     DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
@@ -1739,6 +1814,57 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
+    public String getRefreshTriggerString() {
+        if (refreshScheme == null) {
+            return "NONE";
+        }
+        MaterializedViewRefreshType type = refreshScheme.getType();
+        if (type == MaterializedViewRefreshType.SYNC) {
+            return "NONE";
+        }
+        if (type == MaterializedViewRefreshType.MANUAL) {
+            return "MANUAL";
+        }
+        return isLoadTriggeredRefresh() ? "ON_BASE_TABLE_CHANGE" : "SCHEDULED";
+    }
+
+    public String getRefreshPolicyString() {
+        if (refreshScheme == null) {
+            return "NONE";
+        }
+        MaterializedViewRefreshType type = refreshScheme.getType();
+        if (type == MaterializedViewRefreshType.SYNC) {
+            return "NONE";
+        }
+        if (type == MaterializedViewRefreshType.MANUAL) {
+            return "MANUAL";
+        }
+        if (isLoadTriggeredRefresh()) {
+            return "ON_BASE_TABLE_CHANGE";
+        }
+        StringBuilder sb = new StringBuilder();
+        appendAsyncRefreshSchedule(sb, refreshScheme.getAsyncRefreshContext());
+        return sb.toString().trim();
+    }
+
+    private void appendAsyncRefreshSchedule(StringBuilder sb, AsyncRefreshContext asyncRefreshContext) {
+        if (asyncRefreshContext.isDefineStartTime()) {
+            sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                            .format(DateUtils.DATE_TIME_FORMATTER))
+                    .append("\")");
+        }
+        if (asyncRefreshContext.getTimeUnit() != null) {
+            sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                    .append(asyncRefreshContext.getTimeUnit()).append(")");
+        }
+    }
+
+    public String getResourceGroupString() {
+        TableProperty tableProperty = getTableProperty();
+        String resourceGroup = tableProperty == null ? null : tableProperty.getResourceGroup();
+        return Strings.isNullOrEmpty(resourceGroup) ? ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME : resourceGroup;
+    }
+
     /**
      * Return the partition refresh strategy of the materialized view.
      */
@@ -1848,19 +1974,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
 
-        // NOTE: only output non-generated columns.
-        // Start with query-output order (preserves user's ORDER BY reorder effect), then
-        // append schema columns not produced by the query (e.g. AUTO_INCREMENT __ROW_ID__
-        // on non-aggregate IVM). Match the pre-existing behavior of showing hidden columns
-        // like __ROW_ID__ / __AGG_STATE__ in the DDL.
-        List<Column> orderedColumns = new ArrayList<>(getOrderedOutputColumns(true));
-        Set<String> alreadyIncluded = orderedColumns.stream()
-                .map(Column::getName)
-                .collect(Collectors.toSet());
-        getBaseSchemaWithoutGeneratedColumn().stream()
-                .filter(col -> !alreadyIncluded.contains(col.getName()))
-                .forEach(orderedColumns::add);
-        for (Column column : orderedColumns) {
+        // NOTE: only output non-generated columns, in query-output order.
+        // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
+        // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
+        // non-aggregate IVM) itself — listing those here breaks the round trip.
+        for (Column column : queryProducedColumns()) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
@@ -1914,23 +2032,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (refreshScheme == null) {
             sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
+            // Prefer the SCHEDULE keyword for scheduled refresh (ASYNC + EVERY). ASYNC is kept
+            // as the legacy synonym in the parser; for bare ASYNC (no EVERY) we still emit
+            // ASYNC because bare SCHEDULE is not a valid form.
+            String typeName = refreshScheme.getType().name();
+            if (refreshScheme.getType() == MaterializedViewRefreshType.ASYNC
+                    && refreshScheme.getAsyncRefreshContext().getTimeUnit() != null) {
+                typeName = "SCHEDULE";
+            }
             if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
-                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), refreshScheme.getType()));
+                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), typeName));
             } else {
-                sb.append("\nREFRESH ").append(refreshScheme.getType());
+                sb.append("\nREFRESH ").append(typeName);
             }
         }
         if (refreshScheme != null && refreshScheme.getType() == MaterializedViewRefreshType.ASYNC) {
-            AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-            if (asyncRefreshContext.isDefineStartTime()) {
-                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                .format(DateUtils.DATE_TIME_FORMATTER))
-                        .append("\")");
-            }
-            if (asyncRefreshContext.getTimeUnit() != null) {
-                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
-                        .append(asyncRefreshContext.getTimeUnit()).append(")");
-            }
+            appendAsyncRefreshSchedule(sb, refreshScheme.getAsyncRefreshContext());
         }
 
         // properties
@@ -2245,22 +2362,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Return the status and reason about query rewrite
+     * Return the query rewrite status enum name: VALID, INVALID, or UNKNOWN.
      */
     public String getQueryRewriteStatus() {
+        return getMvPlanValidationResult().getStatus().name();
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return getMvPlanValidationResult().getReasonCode().name();
+    }
+
+    public MVPlanValidationResult getMvPlanValidationResult() {
         // since check mv valid to rewrite query is a heavy operation, we only check it when it's in the plan cache.
         ConnectContext context = ConnectContext.get() == null ? ConnectContext.build() : ConnectContext.get();
-        final MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(context,
+        return MvRewritePreprocessor.isMVValidToRewriteQuery(context,
                 this, Sets.newHashSet(), false, true,
                 context.getSessionVariable().getOptimizerExecuteTimeout());
-        switch (result.getStatus()) {
-            case VALID:
-                return "VALID";
-            case INVALID:
-                return "INVALID: " + result.getReason();
-            default:
-                return "UNKNOWN: " + result.getReason();
-        }
     }
 
     @Override

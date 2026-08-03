@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE configuration parameters for authentication, query execution, and data loading."
 sidebar_label: "用户管理、查询引擎和导入导出"
 ---
 
@@ -89,6 +90,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在发送计划片段之前应用于 BRPC TalkTimeoutController 的超时（毫秒）。`BackendServiceClient.sendPlanFragmentAsync` 在调用后端 `execPlanFragmentAsync` 之前设置此值。它控制 BRPC 在从连接池借用空闲连接以及执行发送时将等待多长时间；如果超过，RPC 将失败并可能触发该方法的重试逻辑。在争用情况下，将此值设置得更低以快速失败，或提高它以容忍瞬时池耗尽或慢速网络。请谨慎：非常大的值可能会延迟故障检测并阻塞请求线程。
 - 引入版本: v3.3.11, v3.4.1, v3.5.0
+
+### `connector_row_size_estimate_bytes`
+
+- 默认值: 256
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 优化器在存储格式未知或列 Schema 不可用时，用于估算外部文件表（FILES() 和 ENGINE=file 表）行数的平均行大小（字节）。行数估算公式为 `总文件字节数 / connector_row_size_estimate_bytes`。值越小，估算行数越大，可能影响 Join 顺序决策。
+- 引入版本: v3.4
+
+### `connector_table_analyze_scan_bytes_cap`
+
+- 默认值: 2147483648（2 GB）
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**主**扫描字节预算。每个 (分区, 列) 的统计扫描会累计其打开的 split 的字节数，一旦达到该预算即提前停止（软上限：最后一个 split 可能略微超出）。因此单个过大的分区或未分区表会被收集为一个有上界的降级样本，而不是失败或超时。取值 `0` 或更小表示该维度不限制。请按收集的列数进行校准，因为一个分区会为每一列各跑一个独立扫描。将该参数与 `connector_table_analyze_scan_files_cap`、`connector_table_analyze_scan_rows_cap` 同时设为 `0` 或更小，即可完全关闭有界成本收集并回退为全量扫描。可通过 `ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**次**扫描文件数预算。统计扫描在打开该数量的文件后即提前停止，用于限制由大量小文件组成的分区的收集成本。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- 默认值: 10000000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
@@ -206,7 +243,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 控制物化视图快速模式变更（FSE）的行为。有效值为：`strict`（默认）- 仅在 `isSupportFastSchemaEvolutionInDanger` 为 true 时允许 FSE，并清除版本映射中受影响的分区条目；`force` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，并清除受影响的分区条目以在刷新时触发重新计算；`force_no_clear` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，但不清除分区条目。
-- 引入版本: v3.4.0
+- 引入版本: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -350,6 +387,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否启用谓词列收集。如果禁用，谓词列在查询优化期间将不会被记录。
+- 引入版本: -
+
+### `push_down_non_grouped_aggregate_below_union`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在物理计划中将不带 GROUP BY 的聚合下推到 Union 下方。
 - 引入版本: -
 
 ### `enable_query_queue_v2`
@@ -644,11 +690,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- 默认值: MAX
+- 默认值: PBE
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：MBE（基于内存）、PBE（基于并行度）、MAX（取 MBE 和 PBE 的最大值）和 MIN（取 MBE 和 PBE 的最小值）。MBE 根据预测内存或计划成本除以每个槽位内存目标来估算槽位，并受 `totalSlots` 限制。PBE 根据片段并行度（扫描范围计数或基数/每槽位行数）和基于 CPU 成本的计算（使用每槽位 CPU 成本）推导出槽位，然后将结果限制在 [numSlots/2, numSlots] 范围内。MAX 和 MIN 通过取其最大值或最小值来组合 MBE 和 PBE。如果配置值无效，则使用默认值 (`MAX`)。
+- 描述: 当 `enable_query_queue_v2` 为 true 时，选择用于基于队列的查询的槽位估算策略。有效值：`PBE`（基于并行度，默认值）、`MBE`（基于内存成本）和 `CBE`（基于 CPU 成本）。PBE 根据扫描并行度估算查询槽位（受 worker 数量上限）：OLAP 表使用剪枝后剩余的扫描范围数，因此只有极小的查询才会低于 worker 数；connector/外表扫描按满并行度（worker 数）处理，而不是当作单槽位查询。MBE 根据查询的内存成本除以 `query_queue_v2_mem_bytes_per_slot` 估算槽位。CBE 根据计划 CPU 成本除以 `query_queue_v2_cpu_costs_per_slot` 估算槽位。MBE 和 CBE 的单查询槽位还会被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。为向后兼容，旧值 `MAX` 和 `MIN` 仍被接受，并按默认估算器处理；其他值会被配置校验拒绝。
 - 引入版本: v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -657,7 +703,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制计算系统总查询槽位时使用的逻辑并发“层数”。在 shared-nothing 模式下，总槽位 = `query_queue_v2_concurrency_level` * BE 数量 * 每个 BE 的核心数（来自 BackendResourceStat）。在多仓库模式下，有效并发会缩减为 max(1, `query_queue_v2_concurrency_level` / 4)。如果配置值为非正数，则视为 `4`。更改此值会增加或减少 totalSlots（以及因此的并发查询容量），并影响每个槽位的资源：memBytesPerSlot 通过将每个 worker 内存除以（每个 worker 的核心数 * 并发）得出，并且 CPU 记账使用 `query_queue_v2_cpu_costs_per_slot`。将其设置为与集群大小成比例；非常大的值可能会减少每个槽位的内存并导致资源碎片。
+- 描述: 作为相对于默认层级 `4` 的容量层级来解释。对于默认（PBE）和基于 CPU 成本（CBE）的估算器，系统总查询槽位计算为 `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)`（来自 BackendResourceStat）。对于基于内存成本（MBE）的估算器，总槽位改为根据仓库内存预算推导。如果配置值为非正数，则视为 `4`。totalSlots 会被下限约束为至少 `number_of_workers`。增大此值会提高 totalSlots（以及并发查询容量）；在默认值 `4` 时，总容量等于 `number_of_workers * cores_per_worker`。请按集群所需并发度成比例设置。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -666,8 +712,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 规划器 CPU 成本单位
 - 是否可变: Yes
-- 描述: 每个槽位的 CPU 成本阈值，用于根据查询的规划器 CPU 成本估算查询所需的槽位数量。调度器计算槽位为整数（`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`），然后将结果限制在 [1, totalSlots] 范围内（totalSlots 来自查询队列 V2 `V2` 参数）。V2 代码将非正值规范化为 1 (Math.max(1, value))，因此非正值实际上变为 `1`。增加此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减少此值会增加每个查询的槽位。与 `query_queue_v2_num_rows_per_slot` 和并发设置一起调整，以控制并行度与资源粒度。
+- 描述: 基于 CPU 成本的估算器（CBE）使用的每槽位 CPU 成本阈值，用于根据查询的计划 CPU 成本估算所需槽位数量。调度器计算槽位为 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)`，然后将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。非正值会被规范化为 `1`。增大此值会减少每个查询分配的槽位（有利于更少、更大槽位的查询）；减小此值会增加每个查询的槽位。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 基于内存成本的估算器（MBE）使用的每槽位内存目标。当 `query_queue_slots_estimator_strategy` 为 `MBE` 时，总槽位根据仓库内存预算推导，单个查询的槽位根据其总内存成本除以该值估算，并被 `number_of_workers * max(1, pipeline_dop / 2)` 上限约束。如果为非正数，Query Queue V2 使用每核平均 worker 内存。
+- 引入版本: -
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -675,7 +730,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 行
 - 是否可变: Yes
-- 描述: 当估算每个查询的槽位计数时，分配给单个调度槽位的目标源行记录数。StarRocks 计算 `estimated_slots` = (源节点的基数) / `query_queue_v2_num_rows_per_slot`，然后将结果限制在 [1, totalSlots] 范围内，如果计算值为非正数，则强制最小值为 1。totalSlots 来自可用资源（大致为 DOP * `query_queue_v2_concurrency_level` * worker/BE 数量），因此取决于集群/核心计数。增加此值以减少槽位计数（每个槽位处理更多行）并降低调度开销；减少此值以增加并行度（更多、更小的槽位），直至达到资源限制。
+- 描述: 为向后兼容 Query Queue V2 现有的序列化 / 调试输出而保留。PBE、MBE、CBE 槽位估算器均不再使用它。
 - 引入版本: v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
@@ -761,7 +816,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- 默认值: 10
+- 默认值: 5
 - 类型: Int
 - 单位: -
 - 是否可变: No
@@ -802,6 +857,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 统计信息缓存的更新间隔。
+- 引入版本: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制 Follower（以及重启恢复）在回放统计信息日志时如何刷新 Connector（外部表）统计信息缓存。设为 `true` 时，按日志中持久化的表 UUID 失效缓存，并在下次查询时惰性重新加载，从而避免在回放期间解析外部表元数据（`MetadataMgr.getTable`）——该解析可能因 Hive Metastore 或对象存储变慢而阻塞日志回放线程。设为 `false`（默认）时使用原有的主动刷新方式，保持现有行为。在该 UUID 被持久化之前写入的统计信息日志，无论该配置如何都会回退到主动刷新。
+
+### `statistics_large_string_column_merge_threshold`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 默认关闭（`0`）。设为正值后，在统计信息收集的过程中，会单独生成一条 SQL 来收集声明长度超过该阈值的字符串列（`VARCHAR` / `CHAR`）的统计信息，不与其他列合并起来收集。抽样统计和全量统计都遵循该策略。这样做是为了限制单条统计 SQL 在 Exchange 阶段的内存峰值，避免长字符串列与其他列合并后进一步放大聚合算子的状态。保持为 `0` 时，所有列走原先的合并批量收集路径。注意，`STRING` 在内部会表示为最大长度的 `VARCHAR`，因此启用该配置并设置正值阈值后，`STRING` 列也可能被单独拆分出来收集。
 - 引入版本: -
 
 ### `task_check_interval_second`
@@ -1061,6 +1134,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
+- 引入版本: -
+
+### `max_load_initial_open_partition_number`
+
+- 默认值: 4096
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 单次导入开始时最多预先打开的分区数。该值在以下两种场景作为上限生效:(1) LIST 分区表(默认全部打开);(2) RANGE 分区表通过 INSERT / Broker Load / Spark Load 导入(默认全部打开)。Stream Load 与 Routine Load 写入 RANGE 分区表时不受该上限限制,保留更保守的「最新 32」默认行为。表属性 `load_initial_open_partition_number` 优先级最高,可覆盖该值并突破此上限。从 v4.0 起,默认值从 32 调整为 4096。
 - 引入版本: -
 
 ### `max_load_timeout_second`

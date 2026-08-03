@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtains the position of an element in an array."
 ---
 
 # array_position

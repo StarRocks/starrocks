@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "columnsはすべてのテーブル列またはビュー列に関する情報を含みます。"
 ---
 
 # columns

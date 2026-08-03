@@ -242,6 +242,7 @@ public class SPMOptimizer extends Optimizer {
             deriveLogicalProperty(tree);
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
+            scheduler.rewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
             scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
             scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         }

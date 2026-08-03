@@ -22,8 +22,31 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
+import java.util.Comparator;
 
 public final class ColumnDict extends StatsVersion {
+    /**
+     * Unsigned-byte lexicographic comparator. BE sorts dictionary strings via memcmp, which the C
+     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo on JDK 8 instead
+     * compares bytes as signed (Java 9 fixed this to unsigned), so any UTF-8 string with a high-bit
+     * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
+     * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
+     */
+    private static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
+        int aPos = a.position();
+        int bPos = b.position();
+        int aLen = a.limit() - aPos;
+        int bLen = b.limit() - bPos;
+        int n = Math.min(aLen, bLen);
+        for (int i = 0; i < n; i++) {
+            int diff = (a.get(aPos + i) & 0xff) - (b.get(bPos + i) & 0xff);
+            if (diff != 0) {
+                return diff;
+            }
+        }
+        return aLen - bLen;
+    };
+
     private final ImmutableMap<ByteBuffer, Integer> dict;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
@@ -94,7 +117,10 @@ public final class ColumnDict extends StatsVersion {
         while (idx1 < n1 && idx2 < n2) {
             ByteBuffer key1 = sortedKeys1[idx1];
             ByteBuffer key2 = sortedKeys2[idx2];
-            int cmp = key1.compareTo(key2);
+            // Must use UNSIGNED_LEX here, not ByteBuffer.compareTo: BE sorted these dicts by
+            // unsigned memcmp, and on JDK 8 ByteBuffer.compareTo is signed, which would walk the
+            // arrays in the wrong order and emit duplicate keys.
+            int cmp = UNSIGNED_LEX.compare(key1, key2);
             if (cmp == 0) {
                 builder.put(key1, newIdx);
                 idx1++;

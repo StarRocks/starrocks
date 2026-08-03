@@ -496,6 +496,22 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testFullOuterJoinUsingWithMismatchedTypes() throws Exception {
+        // Two USING columns with the same name but different types (DATETIME vs VARCHAR).
+        // The synthesized COALESCE must wrap the side whose type does not equal the
+        // resolved common type in an explicit CAST, so that arg types match the function
+        // signature.
+        String sql = "select v from " +
+                "  (select id_datetime as v from test_all_type) a " +
+                "  full outer join " +
+                "  (select t1a as v from test_all_type) b using(v)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: FULL OUTER JOIN");
+        // The DATETIME side must be cast to the common (string) type inside the coalesce.
+        assertContains(plan, "coalesce(8: id_datetime, CAST(11: t1a AS DATETIME))");
+    }
+
+    @Test
     public void testJoinAssociativityConst() throws Exception {
         String sql = "SELECT x0.*\n" +
                 "FROM (\n" +
@@ -2695,7 +2711,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
-                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+                "  |  equal join conjunct: 11: N_NAME = 17: cast");
     }
 
     @Test

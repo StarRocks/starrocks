@@ -71,8 +71,9 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_window_shared_cont
 }
 
 // Build a per-aggregator JavaUDAFUniqueContext for a window function on top of a shared context.
+// The context is already pre-allocated in FunctionContext::_jvm_udaf_ctxs; we populate it here.
 static Status build_window_unique_context(std::shared_ptr<JavaUDAFSharedContext> shared, FunctionContext* context) {
-    auto udaf_ctx = std::make_unique<JavaUDAFUniqueContext>();
+    auto* udaf_ctx = context->udaf_ctxs();
     udaf_ctx->ctx = std::move(shared);
 
     ASSIGN_OR_RETURN(udaf_ctx->handle, udaf_ctx->ctx->udaf_class.newInstance());
@@ -87,14 +88,13 @@ static Status build_window_unique_context(std::shared_ptr<JavaUDAFSharedContext>
             JavaGlobalRef(env->NewGlobalRef(udaf_ctx->ctx->states_add_method.handle())),
             JavaGlobalRef(env->NewGlobalRef(udaf_ctx->ctx->states_remove_method.handle())),
             JavaGlobalRef(env->NewGlobalRef(udaf_ctx->ctx->states_clear_method.handle())));
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx.get());
-    attach_java_udaf_context(context, std::move(udaf_ctx));
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
     return Status::OK();
 }
 
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context, bool use_cache,
-                               bool* cache_hit_out) {
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache, bool* cache_hit_out) {
     RETURN_IF_ERROR(detect_java_runtime());
     auto func_cache = UserFunctionCache::instance();
 
@@ -105,7 +105,8 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
                                                   ASSIGN_OR_RETURN(auto ctx,
                                                                    build_window_shared_context(libpath, symbol));
                                                   return std::any(std::move(ctx));
-                                              }));
+                                              },
+                                              cloud_configuration));
         if (cache_hit_out != nullptr) {
             *cache_hit_out = result.first;
         }
@@ -114,7 +115,8 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     }
 
     std::string libpath;
-    RETURN_IF_ERROR(func_cache->get_libpath(fid, url, checksum, TFunctionBinaryType::SRJAR, &libpath));
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(fid, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
     ASSIGN_OR_RETURN(auto shared_ctx, build_window_shared_context(libpath, symbol));
     return build_window_unique_context(std::move(shared_ctx), context);
 }

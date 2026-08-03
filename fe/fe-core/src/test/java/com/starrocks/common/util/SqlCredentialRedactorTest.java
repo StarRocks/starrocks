@@ -294,6 +294,27 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactFastPathReturnsSameInstanceForNonCredentialSql() {
+        // When the SQL carries no credential marker, redact() must short-circuit and return the
+        // input instance as-is, without running any regex pass or allocating a new string. The
+        // regex passes always rebuild the string via StringBuilder.toString(), so reference
+        // equality is a precise probe that the fast path was taken. This keeps the hot audit path
+        // (run on every prepared-statement execution) cheap.
+        String plainQuery = "SELECT a, b, c FROM t0 JOIN t1 ON t0.id = t1.id WHERE t0.v > 10 ORDER BY a";
+        Assertions.assertSame(plainQuery, SqlCredentialRedactor.redact(plainQuery));
+
+        String insertQuery = "INSERT INTO t0 VALUES (1, 'abc'), (2, 'def')";
+        Assertions.assertSame(insertQuery, SqlCredentialRedactor.redact(insertQuery));
+
+        // Sanity: SQL that actually carries a credential marker must NOT take the fast path and
+        // still gets redacted into a different string.
+        String credentialSql = "CREATE USER 'u1' IDENTIFIED BY 'secret'";
+        String redacted = SqlCredentialRedactor.redact(credentialSql);
+        Assertions.assertNotSame(credentialSql, redacted);
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY '***'", redacted);
+    }
+
+    @Test
     public void testMultipleCredentials() {
         String sql = "CREATE STORAGE VOLUME test_volume\n" +
                 "TYPE = S3\n" +

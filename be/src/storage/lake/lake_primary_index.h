@@ -69,9 +69,15 @@ public:
         _enable_persistent_index = enable_persistent_index;
     }
 
-    Status apply_opcompaction(const TabletMetadata& metadata, const TxnLogPB_OpCompaction& op_compaction);
+    Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
+    Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t generation_version = 0);
+
+    // Force any in-memory memtables of the cloud-native persistent index to
+    // be flushed into sstables on shared storage. A no-op for LOCAL /
+    // in-memory index types. Used by the reshard flush path where the
+    // default commit()'s heuristic flush is not sufficient.
+    Status sync_flush_persistent_index(int64_t wait_timeout_us);
 
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
@@ -89,8 +95,9 @@ public:
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
-    // |rowset_id| The rowset that keys belong to. Used for setup rebuild point (cloud native index only).
-    Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t rowset_id);
+    // |del_rssid| rssid stamped for these deletes (rowset_id + op_offset). Used as the rebuild point
+    // (cloud native index only).
+    Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
 
     int32_t current_fileset_index() const;
 
@@ -106,6 +113,8 @@ public:
     // cross-segment parallelism. Each rss_rowids[i] = (rssid << 32 | rowid) for the
     // i-th primary key, or NullIndexValue if the key doesn't exist.
     // Used by column mode partial update to build the update-row-to-source-row mapping.
+    // To learn each segment's physical rowid base (range_start), call
+    // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
     Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
                                          std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);

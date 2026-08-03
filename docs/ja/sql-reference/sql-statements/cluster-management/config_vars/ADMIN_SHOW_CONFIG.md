@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のクラスターの設定を表示します（現在は FE の設定項目のみ）。"
 ---
 
 # ADMIN SHOW CONFIG

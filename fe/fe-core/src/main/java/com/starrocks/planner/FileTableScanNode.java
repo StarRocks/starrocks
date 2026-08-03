@@ -21,6 +21,8 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -72,12 +74,17 @@ public class FileTableScanNode extends ScanNode {
 
     public void setupScanRangeLocations() throws Exception {
         List<RemoteFileDesc> files = fileTable.getFileDescs();
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null) {
+            sv = connectContext.getSessionVariable();
+        }
         for (RemoteFileDesc file : files) {
-            addScanRangeLocations(file);
+            addScanRangeLocations(file, sv);
         }
     }
 
-    private void addScanRangeLocations(RemoteFileDesc file) {
+    private void addScanRangeLocations(RemoteFileDesc file, SessionVariable sv) {
         for (RemoteFileBlockDesc blockDesc : file.getBlockDescs()) {
             TScanRangeLocations scanRangeLocs = new TScanRangeLocations();
 
@@ -102,6 +109,9 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setFile_format(fileFormat.toFileFormatThrift());
             if (fileFormat.isTextFormat()) {
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
+            }
+            if (fileFormat == HiveStorageFormat.AVRO) {
+                hdfsScanRange.setUse_avro_jni_reader(sv.getAvroUseJNIReader());
             }
 
             TScanRange scanRange = new TScanRange();

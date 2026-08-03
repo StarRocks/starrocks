@@ -862,6 +862,30 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
+#### 制限事項
+
+レンジ分散方式のテーブルでは、以下の操作はサポートされていません：
+
+| DDL | 理由 |
+|---|---|
+| `ALTER TABLE ... ADD ROLLUP ...` | 同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し、行順序が一致していることを前提としていますが、レンジ分散ではこの前提を満たせません。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | `ADD ROLLUP` と同じコードパスを共有します。 |
+| `ALTER TABLE ... ORDER BY (...)`（ソートキーの変更） | ソートキーが tablet の境界を決定するため、これを変更すると既存のレンジ tablet が無効になります。 |
+| `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
+| `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、新しいキー列が（導出された）レンジソートキーに自動的に追加されます。 |
+| `ALTER TABLE ... DROP COLUMN <col>`（`<col>` がレンジソートキーに含まれる場合） | ソートキー列の削除は、保存されている tablet 境界値を無効化します。 |
+| `ALTER TABLE ... MODIFY COLUMN <col> ...`（`<col>` がレンジソートキーに含まれる場合） | 列の型 / セマンティクスを変更すると、保存されている tablet 境界値が記録された時点の前提が崩れます。 |
+| `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（または任意のキータイプにおける値列のキー昇格）による keyness の反転 | 集計テーブル / ユニークキーテーブル、または明示的な `ORDER BY` を持たないテーブルでは、keyness の反転によりキー列から導出されるレンジソートキーが変化します。 |
+
+Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
+
+```sql
+CREATE MATERIALIZED VIEW mv
+DISTRIBUTED BY HASH(col)
+REFRESH ASYNC
+AS SELECT ... FROM range_table;
+```
+
 ### バケット数の設定
 
 バケットは、StarRocksでデータファイルが実際にどのように組織されているかを反映しています。

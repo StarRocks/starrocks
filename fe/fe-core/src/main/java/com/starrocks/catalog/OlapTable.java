@@ -83,6 +83,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.SlotDescriptor;
@@ -1599,6 +1600,21 @@ public class OlapTable extends Table {
         this.colocateGroup = colocateGroup;
     }
 
+    // Whether this table declares a colocate group. For a real catalog OlapTable this matches
+    // ColocateTableIndex.isColocateTable(getId()): the group name and the index's table2Group membership
+    // are set together on create/ALTER-set and cleared together on ALTER-unset. It is NOT a drop-in
+    // replacement for the index everywhere -- two boundaries make them diverge:
+    //   - a query-time copy is not valid input: OlapTable.copyOnlyForQuery() does not carry colocateGroup;
+    //   - a crash between the OP_CREATE_TABLE and OP_COLOCATE_ADD_TABLE_V2 journal records can replay a
+    //     table with the property set but no index membership (the index is the durable source of truth).
+    // So this is used only by fail-closed ALTER-time guards that hold the table write lock on the real
+    // catalog object, where the declared property is authoritative (and in the crash-orphan corner makes
+    // the guard strictly more conservative). Named hasColocateGroup, not isColocateTable, since it is a
+    // pure property read with no GroupId/stability/range semantics -- use ColocateTableIndex when needed.
+    public boolean hasColocateGroup() {
+        return !Strings.isNullOrEmpty(colocateGroup);
+    }
+
     public boolean isEnableColocateMVIndex() {
         if (!isOlapTableOrMaterializedView()) {
             return false;
@@ -2184,10 +2200,15 @@ public class OlapTable extends Table {
         return tableProperty.enableStatisticCollectOnFirstLoad();
     }
 
+    public boolean isSetEnableStatisticCollectOnFirstLoad() {
+        return tableProperty != null && tableProperty.isSetEnableStatisticCollectOnFirstLoad();
+    }
+
     public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
                 Boolean.valueOf(enable).toString());
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
+        tableProperty.setEnableStatisticCollectOnFirstLoad(enable);
     }
 
     public int getTableQueryTimeout() {
@@ -2249,6 +2270,16 @@ public class OlapTable extends Table {
 
     public Boolean enableLoadProfile() {
         return tableProperty.enableLoadProfile();
+    }
+
+    public int getLoadInitialOpenPartitionNumber() {
+        return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
+    }
+
+    public void setLoadInitialOpenPartitionNumber(int n) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, String.valueOf(n));
+        tableProperty.buildLoadInitialOpenPartitionNumber();
     }
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
@@ -2704,6 +2735,18 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
+            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
+            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
+            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
+            // which is harmless because the next create on the same colocate_with name allocates a
+            // new grpId via getNextId().
+            if (colocateTableIndex.isRangeColocateGroup(groupId)) {
+                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
+                if (!ranges.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
+                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
+                }
+            }
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
                     backendsPerBucketSeq);
@@ -2931,9 +2974,9 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
         }
 
-        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
-        if (!enableStatisticCollectOnFirstLoad) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        if (isSetEnableStatisticCollectOnFirstLoad()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                    Boolean.toString(enableStatisticCollectOnFirstLoad()));
         }
 
         // base compaction forbidden time ranges
@@ -2998,6 +3041,13 @@ public class OlapTable extends Table {
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // load initial open partition number
+        String loadInitialOpenPartitionNumber =
+                tableProperties.get(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+        if (loadInitialOpenPartitionNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER, loadInitialOpenPartitionNumber);
         }
 
         // partition ttl
@@ -3092,35 +3142,40 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
         }
 
-        // flat json enable
-        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
-        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
-
-            // Only include other flat JSON properties if flat_json.enable is true
-            if (Boolean.parseBoolean(flatJsonEnable)) {
-                // flat json null factor
-                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
-                }
-
-                // flat json sparsity factor
-                String flatJsonSparsityFactor =
-                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
-                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
-                }
-
-                // flat json column max
-                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
-                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
-                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
-                }
-            }
-        }
+        // flat json
+        appendFlatJsonProperties(properties, tableProperties);
 
         return properties;
+    }
+
+    // Render flat_json.* for SHOW CREATE TABLE; shared with LakeTable.getUniqueProperties()
+    // so both modes stay in sync.
+    protected static void appendFlatJsonProperties(Map<String, String> properties,
+                                                   Map<String, String> tableProperties) {
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (Strings.isNullOrEmpty(flatJsonEnable)) {
+            return;
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+
+        // Only include other flat JSON properties if flat_json.enable is true
+        if (Boolean.parseBoolean(flatJsonEnable)) {
+            String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+            }
+
+            String flatJsonSparsityFactor =
+                    tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+            if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+            }
+
+            String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+            if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+            }
+        }
     }
 
     @Override

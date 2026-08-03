@@ -64,9 +64,6 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
-    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
     /**
      * @param: [json_string, tagged_value]
      * @paramType: [BinaryColumn, BinaryColumn]

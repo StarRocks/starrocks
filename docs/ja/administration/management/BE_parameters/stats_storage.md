@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -35,7 +36,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [統計レポート](#統計レポート)
 - [ストレージ](#ストレージ)
 
@@ -196,6 +197,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: いいえ
 - 説明: 各コンパクションスレッドに許可される最大メモリサイズ。
+- 導入バージョン: -
+
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Percent
+- 変更可能: はい
+- 説明: コンパクションが内部 Chunk の保持容量を解放するタイミングを制御します。現在、このパラメータは共有なしクラスタの主キーテーブルコンパクションでのみ有効です。現在のコンパクションタスクのメモリトラッカー使用量が `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100` を超えると、StarRocks は内部 Chunk をリセットするときに保持容量を解放します。負の値に設定すると、この動作は無効になります。
 - 導入バージョン: -
 
 ### compaction_trace_threshold
@@ -367,15 +377,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: はい
 - 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするかどうか。有効化されると、システムは公開操作中にスレッドプールを使用してセグメントを並行処理し、大規模なテーブルのパフォーマンスを大幅に向上させます。
-- 導入バージョン: -
-
-### enable_pk_index_eager_build
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: データインポートおよびコンパクションの段階で、Primary Key インデックスファイルを即座に構築するかどうかを決定します。有効化されると、システムはデータ書き込み時に永続的な PK インデックスファイルを直接生成し、後続のクエリパフォーマンスを向上させます。
 - 導入バージョン: -
 
 ### enable_pk_size_tiered_compaction_strategy
@@ -774,6 +775,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
+### pk_index_parallel_rebuild_mem_ratio
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: パーセント (0-100)
+- 変更可能: はい
+- 説明: 共有データモードで、Primary Key インデックスの再構築時に使用される並列プリフェッチ経路に対するメモリ圧迫ゲートです。update メモリトラッカーの使用量が上限のこの割合を超えている場合、再構築は一度に 1 つのデコード済みカラムのみを保持するシングルパスループにフォールバックし、コールドスタートのレイテンシ改善を諦めてピークメモリを抑制します。再構築中の del ファイル、segment ファイルなどの並列読み込みを制御します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` の場合は常に並列実行されます。
+- 導入バージョン: -
+
+### lake_partial_update_thread_pool_max_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データモードでの部分更新セグメントレベル並列実行用のスレッドプールの最大スレッド数。このスレッドプールは行モード（並列 load_segment + rewrite_segment）と列モード（並列 DCG 生成）の両方の部分更新で使用されます。0 は CPU コア数の半分に自動設定されることを意味します。実行時のオン/オフは `enable_pk_index_parallel_execution` で制御されます。
+- 導入バージョン: v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- デフォルト: 2048
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 部分更新スレッドプールのタスクキューサイズ。
+- 導入バージョン: v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - デフォルト: 10
@@ -825,7 +853,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: Bytes
 - 変更可能: はい
-- 説明: `enable_pk_index_eager_build` が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えたときのみ、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
+- 説明: インポートまたはコンパクションで生成されるデータがこの閾値を超えたときに、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
 - 導入バージョン: -
 
 ### primary_key_limit_size

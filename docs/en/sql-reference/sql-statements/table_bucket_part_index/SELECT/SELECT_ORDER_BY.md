@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "ORDER BY"
+description: "The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns."
 ---
 
 # ORDER BY

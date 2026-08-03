@@ -1,12 +1,13 @@
 ---
 displayed_sidebar: docs
+description: "SSB flat-table benchmark on 100 GB dataset: StarRocks is 1.87x faster than ClickHouse and 4.75x faster than Apache Druid across 13 queries."
 ---
 
 # SSB Flat-table Benchmarking
 
 Star schema benchmark (SSB) is designed to test basic performance metrics of OLAP database products. SSB uses a star schema test set that is widely applied in academia and industry. For more information, see [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF).
 
-ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/en/getting-started/example-datasets/star-schema)
+ClickHouse flattens the star schema into a wide flat table and rewrites the SSB into a single-table benchmark. For more information, see [Star schema benchmark of ClickHouse](https://clickhouse.com/docs/getting-started/example-datasets/star-schema)
 
 This test compares the performance of StarRocks, Apache Druid, and ClickHouse against SSB single-table datasets.
 

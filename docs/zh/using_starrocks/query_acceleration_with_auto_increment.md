@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中使用 AUTO INCREMENT 列和全局字典将字符串 Key 替换为整数 ID，加速精确去重和 Join 操作。"
 sidebar_position: 100
 ---
 

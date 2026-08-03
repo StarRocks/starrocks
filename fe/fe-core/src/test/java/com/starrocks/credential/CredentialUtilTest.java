@@ -18,7 +18,6 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
 import org.junit.jupiter.api.Assertions;
@@ -49,9 +48,9 @@ public class CredentialUtilTest {
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("he******eh", properties.get(key));
 
-        properties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, "path");
+        properties.put(CloudConfigurationConstants.AZURE_PATH_KEY, "path");
         CredentialUtil.maskCredential(properties);
-        Assertions.assertFalse(properties.containsKey(AzureCloudConfigurationProvider.AZURE_PATH_KEY));
+        Assertions.assertFalse(properties.containsKey(CloudConfigurationConstants.AZURE_PATH_KEY));
     }
 
     @Test
@@ -88,6 +87,27 @@ public class CredentialUtilTest {
         properties.put(JDBCResource.PASSWORD, "7758258");
         CredentialUtil.maskCredential(properties);
         Assertions.assertFalse(properties.containsKey(JDBCResource.PASSWORD));
+    }
+
+    @Test
+    public void testMaskTencentCOSCredential() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "test_cos_access_key");
+        properties.put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "test_cos_secret_key");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY));
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY));
+    }
+
+    @Test
+    public void testMaskIcebergJdbcCatalogPassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD, "12345678");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("12******78", properties.get(
+                IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                        IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD));
     }
 
     @Test

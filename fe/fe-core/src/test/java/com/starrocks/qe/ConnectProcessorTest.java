@@ -61,9 +61,12 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
@@ -80,9 +83,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -457,6 +463,49 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testAuditBeforeAndAfterOnceForMultiStatement() throws Exception {
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select 1; select 2;");
+            ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + origStmt);
+                }
+
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
+                }
+            };
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+            Assertions.assertEquals(2, auditRecords.size());
+            Assertions.assertEquals("BEFORE:select 1; select 2;", auditRecords.get(0));
+            Assertions.assertEquals("AFTER:OK:select 1; select 2;", auditRecords.get(1));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
+    }
+
+    @Test
     public void testQueryAuditRelations() throws Exception {
         auditBuilder.reset();
         starRocksAssert.withView("create or replace view relation_view_cp as select v1 from testTable1");
@@ -487,6 +536,175 @@ public class ConnectProcessorTest extends DDLTestBase {
                 qualifiedRelationName("testDb1", "relation_view_cp"),
                 qualifiedRelationName("testDb1", "testTable1")),
                 auditEvent.queriedRelations);
+    }
+
+    // A forwarding follower never analyzes the statement, so its local parse tree still carries
+    // CTE aliases and unqualified names. When the Leader resolved the relations and shipped them
+    // back, the follower must log the Leader's list rather than its own inaccurate collection.
+    @Test
+    public void testQueriedRelationsPrefersLeaderResultWhenForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        List<String> leaderRelations = Arrays.asList("default_catalog.k.leader_only_table");
+        TMasterOpResult leaderResult = new TMasterOpResult();
+        leaderResult.setQueried_relations(leaderRelations);
+
+        LeaderOpExecutor leaderOpExecutor = Mockito.mock(LeaderOpExecutor.class);
+        Mockito.when(leaderOpExecutor.getResult()).thenReturn(leaderResult);
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(true);
+        Mockito.when(executor.getLeaderOpExecutor()).thenReturn(leaderOpExecutor);
+
+        // Local collection would yield default_catalog.testDb1.testTable1, but the Leader's list must win.
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        Assertions.assertEquals(leaderRelations, processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // An explicitly-provided empty list from the Leader ("resolved no relations", e.g. a CTE-only
+    // query) must be preferred, not mistaken for "field missing" and overridden by local collection.
+    // Regressing the null-check to an isEmpty-check would silently re-log the CTE alias, so guard it.
+    @Test
+    public void testQueriedRelationsPrefersEmptyLeaderResultWhenForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        List<String> leaderRelations = new ArrayList<>();
+        TMasterOpResult leaderResult = new TMasterOpResult();
+        leaderResult.setQueried_relations(leaderRelations);
+        // The empty list is still marked present on the wire.
+        Assertions.assertTrue(leaderResult.isSetQueried_relations());
+
+        LeaderOpExecutor leaderOpExecutor = Mockito.mock(LeaderOpExecutor.class);
+        Mockito.when(leaderOpExecutor.getResult()).thenReturn(leaderResult);
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(true);
+        Mockito.when(executor.getLeaderOpExecutor()).thenReturn(leaderOpExecutor);
+
+        // Local collection is non-empty here, so an empty result can only mean the Leader's empty
+        // list was preferred over a local fallback.
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+        Assertions.assertFalse(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(localStmt).isEmpty());
+
+        Assertions.assertEquals(leaderRelations, processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // Statements that run locally (not forwarded) have an analyzed parse tree, so the follower
+    // falls back to its own accurate collection.
+    @Test
+    public void testQueriedRelationsFallsBackToLocalWhenNotForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(false);
+
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("testDb1", "testTable1")),
+                processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // A forwarded statement that resolves to no real relations (e.g. a CTE-only query) must still
+    // mark queried_relations as set. Otherwise the follower cannot tell "leader found none" from
+    // "leader too old to send the field" and falls back to its unanalyzed parse tree, which still
+    // holds the CTE alias -- re-introducing exactly the inaccuracy this fix removes.
+    @Test
+    public void testProxyExecuteSetsEmptyQueriedRelationsForCteOnlyStatement() throws Exception {
+        StatementBase analyzedCteOnly =
+                UtFrameUtils.parseStmtWithNewParser("with t as (select 1) select * from t", ctx);
+        Assertions.assertTrue(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(analyzedCteOnly).isEmpty());
+
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("with t as (select 1) select * from t");
+        request.setIsInternalStmt(true);
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        context.setCurrentCatalog("default");
+        context.setDatabase("testDb1");
+        context.setQualifiedUser("root");
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setSessionId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(context);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doNothing().when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                    Mockito.when(mock.getParsedStmt()).thenReturn(analyzedCteOnly);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertTrue(result.isSetQueried_relations());
+            Assertions.assertTrue(result.getQueried_relations().isEmpty());
+        }
+    }
+
+    // queried_relations must be populated even when execute() throws after analysis. Otherwise the
+    // follower sees "field missing" on an error, falls back to its unanalyzed parse tree, and a
+    // failed forwarded statement gets an inaccurate audit log. The collection runs in a finally
+    // around execute(), so an already-analyzed statement still ships its resolved relations.
+    @Test
+    public void testProxyExecuteSetsQueriedRelationsWhenExecuteFails() throws Exception {
+        StatementBase analyzed = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select v1 from testTable1");
+        request.setIsInternalStmt(true);
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        context.setCurrentCatalog("default");
+        context.setDatabase("testDb1");
+        context.setQualifiedUser("root");
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setSessionId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(context);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doThrow(new RuntimeException("execution failed")).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                    Mockito.when(mock.getParsedStmt()).thenReturn(analyzed);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertTrue(result.isSetQueried_relations());
+            Assertions.assertEquals(Arrays.asList(qualifiedRelationName("testDb1", "testTable1")),
+                    result.getQueried_relations());
+        }
+    }
+
+    // queried_relations is populated in the shared proxyExecute(), so every forward path is covered,
+    // including Arrow Flight SQL: ArrowFlightSqlConnectProcessor overrides doProxyExecute() but must
+    // inherit proxyExecute(). If it ever overrides proxyExecute(), forwarded Arrow queries would
+    // bypass the population and regress to logging CTE aliases / unqualified names -- guard that here.
+    @Test
+    public void testArrowFlightSqlInheritsProxyExecute() throws Exception {
+        Method proxyExecute = ArrowFlightSqlConnectProcessor.class.getMethod(
+                "proxyExecute", TMasterOpRequest.class, Frontend.class);
+        Assertions.assertEquals(ConnectProcessor.class, proxyExecute.getDeclaringClass(),
+                "ArrowFlightSqlConnectProcessor must inherit proxyExecute() so forwarded queries "
+                        + "populate queried_relations");
     }
 
     @Test
@@ -675,6 +893,34 @@ public class ConnectProcessorTest extends DDLTestBase {
         // customQueryId is cleared after query finished
         Assertions.assertEquals("", ctx.getCustomQueryId());
         Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+    }
+
+    @Test
+    public void testQueryWithCustomSessionName() throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomSessionName("session_name");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customSessionName = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customSessionName.set(ctx.getCustomSessionName());
+            }
+            
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        processor.processOnce();
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customSessionName is set during query execution
+        Assertions.assertEquals("session_name", customSessionName.get());
+        // customSessionName is NOT cleared after query finished
+        Assertions.assertEquals("session_name", ctx.getCustomSessionName());
+        Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
     }
 
     @Test

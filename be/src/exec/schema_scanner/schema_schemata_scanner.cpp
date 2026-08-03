@@ -26,6 +26,7 @@ SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"DEFAULT_ENCRYPTION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()
@@ -109,6 +110,16 @@ Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 6: {
+            // DEFAULT_ENCRYPTION
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
+                const char* str = "NO";
+                Slice value(str, strlen(str));
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }

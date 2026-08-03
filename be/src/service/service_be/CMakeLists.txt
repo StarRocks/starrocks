@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service_be")
 
 ADD_BE_LIB(ServiceBE
     backend_service.cpp
+    http_auth_response.cpp
     http_service.cpp
     internal_service.cpp
     lake_service.cpp

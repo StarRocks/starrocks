@@ -21,11 +21,13 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/flat_json_config.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
@@ -165,6 +167,9 @@ private:
 
 Status LinkedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
     new_rowset_metadata->CopyFrom(rowset->metadata());
+    // Linked SC reuses the source segments, so it inherits the source uid; mint one
+    // only if the source predates the uid feature (set-if-absent).
+    tablet_reshard_helper::ensure_rowset_uid(new_rowset_metadata);
     return Status::OK();
 }
 
@@ -240,21 +245,16 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
@@ -283,14 +283,19 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
-    // create writer
+    // Pass the new tablet schema directly so DeltaWriter does not consult TableSchemaService.
+    // The schema-service lookup is keyed by (db_id, table_id, schema_id) and falls back to an
+    // FE RPC; without catalog ids on the alter task the RPC goes out with zeros and FE replies
+    // "Table not exist". The schema-change task already holds the exact schema, so we sidestep
+    // the lookup entirely.
     ASSIGN_OR_RETURN(auto writer, DeltaWriterBuilder()
                                           .set_tablet_manager(_tablet_manager)
                                           .set_tablet_id(_new_tablet.id())
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
-                                          .set_schema_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
+                                          .set_schema_id(_new_tablet_schema->id())
+                                          .set_tablet_schema(_new_tablet_schema)
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -332,15 +337,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     for (const auto& f : writer->segments()) {
-        uint32_t segment_idx = new_rowset_metadata->segments_size();
-        new_rowset_metadata->add_segments(f.path);
-        new_rowset_metadata->add_segment_size(f.size.value());
-        new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
-        auto* segment_meta = new_rowset_metadata->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = new_rowset_metadata->segment_metas_size();
+        f.to_proto(segment_idx, new_rowset_metadata->add_segment_metas());
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -348,6 +346,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
+    // Fresh uid: a converted (rewritten) rowset is new data, distinct from its base.
+    tablet_reshard_helper::set_rowset_uid(new_rowset_metadata);
     _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
@@ -527,6 +527,12 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
                                                            ? CompactionStrategyPB::DEFAULT
                                                            : CompactionStrategyPB::REAL_TIME;
         metadata_update_info->set_compaction_strategy(compaction_strategy);
+    }
+
+    if (tablet_meta_info.__isset.flat_json_config) {
+        FlatJsonConfig cfg;
+        cfg.update(tablet_meta_info.flat_json_config);
+        cfg.to_pb(metadata_update_info->mutable_flat_json_config());
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

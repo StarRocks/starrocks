@@ -255,10 +255,9 @@ TEST_F(ChunkTest, test_copy_one_row) {
 
     ASSERT_EQ(new_chunk->num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
-        ASSERT_EQ(chunk->mutable_columns()[i]->size(), new_chunk->mutable_columns()[i]->size());
-        for (size_t j = 0; j < chunk->mutable_columns()[i]->size(); ++j) {
-            ASSERT_EQ(chunk->mutable_columns()[i]->get(j).get_int32(),
-                      new_chunk->mutable_columns()[i]->get(j).get_int32());
+        ASSERT_EQ(chunk->columns()[i]->size(), new_chunk->columns()[i]->size());
+        for (size_t j = 0; j < chunk->columns()[i]->size(); ++j) {
+            ASSERT_EQ(chunk->columns()[i]->get(j).get_int32(), new_chunk->columns()[i]->get(j).get_int32());
         }
     }
 }
@@ -314,7 +313,7 @@ TEST_F(ChunkTest, test_append_chunk_safe) {
     chunk_1->append_safe(*chunk_2);
 
     for (size_t i = 0; i < chunk_1->num_columns(); i++) {
-        auto column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk_1->mutable_columns()[i].get());
+        auto column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(chunk_1->columns()[i].get());
         ASSERT_EQ(column->size(), 200);
         for (size_t j = 0; j < 100; j++) {
             ASSERT_EQ(column->get(j).get_int32(), j);

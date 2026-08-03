@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Cancels an in-progress ALTER TABLE operation such as column modification, schema optimization, or rollup index creation."
 ---
 
 # CANCEL ALTER TABLE

@@ -57,8 +57,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.MergeTabletClause;
-import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -141,6 +139,14 @@ public class TabletStatMgr extends FrontendDaemon {
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
+                // Reshard is leader-only (TabletStatMgr runs on all FEs), and only for cloud-native
+                // range-distribution tables. This gates the parallelism-floor lookup (a StarMgr RPC),
+                // the adjacency walk, and the reshard trigger — none of which should run on followers.
+                boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
+                        && olapTable.isCloudNativeTableOrMaterializedView()
+                        && olapTable.isRangeDistribution();
+                int parallelismFloor = reshardEligible
+                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -150,9 +156,17 @@ public class TabletStatMgr extends FrontendDaemon {
                             for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
+                                List<Tablet> tablets = index.getTablets();
+                                // Only an index above the parallelism floor contributes the merge signal
+                                // (minAdjacentTabletPairSize); otherwise auto-merge could shrink it below the
+                                // tablet count pre-split established for parallelism (and would churn empty
+                                // merge jobs every cycle). Split detection (maxTabletSize) is never gated.
+                                // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
+                                // inside an admitted job, so the floor holds even for manual size-based merges.
+                                boolean eligibleForMerge = tablets.size() > parallelismFloor;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
-                                for (Tablet tablet : index.getTablets()) {
+                                for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
@@ -161,7 +175,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                         prevFreshTabletSize = -1L;
                                         continue;
                                     }
-                                    if (prevFreshTabletSize >= 0) {
+                                    if (prevFreshTabletSize >= 0 && eligibleForMerge) {
                                         minAdjacentTabletPairSize = Math.min(minAdjacentTabletPairSize,
                                                 prevFreshTabletSize + dataSize);
                                     }
@@ -201,42 +215,19 @@ public class TabletStatMgr extends FrontendDaemon {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
 
-                // Trigger tablet reshard
-                if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerTabletReshard(db, olapTable, maxTabletSize, minAdjacentTabletPairSize);
+                // Emit a reshard candidate with the signals computed above; addReshardCandidate drops
+                // non-actionable signals and the TabletReshardJobMgr drain owns job creation. This
+                // periodic scan is the fallback for the publish-driven path, so unlike publish it
+                // carries the merge signal too.
+                if (reshardEligible) {
+                    GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
                 }
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
         lastWorkTimestamp = LocalDateTime.now();
-    }
-
-    private static void triggerTabletReshard(Database db, OlapTable table,
-                                             long maxTabletSize, long minAdjacentTabletPairSize) {
-        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
-            return;
-        }
-
-        try {
-            if (TabletReshardUtils.needSplit(maxTabletSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new SplitTabletClause());
-                LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
-                        db.getFullName(), table.getName(), maxTabletSize);
-                return;
-            }
-
-            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
-                        db, table, new MergeTabletClause());
-                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
-                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to create tablet reshard job for table {}.{}.",
-                    db.getFullName(), table.getName(), e);
-        }
     }
 
     private void updateLocalTabletStat() {

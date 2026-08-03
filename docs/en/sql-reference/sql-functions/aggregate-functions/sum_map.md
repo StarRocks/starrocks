@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aggregates MAP values by summing numeric values for matching keys across multiple rows."
 ---
 
 # sum_map

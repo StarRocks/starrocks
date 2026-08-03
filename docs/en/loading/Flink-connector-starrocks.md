@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use the StarRocks Flink connector to continuously load data from Apache Flink into StarRocks, supporting DataStream API, Table API & SQL, and Python API."
 ---
 
 # Continuously load data from Apache Flink®
@@ -16,10 +17,10 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -76,13 +77,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       sh build.sh <flink_version>
       ```
 
-   For example, if the Flink version in your environment is 1.15, you need to execute the following command:
+   For example, if the Flink version in your environment is 1.16, you need to execute the following command:
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 > **NOTE**
 >
@@ -697,7 +698,7 @@ Since v1.2.9, the Flink connector for StarRocks is integrated into this framewor
 - Schema change synchronization
 - Full and incremental data synchronization
 
-For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/).
 
 It is advised to use StarRocks v3.2.1 and later versions to enable [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution). It will improve the speed of adding or dropping columns and reduce resource usage.
 
@@ -818,7 +819,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
-    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+    - Set the option `sink.version` to `V1` or `V2`. Both support conditional update.
 
     ```SQL
     CREATE TABLE `score_board` (

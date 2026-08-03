@@ -16,10 +16,12 @@
 
 #include <random>
 
+#include "http/action/compaction_action.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/rowset_update_state.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
 #include "testutil/sync_point.h"
@@ -70,11 +72,11 @@ static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& sch
 static ssize_t read_and_compare(const ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
-    auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     size_t count = 0;
     while (true) {
@@ -170,12 +172,12 @@ ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, in
         return -1;
     }
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
-    auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
-        cols[0]->append_datum(Datum((int64_t)key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
         auto v = std::to_string((int64_t)(key % 1000 + 2));
-        cols[2]->append_datum(Datum(Slice{v}));
+        cols[2]->as_mutable_ptr()->append_datum(Datum(Slice{v}));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -206,11 +208,11 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key1(const TabletSharedPtr& 
     }
     const auto nkeys = keys.size();
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
-    auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
-        cols[0]->append_datum(Datum((int64_t)(nkeys - 1 - key)));
-        cols[1]->append_datum(Datum((int16_t)key));
-        cols[2]->append_datum(Datum((int32_t)(nkeys - 1 - key)));
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)(nkeys - 1 - key)));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)key));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(nkeys - 1 - key)));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -241,11 +243,11 @@ ssize_t read_tablet_and_compare_schema_changed_sort_key2(const TabletSharedPtr& 
     }
     const auto nkeys = keys.size();
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
-    auto cols = full_chunk->mutable_columns();
-    for (long key : keys) {
-        cols[0]->append_datum(Datum((int64_t)key));
-        cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
-        cols[2]->append_datum(Datum((int32_t)key));
+    auto cols = full_chunk->columns();
+    for (int64_t key : keys) {
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(nkeys - 1 - key)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)key));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -275,11 +277,11 @@ static ssize_t read_tablet_and_compare_sort_key_error_encode_case(const TabletSh
         return -1;
     }
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
-    auto cols = full_chunk->mutable_columns();
+    auto cols = full_chunk->columns();
     for (auto i = 0; i < keys.size(); ++i) {
-        cols[0]->append_datum(Datum((int64_t)keys[i]));
-        cols[1]->append_datum(Datum((int16_t)1));
-        cols[2]->append_datum(Datum((int32_t)i));
+        cols[0]->as_mutable_ptr()->append_datum(Datum((int64_t)keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)1));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)i));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -310,11 +312,11 @@ static ssize_t read_tablet_and_compare_nullable_sort_key(const TabletSharedPtr& 
     }
     const auto keys_size = all_cols[0].size();
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys_size);
-    auto cols = full_chunk->mutable_columns();
+    auto cols = full_chunk->columns();
     for (auto i = 0; i < keys_size; ++i) {
-        append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
-        append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
-        append_datum_func(cols[2], static_cast<int32_t>(all_cols[2][i]));
+        append_datum_func(cols[0]->as_mutable_ptr(), static_cast<int64_t>(all_cols[0][i]));
+        append_datum_func(cols[1]->as_mutable_ptr(), static_cast<int16_t>(all_cols[1][i]));
+        append_datum_func(cols[2]->as_mutable_ptr(), static_cast<int32_t>(all_cols[2][i]));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -1544,12 +1546,12 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
 
     auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
     auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
-    auto cols = sk_chunk->mutable_columns();
+    auto cols = sk_chunk->columns();
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -1879,12 +1881,12 @@ TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
 
     auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
     auto sk_chunk = ChunkHelper::new_chunk(schema, loop);
-    auto cols = sk_chunk->mutable_columns();
+    auto cols = sk_chunk->columns();
     for (int i = 0; i < loop; i++) {
         int64_t key = sorted_keys[i * 100];
-        cols[0]->append_datum(Datum(key));
-        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     std::vector<RowsetSharedPtr> rowsets;
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(loop + 1, &rowsets).ok());
@@ -2031,6 +2033,137 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
 
 TEST_F(TabletUpdatesTest, load_snapshot_incremental_with_persistent_index) {
     test_load_snapshot_incremental(true);
+}
+
+void TabletUpdatesTest::test_load_snapshot_incremental_with_merge_condition(bool enable_persistent_index) {
+    srand(GetCurrentTimeMicros());
+    auto tablet0 = create_tablet(rand(), rand());
+    auto tablet1 = create_tablet(rand(), rand());
+    tablet0->set_enable_persistent_index(enable_persistent_index);
+    tablet1->set_enable_persistent_index(enable_persistent_index);
+
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
+        (void)fs::remove_all(tablet0->schema_hash_path());
+        (void)fs::remove_all(tablet1->schema_hash_path());
+    });
+
+    const int N = 10;
+
+    auto build_rowset = [&](const TabletSharedPtr& tablet, const std::vector<int64_t>& keys,
+                            const std::vector<int32_t>& v2_data, bool with_merge_condition) -> RowsetSharedPtr {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->thread_safe_get_tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        if (with_merge_condition) {
+            writer_context.merge_condition = "v2";
+        }
+        std::unique_ptr<RowsetWriter> writer;
+        CHECK_OK(RowsetFactory::create_rowset_writer(writer_context, &writer));
+        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+        for (size_t i = 0; i < keys.size(); i++) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(v2_data[i]));
+        }
+        CHECK_OK(writer->flush_chunk(*chunk));
+        return *writer->build();
+    };
+
+    std::vector<int64_t> keys(N);
+    std::vector<int32_t> v2_init(N);
+    std::vector<int32_t> v2_new(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        v2_init[i] = i + 100;
+        v2_new[i] = (i < N / 2) ? (v2_init[i] - 1) : (v2_init[i] + 1);
+    }
+
+    auto collect_v2 = [&](const TabletSharedPtr& tablet) -> std::vector<int32_t> {
+        Schema schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
+        TabletReader reader(tablet, Version(0, tablet->updates()->max_version()), schema);
+        auto iter = create_tablet_iterator(reader, schema);
+        EXPECT_NE(nullptr, iter);
+        if (iter == nullptr) return {};
+        std::map<int64_t, int32_t> rows;
+        auto chunk = ChunkHelper::new_chunk(iter->schema(), N);
+        while (true) {
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file() || !st.ok()) break;
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows[chunk->columns()[0]->get(i).get_int64()] = chunk->columns()[2]->get(i).get_int32();
+            }
+            chunk->reset();
+        }
+        std::vector<int32_t> v2_values;
+        v2_values.reserve(rows.size());
+        for (const auto& [_, v2] : rows) v2_values.push_back(v2);
+        return v2_values;
+    };
+
+    ASSERT_TRUE(tablet0->rowset_commit(2, build_rowset(tablet0, keys, v2_init, false)).ok());
+    ASSERT_EQ(2, tablet0->updates()->max_version());
+    ASSERT_TRUE(tablet0->rowset_commit(3, build_rowset(tablet0, keys, v2_new, true)).ok());
+    ASSERT_EQ(3, tablet0->updates()->max_version());
+    EXPECT_EQ(N, read_tablet(tablet0, 3));
+
+    ASSERT_TRUE(tablet1->rowset_commit(2, build_rowset(tablet1, keys, v2_init, false)).ok());
+    ASSERT_EQ(2, tablet1->updates()->max_version());
+
+    auto snapshot_dir = SnapshotManager::instance()->snapshot_incremental(tablet0, {3}, 3600);
+    ASSERT_TRUE(snapshot_dir.ok()) << snapshot_dir.status();
+    DeferOp defer1([&]() { (void)fs::remove_all(*snapshot_dir); });
+
+    auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
+    ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
+    ASSERT_EQ(1, snapshot_meta->rowset_metas().size());
+
+    std::set<std::string> files;
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
+    ASSERT_TRUE(st.ok()) << st;
+    files.erase("meta");
+    for (const auto& f : files) {
+        std::string src = meta_dir + "/" + f;
+        std::string dst = tablet1->schema_hash_path() + "/" + f;
+        ASSERT_TRUE(FileSystem::Default()->link_file(src, dst).ok());
+    }
+    snapshot_meta->tablet_meta().set_tablet_id(tablet1->tablet_id());
+    snapshot_meta->tablet_meta().set_schema_hash(tablet1->schema_hash());
+    for (auto& rm : snapshot_meta->rowset_metas()) {
+        rm.set_tablet_id(tablet1->tablet_id());
+    }
+
+    const std::vector<int32_t> v2_expected = {100, 101, 102, 103, 104, 106, 107, 108, 109, 110};
+
+    ASSERT_TRUE(tablet1->updates()->load_snapshot(*snapshot_meta).ok());
+    EXPECT_EQ(3, tablet1->updates()->max_version());
+    EXPECT_EQ(3, tablet1->updates()->version_history_count());
+    EXPECT_EQ(v2_expected, collect_v2(tablet1));
+
+    auto tablet2 = load_same_tablet_from_store(tablet1);
+    EXPECT_EQ(v2_expected, collect_v2(tablet2));
+}
+
+TEST_F(TabletUpdatesTest, load_snapshot_incremental_with_merge_condition) {
+    test_load_snapshot_incremental_with_merge_condition(false);
+}
+
+TEST_F(TabletUpdatesTest, load_snapshot_incremental_with_merge_condition_with_persistent_index) {
+    test_load_snapshot_incremental_with_merge_condition(true);
 }
 
 // NOLINTNEXTLINE
@@ -3096,6 +3229,111 @@ TEST_F(TabletUpdatesTest, get_column_values_with_invalid_rssid_persistent_index)
     test_get_column_values_with_invalid_rssid(true);
 }
 
+// Regression test for the read-side integrity guard of the PK auto-increment partial-update 0-row-segment crash.
+// When a resolved (valid) rssid points to a segment whose on-disk num_rows is 0 -- an index/rowset-meta vs
+// segment-data inconsistency, e.g. a corrupt partial-update/auto-increment rewrite -- get_column_values must fail
+// with Corruption instead of silently skipping the segment (which returned short read columns and later crashed
+// in append_selective). The 0-row condition cannot arise naturally, so it is injected via SyncPoint.
+TEST_F(TabletUpdatesTest, get_column_values_zero_row_segment) {
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowset(tablet, keys)).ok());
+
+    // Use the real (valid) rssid of the committed rowset so we pass the rssid-range guards and reach the
+    // 0-row integrity check.
+    uint32_t rssid = 0;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(2, &rowsets, &version).ok());
+        ASSERT_FALSE(rowsets.empty());
+        rssid = rowsets[0]->rowset_meta()->get_rowset_seg_id();
+    }
+
+    std::vector<uint32_t> read_column_ids = {1, 2};
+    MutableColumns read_columns(read_column_ids.size());
+    const auto& tablet_schema = tablet->unsafe_tablet_schema_ref();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        auto tablet_column = tablet_schema.column(read_column_ids[i]);
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+    rowids_by_rssid[rssid] = {0, 1, 2};
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::get_column_values:segment_num_rows",
+                                          [](void* arg) { *(uint32_t*)arg = 0; });
+    auto st = tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns, nullptr,
+                                                   tablet->tablet_schema());
+    SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::get_column_values:segment_num_rows");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_FALSE(st.ok()) << "0-row segment with resolved rowids must fail loudly";
+    ASSERT_TRUE(st.is_corruption()) << st;
+}
+
+// Same integrity guard as get_column_values_zero_row_segment, but for the auto-increment default read path
+// (state != nullptr && with_default): a 0-row segment must yield Corruption, not a silent skip.
+TEST_F(TabletUpdatesTest, get_column_values_zero_row_segment_auto_increment) {
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowset(tablet, keys)).ok());
+
+    RowsetSharedPtr rowset;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(2, &rowsets, &version).ok());
+        ASSERT_FALSE(rowsets.empty());
+        rowset = rowsets[0];
+    }
+
+    // Drive the auto-increment default block: state != nullptr && with_default, with an empty rowids_by_rssid so
+    // the main read loop is skipped and control reaches the auto-increment default read.
+    AutoIncrementPartialUpdateState ai_state;
+    ai_state.init(rowset.get(), tablet->tablet_schema(), 0, 0);
+
+    std::vector<uint32_t> read_column_ids = {1};
+    MutableColumns read_columns(read_column_ids.size());
+    const auto& tablet_schema = tablet->unsafe_tablet_schema_ref();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        auto tablet_column = tablet_schema.column(read_column_ids[i]);
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+    std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::get_column_values:auto_increment_segment_num_rows",
+                                          [](void* arg) { *(uint32_t*)arg = 0; });
+    auto st = tablet->updates()->get_column_values(read_column_ids, 0, /*with_default=*/true, rowids_by_rssid,
+                                                   &read_columns, &ai_state, tablet->tablet_schema());
+    SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::get_column_values:auto_increment_segment_num_rows");
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_FALSE(st.ok()) << "0-row segment on the auto-increment default path must fail loudly";
+    ASSERT_TRUE(st.is_corruption()) << st;
+}
+
 void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_t>& versions,
                                                         const std::vector<int64_t>& expected_missing_ranges) {
     auto tablet = create_tablet(rand(), rand());
@@ -3334,11 +3572,11 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
         }
         auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 2)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 3)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 2)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
     }
@@ -3356,11 +3594,11 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
 
         auto schema = ChunkHelper::convert_schema(_tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
+        auto cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 100 + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 100 + 2)));
         }
         CHECK_OK(writer->flush_chunk_with_deletes(*chunk, deletes));
     }
@@ -3390,17 +3628,17 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
-    auto cols = full_chunk->mutable_columns();
+    auto cols = full_chunk->columns();
     for (int i = 0; i < 50; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 2)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % 100 + 3)));
     }
 
     for (int i = 50; i < 100; i++) {
-        cols[0]->append_datum(Datum(keys[i]));
-        cols[1]->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
+        cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+        cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % 100 + 1)));
+        cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % 100 + 2)));
     }
 
     size_t count = 0;
@@ -4427,6 +4665,103 @@ TEST_F(TabletUpdatesTest, test_make_snapshot_on_tablet_meta_keep_rowsets) {
 
     ASSERT_TRUE(has_meta_file);
     ASSERT_TRUE(still_has_rowset_files);
+}
+
+// Manual compaction of a primary-key tablet goes through run_manual_compaction's updates() branch,
+// which now wraps the parent compaction tracker in a Compaction-<tablet_id> child before delegating to
+// TabletUpdates::compaction. Exercise that path end to end and assert the rowsets are merged.
+TEST_F(TabletUpdatesTest, test_run_manual_compaction) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply, otherwise compaction may snapshot a subset of the rowsets.
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // compaction_type is ignored for primary-key tablets; rowset_ids empty means compact the whole tablet.
+    ASSERT_OK(CompactionAction::do_compaction(_tablet->tablet_id(), "", ""));
+    // compaction() only commits the compaction edit; the rowset replacement applies asynchronously.
+    _tablet->updates()->wait_apply_done();
+
+    ASSERT_EQ(1, _tablet->updates()->num_rowsets());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
+}
+
+// Same path but with an explicit rowset_ids list, exercising run_manual_compaction's
+// compaction(mem_tracker.get(), rowset_ids) branch (the one that also backs repair compaction).
+TEST_F(TabletUpdatesTest, test_run_manual_compaction_with_rowset_ids) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply before snapshotting the rowset ids to compact.
+    _tablet->updates()->wait_apply_done();
+
+    std::vector<uint32_t> rowset_ids;
+    size_t total_bytes = 0;
+    ASSERT_OK(_tablet->updates()->get_rowsets_for_compaction(INT64_MAX, rowset_ids, total_bytes));
+    ASSERT_FALSE(rowset_ids.empty());
+    std::string rowset_ids_string;
+    for (auto id : rowset_ids) {
+        if (!rowset_ids_string.empty()) {
+            rowset_ids_string += ",";
+        }
+        rowset_ids_string += std::to_string(id);
+    }
+
+    ASSERT_OK(CompactionAction::do_compaction(_tablet->tablet_id(), "", rowset_ids_string));
+    _tablet->updates()->wait_apply_done();
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
+}
+
+// Manual compaction submitted through the task queue runs StorageEngine::do_manual_compaction, which
+// also wraps the parent tracker in a Compaction-<tablet_id> child before delegating to TabletUpdates.
+TEST_F(TabletUpdatesTest, test_do_manual_compaction_via_task_queue) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // Wait for all three commits to apply; do_manual_compaction snapshots the rowsets via
+    // get_rowsets_for_compaction, so an unapplied commit would be left out and num_rowsets would be > 1.
+    _tablet->updates()->wait_apply_done();
+
+    StorageEngine::instance()->submit_manual_compaction_task(_tablet->tablet_id(), INT64_MAX);
+    ASSERT_TRUE(run_pending_manual_compaction());
+    _tablet->updates()->wait_apply_done();
+
+    ASSERT_EQ(1, _tablet->updates()->num_rowsets());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    EXPECT_TRUE(_tablet->verify().ok());
 }
 
 } // namespace starrocks

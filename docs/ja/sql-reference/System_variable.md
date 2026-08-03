@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks が提供する多くのシステム変数の設定と変更について説明。"
 ---
 
 # システム変数
@@ -190,7 +191,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
-* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **説明**: オプティマイザが `array<varchar>` カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array<varchar>` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array<varchar>` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
 * **デフォルト**: `true`
 * **タイプ**: boolean
 * **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
@@ -198,6 +199,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### auto_increment_increment
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
+
+### avro_use_jni_reader
+
+* **スコープ**: Session
+* **説明**: Hive などの外部 Catalog にある Avro データをスキャンする際に、JNI ベースの Avro Reader を使用するかどうかを制御します。有効にすると（`true`）、FE は Avro scan range にこのセッション変数を設定し、BE はネイティブ Avro スキャン経路ではなく `HdfsAvroScanner` を優先して使用します。現在この変数は主に互換性確保のためのフォールバックとして利用されます。
+
+  現在の制限: `CHAR(n)` 列は JNI Reader と非 JNI Avro Reader の間で完全には互換ではありません。たとえば `CHAR(10)` 列に対して Avro の値 `Char` を読み込む場合、現在のネイティブ Reader は `Char` の後ろに 6 個の空白を付けず、非パディングの値をそのまま保持します。一方で JNI Reader は異なる挙動を示す可能性があります。`avro_use_jni_reader` を切り替えた際の結果不一致を避けるため、現時点では `CHAR(n)` の空白パディングの意味論に依存しないことを推奨します。可能であれば `VARCHAR` を使用してください。
+* **デフォルト**: `true`
+* **データ型**: boolean
+* **導入バージョン**: v4.1.1
 
 ### binary_encoding_format
 
@@ -224,6 +235,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: 秒
 * **データ型**: 文字列
 * **導入バージョン**: v3.1
+
+### blacklist_backup_routing
+
+* **スコープ**: Session
+* **説明**: 共有データ（shared-data）モードでは、スキャンに対してプランが優先する compute node が、現在のクエリで利用可能なワーカーに含まれない場合（例：ノードがダウンしている、またはホストの blocklist に載っているなど）、プランナーはバックアップ用の compute node を選ぶ必要があります。この変数は、（プライマリ以外の）候補ノードのうち、バックアップをどのように選ぶかを設定します。`RANDOM` は候補集合から一様乱択でサンプリングします。`CIRCULAR` はプライマリからソート済みの compute node ID のリング上を走査し、最初に見つかった候補ノードを選びます（決定的）。バックアップとして選べるノードは `skip_black_list` にも依存します。デフォルトではホスト blocklist 上のノードは除外されます。`skip_black_list` が `true` の場合、blocklist に載っていても、（例：生存しておりウェアハウスで利用可能など）他の条件を満たせばバックアップとして選ばれることがあります。
+* **デフォルト**: `CIRCULAR`
+* **データ型**: String
+* **有効な値**: `CIRCULAR`, `RANDOM`
+* **導入バージョン**: -
 
 ### catalog
 
@@ -866,6 +886,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v2.3
 
+### enable_tablet_pre_split
+
+* **説明**: サンプリングベースのタブレット事前分割（Sample-Based Tablet Pre-Split）に対するセッション単位のオプトアウト。FE Config ゲート（`enable_tablet_pre_split_for_*`）を主たるオン／オフスイッチとして機能させるため、既定値は `true` です。特定のセッションの取り込みに干渉させたくない場合は `false` に設定してください。事前分割が実行されるには、対応する Config フラグとこのセッション変数の両方が `true` である必要があります。
+* **デフォルト**: true
+* **導入バージョン**: v4.1.0
+
 ### enable_topn_runtime_filter
 
 * **説明**: TopN Runtime Filter を有効にするかどうか。この機能を有効にすると、ORDER BY LIMIT クエリに対して動的に Runtime Filter が構築され、Scan 段階にプッシュダウンされてフィルタリングに利用されます。
@@ -1349,6 +1375,22 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **説明**: レイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してパーティションフィルターなしのクエリを許可するかどうか。`false` に設定すると、有効なパーティションフィルターを含まないクエリは拒否され、意図しないフルテーブルスキャンを防止します。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **エイリアス**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **説明**: 単一のレイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してスキャンできるパーティションの最大数。`0` に設定すると制限なし。上限を超えるとクエリはエラーを返します。なお、増分的にスプリットを列挙するカタログタイプ（Iceberg、Delta Lake）では、制限チェックはスキャンレンジのディスパッチ時に行われ、クエリが即座に拒否されるのではなく、実行途中で失敗する場合があります。
+* **スコープ**: セッション
+* **デフォルト**: `0`（制限なし）
+* **タイプ**: Int
+* **エイリアス**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **説明**: FE がスキャンレンジを構築するときに、各タブレットの内部スキャンレンジに `skip_disk_cache` をマークするよう指示するセッションフラグです。`true` に設定すると、`OlapScanNode.addScanRangeLocations()` は作成された `TInternalScanRange` オブジェクトに対して `internalRange.setSkip_disk_cache(true)` を設定するため、下流の BE スキャンノードはそのスキャンでローカルディスクキャッシュをバイパスするよう指示されます。この設定はセッション単位で適用され、プラン／スキャンレンジ構築時に評価されます。ページキャッシュスキップの制御には `skip_page_cache` と組み合わせて使用し、データキャッシュ関連の変数（`enable_scan_datacache` / `enable_populate_datacache`）と併せて適切に利用してください。
@@ -1408,6 +1450,7 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * `SORT_NULLS_LAST`: ソート後に NULL 値を最後に配置します。
 * `ERROR_IF_OVERFLOW`: 算術オーバーフローが発生した場合に NULL の代わりにエラーを返します。現在、このオプションは DECIMAL データ型にのみ対応しています。
 * `GROUP_CONCAT_LEGACY`: v2.5 およびそれ以前の `group_concat` 構文を使用します。このオプションは v3.0.9 および v3.1.6 からサポートされています。
+* `STRUCT_CAST_BY_NAME`: STRUCT 型間のキャストにおいて、デフォルトの位置ベースのマッチングではなく、名前ベースのフィールドマッチングを有効にします。このモードが有効になっている場合、ソース構造体のフィールドは、宣言順序に関係なく、フィールド名（大文字小文字を区別しない）に基づいてターゲット構造体のフィールドと照合されます。ソース側には存在するがターゲット側には存在しないフィールドは無視され、ターゲット側には存在するがソース側には存在しないフィールドは NULL で埋められます。このモードは、FE型の解決（UNION ALL における共通のスーパータイプの計算やキャスト可能性のチェック）と、BEキャストの評価（CastStructExpr における実行時のフィールドの順序変更）の両方に影響します。これは、分岐間でフィールドの定義順序が異なるSTRUCT列に対して UNION ALL を実行する場合に特に有用です。
 
 1 つの SQL モードのみを設定できます。例：
 

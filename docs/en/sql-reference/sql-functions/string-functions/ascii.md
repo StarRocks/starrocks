@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the ASCII code of the leftmost character of a string."
 ---
 
 # ascii

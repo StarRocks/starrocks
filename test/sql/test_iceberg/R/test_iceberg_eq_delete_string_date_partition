@@ -1,0 +1,27 @@
+-- name: test_iceberg_eq_delete_string_date_partition
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part order by id, v;
+-- result:
+1	2020-06-14	200
+2	2020-06-22	300
+-- !result
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = cast('2020-06-15' as date) - interval 1 day order by id, v;
+-- result:
+1	2020-06-14	200
+-- !result
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = date_sub(cast('2020-06-15' as date), interval 1 day) order by id, v;
+-- result:
+1	2020-06-14	200
+-- !result
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = '2020-06-14' order by id, v;
+-- result:
+1	2020-06-14	200
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

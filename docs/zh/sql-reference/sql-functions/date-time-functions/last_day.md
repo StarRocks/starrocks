@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据指定时间单位，返回输入日期对应的最后一天。"
 ---
 
 # last_day

@@ -40,6 +40,7 @@
 #include <future>
 #include <vector>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
@@ -66,7 +67,10 @@ public:
               topic(t_info.topic),
               confluent_schema_registry_url(t_info.confluent_schema_registry_url),
               begin_offset(t_info.partition_begin_offset),
-              properties(t_info.properties) {
+              properties(t_info.properties),
+              need_source_metadata(t_info.__isset.need_source_metadata && t_info.need_source_metadata),
+              need_message_key(t_info.__isset.need_message_key && t_info.need_message_key),
+              need_message_headers(t_info.__isset.need_message_headers && t_info.need_message_headers) {
         // The offset(begin_offset) sent from FE is the starting offset,
         // and the offset(cmt_offset) reported by BE to FE is the consumed offset,
         // so we need to minus 1 here.
@@ -95,6 +99,12 @@ public:
     std::map<int32_t, int64_t> cmt_offset_timestamp;
     //custom kafka property key -> value
     std::map<std::string, std::string> properties;
+    // Attach the extended per-message metadata (topic/timestamp/key/headers) to the buffer only when
+    // the job references a metadata column.
+    bool need_source_metadata{false};
+    // Only extract the message key / headers into buffer meta when the job references __key__ / __headers__.
+    bool need_message_key{false};
+    bool need_message_headers{false};
 };
 
 // pulsar related info
@@ -105,7 +115,10 @@ public:
               topic(t_info.topic),
               subscription(t_info.subscription),
               partitions(t_info.partitions),
-              properties(t_info.properties) {
+              properties(t_info.properties),
+              need_source_metadata(t_info.__isset.need_source_metadata && t_info.need_source_metadata),
+              need_message_key(t_info.__isset.need_message_key && t_info.need_message_key),
+              need_message_headers(t_info.__isset.need_message_headers && t_info.need_message_headers) {
         if (t_info.__isset.initial_positions) {
             initial_positions = t_info.initial_positions;
         }
@@ -130,6 +143,12 @@ public:
 
     // custom kafka property key -> value
     std::map<std::string, std::string> properties;
+    // Attach per-message source metadata to the buffer only when the job references a metadata column.
+    bool need_source_metadata{false};
+    // Only extract the message key (partition key) / headers (properties) when the job references
+    // __key__ / __headers__.
+    bool need_message_key{false};
+    bool need_message_headers{false};
 };
 
 class MessageBodySink;
@@ -185,6 +204,32 @@ public:
     bool check_and_set_http_limiter(ConcurrentLimiter* limiter);
 
     static void release(StreamLoadContext* context);
+
+    // Returns the Thrift RPC timeout (in milliseconds) shared by the stream-load plan (put)
+    // and the txn prepare/commit RPCs sent to the FE.
+    //
+    // The base value is the configurable `stream_load_thrift_rpc_timeout_ms`. When the caller
+    // specifies a load timeout (`timeout_second`), the RPC timeout is clamped into the range
+    // [timeout_ms / 4, timeout_ms / 2], so that a single RPC is never allowed to take longer
+    // than half of the whole load timeout, nor be shorter than a quarter of it.
+    //
+    // The bounds are computed in 64-bit because `timeout_second` comes from a user-supplied
+    // header and `timeout_second * 1000` would overflow int32 once timeout_second > 2147483;
+    // the result is capped at INT32_MAX before narrowing back to the int32 RPC timeout.
+    int32_t calc_put_and_commit_rpc_timeout_ms() {
+        int32_t rpc_timeout_ms = config::stream_load_thrift_rpc_timeout_ms;
+        if (timeout_second != -1) {
+            int64_t timeout_ms = static_cast<int64_t>(timeout_second) * 1000;
+            int64_t min_rpc_timeout_ms = timeout_ms / 4;
+            int64_t max_rpc_timeout_ms = timeout_ms / 2;
+            if (rpc_timeout_ms < min_rpc_timeout_ms) {
+                rpc_timeout_ms = min_rpc_timeout_ms > INT32_MAX ? INT32_MAX : static_cast<int32_t>(min_rpc_timeout_ms);
+            } else if (rpc_timeout_ms > max_rpc_timeout_ms) {
+                rpc_timeout_ms = static_cast<int32_t>(max_rpc_timeout_ms);
+            }
+        }
+        return rpc_timeout_ms;
+    }
 
     // ========================== transaction stream load ==========================
     // try to get the lock when receiving http requests.

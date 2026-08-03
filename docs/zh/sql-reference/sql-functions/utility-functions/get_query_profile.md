@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 query_id 来获取指定查询的 Profile。"
 ---
 
 # get_query_profile

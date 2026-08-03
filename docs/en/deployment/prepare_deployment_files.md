@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to prepare StarRocks deployment files for x86 or ARM-based CPU deployments."
 ---
 
 # Prepare deployment files

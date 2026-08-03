@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [ログ](#ログ)
 - [サーバー](#サーバー)
 - [メタデータとクラスター管理](#メタデータとクラスター管理)
@@ -167,6 +168,19 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: BE HTTP サーバーポート。
 - 導入バージョン: -
+
+### enable_http_auth
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 導入時期: v4.2.0
+- 説明: true の場合、ほとんどの外部 BE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は Thrift `checkAuth` RPC で FE Leader に転送されて検証され、ユーザー名/パスワードは FE 側の認証システム（LDAP / security integration を含む）を正としています。次のエンドポイントは常に除外されます：
+  - トークン認証の内部転送（FE/BE 間の tablet clone と load エラーファイル取得に使用）: `/api/_tablet/_download`、`/api/_download_load`。これらは各自の token チェックで保護されており、`enable_http_auth=true` を有効にしても `enable_token_check=false` の影響を補うことはできません。
+  - ハンドラ内でロードラベル + テーブル権限から認証する Stream Load / transaction エンドポイント: `/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
+
+  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていない場合は `SET DEFAULT ROLE <roles> TO <user>;` または `activate_all_roles_on_login=true` を利用してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
 ### be_port
 
@@ -357,6 +371,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
+### enable_threadpool_catch_task_exception
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 動的に変更可能: はい
+- 説明: ThreadPool のワーカースレッドが、タスクがスローした例外を飲み込んで次のタスクの実行を続けるかどうかを指定します。`false`（デフォルト）に設定すると、タスク本体を囲む catch 句が存在しないため、タスクからエスケープした例外はハンドラーを見つけられず、スローされた地点で BE プロセスを終了させます。`true` に設定すると、例外は ERROR レベルでログに記録され、プロセス全体のメトリクス [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) が加算され、ワーカースレッドは次のタスクに進むため、プロセスは存続します。ただし、ワーカースレッドが存続することはタスクが例外安全であることを意味しません。タスクが `DeferOp` またはデストラクターから完了を通知し、結果を記録する文がスキップされた場合、未設定の `Status` は OK として読み取られるため、待機側はそのタスクを成功と見なします。この場合、障害はエラーではなく誤った結果を生成します。クラッシュループを緩和する必要がある場合にのみ `true` に設定し、該当する障害がサイレントになることを想定してください。
+- 導入バージョン: -
+
 ### ssl_private_key_path
 
 - デフォルト: An empty string
@@ -428,6 +451,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
+
+### stream_load_thrift_rpc_timeout_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: BE の stream load およびトランザクションコミット呼び出しで使用される Thrift RPC 接続の最大有効時間（ミリ秒）。StarRocks はこの値を FE へ送るリクエストの `thrift_rpc_timeout_ms` として設定します（stream load のプランニング、loadTxnBegin/loadTxnPrepare/loadTxnCommit、および getLoadTxnStatus で使用されます）。接続がこの値より長くコネクションプールに留まっている場合は閉じられます。リクエストごとのタイムアウト（`ctx->timeout_second`）が指定されている場合、BE は RPC タイムアウトを rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, stream_load_thrift_rpc_timeout_ms)) として計算するため、実効 RPC タイムアウトはコンテキストとこの設定の両方によって制限されます。タイムアウトの不一致を避けるため、FE の `thrift_client_timeout_ms` と一致させてください。旧名称 `txn_commit_rpc_timeout_ms` は後方互換のエイリアスとして引き続き使用できます。
+- 導入バージョン: v3.2.0
 
 ### transaction_apply_thread_pool_num_min
 

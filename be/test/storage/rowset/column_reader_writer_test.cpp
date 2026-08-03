@@ -39,6 +39,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -653,6 +654,123 @@ TEST_F(ColumnReaderWriterTest, test_default_value) {
 TEST_F(ColumnReaderWriterTest, test_array_int) {
     test_int_array<2>();
     test_int_array<2>("1");
+}
+
+// Covers ArrayColumnIterator::fetch_values_by_rowid with an offsets-only access
+// path (_access_values == false): only array sizes are materialized, element
+// values are never read. This locks the semantics: returned offsets must match
+// the written array lengths, and the elements column stays a const default
+// column sized by the sum of the fetched array sizes.
+TEST_F(ColumnReaderWriterTest, test_array_fetch_by_rowid_offsets_only) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+
+    TabletColumn array_column = create_array(0, true, sizeof(Collection));
+    TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
+    array_column.add_sub_column(int_column);
+
+    // Enough rows that the element data spans multiple 64KB pages, so scattered
+    // rowids land on different pages.
+    const size_t kNumRows = 20000;
+
+    auto src_offsets = UInt32Column::create();
+    auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto src_column = ArrayColumn::create(src_elements, src_offsets);
+
+    // Row i holds i % 5 elements, so array lengths vary and are predictable.
+    uint32_t offset = 0;
+    for (size_t i = 0; i < kNumRows; ++i) {
+        size_t array_size = i % 5;
+        for (size_t j = 0; j < array_size; ++j) {
+            src_elements->append_datum(static_cast<int32_t>(i * 10 + j));
+        }
+        offset += array_size;
+        src_offsets->append(offset);
+    }
+
+    ColumnMetaPB meta;
+    const std::string fname = TEST_DIR + "/test_array_fetch_by_rowid_offsets_only.data";
+    auto segment = create_dummy_segment(fs, fname);
+
+    // write data
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_ARRAY);
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+        writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+        writer_opts.meta->set_is_nullable(false);
+        writer_opts.need_zone_map = false;
+
+        // init integer sub column
+        ColumnMetaPB* element_meta = writer_opts.meta->add_children_columns();
+        element_meta->set_column_id(0);
+        element_meta->set_unique_id(0);
+        element_meta->set_type(int_column.type());
+        element_meta->set_length(int_column.length());
+        element_meta->set_encoding(DEFAULT_ENCODING);
+        element_meta->set_compression(LZ4_FRAME);
+        element_meta->set_is_nullable(false);
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &array_column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*src_column).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // read back through an offsets-only access path (root with a single OFFSET
+    // child), which makes ArrayColumnIterator::init set _access_values = false.
+    {
+        ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::OFFSET, "offsets", 1));
+        ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+        path->children().emplace_back(std::move(child_path));
+
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        iter_opts.use_page_cache = true;
+        ASSERT_OK(iter->init(iter_opts));
+
+        // scattered rowids: first row, one every 997 rows, and the last row.
+        std::vector<uint32_t> rowids;
+        for (size_t i = 0; i < kNumRows; i += 997) {
+            rowids.push_back(i);
+        }
+        rowids.push_back(kNumRows - 1);
+
+        auto dst_offsets = UInt32Column::create();
+        auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto dst_column = ArrayColumn::create(std::move(dst_elements), std::move(dst_offsets));
+        ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), dst_column.get()));
+        ASSERT_EQ(rowids.size(), dst_column->size());
+
+        // each fetched row must report the same array length as written.
+        size_t expected_element_rows = 0;
+        for (size_t i = 0; i < rowids.size(); ++i) {
+            size_t expected_size = rowids[i] % 5;
+            ASSERT_EQ(expected_size, dst_column->get_element_size(i)) << " row " << i << " rowid " << rowids[i];
+            expected_element_rows += expected_size;
+        }
+
+        // element values are not read: the elements column is a const default
+        // column whose row count equals the sum of the fetched array sizes.
+        ASSERT_TRUE(dst_column->elements_column()->is_constant());
+        ASSERT_EQ(expected_element_rows, dst_column->elements_column()->size());
+    }
 }
 
 TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {

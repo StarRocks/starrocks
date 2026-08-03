@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY, as an extended type of database, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake."
 ---
 
 # ARRAY

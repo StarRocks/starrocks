@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "0 は false、1 は true を表す boolean データ型。"
 ---
 
 # BOOLEAN

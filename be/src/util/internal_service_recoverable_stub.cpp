@@ -14,15 +14,39 @@
 
 #include "util/internal_service_recoverable_stub.h"
 
-#include <functional>
+#include <memory>
 
 #include "common/config.h"
 
 namespace starrocks {
 
+// RecoverableChannel intercepts every RPC call and wraps the user-supplied done
+// closure with a RecoverableClosure so that channel errors trigger an automatic
+// channel reset on the owning stub.
+class RecoverableChannel : public google::protobuf::RpcChannel {
+public:
+    explicit RecoverableChannel(PInternalService_RecoverableStub* owner) : _owner(owner) {}
+
+    void CallMethod(const google::protobuf::MethodDescriptor* method, google::protobuf::RpcController* controller,
+                    const google::protobuf::Message* request, google::protobuf::Message* response,
+                    google::protobuf::Closure* done) override {
+        google::protobuf::Closure* closure = done;
+        if (done != nullptr) {
+            closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
+                                                                                   controller, done);
+        }
+        _owner->stub()->CallMethod(method, controller, request, response, closure);
+    }
+
+private:
+    PInternalService_RecoverableStub* _owner;
+};
+
 PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint,
                                                                    std::string protocol)
-        : _endpoint(endpoint), _protocol(std::move(protocol)) {}
+        : PInternalService_Stub(new RecoverableChannel(this), google::protobuf::Service::STUB_OWNS_CHANNEL),
+          _endpoint(endpoint),
+          _protocol(std::move(protocol)) {}
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
@@ -50,141 +74,15 @@ Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_g
         LOG(WARNING) << "Fail to init channel " << _endpoint;
         return Status::InternalError("Fail to init channel");
     }
-    auto ptr = std::make_unique<PInternalService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+    auto stub =
+            std::make_shared<PInternalService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
     std::unique_lock l(_mutex);
     if (next_connection_group == _connection_group.load() + 1) {
         // prevent the underlying _stub been reset again by the same epoch calls
         ++_connection_group;
-        _stub.reset(ptr.release());
+        _stub = std::move(stub);
     }
     return Status::OK();
-}
-
-void PInternalService_RecoverableStub::tablet_writer_open(::google::protobuf::RpcController* controller,
-                                                          const ::starrocks::PTabletWriterOpenRequest* request,
-                                                          ::starrocks::PTabletWriterOpenResult* response,
-                                                          ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_open(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_cancel(::google::protobuf::RpcController* controller,
-                                                            const ::starrocks::PTabletWriterCancelRequest* request,
-                                                            ::starrocks::PTabletWriterCancelResult* response,
-                                                            ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_cancel(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::transmit_chunk(::google::protobuf::RpcController* controller,
-                                                      const ::starrocks::PTransmitChunkParams* request,
-                                                      ::starrocks::PTransmitChunkResult* response,
-                                                      ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->transmit_chunk(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::transmit_chunk_via_http(::google::protobuf::RpcController* controller,
-                                                               const ::starrocks::PHttpRequest* request,
-                                                               ::starrocks::PTransmitChunkResult* response,
-                                                               ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    stub()->transmit_chunk_via_http(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_add_chunk(::google::protobuf::RpcController* controller,
-                                                               const ::starrocks::PTabletWriterAddChunkRequest* request,
-                                                               ::starrocks::PTabletWriterAddBatchResult* response,
-                                                               ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_add_chunk(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_add_chunks(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PTabletWriterAddChunksRequest* request,
-        ::starrocks::PTabletWriterAddBatchResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_add_chunks(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_add_chunk_via_http(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PHttpRequest* request,
-        ::starrocks::PTabletWriterAddBatchResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_add_chunk_via_http(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_add_chunks_via_http(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PHttpRequest* request,
-        ::starrocks::PTabletWriterAddBatchResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_add_chunks_via_http(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::tablet_writer_add_segment(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PTabletWriterAddSegmentRequest* request,
-        ::starrocks::PTabletWriterAddSegmentResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->tablet_writer_add_segment(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::get_load_replica_status(google::protobuf::RpcController* controller,
-                                                               const PLoadReplicaStatusRequest* request,
-                                                               PLoadReplicaStatusResult* response,
-                                                               google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->get_load_replica_status(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::load_diagnose(::google::protobuf::RpcController* controller,
-                                                     const ::starrocks::PLoadDiagnoseRequest* request,
-                                                     ::starrocks::PLoadDiagnoseResult* response,
-                                                     ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->load_diagnose(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::transmit_runtime_filter(::google::protobuf::RpcController* controller,
-                                                               const ::starrocks::PTransmitRuntimeFilterParams* request,
-                                                               ::starrocks::PTransmitRuntimeFilterResult* response,
-                                                               ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->transmit_runtime_filter(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::local_tablet_reader_multi_get(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PTabletReaderMultiGetRequest* request,
-        ::starrocks::PTabletReaderMultiGetResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->local_tablet_reader_multi_get(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::execute_command(::google::protobuf::RpcController* controller,
-                                                       const ::starrocks::ExecuteCommandRequestPB* request,
-                                                       ::starrocks::ExecuteCommandResultPB* response,
-                                                       ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->execute_command(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::process_dictionary_cache(
-        ::google::protobuf::RpcController* controller, const ::starrocks::PProcessDictionaryCacheRequest* request,
-        ::starrocks::PProcessDictionaryCacheResult* response, ::google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->process_dictionary_cache(controller, request, response, closure);
-}
-void PInternalService_RecoverableStub::lookup(google::protobuf::RpcController* controller,
-                                              const PLookUpRequest* request, PLookUpResponse* response,
-                                              google::protobuf::Closure* done) {
-    auto closure = new RecoverableClosure(shared_from_this(), controller, done);
-    _stub->lookup(controller, request, response, closure);
-}
-
-void PInternalService_RecoverableStub::fetch_datacache(::google::protobuf::RpcController* controller,
-                                                       const ::starrocks::PFetchDataCacheRequest* request,
-                                                       ::starrocks::PFetchDataCacheResponse* response,
-                                                       ::google::protobuf::Closure* done) {
-    stub()->fetch_datacache(controller, request, response, nullptr);
 }
 
 } // namespace starrocks

@@ -1,8 +1,20 @@
-/*
- * Copyright (c) 2006 JMockit developers
- * This file is subject to the terms of the MIT license.
- * (https://github.com/jmockit/jmockit2/blob/master/LICENSE.txt)
- */
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Derived from JMockit (MIT-licensed):
+// Copyright (c) 2006 JMockit developers
+// https://github.com/jmockit/jmockit2/blob/master/LICENSE.txt
 
 package com.starrocks.common.jmockit;
 
@@ -113,8 +125,10 @@ public final class ConstructorReflection {
 
     /**
      * Get non-inner-class constructor with {@argTypes Class<?>[]}.
-     * if more than one constructor was found, choose the more specific one. (i.e. constructor with parameters that have more concrete types is more specific)
-     * if no constructor was found, will check if {@theClass} is a inner class. Then a IllegalArgumentException exception will be thrown.
+     * if more than one constructor was found, choose the more specific one.
+     * (i.e. constructor with parameters that have more concrete types is more specific)
+     * if no constructor was found, will check if {@theClass} is an inner class.
+     * Then an IllegalArgumentException will be thrown.
      */
     private static <T> Constructor<T> findCompatibleConstructor(Class<?> theClass, Class<?>[] argTypes) {
         if (theClass == null || argTypes == null) {

@@ -90,6 +90,49 @@ public class ProfileManagerTest {
         manager.clearProfiles();
     }
 
+    private RuntimeProfile buildLoadProfile(String queryId, String state) {
+        RuntimeProfile profile = new RuntimeProfile("");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, state);
+        summaryProfile.addInfoString(ProfileManager.START_TIME, "2024-01-01 10:00:00");
+        summaryProfile.addInfoString(ProfileManager.END_TIME, "2024-01-01 10:00:05");
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, "test_db");
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, "stream load label");
+        summaryProfile.addInfoString(ProfileManager.USER, "root");
+        summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, "default_warehouse");
+        profile.addChild(summaryProfile);
+        return profile;
+    }
+
+    @Test
+    public void testPrintLoadProfileToLog() {
+        ProfileManager manager = ProfileManager.getInstance();
+        boolean original = Config.enable_print_load_profile_to_log;
+        Config.enable_print_load_profile_to_log = true;
+        try {
+            // Each state exercises buildLoadQueryDetail plus one branch of toLoadState:
+            // Finished -> FINISHED, Aborted -> FAILED, CANCELLED -> CANCELLED, Running -> RUNNING (default).
+            String[][] loads = {
+                    {"load-finished", "Finished"},
+                    {"load-aborted", "Aborted"},
+                    {"load-cancelled", "CANCELLED"},
+                    {"load-running", "Running"}};
+            for (String[] load : loads) {
+                manager.pushProfile(null, buildLoadProfile(load[0], load[1]));
+                assertTrue(manager.hasProfile(load[0]), "Load profile should be stored");
+            }
+
+            // A query profile must not take the load-profile log path but is still stored normally.
+            manager.pushProfile(null, buildRuntimeProfile("a-query", "Query"));
+            assertTrue(manager.hasProfile("a-query"), "Query profile should be stored");
+        } finally {
+            Config.enable_print_load_profile_to_log = original;
+            manager.clearProfiles();
+        }
+    }
+
     @Test
     public void testPushExceed() {
         ProfileManager manager = ProfileManager.getInstance();

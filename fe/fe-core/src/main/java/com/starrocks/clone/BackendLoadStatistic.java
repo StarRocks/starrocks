@@ -57,9 +57,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -290,8 +292,10 @@ public class BackendLoadStatistic {
         memUsed = be.getMemUsedBytes();
 
         ImmutableMap<String, DiskInfo> disks = be.getDisks();
+        Set<TStorageMedium> mediaOnBackend = EnumSet.noneOf(TStorageMedium.class);
         for (DiskInfo diskInfo : disks.values()) {
             TStorageMedium medium = diskInfo.getStorageMedium();
+            mediaOnBackend.add(medium);
             if (diskInfo.getState() == DiskState.ONLINE) {
                 // we only collect online disk's capacity
                 totalCapacityMap
@@ -306,15 +310,44 @@ public class BackendLoadStatistic {
             pathStatistics.add(pathStatistic);
         }
 
-        totalReplicaNumMap = invertedIndex.getReplicaNumByBeIdAndStorageMedium(beId);
-        // This is very tricky. because the number of replica on specified medium we get
-        // from getReplicaNumByBeIdAndStorageMedium() is defined by table properties,
-        // but in fact there may not has SSD disk on this backend. So if we found that no SSD disk on this
-        // backend, set the replica number to 0, otherwise, the average replica number on specified medium
-        // will be incorrect.
-        for (TStorageMedium medium : TStorageMedium.values()) {
-            if (!hasMedium(medium)) {
+        totalReplicaNumMap = Maps.newHashMap();
+        if (mediaOnBackend.isEmpty()) {
+            // BE has not reported any disks yet (newly added / dead / pre-heartbeat). Skip the
+            // per-tablet scan -- with no pathStatistics, the hasMedium() post-pass would zero
+            // every count anyway. Match that outcome directly.
+            for (TStorageMedium medium : TStorageMedium.values()) {
                 totalReplicaNumMap.put(medium, 0L);
+            }
+        } else if (mediaOnBackend.size() == 1) {
+            // Homogeneous-disk BE: every replica on the BE physically resides on its only
+            // medium, so we can read the count directly from the backend->tablet index in O(1)
+            // instead of scanning every TabletMeta. This avoids holding the inverted-index walk
+            // each ClusterLoadStatistic refresh (~20s) on busy clusters with ~350k replicas/BE.
+            //
+            // Storage-cooldown consideration: when a partition's DataProperty flips from SSD to
+            // HDD, ReportHandler propagates the new intended medium into TabletMeta even on
+            // single-medium BEs that cannot migrate (ReportHandler skips the migrate task when
+            // backendStorageTypeCnt <= 1). The per-tablet scan would then attribute those
+            // replicas to the medium the BE physically lacks, and the post-pass below would
+            // zero them out -- making the replicas vanish from the load-balance averages.
+            // Counting by physical placement here is both cheaper and more accurate.
+            TStorageMedium onlyMedium = mediaOnBackend.iterator().next();
+            long totalOnBe = invertedIndex.getTabletNumByBackendId(beId);
+            for (TStorageMedium medium : TStorageMedium.values()) {
+                totalReplicaNumMap.put(medium, medium == onlyMedium ? totalOnBe : 0L);
+            }
+        } else {
+            // Mixed-medium BE (BE has both HDD and SSD disks): per-tablet scan so the count
+            // reflects each replica's TabletMeta.storageMedium, which is what drives migration
+            // scheduling on BEs that actually have both media available.
+            totalReplicaNumMap = invertedIndex.getReplicaNumByBeIdAndStorageMedium(beId);
+            // Defensive post-pass: zero a medium if the BE has no disks of that type. With
+            // mediaOnBackend.size() == 2 both media are present, so this is currently a no-op;
+            // kept for parity with the historical behavior if disk reporting becomes partial.
+            for (TStorageMedium medium : TStorageMedium.values()) {
+                if (!hasMedium(medium)) {
+                    totalReplicaNumMap.put(medium, 0L);
+                }
             }
         }
 

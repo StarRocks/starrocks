@@ -301,14 +301,30 @@ Status MemTable::finalize() {
                 _aggregator_bytes_usage = 0;
                 return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
-            if (_has_op_slot) {
+            if (_has_op_slot && !_sink->keep_op_column()) {
                 // TODO(cbl): mem_tracker
                 ChunkPtr upserts;
                 RETURN_IF_ERROR(_split_upserts_deletes(_result_chunk, &upserts, &_deletes));
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
+            } else if (_has_op_slot && !_merge_condition.empty()) {
+                // The op-aware spill path (keep_op_column) skips _split_upserts_deletes, which is where a
+                // DELETE combined with a merge condition is rejected. Enforce the same rejection here so
+                // such a load fails consistently instead of the spill merge silently applying the delete.
+                size_t op_column_id = _result_chunk->num_columns() - 1;
+                // __op is a non-nullable TINYINT (Int8) column; read its raw buffer directly (branch-4.1
+                // has no RawDataVisitor).
+                const auto* ops = _result_chunk->get_column_by_index(op_column_id)->raw_data();
+                for (size_t i = 0; i < _result_chunk->num_rows(); i++) {
+                    if (ops[i] == TOpType::DELETE) {
+                        return Status::InternalError(fmt::format(
+                                "memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
+                    }
+                }
             }
+            // When the sink keeps the __op column (spill path), _result_chunk retains __op and is not
+            // split here; the sink resolves the upsert/delete order during its merge (see flush()).
             if (_keys_type == KeysType::PRIMARY_KEYS) {
                 std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
                 for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
@@ -362,6 +378,10 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
         if (_deletes) {
             RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
                                                             slot_idx));
+        } else if (_has_op_slot && _sink->keep_op_column()) {
+            // Spill path: _result_chunk still carries the trailing __op column; the sink spills it and
+            // resolves upsert/delete order during the merge.
+            RETURN_IF_ERROR(_sink->flush_chunk_with_op(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         } else {
             RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }

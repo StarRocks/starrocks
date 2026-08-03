@@ -17,6 +17,7 @@ package com.starrocks.lake.snapshot;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
@@ -44,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -288,26 +290,75 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
+    // The earliest snapshot consistency point whose data must stay restorable. Recycle-bin objects
+    // recycled before this time may be erased. Only two things need protecting: the finished snapshots
+    // we keep, and any in-progress job. A job that ended in ERROR protects nothing, so a persistently
+    // failing snapshot (e.g. every upload fails) no longer freezes the recycle bin.
     public long getSafeDeletionTimeMs() {
         if (!isAutomatedSnapshotOn()) {
             return Long.MAX_VALUE;
         }
+        long boundaryMs = computeProtectionBoundaryMs();
+        // Nothing needs protecting (e.g. every job ended in ERROR): do not block the recycle bin.
+        return boundaryMs == Long.MAX_VALUE ? System.currentTimeMillis() : boundaryMs;
+    }
 
-        boolean meetFirstFinished = false;
-        long previousAutomatedSnapshotCreatedTimsMs = 0;
-        for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.descendingMap().entrySet()) {
-            ClusterSnapshotJob job = entry.getValue();
-            if (meetFirstFinished && (job.isFinished() || job.isExpired() || job.isDeleted())) {
-                previousAutomatedSnapshotCreatedTimsMs = job.getCreatedTimeMs();
-                break;
+    // One descending pass finds both things we protect, then stops:
+    //  - any in-progress job: these are always the newest jobs (the scheduler runs jobs one at a
+    //    time), so they are seen before we reach the completed snapshots and can stop;
+    //  - the finished snapshots we keep: the second-newest completed snapshot (matching the historical
+    //    "keep the two most-recent" behavior), or the only finished one.
+    // A job that ended in ERROR protects nothing.
+    private long computeProtectionBoundaryMs() {
+        long boundaryMs = Long.MAX_VALUE;
+        long newestFinishedCreatedTimeMs = Long.MAX_VALUE;
+        for (ClusterSnapshotJob job : automatedSnapshotJobs.descendingMap().values()) {
+            if (job.isUnFinishedState()) {
+                boundaryMs = Math.min(boundaryMs, job.getCreatedTimeMs());
+                continue;
             }
-
+            if (!isCompletedSnapshot(job)) {
+                continue; // ERROR
+            }
+            if (newestFinishedCreatedTimeMs != Long.MAX_VALUE) {
+                // second completed snapshot reached: it is the oldest restore point we keep
+                return Math.min(boundaryMs, job.getCreatedTimeMs());
+            }
             if (job.isFinished()) {
-                meetFirstFinished = true;
+                newestFinishedCreatedTimeMs = job.getCreatedTimeMs();
             }
         }
+        // Fewer than two completed snapshots: protect the single finished one (if any) plus in-progress.
+        return Math.min(boundaryMs, newestFinishedCreatedTimeMs);
+    }
 
-        return previousAutomatedSnapshotCreatedTimsMs;
+    // A terminal, non-ERROR snapshot state (FINISHED, EXPIRED, or DELETED). These anchor the retention
+    // boundary, matching historical behavior; ERROR does not. Note only a FINISHED job can be the first
+    // (newest) anchor in computeProtectionBoundaryMs(), so an EXPIRED/DELETED job alone never pins the
+    // boundary -- it can only serve as the second, older boundary once a newer FINISHED exists.
+    private static boolean isCompletedSnapshot(ClusterSnapshotJob job) {
+        return job.isFinished() || job.isExpired() || job.isDeleted();
+    }
+
+    // Number of trailing ERROR jobs since the last successful (FINISHED) one.
+    // In-progress jobs are not counted; a completed snapshot stops the count.
+    public int getConsecutiveFailureCount() {
+        int count = 0;
+        for (ClusterSnapshotJob job : automatedSnapshotJobs.descendingMap().values()) {
+            if (job.isError()) {
+                count++;
+            } else if (isCompletedSnapshot(job)) {
+                break;
+            }
+            // in-progress: skip without counting or breaking
+        }
+        return count;
+    }
+
+    // finishedTimeMs of the most recent FINISHED automated snapshot, or 0 if none.
+    public long getLastSuccessTimeMs() {
+        ClusterSnapshotJob job = getLastFinishedAutomatedClusterSnapshotJob();
+        return job == null ? 0L : job.getSnapshot().getFinishedTimeMs();
     }
 
     public boolean isTableSafeToDeleteTablet(long tableId) {
@@ -315,17 +366,34 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return true;
         }
 
-        boolean safe = true;
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        long safeDeletionTimeMs = getSafeDeletionTimeMs();
+
+        Map<Long, AlterJobV2> alterJobs =
+                new HashMap<>(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2());
         alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
-        for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
-            AlterJobV2 alterJob = entry.getValue();
+        for (AlterJobV2 alterJob : alterJobs.values()) {
             if (alterJob.getTableId() == tableId) {
-                safe = (alterJob.getFinishedTimeMs() < getSafeDeletionTimeMs());
+                if (alterJob.getFinishedTimeMs() >= safeDeletionTimeMs) {
+                    return false;
+                }
                 break;
             }
         }
-        return safe;
+
+        // A tablet reshard (split/merge) replaces a table's tablets and leaves the pre-reshard
+        // parent/source tablets referenced only by an already-captured snapshot. Keep the table's
+        // tablets until every covering automated snapshot has expired, mirroring the ALTER-job
+        // handling above. An aborted reshard removes no tablets (an abort can only happen before the
+        // old tablets are dropped), so it is not snapshot-relevant and must not pin the table.
+        for (TabletReshardJob reshardJob :
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().values()) {
+            if (reshardJob.getTableId() == tableId && !reshardJob.isAborted()
+                    && (!reshardJob.isDone() || reshardJob.getFinishedTimeMs() >= safeDeletionTimeMs)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public boolean isDeletionSafeToExecute(long deletionCreatedTimeMs) {

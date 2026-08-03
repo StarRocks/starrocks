@@ -205,6 +205,7 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
+            case PAIMON_VIEW:
             case ODPS:
             case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action

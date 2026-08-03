@@ -17,11 +17,25 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.assignment.BackendSelectorFactory;
+import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategy;
+import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
+import com.starrocks.qe.scheduler.assignment.LocalFragmentAssignmentStrategy;
+import com.starrocks.qe.scheduler.dag.ExecutionDAG;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBucketFunction;
@@ -31,13 +45,17 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,7 +80,7 @@ public class BucketAwareBackendSelectorTest {
 
     private List<TScanRangeLocations> genScanRangeLocations(int bucketNum, int scanRangesPerBucket) {
         List<TScanRangeLocations> locations = new ArrayList<>();
-        
+
         for (int i = 0; i < bucketNum; i++) {
             for (int j = 0; j < scanRangesPerBucket; j++) {
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -79,7 +97,7 @@ public class BucketAwareBackendSelectorTest {
                 locations.add(scanRangeLocations);
             }
         }
-        
+
         return locations;
     }
 
@@ -121,7 +139,7 @@ public class BucketAwareBackendSelectorTest {
 
         // Check that all buckets are assigned to workers
         Assertions.assertEquals(bucketNum, seqToWorkerId.size());
-        
+
         // Check that scan ranges are properly distributed
         for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
             Assertions.assertTrue(seqToWorkerId.containsKey(bucketSeq));
@@ -150,7 +168,7 @@ public class BucketAwareBackendSelectorTest {
             {
                 scanNode.getId();
                 result = new PlanNodeId(2);
-            
+
                 scanNode.hasMoreScanRanges();
                 result = true;
             }
@@ -169,17 +187,17 @@ public class BucketAwareBackendSelectorTest {
 
         // Check that all buckets are assigned to workers (including empty ones)
         Assertions.assertEquals(bucketNum, seqToWorkerId.size());
-        
+
         // Check that all buckets have scan ranges (including empty marker)
         for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
             Assertions.assertTrue(seqToWorkerId.containsKey(bucketSeq));
             Assertions.assertTrue(seqToScanRange.containsKey(bucketSeq));
             Assertions.assertTrue(seqToScanRange.get(bucketSeq).containsKey(2)); // scanNode.getId() = 2
-            
+
             List<TScanRangeParams> scanRangeParams = seqToScanRange.get(bucketSeq).get(2);
             Assertions.assertFalse(scanRangeParams.isEmpty());
             Assertions.assertEquals(scanRangesPerBucket + 1, scanRangeParams.size());
-            
+
             // The last scan range should be the empty marker with has_more = true
             TScanRangeParams lastParam = scanRangeParams.get(scanRangeParams.size() - 1);
             Assertions.assertTrue(lastParam.isEmpty());
@@ -243,4 +261,153 @@ public class BucketAwareBackendSelectorTest {
         // Execute and expect exception
         Assertions.assertThrows(StarRocksException.class, selector::computeScanRangeAssignment);
     }
+
+    @Test
+    public void testIncrementalBatchAccumulatesStaleEntries() throws StarRocksException {
+        final int bucketNum = 6;
+
+        ColocatedBackendSelector.Assignment assignment = genColocatedAssignment(bucketNum, 1);
+        WorkerProvider wp = genWorkerProvider(Set.of(1L));
+
+        List<TScanRangeLocations> locations = genScanRangeLocations(bucketNum, 1);
+        List<TScanRangeLocations> onlyOne = genScanRangeLocations(1, 1);
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setExecutionId(new TUniqueId());
+
+        new Expectations() {
+            {
+                scanNode.hasMoreScanRanges();
+                result = true;
+            }
+        };
+
+        new MockUp<CoordinatorPreprocessor>() {
+            @Mock
+            public void $init(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
+            }
+        };
+
+        final FragmentScanRangeAssignment fragmentScanRangeAssignment = new FragmentScanRangeAssignment();
+
+        new MockUp<PlanFragment>() {
+            @Mock
+            public void $init(PlanFragmentId id, PlanNode root, DataPartition partition) {
+            }
+
+            @Mock
+            public void disablePhysicalPropertyOptimize() {
+            }
+        };
+
+        PlanFragment planFragment = new PlanFragment(null, scanNode, null);
+
+        long id = wp.selectNextWorker();
+        ComputeNode worker = wp.getWorkerById(id);
+        FragmentInstance instance = new FragmentInstance(worker, null);
+
+        new MockUp<ExecutionFragment>() {
+            @Mock
+            public void $init(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
+            }
+
+            @Mock
+            public List<FragmentInstance> getInstances() {
+                return List.of(instance);
+            }
+
+            @Mock
+            public FragmentScanRangeAssignment getScanRangeAssignment() {
+                return fragmentScanRangeAssignment;
+            }
+
+            @Mock
+            public ColocatedBackendSelector.Assignment getColocatedAssignment() {
+                return assignment;
+            }
+
+            @Mock
+            public Collection<ScanNode> getScanNodes() {
+                return List.of(scanNode);
+            }
+
+            @Mock
+            public boolean isColocated() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLocalBucketShuffleJoin() {
+                return false;
+            }
+
+            @Mock
+            public PlanFragment getPlanFragment() {
+                return planFragment;
+            }
+
+        };
+
+        new MockUp<FragmentAssignmentStrategyFactory>() {
+            @Mock
+            public void $init(ConnectContext connectContext, JobSpec jobSpec, ExecutionDAG executionDAG) {
+            }
+
+            @Mock
+            public FragmentAssignmentStrategy create(ExecutionFragment execFragment, WorkerProvider workerProvider) {
+                return new LocalFragmentAssignmentStrategy(null, workerProvider, true, false, true);
+            }
+        };
+
+        LazyWorkerProvider lazyWorkerProvider = new LazyWorkerProvider(() -> wp);
+
+        final boolean[] flag = {false};
+
+        new MockUp<BackendSelectorFactory>() {
+            @Mock
+            public BackendSelector create(ScanNode scanNode,
+                                          boolean isLoadType,
+                                          ExecutionFragment execFragment,
+                                          WorkerProvider workerProvider,
+                                          ConnectContext connectContext,
+                                          Set<Integer> destReplicatedScanIds,
+                                          boolean useIncrementalScanRanges) {
+
+                List<TScanRangeLocations> scanRanges;
+                if (!flag[0]) {
+                    flag[0] = true;
+                    scanRanges = locations;
+                } else {
+                    scanRanges = onlyOne;
+                }
+                return new BucketAwareBackendSelector(
+                        scanNode, scanRanges, assignment, lazyWorkerProvider.get(),
+                        false, true, SessionVariableConstants.BALANCE);
+            }
+        };
+
+        CoordinatorPreprocessor preprocessor = new CoordinatorPreprocessor(null, null, false);
+
+        FragmentAssignmentStrategyFactory factory = new FragmentAssignmentStrategyFactory(null, null, null);
+
+
+        Deencapsulation.setField(preprocessor, "fragmentAssignmentStrategyFactory", factory);
+        Deencapsulation.setField(preprocessor, "lazyWorkerProvider", lazyWorkerProvider);
+
+        ExecutionFragment executionFragment = new ExecutionFragment(null, null, 0);
+        preprocessor.assignIncrementalScanRangesToFragmentInstances(executionFragment);
+
+        long scanRanges;
+        scanRanges = assignment.getSeqToScanRange().values().stream().flatMap(i -> i.values().
+                stream()).flatMap(Collection::stream).filter(r -> !r.empty).count();
+        Assertions.assertEquals(6, scanRanges);
+
+        preprocessor.assignIncrementalScanRangesToFragmentInstances(executionFragment);
+        scanRanges = assignment.getSeqToScanRange().values().
+                stream().flatMap(i -> i.values().stream()).flatMap(Collection::stream).filter(r -> !r.empty).count();
+        Assertions.assertEquals(1, scanRanges);
+
+
+    }
+
 }

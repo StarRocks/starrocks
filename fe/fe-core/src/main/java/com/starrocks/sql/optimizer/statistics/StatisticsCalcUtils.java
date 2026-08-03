@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -62,8 +63,8 @@ public class StatisticsCalcUtils {
     }
 
     public static Statistics.Builder estimateScanColumns(Table table,
-                                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                         OptimizerContext optimizerContext) {
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          OptimizerContext optimizerContext) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
@@ -325,16 +326,18 @@ public class StatisticsCalcUtils {
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         } else {
             PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
             if (olapScanOperator.getSelectedPartitionId() == null) {
                 selectedPartitions = Lists.newArrayList(olapScanOperator.getTable().getPartitions());
             } else {
+                // filter out null partitions that may have been dropped concurrently
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                        olapTable::getPartition).filter(Objects::nonNull).collect(Collectors.toList());
             }
         }
         return selectedPartitions;

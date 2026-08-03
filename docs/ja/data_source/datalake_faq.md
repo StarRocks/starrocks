@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks データレイク分析の catalog 設定とクエリ問題に関する FAQ と解決策。"
 ---
 
 # データレイク FAQ

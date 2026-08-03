@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks supports the catalog feature from v2.3 onwards."
 ---
 
 # Overview

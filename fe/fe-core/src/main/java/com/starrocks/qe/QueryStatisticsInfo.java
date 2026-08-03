@@ -67,6 +67,7 @@ public class QueryStatisticsInfo {
     private String wareHouseName;
     private String customQueryId;
     private String resourceGroupName;
+    private String queryType = "";
 
     public QueryStatisticsInfo() {
     }
@@ -162,6 +163,10 @@ public class QueryStatisticsInfo {
         return customQueryId;
     }
 
+    public String getQueryType() {
+        return queryType;
+    }
+
     public QueryStatisticsInfo withQueryStartTime(long queryStartTime) {
         this.queryStartTime = queryStartTime;
         return this;
@@ -247,6 +252,11 @@ public class QueryStatisticsInfo {
         return this;
     }
 
+    public QueryStatisticsInfo withQueryType(String queryType) {
+        this.queryType = queryType;
+        return this;
+    }
+
     public TQueryStatisticsInfo toThrift() {
         return new TQueryStatisticsInfo()
                 .setQueryStartTime(queryStartTime)
@@ -265,7 +275,8 @@ public class QueryStatisticsInfo {
                 .setExecState(execState)
                 .setWareHouseName(wareHouseName)
                 .setCustomQueryId(customQueryId)
-                .setResourceGroupName(resourceGroupName);
+                .setResourceGroupName(resourceGroupName)
+                .setQueryType(queryType);
     }
 
     public static QueryStatisticsInfo fromThrift(TQueryStatisticsInfo tinfo) {
@@ -286,7 +297,9 @@ public class QueryStatisticsInfo {
                 .withExecState(tinfo.getExecState())
                 .withWareHouseName(tinfo.getWareHouseName())
                 .withCustomQueryId(tinfo.getCustomQueryId())
-                .withResourceGroupName(tinfo.getResourceGroupName());
+                .withResourceGroupName(tinfo.getResourceGroupName())
+                // queryType may be absent when the info comes from an older FE during a rolling upgrade.
+                .withQueryType(tinfo.isSetQueryType() ? tinfo.getQueryType() : "");
     }
 
     public List<String> formatToList() {
@@ -308,6 +321,7 @@ public class QueryStatisticsInfo {
         values.add(this.getWareHouseName());
         values.add(this.getCustomQueryId());
         values.add(this.getResourceGroupName());
+        values.add(this.getQueryType());
         return values;
     }
 
@@ -327,13 +341,14 @@ public class QueryStatisticsInfo {
                 spillBytes == that.spillBytes && execTime == that.execTime && execProgress == that.execProgress &&
                 execState == that.execState && Objects.equals(wareHouseName, that.wareHouseName) &&
                 Objects.equals(customQueryId, that.customQueryId) &&
-                Objects.equals(resourceGroupName, that.resourceGroupName);
+                Objects.equals(resourceGroupName, that.resourceGroupName) &&
+                Objects.equals(queryType, that.queryType);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(queryStartTime, feIp, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
-                spillBytes, execTime, execProgress, execState, wareHouseName, customQueryId, resourceGroupName);
+                spillBytes, execTime, execProgress, execState, wareHouseName, customQueryId, resourceGroupName, queryType);
     }
 
     @Override
@@ -346,7 +361,8 @@ public class QueryStatisticsInfo {
                 ", db=" + db +
                 ", user=" + user +
                 ", cpuCostNs=" + cpuCostNs +
-                ", scanRows=" + scanBytes +
+                ", scanBytes=" + scanBytes +
+                ", scanRows=" + scanRows +
                 ", memUsageBytes=" + memUsageBytes +
                 ", spillBytes=" + spillBytes +
                 ", execTime=" + execTime +
@@ -355,6 +371,7 @@ public class QueryStatisticsInfo {
                 ", wareHouseName=" + wareHouseName +
                 ", customQueryId=" + customQueryId +
                 ", resourceGroupName=" + resourceGroupName +
+                ", queryType=" + queryType +
                 '}';
     }
 
@@ -385,7 +402,8 @@ public class QueryStatisticsInfo {
                     .withExecState(item.getExecState())
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
-                    .withResourceGroupName(item.getResourceGroupName());
+                    .withResourceGroupName(item.getResourceGroupName())
+                    .withQueryType(item.getQueryType());
             if (statistics != null) {
                 info.withScanBytes(statistics.getScanBytes())
                         .withScanRows(statistics.getScanRows())

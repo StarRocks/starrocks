@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AuditLoader 插件实现 StarRocks 审计日志的数据库存储和 SQL 查询管理。"
 ---
 
 # 通过 AuditLoader 管理 StarRocks 中的审计日志

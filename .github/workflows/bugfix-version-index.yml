@@ -1,0 +1,197 @@
+name: Bugfix Version Index
+run-name: Bugfix Version Index - ${{ github.event_name }} ${{ github.event.number || github.ref_name }}
+
+# Maintains the deterministic code_kb.versions index (fix side) + the heuristic
+# code_kb.task_summaries cause cache, via the github-bugfix-versions skill running in
+# the claude-cli container (same runner/container pattern as ai-sr-skills.yml). Three events:
+#
+#   ① origin bugfix PR merges to main      → /github-bugfix-versions:index-fix (seed versions) + :affected-versions (cache cause)
+#   ② a backport PR merges to branch-X.Y*  → /github-bugfix-versions:index-fix (rebuild the origin's versions record)
+#   ③ a release tag X.Y.Z is pushed        → /github-bugfix-versions:index-fix <tag> (resolve pending-<line> → concrete tag)
+#
+# NOTE: plugin commands MUST be namespaced (/github-bugfix-versions:<cmd>). A bare /index-fix
+# in headless `-p` does NOT resolve — it is silently treated as prompt text (no error, no write),
+# which combined with continue-on-error would look green while doing nothing.
+#
+# The skill computes everything (gh PR/backport data, git tag --contains / blame, the rung
+# firewall) and writes via the context-base MCP. RC stores/serves only; CI never POSTs to RC.
+# See: plugins/github-bugfix-versions (cd-claude-marketplace) and the version-index design doc.
+#
+# PREREQUISITES on the self-hosted runner's claude-cli container (one-time, infra):
+#   - the `github-bugfix-versions` plugin installed (provides :index-fix, :affected-versions,
+#     :release-report — invoked namespaced as /github-bugfix-versions:<cmd>, see NOTE above);
+#   - the `context-base` MCP configured with `code_kb` USAGE (read+write data) for the
+#     container's identity — USAGE alone is enough to context_upsert (no ALTER needed);
+#   - the `code_kb.versions` (collection_type=knowledge) and `code_kb.task_summaries`
+#     (collection_type=task_summary — NOT knowledge; the task_summary family, shared with the
+#     release-bug write-back) collections pre-created by an admin (the emitter cannot create
+#     shared-base collections; MCP create_collection only targets the caller's personal base).
+# gh is NOT installed in the container, but GITHUB_TOKEN is passed in — the skill uses the
+# GitHub REST/compare API for PR/backport/tag-contains when no local clone is present.
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      # release lines. Use [0-9]+ (one-or-more), NOT bare [0-9] (single digit) — else multi-digit
+      # versions like branch-3.12, branch-3.5.20, branch-3.12.20 silently never match the filter
+      # and their backport merges never trigger this workflow. (Mirrors the push-tag pattern below.)
+      - 'branch-[0-9]+.[0-9]+'
+      - 'branch-[0-9]+.[0-9]+.[0-9]+'
+    types:
+      - closed
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+# Concurrency is per-ORIGIN, set at the JOB level (not here) — see each job's `concurrency:`.
+# A workflow-level group keyed on the triggering event (PR #/tag) would be WRONG: the entity
+# written is the *origin* PR's cumulative record (version/<repo>/<origin>), and two backports of
+# the same origin merging on different release branches fire as different events → different
+# groups → concurrent runs. The earlier run can read the backport set before the later backport
+# merged, then write AFTER the later run, clobbering the just-accreted backport_set/earliest_fix_tag
+# (lost update). With continue-on-error that loss is silent. Grouping by origin serializes all
+# writers of the same record; rebuild-from-source makes a superseded pending run harmless.
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # ① origin bugfix PR merged to main → seed versions (fix side) + cache cause (task_summaries).
+  # Gated to [BugFix]-titled PRs (StarRocks convention) to avoid an LLM cause analysis on every
+  # merge; broaden the title/label gate if your bugfixes are titled differently.
+  origin-merge:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      contains(github.event.pull_request.title, '[BugFix]') &&
+      !startsWith(github.head_ref, 'mergify/') &&
+      !contains(github.head_ref, '-sync-pr-')
+    # Serialize on the origin = this PR's own number (it writes version/<repo>/<number> +
+    # task/pr/<repo>/<number>). Shares the group with any backport-write of the same origin.
+    concurrency:
+      group: BVI-${{ github.repository }}-origin-${{ github.event.number }}
+      cancel-in-progress: false
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+    steps:
+      - name: index-fix (deterministic fix side → code_kb.versions)
+        run: |
+          echo "origin-merge PR #${{ github.event.number }} → ${PR_URL}"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:index-fix ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true
+
+      - name: affected-versions (heuristic cause → code_kb.task_summaries)
+        run: |
+          # Cause is stable at origin-merge (blame over immutable pre-fix history); cache it now
+          # so the pre-release report is a fast bulk query, not dozens of live analyses. The
+          # firewall (version_emit_check / firewall_check) runs inside the skill before any write.
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:affected-versions ${PR_URL}" 2>&1 | tee "${RUNNER_TEMP}/affected_versions.txt" || true
+
+  # ② a backport PR merged to a release branch → rebuild EACH origin it backports. A title can
+  # bundle several origins ((backport #a)(backport #b)...), so one event may touch multiple
+  # version/<repo>/<origin> records. FAN OUT: resolve every marker, then one matrix instance per
+  # origin, each serialized on that origin via `concurrency`. That is the P1 fix — two backports of
+  # the SAME origin landing on different branches (separate events) no longer write concurrently and
+  # clobber each other's accreted backport_set/earliest_fix_tag.
+  # Exclude branch-sync PRs (head like `branch-4.1-sync-pr-74722` → branch-4.1): a sync of a
+  # backport carries 'backport' in its title but is NOT a real (backport #N) landing — it would
+  # misattribute the origin. Do NOT exclude `mergify/` here (unlike origin-merge): mergify IS the
+  # backport mechanism (head `mergify/bp/branch-X.Y/pr-N`) — excluding it would drop real backports.
+  backport-resolve:
+    if: >
+      github.event_name == 'pull_request_target' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.base_ref, 'branch-') &&
+      contains(github.event.pull_request.title, 'backport') &&
+      !contains(github.head_ref, '-sync-pr-')
+    runs-on: [self-hosted, normal]
+    outputs:
+      origins: ${{ steps.parse.outputs.origins }}
+    steps:
+      - name: parse all (backport #N) markers → origin list
+        id: parse
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # ALL markers (mirrors the skill's backport_markers), not just the last — bundled/chained
+          # titles backport several origins. Looser than \(backport #N\) (no parens required): an
+          # extra non-origin number only yields a harmless no-op /index-fix (exits 0 on a non-origin).
+          # Build the JSON array with awk (not a shell for-loop) so it is shell-agnostic — unquoted
+          # word-splitting differs between bash and sh/zsh; awk handles the line stream itself.
+          json="$(printf '%s' "$TITLE" | grep -oiE 'backport #[0-9]+' | grep -oE '[0-9]+' | sort -un \
+                 | awk 'BEGIN{printf "["} {printf "%s\"%s\"",(NR>1?",":""),$0} END{printf "]"}')"
+          echo "origins=$json" >> "$GITHUB_OUTPUT"
+          echo "backport PR #${{ github.event.number }} (${{ github.base_ref }}) → origins: $json"
+
+  backport-write:
+    needs: backport-resolve
+    if: ${{ needs.backport-resolve.outputs.origins != '[]' && needs.backport-resolve.outputs.origins != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        origin: ${{ fromJSON(needs.backport-resolve.outputs.origins) }}
+    # Serialize per origin: same-origin runs queue (1 running + at most 1 pending; a superseded
+    # pending run is harmless — /index-fix rebuilds the full set from GitHub). Different origins run
+    # in parallel (distinct groups). Shares the group with the origin-merge job of the same origin.
+    concurrency:
+      group: BVI-${{ github.repository }}-origin-${{ matrix.origin }}
+      cancel-in-progress: false
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    steps:
+      - name: index-fix (rebuild origin ${{ matrix.origin }} from its merged backports)
+        run: |
+          echo "rebuild origin ${{ github.repository }}#${{ matrix.origin }} (triggered by backport PR #${{ github.event.number }})"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:index-fix ${{ github.repository }}#${{ matrix.origin }}" 2>&1 | tee "${RUNNER_TEMP}/index_fix_${{ matrix.origin }}.txt" || true
+
+  # ③ release tag cut → resolve pending-<line> records on that line to the concrete tag.
+  # A tag-cut touches MANY origins (every record pending on the line), so it can't share the
+  # per-origin groups above and CAN start concurrently with a same-origin backport-write. The
+  # pending->concrete clobber that would cause (a late backport-write reverting this resolution) is
+  # prevented at the WRITE layer, not here: /index-fix's monotonic guard refuses to overwrite a
+  # stored concrete earliest_fix_tag with pending-* (github-bugfix-versions plugin). So a per-origin
+  # group for tag-cut is not needed for correctness; a full fan-out (per pending origin, reusing
+  # BVI-...-origin-<N>) remains an option if stricter serialization is ever wanted.
+  tag-cut:
+    if: github.event_name == 'push'
+    concurrency:
+      group: BVI-${{ github.repository }}-tagcut-${{ github.ref_name }}
+      cancel-in-progress: false
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: "index-fix (tag-cut → concrete tag for this line)"
+        run: |
+          echo "tag-cut ${TAG}"
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/github-bugfix-versions:index-fix ${TAG}" 2>&1 | tee "${RUNNER_TEMP}/index_fix.txt" || true

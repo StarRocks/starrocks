@@ -45,7 +45,7 @@ class RowGroup;
 
 namespace starrocks {
 class RandomAccessFile;
-struct HdfsScanStats;
+struct HdfsScannerStats;
 class ColumnPredicate;
 class ExprContext;
 class NullableColumn;
@@ -78,7 +78,7 @@ struct ColumnReaderOptions {
     bool case_sensitive = false;
     bool use_file_pagecache = false;
     int chunk_size = 0;
-    HdfsScanStats* stats = nullptr;
+    HdfsScannerStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
@@ -143,6 +143,8 @@ public:
         dst_col->swap_column(*src_col);
         return Status::OK();
     }
+
+    virtual Status finalize_lazy_state(ColumnPtr& col) { return Status::OK(); }
 
     virtual void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                          int64_t* end_offset, ColumnIOTypeFlags types, bool active) = 0;

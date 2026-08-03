@@ -154,6 +154,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public String getTableComment(ConnectContext context, String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getTableComment(context, dbName, tblName);
+    }
+
+    @Override
     public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
@@ -185,6 +195,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         }
 
         return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getVersionCommitTimeMillis(dbName, table, version);
     }
 
     @Override

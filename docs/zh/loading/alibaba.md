@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从阿里云 OSS 导入数据到 StarRocks，支持 Broker Load 和 INSERT 导入方式。"
 ---
 
 # 从阿里云 OSS 导入
@@ -95,7 +96,6 @@ Broker Load 支持如下数据文件格式：
           DISTRIBUTED BY HASH(`id`);
    ```
 
-<!-- Alibaba -->
 ## 从阿里云 OSS 导入
 
 下述命令以 CSV 格式为例。有关如何导入其他格式的数据，参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)。
@@ -261,7 +261,6 @@ PROPERTIES
    4 rows in set (0.01 sec)
    ```
 
-<!-- Common footer -->
 ## 查看导入作业
 
 通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。

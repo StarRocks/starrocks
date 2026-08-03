@@ -200,6 +200,49 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_compaction_failed`
+
+- 单位：计数
+- 描述：失败的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_partial_success`
+
+- 单位：计数
+- 描述：部分成功的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_running`
+
+- 单位：计数
+- 描述：当前正在运行的存算分离（lake）压缩作业数量（每个分区一个作业）。
+
+## `lake_compaction_running_tasks`
+
+- 单位：计数
+- 描述：所有正在运行的存算分离（lake）压缩作业中当前正在被压缩的 tablet 数量。该数量与调度器通过 `lake_compaction_max_tasks` 配置进行限流时所用的单位一致，比统计压缩作业数量（每个分区一个）的 `lake_compaction_running` 更细粒度——单个作业会按 tablet 拆分为一个个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_score_at_trigger`
+
+- 单位：分数
+- 类型：Gauge
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的压缩分数，四舍五入为整数。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该 Gauge 不会衰减：在 Leader FE 上，当没有压缩任务运行时，它会保留上一次触发的值（不会重置为 0）。该值是进程本地的（Leader 上的内存计数器，不会持久化），因此当 FE Leader 发生故障切换后，新当选的 Leader 会从 0 开始，并在其首次触发压缩之前一直报告 0——不会继承前一个 Leader 的值。应将其与 `lake_compaction_running > 0` 结合起来设置告警，而非单独读取该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_success`
+
+- 单位：计数
+- 描述：成功的存算分离（lake）压缩任务计数。
+
+## `lake_vacuum_del_file_batch_size_minute`
+
+- 单位：文件数（每批次）
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内每次 `DeleteObjects` 批次的平均文件数。
+
+## `lake_vacuum_del_file_retries_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下 Vacuum 在过去 60 秒内触发的删除重试次数。反映对象存储瞬时限流压力（SlowDown / try-again）。
+
 ## `load_bytes`
 
 - 单位：字节
@@ -452,6 +495,26 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：Scan Operators 启动的待处理异步 I/O 任务的当前数量。
 
+## `plan_advisor_guide_applied_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 在查询优化阶段成功应用的 guide 总数。每当某个 guide 成功改写一个计划节点时，该指标加 1。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+## `plan_advisor_guide_generated_total`
+
+- 单位：个
+- 类型：累积值
+- 标签：`operator_type`（`join` 或 `agg`）
+- 描述：Plan Advisor 成功生成并写入当前 FE 本地缓存的 guide 总数。只有分析结果非空且作为新的缓存项写入时才会累加。`join` 表示 Join 估算误差相关 guide，`agg` 表示 Streaming Agg 相关 guide。
+
+## `plan_advisor_optimization_duration_ms_total`
+
+- 单位：毫秒
+- 类型：累积值
+- 描述：Plan Advisor 累计节省的查询执行耗时（毫秒）。当一个使用了缓存 guide 的查询执行时间短于生成该 guide 的原始查询时，节省的时间会累加到该指标。
+
 ## `pk_index_compaction_queue_count`
 
 - 单位：计数
@@ -528,3 +591,4 @@ description: "Alphabetical i - p"
 
 - 单位: 计数
 - 描述: 成功和失败的Spark Load请求总数。
+  

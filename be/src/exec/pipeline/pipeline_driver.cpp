@@ -49,6 +49,10 @@ DEFINE_FAIL_POINT(operator_return_large_column);
 DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
 PipelineDriver::~PipelineDriver() noexcept {
+    // Queued or blocked drivers abandoned when the driver executor is closed during shutdown are
+    // destroyed without going through finalize(), so unschedule the global runtime-filter timer here
+    // as well; otherwise the timer thread may run a task whose owning shared_ptr is already gone.
+    _unschedule_global_rf_timer();
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
@@ -382,10 +386,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                         if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
                             if (capacity_exceed || maybe_chunk.value()->has_capacity_limit_reached()) {
+                                LOG(WARNING) << "Large column detected after " << i << "-th operator "
+                                             << curr_op->get_name() << " in " << to_readable_string();
                                 return Status::CapacityLimitExceed(
-                                        fmt::format("Large column detected at "
-                                                    "after {}-th operator {} in {}",
-                                                    i, curr_op->get_name(), to_readable_string()));
+                                        "Large column detected, please reduce rows per batch or the size of "
+                                        "string/array values");
                             }
                         }
 
@@ -480,10 +485,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             if (is_precondition_block()) {
                 set_driver_state(DriverState::PRECONDITION_BLOCK);
                 COUNTER_UPDATE(_block_by_precondition_counter, 1);
-            } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
+            } else if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
                 set_driver_state(DriverState::OUTPUT_FULL);
                 COUNTER_UPDATE(_block_by_output_full_counter, 1);
-            } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            } else if (!source_operator()->has_output() && !source_operator()->is_finished()) {
                 if (source_operator()->is_mutable()) {
                     set_driver_state(DriverState::LOCAL_WAITING);
                     COUNTER_UPDATE(_yield_by_local_wait_counter, 1);
@@ -741,9 +746,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 
     _update_driver_level_timer();
 
-    if (_global_rf_timer != nullptr) {
-        _fragment_ctx->pipeline_timer()->unschedule(_global_rf_timer.get());
-    }
+    _unschedule_global_rf_timer();
 
     // Acquire the pointer to avoid be released when removing query
     auto query_trace = _query_ctx->shared_query_trace();
@@ -790,6 +793,16 @@ void PipelineDriver::_update_global_rf_timer() {
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
+}
+
+void PipelineDriver::_unschedule_global_rf_timer() noexcept {
+    // Move the task out first so it stays alive while we synchronize with a callback that may already
+    // be running on the timer thread but has not yet taken its shared_from_this() reference. Otherwise
+    // doRun() could observe a zero use_count and throw std::bad_weak_ptr.
+    auto task = std::move(_global_rf_timer);
+    if (task != nullptr && _fragment_ctx != nullptr) {
+        task->unschedule_and_wait(_fragment_ctx->pipeline_timer());
+    }
 }
 
 std::string PipelineDriver::_build_readable_string(bool use_raw_name) const {

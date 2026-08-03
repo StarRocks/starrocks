@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "同期および非同期マテリアライズドビューを作成します。"
 ---
 
 # CREATE MATERIALIZED VIEW
@@ -44,7 +45,7 @@ AS
 
 マテリアライズドビューの名前。命名要件は次のとおりです。
 
-- 名前は文字 (a-z または A-Z)、数字 (0-9)、またはアンダースコア (\_) で構成され、文字で始まる必要があります。
+- 名前は文字 (a-z または A-Z)、数字 (0-9)、またはアンダースコア (`_`) で構成され、文字で始まる必要があります。
 - 名前の長さは64文字を超えてはなりません。
 - 名前は大文字と小文字を区別します。
 
@@ -166,7 +167,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
+    [ASYNC | SCHEDULE [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -187,7 +188,7 @@ AS
 
 マテリアライズドビューの名前。命名要件は次のとおりです。
 
-- 名前は文字 (a-z または A-Z)、数字 (0-9)、またはアンダースコア (\_) で構成され、文字で始まる必要があります。
+- 名前は文字 (a-z または A-Z)、数字 (0-9)、またはアンダースコア (`_`) で構成され、文字で始まる必要があります。
 - 名前の長さは64文字を超えてはなりません。
 - 名前は大文字と小文字を区別します。
 
@@ -252,7 +253,7 @@ AS
 非同期マテリアライズドビューのリフレッシュ戦略。有効な値:
 
 - `ASYNC`: 自動リフレッシュモード。ベーステーブルデータが変更されるたびに、マテリアライズドビューが自動的にリフレッシュされます。
-- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。間隔は`EVERY (interval n day/hour/minute/second)`として指定できます。使用可能な単位は`DAY`、`HOUR`、`MINUTE`、`SECOND`です。デフォルト値は`10 MINUTE`です。リフレッシュ開始時間を`START('yyyy-MM-dd hh:mm:ss')`としてさらに指定できます。開始時間が指定されていない場合、現在の時間が使用されます。例: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。
+- `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。間隔は`EVERY (interval n day/hour/minute/second)`として指定できます。使用可能な単位は`DAY`、`HOUR`、`MINUTE`、`SECOND`です。デフォルト値は`10 MINUTE`です。リフレッシュ開始時間を`START('yyyy-MM-dd hh:mm:ss')`としてさらに指定できます。開始時間が指定されていない場合、現在の時間が使用されます。例: `SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。互換性のため `ASYNC [START (...)] EVERY (...)` も引き続き受け付けますが、`SHOW CREATE MATERIALIZED VIEW` の出力は常に `SCHEDULE` で表示されます。
 - `MANUAL`: 手動リフレッシュモード。リフレッシュタスクを手動でトリガーしない限り、マテリアライズドビューはリフレッシュされません。
 
 このパラメータが指定されていない場合、デフォルト値`MANUAL`が使用されます。
@@ -331,7 +332,7 @@ SHOW CREATE MATERIALIZED VIEW <mv_name>;
 ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");  
 ```
 
-**PROPERTIES** (オプション)
+#### PROPERTIES (オプション)
 
 非同期マテリアライズドビューのプロパティ。既存のマテリアライズドビューのプロパティを変更するには、[ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md)を使用できます。
 
@@ -410,7 +411,6 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   - `PCT`: （デフォルト）パーティション化されたマテリアライズドビューの場合、ベーステーブルにデータの変更があると影響を受けたパーティションのみリフレッシュされ、そのパーティションの結果の一貫性が保証されます。パーティション化されていないマテリアライズドビューの場合、ベーステーブルのいずれかが変更されるとマテリアライズドビュー全体がフルリフレッシュされます。
   - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
-  - `FULL`: マテリアライズドビューが増分やパーティション単位のリフレッシュをサポートしているかどうかに関係なく、毎回全データのフルリフレッシュを強制します。
 
 <MVWarehouse />
 
@@ -862,7 +862,7 @@ PROPERTIES (
 -- lo_custkeyでソートされた非パーティション化されたマテリアライズドビューを作成
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC
 AS
 select
@@ -882,7 +882,7 @@ group by lo_orderkey, lo_custkey
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -1072,7 +1072,7 @@ AS SELECT * from t1;
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
-ORDER BY `lo_custkey`
+ORDER BY (`lo_custkey`)
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select

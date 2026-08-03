@@ -102,7 +102,6 @@ import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
-import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -177,6 +176,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
+
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
 
@@ -211,6 +212,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
+    public static final String PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER = "load_initial_open_partition_number";
 
     // default: same as cluster query_timeout
     public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
@@ -480,6 +482,25 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
+    public static int analyzeLoadInitialOpenPartitionNumber(Map<String, String> properties, boolean removeProperties) {
+        int value = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+            try {
+                value = Integer.parseInt(properties.get(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new SemanticException(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + e.getMessage());
+            }
+            if (value < 0) {
+                throw new SemanticException("Illegal " + PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER + ": " + value
+                        + ". Use 0 to open all partitions, or a positive integer to open the latest N partitions.");
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER);
+            }
+        }
+        return value;
+    }
+
     public static String analyzePartitionRetentionCondition(Database db,
                                                             OlapTable olapTable,
                                                             Map<String, String> properties,
@@ -724,14 +745,18 @@ public class PropertyAnalyzer {
         String refreshMode = null;
         if (properties != null && properties.containsKey(PROPERTIES_MV_REFRESH_MODE)) {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
+            MaterializedView.RefreshMode parsed;
             try {
-                MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode + ". Only " +
-                        EnumUtils.getEnumList(MaterializedView.RefreshMode.class).stream()
-                                .map(MaterializedView.RefreshMode::name)
-                                .collect(Collectors.joining(", ")) +
-                        " are supported.");
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
+            }
+            // AUTO is intentionally not exposed to users; the implementation is preserved
+            // internally for future revival.
+            if (parsed == MaterializedView.RefreshMode.AUTO) {
+                throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
+                        ". Only INCREMENTAL, PCT are supported.");
             }
             properties.remove(PROPERTIES_MV_REFRESH_MODE);
         }

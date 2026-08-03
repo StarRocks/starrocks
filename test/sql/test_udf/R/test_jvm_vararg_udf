@@ -1,0 +1,239 @@
+-- name: test_jvm_vararg_udf @no_arrow_flight_sql
+CREATE TABLE `t_varargs` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` varchar(64) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_varargs VALUES
+  (1, 10, 'hello'),
+  (2, 20, 'world'),
+  (3, 30, 'foo'),
+  (null, null, null);
+-- result:
+-- !result
+CREATE FUNCTION sumint_va(int, ...)
+RETURNS int
+symbol = "Sumint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+-- result:
+-- !result
+CREATE FUNCTION concat_str_va(string, ...)
+RETURNS string
+symbol = "ConcatString"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+-- result:
+-- !result
+select sumint_va(42);
+-- result:
+42
+-- !result
+select c0, sumint_va(c0) from t_varargs order by c0;
+-- result:
+None	0
+1	1
+2	2
+3	3
+-- !result
+select sumint_va(5, 10);
+-- result:
+15
+-- !result
+select concat_str_va(5, "10");
+-- result:
+510
+-- !result
+select sumint_va(5, 10, 15, 20);
+-- result:
+50
+-- !result
+select concat_str_va(5, 10, 15, 20);
+-- result:
+5101520
+-- !result
+select c0, sumint_va(c0, c1) from t_varargs order by c0;
+-- result:
+None	0
+1	11
+2	22
+3	33
+-- !result
+select c0, concat_str_va(c0, c1) from t_varargs order by c0;
+-- result:
+None	nullnull
+1	110
+2	220
+3	330
+-- !result
+select sumint_va(null);
+-- result:
+0
+-- !result
+select concat_str_va(null);
+-- result:
+null
+-- !result
+select sumint_va(1, null);
+-- result:
+1
+-- !result
+select concat_str_va(1, null);
+-- result:
+1null
+-- !result
+[UC]select sumint_va(1, [1,2,3]);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 27. Detail message: No matching function with signature: sumint_va(tinyint(4), array<tinyint(4)>).')
+-- !result
+[UC]select sumint_va();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 17. Detail message: No matching function with signature: sumint_va().')
+-- !result
+select sum(sumint_va(c0)) from t_varargs;
+-- result:
+6
+-- !result
+select sum(sumint_va(c0, c1)) from t_varargs;
+-- result:
+66
+-- !result
+select c0 from t_varargs where sumint_va(c0) > 1 order by c0;
+-- result:
+2
+3
+-- !result
+select c0 from t_varargs where sumint_va(c0) > 1 order by c0;
+-- result:
+2
+3
+-- !result
+select c0 from t_varargs where length(concat_str_va(c0, c1)) > 1 order by c0;
+-- result:
+None
+1
+2
+3
+-- !result
+CREATE FUNCTION sumint_va2(int, int, ...)
+RETURNS int
+symbol = "Sumint2"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+-- result:
+-- !result
+[UC]select sumint_va2(1);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 19. Detail message: No matching function with signature: sumint_va2(tinyint(4)).')
+-- !result
+select sumint_va2(5, 10);
+-- result:
+15
+-- !result
+select sumint_va2(5, 10, 15);
+-- result:
+30
+-- !result
+CREATE TABLE `t_complex` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL,
+  `c2` map<int, string> NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_complex VALUES
+  (1, [1,2,3], map(1,'a',2,'b')),
+  (2, [4,5], map(3,'c')),
+  (3, null, null);
+-- result:
+-- !result
+CREATE FUNCTION echo_array_va(array<int>, ...)
+RETURNS array<int>
+symbol = "EchoArray"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+-- result:
+-- !result
+CREATE FUNCTION echo_map_va(map<int,string>, ...)
+RETURNS map<int,string>
+symbol = "EchoMap"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf_vararg.jar";
+-- result:
+-- !result
+select echo_array_va([1,2,3]);
+-- result:
+[1,2,3]
+-- !result
+select echo_array_va([1,2,3], [4,5,6]);
+-- result:
+[4,5,6]
+-- !result
+select echo_array_va([1,2,3], [4,5,6], [7,8,9]);
+-- result:
+[7,8,9]
+-- !result
+select echo_array_va([1,2,3], null);
+-- result:
+None
+-- !result
+select echo_array_va(null);
+-- result:
+None
+-- !result
+select echo_map_va(map(1,'a',2,'b'));
+-- result:
+{1:"a",2:"b"}
+-- !result
+select echo_map_va(map(1,'a'), map(2,'b'));
+-- result:
+{2:"b"}
+-- !result
+select echo_map_va(map(1,'a'), map(2,'b'), map(3,'c'));
+-- result:
+{3:"c"}
+-- !result
+select echo_map_va(map(1,'a'), null);
+-- result:
+None
+-- !result
+select echo_map_va(null);
+-- result:
+None
+-- !result
+[UC]select echo_map_va(map(1,'a'), 42);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 33. Detail message: No matching function with signature: echo_map_va(map<tinyint(4),varchar>, tinyint(4)).')
+-- !result
+[UC]select echo_map_va(map(1,'a'), [1,2,3]);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 38. Detail message: No matching function with signature: echo_map_va(map<tinyint(4),varchar>, array<tinyint(4)>).')
+-- !result
+[UC]select echo_map_va();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 19. Detail message: No matching function with signature: echo_map_va().')
+-- !result
+select c0, echo_map_va(c2) from t_complex order by c0;
+-- result:
+1	{1:"a",2:"b"}
+2	{3:"c"}
+3	None
+-- !result
+select c0, echo_map_va(c2, map(99,'x')) from t_complex order by c0;
+-- result:
+1	{99:"x"}
+2	{99:"x"}
+3	{99:"x"}
+-- !result

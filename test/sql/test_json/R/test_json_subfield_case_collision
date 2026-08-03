@@ -1,0 +1,98 @@
+-- name: test_json_subfield_case_collision
+drop database if exists test_json_subfield_case_collision;
+-- result:
+-- !result
+CREATE DATABASE test_json_subfield_case_collision;
+-- result:
+-- !result
+USE test_json_subfield_case_collision;
+-- result:
+-- !result
+CREATE TABLE activity (
+  id bigint,
+  tenant_id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO activity VALUES
+ (1, 1, parse_json('{"Campaign":"CapA","campaign":"lowa","title":"t1"}')),
+ (2, 1, parse_json('{"Campaign":"CapB","campaign":"lowb","title":"t2"}')),
+ (3, 1, parse_json('{"Campaign":"CapC","title":"t3"}')),
+ (4, 1, parse_json('{"campaign":"lowd"}')),
+ (5, 1, parse_json('{}'));
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+INSERT INTO activity SELECT id, tenant_id, fields FROM activity;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+set cbo_json_v2_dict_opt = true;
+-- result:
+-- !result
+SELECT count(get_json_string(fields, 'Campaign')) AS caps_cnt,
+       count(get_json_string(fields, 'campaign')) AS low_cnt,
+       sum(CASE WHEN get_json_string(fields, 'Campaign') = get_json_string(fields, 'campaign')
+                THEN 1 ELSE 0 END) AS eq_cnt
+FROM activity;
+-- result:
+3072	3072	0
+-- !result
+SELECT min(get_json_string(fields, 'Campaign')) AS mn_caps,
+       max(get_json_string(fields, 'Campaign')) AS mx_caps,
+       min(get_json_string(fields, 'campaign')) AS mn_low,
+       max(get_json_string(fields, 'campaign')) AS mx_low
+FROM activity;
+-- result:
+CapA	CapC	lowa	lowd
+-- !result
+SELECT COALESCE(get_json_string(fields, 'Campaign'), get_json_string(fields, 'campaign')) AS c,
+       count(*) AS cnt
+FROM activity
+GROUP BY c
+ORDER BY c;
+-- result:
+None	1024
+CapA	1024
+CapB	1024
+CapC	1024
+lowd	1024
+-- !result
+SELECT count(get_json_string(fields, 'title')) AS t_cnt,
+       count(get_json_string(fields, 'Campaign')) AS caps_cnt,
+       count(get_json_string(fields, 'campaign')) AS low_cnt
+FROM activity;
+-- result:
+3072	3072	3072
+-- !result

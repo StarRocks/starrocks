@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "collations 包含可用的排序规则。"
 ---
 
 # collations

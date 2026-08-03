@@ -160,6 +160,10 @@ public class LakeTable extends OlapTable {
         properties.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
                 String.valueOf(isFastSchemaEvolutionV2()));
 
+        // flat_json: render it like OlapTable.getUniqueProperties() so SHOW CREATE TABLE reflects
+        // the table-level flat_json config for cloud-native tables too.
+        appendFlatJsonProperties(properties, tableProperty.getProperties());
+
         return properties;
     }
 

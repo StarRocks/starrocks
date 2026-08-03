@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のデータロードおよびアンロード方法における機能サポートとファイル形式の互換性リファレンス。"
 sidebar_label: 機能サポート
 ---
 

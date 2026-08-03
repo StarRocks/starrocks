@@ -276,4 +276,40 @@ TEST_F(CompressedInputStreamTest, test_Snappy1) {
     }
 }
 
+namespace {
+// Minimal InputStream whose get_io_stats_snapshot() returns a recognizable
+// sentinel byte count, used by the forwarding test below.
+class SentinelInputStream : public InputStream {
+public:
+    static constexpr int64_t kSentinel = 0x1A2B3C4D;
+
+    StatusOr<int64_t> read(void* /*data*/, int64_t /*count*/) override { return 0; }
+    Status read_fully(void* /*data*/, int64_t /*count*/) override { return Status::OK(); }
+    Status skip(int64_t /*count*/) override { return Status::OK(); }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override {
+        IoStatsSnapshot snap;
+        snap.bytes_read_local_disk = kSentinel;
+        return snap;
+    }
+};
+} // namespace
+
+// CompressedInputStream and CompressedSeekableInputStream both implement
+// get_io_stats_snapshot() as a single-line forward to the inner stream. Anyone
+// removing the override would silently downgrade the publish-trace counters
+// (which call get_io_stats_snapshot through whatever wrapper chain is in play)
+// to all-zero on compressed streams. Verify the sentinel passed via the inner
+// stream survives both wrappers.
+TEST_F(CompressedInputStreamTest, test_io_stats_snapshot_forwarding) {
+    auto sentinel_inner = std::make_shared<SentinelInputStream>();
+
+    CompressedInputStream cis(sentinel_inner, LZ4F_decompressor());
+    EXPECT_EQ(SentinelInputStream::kSentinel, cis.get_io_stats_snapshot().bytes_read_local_disk);
+
+    auto cis_shared = std::make_shared<CompressedInputStream>(sentinel_inner, LZ4F_decompressor());
+    CompressedSeekableInputStream csis(cis_shared);
+    EXPECT_EQ(SentinelInputStream::kSentinel, csis.get_io_stats_snapshot().bytes_read_local_disk);
+}
+
 } // namespace starrocks::io

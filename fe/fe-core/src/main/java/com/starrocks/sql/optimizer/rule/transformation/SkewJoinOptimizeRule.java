@@ -60,8 +60,6 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,7 +91,6 @@ import java.util.stream.Collectors;
  */
 
 public class SkewJoinOptimizeRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(SkewJoinOptimizeRule.class);
 
     private static final String RAND_COL = "rand_col";
 
@@ -106,6 +103,32 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     public List<Rule> successorRules() {
         // skew join generate new join and on predicate, need to push down join on expression to child project again
         return Lists.newArrayList(new PushDownJoinOnExpressionToChildProject());
+    }
+
+    /**
+     * For a given equality predicate (e.g., a.x = b.x), resolves the left-side column
+     * (the one belonging to leftOutputColumns).
+     */
+    private static Optional<ColumnRefOperator> getLeftSideColumn(BinaryPredicateOperator equalConj,
+            ColumnRefSet leftOutputColumns) {
+        if (!equalConj.getChild(0).isColumnRef() || !equalConj.getChild(1).isColumnRef()) {
+            return Optional.empty();
+        }
+        final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
+        return Optional.of(leftOutputColumns.contains(leftCol.getId())
+                ? leftCol : (ColumnRefOperator) equalConj.getChild(1));
+    }
+
+    /**
+     * For a given equality predicate (e.g., a.x = b.x), resolves the left-side column and
+     * computes its skew info.
+     */
+    private static Optional<DataSkew.SkewInfo> getSkewInfoForPredicate(BinaryPredicateOperator equalConj,
+            ColumnRefSet leftOutputColumns, Statistics leftChildStats, DataSkew.Thresholds skewThresholds) {
+        return getLeftSideColumn(equalConj, leftOutputColumns)
+                .filter(col -> leftChildStats.getColumnStatistics().containsKey(col))
+                .map(leftChildStats::getColumnStatistic)
+                .map(colStats -> DataSkew.getColumnSkewInfo(leftChildStats, colStats, skewThresholds));
     }
 
     @Override
@@ -139,64 +162,60 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         if (leftChildStats == null) {
             return false;
         }
+        final var mcvLimit = context.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
+        final var rowPercentageThreshold = context.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final var skewThresholds = new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold);
+
+        // If any predicate is not skewed, the composite hash key already distributes data well,
+        // and we do not need to add salting.
+        // Idea: the most frequent composite tuple (k_1, k_2, ..., k_n) is bounded by the most
+        // frequent value of each individual key. If any key k_i is not skewed (no value exceeds
+        // the threshold), then no composite tuple can exceed it either, so no partition is skewed.
+        record PredicateSkewInfo(ColumnRefOperator column, DataSkew.SkewInfo skewInfo) {}
+
+        List<PredicateSkewInfo> skewedPredicates = new ArrayList<>();
         for (BinaryPredicateOperator equalConj : equalConjs) {
-            if (!equalConj.getChild(0).isColumnRef() || !equalConj.getChild(1).isColumnRef()) {
-                // only support column equal column
+            var columnOpt = getLeftSideColumn(equalConj, leftOutputColumns);
+            var skewInfoOpt = getSkewInfoForPredicate(equalConj, leftOutputColumns, leftChildStats, skewThresholds);
+            if (columnOpt.isEmpty() || skewInfoOpt.isEmpty()) {
                 continue;
             }
-            ColumnRefOperator leftColumn = (ColumnRefOperator) equalConj.getChild(0);
-            ColumnRefOperator rightColumn = (ColumnRefOperator) equalConj.getChild(1);
-            ColumnRefOperator skewJoinColumn;
-            // choose the skew join column, it could be left or right column of the predicate
-            if (leftOutputColumns.contains(leftColumn.getId())) {
-                skewJoinColumn = leftColumn;
-            } else {
-                skewJoinColumn = rightColumn;
+            if (!skewInfoOpt.get().isSkewed()) {
+                return false;
             }
-            if (!leftChildStats.getColumnStatistics().containsKey(skewJoinColumn)) {
-                continue;
-            }
-            final var skewColumnStats = leftChildStats.getColumnStatistic(skewJoinColumn);
+            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), skewInfoOpt.get()));
+        }
 
-            if (skewColumnStats == null) {
-                // Only support column with some stats
-                continue;
-            }
+        for (final var skewPredicate : skewedPredicates) {
+            final var skewJoinColumn = skewPredicate.column();
+            final var skewInfo = skewPredicate.skewInfo();
 
-            final var mcvLimit = context.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
-            final var rowPercentageThreshold = context.getSessionVariable().getSkewJoinDataSkewThreshold();
-            final var skewInfo = DataSkew.getColumnSkewInfo(leftChildStats, skewColumnStats,
-                    new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold));
+            // Handle NULL-only skew case: when MCV is empty but NULL fraction indicates skew
+            List<ScalarOperator> skewValues;
+            if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
+                // Create a special NULL skew value for NULL-only skew cases
+                skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
+            } else if (skewInfo.type() == DataSkew.SkewType.SKEWED_MCV) {
+                // Use MCV-based skew values
+                skewValues = skewInfo.maybeMcvs().get()
+                        .stream() //
+                        .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
+                                .castTo(skewJoinColumn.getType())) //
+                        .filter(Optional::isPresent) //
+                        .map(Optional::get) //
+                        .collect(Collectors.toList());
 
-            if (skewInfo.isSkewed()) {
-                joinOperator.setSkewColumn(skewJoinColumn);
-
-                // Handle NULL-only skew case: when MCV is empty but NULL fraction indicates skew
-                List<ScalarOperator> skewValues;
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    // Create a special NULL skew value for NULL-only skew cases
-                    skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
-                } else if (skewInfo.type() == DataSkew.SkewType.SKEWED_MCV) {
-                    // Use MCV-based skew values
-                    skewValues = skewInfo.maybeMcvs().get()
-                            .stream() //
-                            .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
-                                    .castTo(skewJoinColumn.getType())) //
-                            .filter(Optional::isPresent) //
-                            .map(Optional::get) //
-                            .collect(Collectors.toList());
-
-                    if (skewValues.isEmpty()) {
-                        // If all explicit casts failed.
-                        continue;
-                    }
-                } else {
-                    throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
+                if (skewValues.isEmpty()) {
+                    // If all explicit casts failed.
+                    continue;
                 }
-
-                joinOperator.setSkewValues(skewValues);
-                return true;
+            } else {
+                throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
             }
+
+            joinOperator.setSkewColumn(skewJoinColumn);
+            joinOperator.setSkewValues(skewValues);
+            return true;
         }
         return false;
     }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "System view showing which roles have been granted to which users or roles in StarRocks."
 ---
 
 # role_edges

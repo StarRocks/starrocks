@@ -247,7 +247,8 @@ private:
                     dest_data_column->append_nulls(1);
                 } else {
                     if constexpr (!lt_is_decimal<LT>) {
-                        sub = items[i].get<CppType>() - items[i - 1].get<CppType>();
+                        sub = static_cast<RunTimeCppType<ResultType>>(items[i].get<CppType>()) -
+                              static_cast<RunTimeCppType<ResultType>>(items[i - 1].get<CppType>());
                     } else if constexpr (lt_is_decimal<LT>) {
                         RunTimeCppType<ResultType> lhs = RunTimeCppType<ResultType>{items[i].get<CppType>()};
                         RunTimeCppType<ResultType> rhs = RunTimeCppType<ResultType>{items[i - 1].get<CppType>()};

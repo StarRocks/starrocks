@@ -2,5 +2,12 @@
 CREATE DATABASE db_${uuid0};
 USE db_${uuid0};
 desc information_schema.warehouse_metrics;
+-- FE-eval path (default): ConstantOperator types must match schema (WAREHOUSE_ID=BIGINT)
 SELECT * FROM information_schema.warehouse_metrics;
+-- BE-scan path: exercises schema check in schema_chunk_source.cpp; pre-fix this reported
+-- "schema not match. input is VARCHAR(16) and output is BIGINT".
+SET enable_evaluate_schema_scan_rule=false;
+SELECT * FROM information_schema.warehouse_metrics;
+SELECT COUNT(*) FROM information_schema.warehouse_metrics;
+SET enable_evaluate_schema_scan_rule=true;
 DROP DATABASE db_${uuid0};

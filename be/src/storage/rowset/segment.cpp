@@ -591,7 +591,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         std::string_view leaf = paths.back();
         may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
     }
-    if (column_reader->is_flat_json() && !may_contains) {
+    // An intermediate node (e.g. "o") whose descendants are stored as flattened sub-columns
+    // (e.g. "o.inner") is present in this segment even though no sub-column is named exactly
+    // "o". Such a node must be reconstructed by the JsonExtractIterator below, not reported as
+    // absent -- otherwise extracting an intermediate JSON object through a json-path-rewrite
+    // extended column (e.g. get_json_string(j, '$.o')) wrongly returns NULL.
+    bool has_flatten_descendant = false;
+    if (sub_readers) {
+        const std::string prefix = std::string(field_name) + ".";
+        for (auto& sub_reader : *sub_readers) {
+            if (std::string_view(sub_reader->name()).starts_with(prefix)) {
+                has_flatten_descendant = true;
+                break;
+            }
+        }
+    }
+    if (column_reader->is_flat_json() && !may_contains && !has_flatten_descendant) {
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
@@ -644,6 +659,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     }
     ASSIGN_OR_RETURN(auto filepath, dcg.column_file_by_idx(parent_name(_segment_file_info.path), idx));
     FileInfo info{.path = filepath};
+    // Supplying the known size lets the segment open path skip a stat/HeadObject. A size of 0 means
+    // unknown (old data lacking column_file_sizes), in which case we fall back to discovering it.
+    if (idx < dcg.column_file_sizes().size() && dcg.column_file_sizes()[idx] > 0) {
+        info.size = dcg.column_file_sizes()[idx];
+    }
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
@@ -676,7 +696,12 @@ void Segment::turn_off_batch_update_cache_size() {
         if (_dirty_cache_counter.exchange(0) > 0) {
             if (_tablet_manager != nullptr) {
                 auto mem_cost = mem_usage();
-                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+                // Use FileInfo::cache_key() so this matches the key load_segment registered under;
+                // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
+                // their cache entries would never get the post-open memory cost, defeating
+                // metacache capacity control.
+                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                           reinterpret_cast<intptr_t>(this));
             }
         }
     }
@@ -687,7 +712,8 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
+                                                       reinterpret_cast<intptr_t>(this));
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

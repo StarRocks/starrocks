@@ -52,6 +52,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,10 @@ public class InfoSchemaDbTest {
 
     @BeforeEach
     public void beforeClass() throws Exception {
+        // Disable connector metadata background refresh to avoid background threads
+        // touching JMockit's shared (non-thread-safe) state while the test thread is
+        // recording Expectations, which leads to flaky ConcurrentModificationException.
+        Config.enable_background_refresh_connector_metadata = false;
         UtFrameUtils.createMinStarRocksCluster();
 
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -99,12 +104,55 @@ public class InfoSchemaDbTest {
         authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
     }
 
+    @AfterEach
+    public void tearDown() {
+        Config.enable_background_refresh_connector_metadata = true;
+    }
+
     @Test
     public void testNormal() throws IOException {
         Database db = new InfoSchemaDb();
         Assertions.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
+    }
+
+    @Test
+    public void testRoutinesAndStatisticsSwitchOnMysqlVersion() {
+        InfoSchemaDb db = new InfoSchemaDb();
+        String original = Config.mysql_server_version;
+        try {
+            Config.mysql_server_version = "8.0.33";
+            Table routinesV8 = db.getTable("routines");
+            Table statisticsV8 = db.getTable("statistics");
+            Assertions.assertEquals(31, routinesV8.getBaseSchema().size());
+            Assertions.assertEquals(18, statisticsV8.getBaseSchema().size());
+            Assertions.assertTrue(routinesV8.getBaseSchema().stream()
+                    .anyMatch(c -> "DATA_TYPE".equalsIgnoreCase(c.getName())));
+            Assertions.assertTrue(statisticsV8.getBaseSchema().stream()
+                    .anyMatch(c -> "IS_VISIBLE".equalsIgnoreCase(c.getName())));
+
+            Config.mysql_server_version = "5.7.28";
+            Table routinesV5 = db.getTable("routines");
+            Table statisticsV5 = db.getTable("statistics");
+            Assertions.assertEquals(23, routinesV5.getBaseSchema().size());
+            Assertions.assertEquals(16, statisticsV5.getBaseSchema().size());
+            Assertions.assertFalse(routinesV5.getBaseSchema().stream()
+                    .anyMatch(c -> "DATA_TYPE".equalsIgnoreCase(c.getName())));
+            Assertions.assertFalse(statisticsV5.getBaseSchema().stream()
+                    .anyMatch(c -> "IS_VISIBLE".equalsIgnoreCase(c.getName())));
+            Assertions.assertFalse(statisticsV5.getBaseSchema().stream()
+                    .anyMatch(c -> "EXPRESSION".equalsIgnoreCase(c.getName())));
+
+            // Other MySQL-8 additions ride on tables that don't shift ordinals,
+            // so they stay registered regardless of the advertised version.
+            Table collations = db.getTable("collations");
+            Assertions.assertNotNull(collations);
+            Assertions.assertTrue(collations.getBaseSchema().stream()
+                    .anyMatch(c -> "PAD_ATTRIBUTE".equalsIgnoreCase(c.getName())));
+        } finally {
+            Config.mysql_server_version = original;
+        }
     }
 
     @Test
@@ -296,7 +344,7 @@ public class InfoSchemaDbTest {
         arg[0] = IntegerType.INT;
         Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, IntegerType.INT,
                 false, TFunctionBinaryType.SRJAR,
-                "objectFile", "mainClass.getCanonicalName()", "", "");
+                "objectFile", "mainClass.getCanonicalName()", "", "", null);
         function.setChecksum("checksum");
 
         statement.setFunction(function);

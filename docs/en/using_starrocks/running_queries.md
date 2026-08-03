@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 9
+description: "How to view and monitor running queries in StarRocks using current_queries and related views, analyze their resource consumption, and cancel long-running..."
 ---
 
 # View Running Queries
@@ -28,6 +29,7 @@ This article describes how to view running queries in StarRocks and analyze thei
 | Warehouse | Warehouse used by the query |
 | CustomQueryId | User-defined query ID |
 | ResourceGroup | Resource group used by the query |
+| QueryType | Type of the query: `Query` (user query), `Statistics` (statistics collection, such as ANALYZE), `Task` (task run), `MV` (materialized view refresh), or `Internal` (other internal query) |
 
 **Example**:
 ```sql
@@ -48,6 +50,7 @@ ExecTime      | 4.077 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 ```
 
 ## global_current_queries
@@ -73,6 +76,7 @@ ExecTime      | 3.032 s
 Warehouse     | default_warehouse
 CustomQueryId |
 ResourceGroup | rg1
+QueryType     | Query
 ```
 
 ## running queries

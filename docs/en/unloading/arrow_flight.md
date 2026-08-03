@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "From v3.5.1 onwards, StarRocks supports connections via Apache Arrow Flight SQL protocol."
 ---
 
 # Interact with StarRocks via Arrow Flight SQL
@@ -69,6 +70,8 @@ On average, Arrow Flight SQL achieved:
 - A clear reduction in CPU and memory usage due to the elimination of redundant serialization steps.
 
 These performance gains translate directly into faster dashboards, more responsive data science workflows, and the ability to analyze much larger datasets in real time.
+
+For a detailed breakdown of how to reach these numbers in your client code — JDBC accessor methods, raw `VectorSchemaRoot` consumption, Parquet writers — and the measured speedup of each tuning step over MySQL JDBC, see [Arrow Flight SQL Best Practices](./arrow_flight_best_practices.md).
 
 ## Usage
 

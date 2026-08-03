@@ -113,7 +113,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -316,7 +316,7 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rs_id = next_id();
         rs_meta->set_id(rs_id);
         rs_meta->set_num_rows(10);
-        rs_meta->add_segments("segment1");
+        rs_meta->add_segment_metas()->set_filename("segment1");
 
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
@@ -352,13 +352,13 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto input_rs = tablet_metadata->mutable_rowsets(input_rowset_idx);
         input_rs->set_num_rows(0);
         op_compaction_meta->add_input_rowsets(input_rs->id());
-        tablet_metadata->mutable_rowsets(0)->clear_segments();
-        tablet_metadata->mutable_rowsets(1)->clear_segments();
+        tablet_metadata->mutable_rowsets(0)->clear_segment_metas();
+        tablet_metadata->mutable_rowsets(1)->clear_segment_metas();
 
         auto rs_meta = op_compaction_meta->mutable_output_rowset();
         rs_meta->set_id(next_id());
         rs_meta->set_num_rows(10);
-        rs_meta->add_segments("segment1");
+        rs_meta->add_segment_metas()->set_filename("segment1");
 
         auto tablet_id = tablet_metadata->id();
         auto version = tablet_metadata->version() + 1;
@@ -392,8 +392,8 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         rs_meta->set_id(next_id());
         rs_meta->set_num_rows(10);
 
-        tablet_metadata->mutable_rowsets(0)->clear_segments();
-        tablet_metadata->mutable_rowsets(1)->clear_segments();
+        tablet_metadata->mutable_rowsets(0)->clear_segment_metas();
+        tablet_metadata->mutable_rowsets(1)->clear_segment_metas();
         tablet_metadata->mutable_rowsets(0)->set_num_rows(0);
         tablet_metadata->mutable_rowsets(1)->set_num_rows(0);
 
@@ -433,11 +433,11 @@ void AlterTabletMetaTest::test_alter_update_tablet_schema(KeysType keys_type) {
         auto rs_id = next_id();
         rs_meta->set_id(rs_id);
         rs_meta->set_num_rows(10);
-        rs_meta->add_segments("segment1");
+        rs_meta->add_segment_metas()->set_filename("segment1");
 
-        tablet_metadata->mutable_rowsets(0)->clear_segments();
-        tablet_metadata->mutable_rowsets(1)->clear_segments();
-        tablet_metadata->mutable_rowsets(2)->clear_segments();
+        tablet_metadata->mutable_rowsets(0)->clear_segment_metas();
+        tablet_metadata->mutable_rowsets(1)->clear_segment_metas();
+        tablet_metadata->mutable_rowsets(2)->clear_segment_metas();
         tablet_metadata->mutable_rowsets(0)->set_num_rows(0);
         tablet_metadata->mutable_rowsets(1)->set_num_rows(0);
         tablet_metadata->mutable_rowsets(2)->set_num_rows(0);
@@ -541,7 +541,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         txn_log->set_txn_id(txn_id);
         auto op_write = txn_log->mutable_op_write();
         for (const auto& f : writer->segments()) {
-            op_write->mutable_rowset()->add_segments(f.path);
+            op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
         }
         op_write->mutable_rowset()->set_num_rows(writer->num_rows());
         op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -667,6 +667,39 @@ TEST_F(AlterTabletMetaTest, test_compaction_strategy) {
     auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
     ASSERT_OK(new_tablet_meta.status());
     ASSERT_EQ(CompactionStrategyPB::REAL_TIME, new_tablet_meta.value()->compaction_strategy());
+}
+
+TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    TFlatJsonConfig flat_json_config;
+    flat_json_config.__set_flat_json_enable(true);
+    flat_json_config.__set_flat_json_null_factor(0.25);
+    flat_json_config.__set_flat_json_sparsity_factor(0.75);
+    flat_json_config.__set_flat_json_column_max(12);
+    flat_json_config.__set_version(3);
+    tablet_meta_info.__set_flat_json_config(flat_json_config);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_alter_metadata());
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_TRUE(new_tablet_meta.value()->has_flat_json_config());
+    const auto& flat_json_config_pb = new_tablet_meta.value()->flat_json_config();
+    ASSERT_TRUE(flat_json_config_pb.flat_json_enable());
+    ASSERT_DOUBLE_EQ(0.25, flat_json_config_pb.flat_json_null_factor());
+    ASSERT_DOUBLE_EQ(0.75, flat_json_config_pb.flat_json_sparsity_factor());
+    ASSERT_EQ(12, flat_json_config_pb.flat_json_max_column_max());
+    ASSERT_EQ(3, flat_json_config_pb.version());
 }
 
 } // namespace starrocks::lake

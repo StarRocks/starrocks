@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
@@ -133,6 +134,7 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    private boolean auditBeforeExecLogged = false;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -221,6 +223,30 @@ public class ConnectProcessor {
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         auditAfterExec(origStmt, parsedStmt, statistics, null);
+    }
+
+    public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+        if (!Config.audit_stmt_before_execute) {
+            return;
+        }
+
+        ctx.getAuditEventBuilder().setEventType(EventType.BEFORE_QUERY)
+                .setState(ctx.getState().toString())
+                .setErrorCode(ctx.getNormalizedErrorCode())
+                .setReturnRows(ctx.getReturnRows())
+                .setStmtId(ctx.getStmtId())
+                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
+                .setSessionId(ctx.getSessionId().toString())
+                .setCNGroup(ctx.getCurrentComputeResourceName())
+                .setQuerySource(ctx.getQuerySource().toString())
+                .setCommand(ctx.getCommandStr())
+                .setPreparedStmtId(null);
+
+        ctx.getAuditEventBuilder().setIsQuery(ctx.getState().isQuery());
+        ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
+        ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(
+                ctx.getAuditEventBuilder().buildSnapshot());
     }
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
@@ -336,12 +362,11 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-        ctx.getAuditEventBuilder().setQueriedRelations(
-                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
+        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelationsForAudit(executor, parsedStmt));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
-        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().buildSnapshot();
         if (ctx.getState().isQuery() && ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
             // multiply LONG by 10 so in metric system we can have more accurate result
             MetricRepo.HISTO_CACHE_MISS_RATIO.update((long) (auditEvent.getCacheMissRatio() * 10));
@@ -394,6 +419,51 @@ public class ConnectProcessor {
         }
     }
 
+    private void resetAuditEventBuilder() {
+        ctx.getAuditEventBuilder().reset();
+        ctx.getAuditEventBuilder()
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setUser(ctx.getQualifiedUser())
+                .setAuthorizedUser(
+                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog())
+                .setWarehouse(ctx.getCurrentWarehouseName())
+                .setCustomQueryId(ctx.getCustomQueryId())
+                .setCustomSessionName(ctx.getCustomSessionName())
+                .setCNGroup(ctx.getCurrentComputeResourceName());
+    }
+
+    private List<String> getQueriedRelationsFromLeader(StmtExecutor stmtExecutor) {
+        if (stmtExecutor == null || !stmtExecutor.getIsForwardToLeaderOrInit(false)) {
+            return null;
+        }
+        LeaderOpExecutor leaderOpExecutor = stmtExecutor.getLeaderOpExecutor();
+        if (leaderOpExecutor == null) {
+            return null;
+        }
+        TMasterOpResult leaderResult = leaderOpExecutor.getResult();
+        if (leaderResult != null && leaderResult.isSetQueried_relations()) {
+            return leaderResult.getQueried_relations();
+        }
+        return null;
+    }
+
+    // A follower that forwards the statement never analyzes it locally, so its own parse tree
+    // still carries CTE aliases and unqualified names. Prefer the relations the Leader resolved
+    // after analyze (shipped back via TMasterOpResult); only fall back to local collection when
+    // the statement ran locally or the Leader did not provide them (e.g. an older version).
+    // Package-private (would otherwise be private) so ConnectProcessorTest can exercise it directly.
+    @VisibleForTesting
+    List<String> queriedRelationsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt) {
+        List<String> relationsFromLeader = getQueriedRelationsFromLeader(stmtExecutor);
+        if (relationsFromLeader != null) {
+            return relationsFromLeader;
+        }
+        return AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt);
+    }
+
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -408,18 +478,8 @@ public class ConnectProcessor {
             ending--;
         }
         originStmt = new String(bytes, 1, ending, StandardCharsets.UTF_8);
-        ctx.getAuditEventBuilder().reset();
-        ctx.getAuditEventBuilder()
-                .setTimestamp(System.currentTimeMillis())
-                .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
-                .setUser(ctx.getQualifiedUser())
-                .setAuthorizedUser(
-                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
-                .setDb(ctx.getDatabase())
-                .setCatalog(ctx.getCurrentCatalog())
-                .setWarehouse(ctx.getCurrentWarehouseName())
-                .setCustomQueryId(ctx.getCustomQueryId())
-                .setCNGroup(ctx.getCurrentComputeResourceName());
+        auditBeforeExecLogged = false;
+        resetAuditEventBuilder();
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
         ctx.getState().setIsQuery(true);
@@ -596,6 +656,11 @@ public class ConnectProcessor {
             if (ctx.getIsLastStmt()) {
                 executor.addRunningQueryDetail(parsedStmt);
             }
+            if (!auditBeforeExecLogged) {
+                ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
+                auditBeforeExec(originStmt, parsedStmt);
+                auditBeforeExecLogged = true;
+            }
             executor.execute();
 
             // do not execute following stmt when current stmt failed, this is consistent with mysql server
@@ -629,17 +694,37 @@ public class ConnectProcessor {
             ctx.getState().setError("Unknown database(" + ctx.getDatabase() + ")");
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        // Internal catalog: lookup resolves to Database.nameToTable (a ConcurrentHashMap,
+        // lock-free safe). External catalog: lookup routes through ConnectorMetadata, whose
+        // concurrency is connector-managed. No FE write path takes the LockManager lock on
+        // external db ids, so the intensive lock acquired below is harmless overhead on
+        // external catalogs and the unlocked lookup changes nothing for them.
+        Table table;
         try {
-            // we should get table through metadata manager
-            Table table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
+            table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
                     ctx, ctx.getCurrentCatalog(), ctx.getDatabase(), tableName);
-            if (table == null) {
+        } catch (StarRocksConnectorException e) {
+            LOG.error("errors happened when getting table {}", tableName, e);
+            ctx.getState().setEof();
+            return;
+        }
+        if (table == null) {
+            ctx.getState().setError("Unknown table(" + tableName + ")");
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        try {
+            // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
+            // and lock acquisition. The table id is stable, so id-based revalidation would
+            // miss a RENAME that re-binds the name to a different table. Internal-catalog
+            // only: LocalMetastore doesn't track connector tables, so a re-fetch for
+            // external catalogs would always return null and falsely fail.
+            if (db.getCatalogName() == null && db.getTable(tableName) != table) {
                 ctx.getState().setError("Unknown table(" + tableName + ")");
                 return;
             }
-
             MysqlSerializer serializer = ctx.getSerializer();
             MysqlChannel channel = ctx.getMysqlChannel();
 
@@ -654,7 +739,7 @@ public class ConnectProcessor {
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
         ctx.getState().setEof();
     }
@@ -738,6 +823,10 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
+            if (enableAudit) {
+                resetAuditEventBuilder();
+                auditBeforeExec(originStmt, executeStmt);
+            }
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
@@ -1147,6 +1236,20 @@ public class ConnectProcessor {
             if (audit != null) {
                 result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
+        }
+
+        // Ship the relations the Leader resolved after analyze so the follower logs accurate
+        // QueriedRelations instead of falling back to its own unanalyzed parse tree (which still holds
+        // CTE aliases / unqualified names). Read from ctx.getExecutor() -- the executor that ran --
+        // rather than the local `executor`, which is null when doProxyExecute threw; this also covers
+        // ArrowFlightSql, which overrides doProxyExecute but reaches it only through this method.
+        // When an executor ran, set the field even if the relation list is empty (collectAll is
+        // null-safe) so an empty result means "leader resolved no relations", distinct from an unset
+        // field -- an older leader, or no executor at all -- which makes the follower fall back.
+        StmtExecutor executedStmt = ctx.getExecutor();
+        if (executedStmt != null) {
+            result.setQueried_relations(AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(
+                    executedStmt.getParsedStmt()));
         }
         return result;
     }

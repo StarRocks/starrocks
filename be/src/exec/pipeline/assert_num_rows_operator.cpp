@@ -60,7 +60,7 @@ Status AssertNumRowsOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     if (_actual_num_rows > 1) {
         auto iter = _TAssertion_VALUES_TO_NAMES.find(_assertion);
         std::string message;
-        if (iter == _TAggregationOp_VALUES_TO_NAMES.end()) {
+        if (iter == _TAssertion_VALUES_TO_NAMES.end()) {
             message = "NULL";
         } else {
             message = iter->second;

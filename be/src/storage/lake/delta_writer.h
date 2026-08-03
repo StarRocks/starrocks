@@ -76,8 +76,6 @@ struct DeltaWriterStat {
     std::atomic_int64_t finish_prepare_txn_log_time_ns = 0;
     // Time to put txn log
     std::atomic_int64_t finish_put_txn_log_time_ns = 0;
-    // Time to preload pk
-    std::atomic_int64_t finish_pk_preload_time_ns = 0;
 
     // ====== statistics for close()
 
@@ -272,6 +270,15 @@ public:
         return *this;
     }
 
+    // Pre-set the tablet schema. When provided, DeltaWriter skips the schema lookup that
+    // would otherwise consult TableSchemaService (cache + tablet metadata + FE RPC). Useful
+    // when the caller already holds the exact schema and wants to avoid the dependency on
+    // catalog ids and the schema cache, e.g. lake schema-change rewrites.
+    DeltaWriterBuilder& set_tablet_schema(std::shared_ptr<const TabletSchema> tablet_schema) {
+        _tablet_schema = std::move(tablet_schema);
+        return *this;
+    }
+
     DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
         _partial_update_mode = partial_update_mode;
         return *this;
@@ -330,6 +337,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
 };
 
 } // namespace starrocks::lake

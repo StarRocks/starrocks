@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Use IMPERSONATE privilege with EXECUTE AS to switch the execution context to another user."
 ---
 
 # EXECUTE AS

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 提供多种 HTTP 接口方便集群维护和操作。"
 ---
 
 # HTTP 接口

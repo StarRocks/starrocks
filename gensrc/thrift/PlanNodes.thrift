@@ -225,6 +225,27 @@ enum TFileScanType {
     FILES_QUERY
 }
 
+// Which per-message metadata field a routine-load source-metadata slot is bound to. The FE lowers the
+// INCLUDE METADATA (<KEY> AS <alias>, ...) clause into hidden source slots described by
+// TRoutineLoadMetaColumn, so the BE scanner fills the slot from the Kafka/Pulsar message rather than
+// the payload. TIMESTAMP is the Kafka record timestamp / Pulsar publish time; EVENT_TIME is the Pulsar
+// event time; HEADERS is the whole header/property map (a single value is read with element_at).
+enum TStreamSourceMetaKind {
+    TOPIC = 0,
+    PARTITION = 1,
+    OFFSET = 2,
+    MESSAGE_ID = 3,
+    TIMESTAMP = 4,
+    EVENT_TIME = 5,
+    KEY = 6,
+    HEADERS = 7
+}
+
+struct TRoutineLoadMetaColumn {
+    1: optional Types.TSlotId slot_id
+    2: optional TStreamSourceMetaKind kind
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -289,6 +310,9 @@ struct TBrokerScanRangeParams {
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
     34: optional bool schema_sample_types = true
+    // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
+    // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
+    35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
 }
 
 // Broker scan range
@@ -444,6 +468,9 @@ struct THdfsScanRange {
     // as first_row_id + row_position for non-compacted files.
     // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
+
+    // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
+    38: optional bool use_avro_jni_reader
 }
 
 struct TBinlogScanRange {
@@ -528,6 +555,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
@@ -603,8 +631,8 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
-
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -698,6 +726,8 @@ struct TLakeScanNode {
   45: optional bool enable_gin_filter
 
   46: optional i32 next_uniq_id
+
+  63: optional TTableSampleOptions sample_options
 }
 
 struct TEqJoinCondition {

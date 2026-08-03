@@ -51,6 +51,12 @@ struct LoadSpillPipelineMergeTask {
     // sorted merge (for aggregation/ordering) and union (for DUP_KEYS tables).
     ChunkIteratorPtr merge_itr;
 
+    // Smallest slot_idx (original memtable flush order) among this batch's block groups. Batches are
+    // formed from a contiguous, monotonically increasing slot range, so this gives each batch a stable
+    // order key. The result-consolidation step sorts batches by it so segments/del files are merged in
+    // flush order regardless of the (concurrent, hence unordered) order in which tasks were registered.
+    int64_t slot_idx = -1;
+
     // Metrics for monitoring merge workload distribution across pipeline tasks.
     // Used to ensure roughly equal work distribution and for performance analysis.
     size_t total_block_groups = 0;
@@ -83,8 +89,10 @@ public:
      * @param quit_flag - Shared cancellation flag for all generated tasks
      * @param final_round - If true, merge directly to tablet; if false, merge to intermediate blocks
      */
+    // @param op_aware - forwarded to each TabletInternalParallelMergeTask: whether the merge input carries
+    //                   a trailing hidden __op column (set by the sink, not inferred from the schema).
     LoadSpillPipelineMergeIterator(LoadChunkSpiller* spiller, lake::TabletWriter* parent_writer,
-                                   std::atomic<bool>* quit_flag, bool final_round);
+                                   std::atomic<bool>* quit_flag, bool final_round, bool op_aware);
     ~LoadSpillPipelineMergeIterator() = default;
 
     // Returns current merge task, or nullptr if iteration exhausted
@@ -124,11 +132,20 @@ private:
     // round writing back to spill blocks for next iteration.
     bool _final_round = false;
 
+    // Whether the merge input carries a trailing hidden __op column (forwarded to each task).
+    bool _op_aware = false;
+
     // WHY NEEDED: Determines merge iterator type. DUP_KEYS tables use union iterator
     // (simple concatenation), while AGG/UNIQUE keys use merge iterator (sorted merge
     // with aggregation). This optimization saves CPU cycles for duplicate key tables
     // that don't need ordering/deduplication.
     bool _do_agg = false;
+
+    // Separate-sort-key PK path: the merge orders output by sort key (not PK), so the writer needs a
+    // per-row ordering key (rssid_rowids, carrying slot_idx) to resolve duplicate primary keys by
+    // last-flushed-wins. When true, merge inputs emit rssid_rowids and tasks forward them to the
+    // unsort SST writer.
+    bool _need_rssid_rowids = false;
 
     // Currently available task for pipeline operator to consume
     std::shared_ptr<lake::TabletInternalParallelMergeTask> _current_task;

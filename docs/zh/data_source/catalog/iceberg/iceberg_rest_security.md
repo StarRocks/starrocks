@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 JWT 认证和临时凭证实现 Iceberg REST Catalog 的安全访问和统一权限管理。"
 ---
 
 # Iceberg REST Catalog 的安全设置

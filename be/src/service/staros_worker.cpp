@@ -105,6 +105,7 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
         }
     }
     auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     l.unlock();
     if (ret.second) {
 #ifndef BE_TEST
@@ -144,6 +145,7 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
         StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
 #endif
         _shards.erase(iter);
+        StarRocksMetrics::instance()->staros_shard_count.set_value(_shards.size());
     }
     return absl::OkStatus();
 }

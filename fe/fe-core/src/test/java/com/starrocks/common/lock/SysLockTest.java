@@ -14,7 +14,6 @@
 package com.starrocks.common.lock;
 
 import com.starrocks.catalog.system.sys.SysFeLocks;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -37,7 +36,6 @@ public class SysLockTest {
     @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.lock_manager_enabled = true;
     }
 
     @Test

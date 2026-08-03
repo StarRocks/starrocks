@@ -30,6 +30,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
@@ -86,6 +87,11 @@ public class StreamLoadInfo {
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
+    // "KAFKA"/"PULSAR" for routine load, null otherwise. Scopes the INCLUDE METADATA clause to routine
+    // load and selects the source-dependent metadata keys.
+    private String routineLoadSourceType;
+    // INCLUDE METADATA clause (routine load); null otherwise.
+    private ImportMetadataStmt metadata;
     private long logRejectedRecordNum = 0;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
@@ -119,6 +125,14 @@ public class StreamLoadInfo {
 
     public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
         this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
+    }
+
+    public String getRoutineLoadSourceType() {
+        return routineLoadSourceType;
+    }
+
+    public ImportMetadataStmt getMetadata() {
+        return metadata;
     }
 
     public TUniqueId getId() {
@@ -445,6 +459,8 @@ public class StreamLoadInfo {
         enclose = routineLoadJob.getEnclose();
         escape = routineLoadJob.getEscape();
         computeResource = routineLoadJob.getComputeResource();
+        routineLoadSourceType = routineLoadJob.getDataSourceTypeName();
+        metadata = routineLoadJob.getMetadata();
     }
 
     // used for stream load

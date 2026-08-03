@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Return the quotient of x divide y."
 ---
 
 # divide

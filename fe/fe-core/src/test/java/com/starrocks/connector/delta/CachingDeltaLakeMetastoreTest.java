@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -29,7 +30,6 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Operation;
 import io.delta.kernel.Snapshot;
 import io.delta.kernel.TransactionBuilder;
@@ -145,7 +145,7 @@ public class CachingDeltaLakeMetastoreTest {
 
     @Test
     public void testGetLatestSnapshot1() {
-        Throwable exception = assertThrows(SemanticException.class, () -> {
+        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> {
             new MockUp<HMSBackedDeltaMetastore>() {
                 @mockit.Mock
                 public MetastoreTable getMetastoreTable(String dbName, String tableName) {
@@ -162,7 +162,7 @@ public class CachingDeltaLakeMetastoreTest {
 
             metastore.getLatestSnapshot("db1", "table1");
         });
-        assertThat(exception.getMessage(), containsString("Failed to find Delta table for delta0.db1.table1"));
+        assertThat(exception.getMessage(), containsString("Failed to find Delta table delta0.db1.table1"));
     }
 
     @Test
@@ -244,6 +244,8 @@ public class CachingDeltaLakeMetastoreTest {
         } catch (Exception e) {
             Assertions.assertTrue(e instanceof StarRocksConnectorException);
             Assertions.assertTrue(e.getMessage().contains("invalidated cache"));
+            Assertions.assertNotNull(e.getCause());
+            Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(e).contains("no such obj"));
         }
 
         new MockUp<DeltaLakeMetastore>() {

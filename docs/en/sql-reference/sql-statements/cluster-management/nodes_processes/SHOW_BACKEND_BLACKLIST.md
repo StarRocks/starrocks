@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shows the BE/CN nodes in the BE and CN Blacklist."
 ---
 
 # SHOW BACKEND/COMPUTE NODE BLACKLIST

@@ -362,6 +362,11 @@ public class ShowStmtAnalyzer {
         }
 
         private void descTableFunctionTable(DescribeStmt node, ConnectContext context) {
+            Map<String, String> tfProps = node.getTableFunctionProperties();
+            if (tfProps.containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
+                throw new SemanticException(
+                        "'schema' is not supported in DESC FILES; remove it and rely on schema inference");
+            }
             Table table = null;
             try {
                 table = new TableFunctionTable(node.getTableFunctionProperties());
@@ -447,7 +452,10 @@ public class ShowStmtAnalyzer {
                     // show base table schema only
                     String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
                             + "/";
-                    if (table.getType() == Table.TableType.OLAP) {
+                    // Cloud-native (lake) tables must also address the base index by its meta id:
+                    // IndexInfoProcDir.lookup() now resolves cloud-native tables per index meta id,
+                    // so passing table.getId() here would yield an empty schema for DESC <lake_table>.
+                    if (table.isOlapOrCloudNativeTable()) {
                         procString += ((OlapTable) table).getBaseIndexMetaId();
                     } else {
                         procString += table.getId();

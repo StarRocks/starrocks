@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
+description: "BE configuration parameters for statistics collection and storage engine settings."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -35,7 +36,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Statistic report](#statistic-report)
 - [Storage](#storage)
 
@@ -243,6 +244,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum memory size allowed for each Compaction thread.
 - Introduced in: -
 
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- Default: -1
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: Controls when compaction releases retained internal chunk capacity. Currently, this parameter takes effect only for Primary Key table compaction in shared-nothing clusters. When the current compaction task memory tracker consumption exceeds `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100`, StarRocks releases retained chunk capacity while resetting internal chunks. A negative value disables this behavior.
+- Introduced in: -
+
 ### compaction_trace_threshold
 
 - Default: 60
@@ -430,15 +440,6 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
-- Introduced in: -
-
-### enable_pk_index_eager_build
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to eagerly build Primary Key index files during data import and compaction phases. When enabled, the system generates persistent PK index files immediately during data writes, improving subsequent query performance.
 - Introduced in: -
 
 ### enable_pk_size_tiered_compaction_strategy
@@ -909,6 +910,33 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
 - Introduced in: -
 
+### pk_index_parallel_rebuild_mem_ratio
+
+- Default: 50
+- Type: Int
+- Unit: percent (0-100)
+- Is mutable: Yes
+- Description: In a shared-data cluster, the memory-pressure gate for the parallel prefetch paths used while rebuilding the Primary Key index. When the update mem tracker is already past this percent of its limit, the rebuild falls back to a single-pass loop that holds only one decoded column at a time, trading the cold-start latency win for bounded peak memory. It gates parallel reads of delete files, segment files, and other files during the rebuild. Set to a higher value to allow the optimization under more memory pressure; set to `100` to disable the memory gate (always run the parallel path when `enable_pk_index_parallel_execution=true`).
+- Introduced in: -
+
+### lake_partial_update_thread_pool_max_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to half of the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
+- Introduced in: v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- Default: 2048
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The task queue size for the lake partial update thread pool.
+- Introduced in: v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - Default: 10
@@ -960,7 +988,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: When `enable_pk_index_eager_build` is set to true, the system will eagerly build PK index files only if the data generated during import or compaction exceeds this threshold. Default is 100MB.
+- Description: The minimum size of data generated during import or compaction for the system to eagerly build PK index files. Default is 100MB.
 - Introduced in: -
 
 ### primary_key_limit_size

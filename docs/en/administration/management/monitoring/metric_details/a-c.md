@@ -305,6 +305,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
 
+## `block_cache_hit_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache hits.
+
+## `block_cache_miss_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache misses.
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`
@@ -381,6 +393,16 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Bytes
 - Description: Memory used for replica clone.
+
+## `cluster_snapshot_consecutive_failures`
+
+- Unit: Count
+- Description: Number of consecutive failed automated cluster snapshot jobs since the last successful one. A persistently increasing value indicates the snapshot storage volume is misconfigured or unreachable.
+
+## `cluster_snapshot_last_finished_time`
+
+- Unit: Milliseconds
+- Description: Epoch time (in milliseconds) of the last finished automated cluster snapshot, or 0 if none has finished.
 
 ## `column_metadata_mem_bytes`
 

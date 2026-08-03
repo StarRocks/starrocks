@@ -101,9 +101,14 @@ CMakeLists.txt
 .claude
 CLAUDE.md
 AGENTS.md
+!docs/.claude/
+!docs/.claude/**
+docs/.claude/settings.local.json
 .clangd
 .cursor/
 .codex/
+.worktrees/
+handbook/plans/local/
 
 
 !build-mac/CMakeLists.txt
@@ -117,3 +122,5 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 _codeql_detected_source_root
+
+.lycheecache

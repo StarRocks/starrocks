@@ -70,6 +70,7 @@
 #include "storage/olap_type_infra.h"
 #include "storage/options.h"
 #include "storage/primary_key_dump.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -377,17 +378,16 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
 
     // Open the table via the official API for full KV iteration.
     Options tbl_opts;
-    Table* table = nullptr;
-    st = Table::Open(tbl_opts, file.get(), file_size, &table);
+    std::unique_ptr<Table> table;
+    st = Table::Open(tbl_opts, file.get(), file_size, table);
     if (!st.ok()) {
         std::cerr << "open SST table for iteration failed: " << st << std::endl;
         return;
     }
-    std::unique_ptr<Table> table_guard(table);
 
     ReadOptions iter_opts;
     iter_opts.fill_cache = false;
-    auto* iter = table_guard->NewIterator(iter_opts);
+    auto* iter = table->NewIterator(iter_opts);
     std::unique_ptr<Iterator> iter_guard(iter);
 
     // Dump all key-value entries.
@@ -1899,9 +1899,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         dump_lake_persistent_index_sst(FLAGS_file, enc_info);
     } else if (FLAGS_operation == "print_lake_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
-        if (!metadata.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&metadata, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse tablet metadata: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1982,9 +1987,14 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << json << '\n';
         }
     } else if (FLAGS_operation == "print_lake_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TxnLogPB txn_log;
-        if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1997,9 +2007,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::CombinedTxnLogPB combined_txn_log;
-        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse combined txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&combined_txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse combined txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;

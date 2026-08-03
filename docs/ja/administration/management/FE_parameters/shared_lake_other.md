@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
 ---
 
@@ -272,6 +273,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は HDFS、Azure Blob (v3.1.1 以降でサポート)、Azure Data Lake Storage Gen2 (v3.4.1 以降でサポート)、Google Storage (ネイティブ SDK、v3.5.1 以降でサポート)、および S3 プロトコルと互換性のあるオブジェクトストレージシステム (AWS S3、MinIO など) にデータを格納することをサポートしています。有効な値: `S3` (デフォルト)、`HDFS`、`AZBLOB`、`ADLS2`、および `GS`。このパラメーターを `S3` に指定した場合、`aws_s3` で始まるパラメーターを追加する必要があります。`AZBLOB` に指定した場合、`azure_blob` で始まるパラメーターを追加する必要があります。`ADLS2` に指定した場合、`azure_adls2` で始まるパラメーターを追加する必要があります。`GS` に指定した場合、`gcp_gcs` で始まるパラメーターを追加する必要があります。`HDFS` に指定した場合、`cloud_native_hdfs_url` のみを指定する必要があります。
 - 導入時期：-
 
+### `enable_admin_skip_committed_txn`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`ADMIN SKIP COMMITTED TRANSACTION` 文を有効にするかどうかを制御します。`false` の場合、当該文はエラーで拒否されます。共有データ（lake）テーブル上で publish が永久にスタックした `COMMITTED` トランザクションを運用者が手動で解除するための非常用エスケープハッチです。スタックしたトランザクションのデータ寄与は破棄されますが、「no-op publish」（このトランザクションのデータ変更を含まない新しい tablet メタデータファイルを書き出す）によってパーティションの可視バージョンは前進します。対応するのは `file_bundling=true` の lake テーブル、かつインポートと lake-compaction 種別のトランザクションのみ（alter / schema-change は未対応）。誤操作を防ぐため、運用者がスタックしたトランザクションを解除する必要があるときだけ有効化し、復旧後は速やかに無効化してください。
+- 導入時期：-
+
 ### `enable_load_volume_from_conf`
 
 - デフォルト：false
@@ -487,6 +497,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
 
+### `slow_publish_partition_log_threshold_ms`
+
+- デフォルト：3000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`PublishVersionDaemon` がパーティション公開の所要時間がこの値を超えた場合に、各フェーズの内訳（`executor_queue` + `db_lock_wait` + `fe_prep` + `rpc`）を WARN レベルで出力するしきい値です。稼働中のクラスターで公開レイテンシを調査する際は、この値を下げてサブ秒単位のジッターを捕捉できます。通常の許容範囲内の遅い公開を抑制するには、この値を上げます。デフォルト値では動作に変更はありません。
+- 導入時期：v4.2
+
 ### `meta_sync_force_delete_shard_meta`
 
 - デフォルト：false
@@ -627,6 +646,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：有効にすると、PublishVersionDaemon は同じ Lake (共有データ) テーブル/パーティションの準備完了トランザクションをバッチ処理し、トランザクションごとの公開を発行するのではなく、まとめてバージョンを公開します。RunMode shared-data では、デーモンは getReadyPublishTransactionsBatch() を呼び出し、publishVersionForLakeTableBatch(...) を使用してグループ化された公開操作を実行します (RPC を削減し、スループットを向上させます)。無効の場合、デーモンは publishVersionForLakeTable(...) を介してトランザクションごとの公開にフォールバックします。実装は、スイッチが切り替えられたときに重複公開を避けるために内部セットを使用して進行中の作業を調整し、`lake_publish_version_max_threads` を介したスレッドプールサイズ設定の影響を受けます。
 - 導入時期：v3.2.0
+
+### `lake_enable_batch_publish_multi_table`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：バッチ発行 (Batch Publish) が連続する複数テーブルトランザクションを 1 回の発行操作にまとめることを許可するかどうか。同じテーブル群にまたがる小さなアトミックトランザクションを高頻度でコミットするワークロード（例えば、複数のテーブルに書き込む CDC パイプライン）に有効です。このようなワークロードでは、トランザクションごとの発行が共有テーブルの依存チェーン上で直列化され、コミットから可視化までのレイテンシーが増大します。`lake_enable_batch_publish_version` が `true` の場合にのみ有効です。すべての FE ノードがこの機能をサポートするバージョンにアップグレードされた後にのみ、このパラメータを有効にしてください。旧バージョンで動作している FE Follower が複数テーブルのトランザクションバッチをリプレイすると、最初のテーブルの Visible Log のみが適用されます。
+- 導入時期：v4.1.5
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -1017,6 +1045,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：JDBC カタログのメタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable` が true に設定されている場合、新しく作成された JDBC カタログはデフォルトでメタデータキャッシュの有効期限を設定します。
 - 導入時期：-
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- デフォルト：600
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュのバックグラウンド更新間隔。この間隔を過ぎると、古い値を即座に返しながらバックグラウンドで非同期に再読み込みします。カタログプロパティ `jdbc_row_count_cache_refresh_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_expire_sec`
+
+- デフォルト：1200
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュエントリの強制削除 TTL。この期間内にアクセスされなかったエントリは削除されます。`jdbc_row_count_cache_refresh_sec` より大きい値を設定してください。カタログプロパティ `jdbc_row_count_cache_expire_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_max_size`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：JDBC カタログごとの行数キャッシュの最大エントリ数。テーブル数が多いカタログのメモリ増大を制限します。カタログプロパティ `jdbc_row_count_cache_max_size` でカタログごとに上書き可能です。
+- 導入時期：-
+
 ### `jdbc_minimum_idle_connections`
 
 - デフォルト：1
@@ -1375,3 +1430,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
+
+### `transform_type_prefer_string_for_varchar`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：マテリアライズドビュー作成時、固定長の char/varchar 列に string 型を優先するかどうか。
+- 導入時期：v4.0.0

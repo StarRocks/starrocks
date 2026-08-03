@@ -229,7 +229,12 @@ void FragmentContext::set_final_status(const Status& status) {
                                             ? _workgroup->executors()
                                             : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
             auto* executor = executors->driver_executor();
-            iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+            if (executor == nullptr) {
+                LOG(WARNING) << "[Driver] driver_executor is null, skip cancel drivers, query_id="
+                             << print_id(_query_id);
+            } else {
+                iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
+            }
         }
 
         // cancel drivers in event scheduler
@@ -384,14 +389,14 @@ void FragmentContext::clear_pipeline_timer() {
         if (!_rf_timeout_tasks.empty()) {
             for (auto& [ignore, task] : _rf_timeout_tasks) {
                 if (task) {
-                    task->unschedule(_pipeline_timer);
+                    task->unschedule_and_wait(_pipeline_timer);
                     task.reset();
                 }
             }
             _rf_timeout_tasks.clear();
         }
         if (_timeout_task) {
-            _timeout_task->unschedule(_pipeline_timer);
+            _timeout_task->unschedule_and_wait(_pipeline_timer);
             _timeout_task.reset();
         }
     }

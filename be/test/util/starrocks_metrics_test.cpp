@@ -139,6 +139,12 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_STREQ("104", metric->to_string().c_str());
     }
     {
+        instance->staros_shard_count.set_value(7);
+        auto metric = metrics->get_metric("staros_shard_count");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("7", metric->to_string().c_str());
+    }
+    {
         instance->query_scan_bytes.increment(104);
         auto metric = metrics->get_metric("query_scan_bytes");
         ASSERT_TRUE(metric != nullptr);
@@ -381,7 +387,6 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_commit_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_task_total"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_duration_us"));
-    ASSERT_NE(nullptr, instance->get_metric("delta_writer_pk_preload_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("delta_writer_txn_commit_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));

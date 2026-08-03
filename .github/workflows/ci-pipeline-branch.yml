@@ -252,14 +252,14 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
         uses: actions/upload-artifact@v6
-        if: always()
+        if: always() && steps.run_ut.outputs.BE_LOG
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -281,6 +281,7 @@ jobs:
     if: needs.basic-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
+      thirdparty: ${{ steps.fe-changes-info.outputs.thirdparty }}
     steps:
       - uses: dorny/paths-filter@v3
         id: changes
@@ -292,6 +293,9 @@ jobs:
               - 'run-fe-ut.sh'
               - 'java-extensions/**'
               - 'build.sh'
+            thirdparty:
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
@@ -299,6 +303,7 @@ jobs:
         id: fe-changes-info
         run: |
           echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   fe-codestyle-check:
     runs-on: ubuntu-latest
@@ -364,10 +369,15 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: fe-codestyle-check
+    needs: [fe-checker, fe-codestyle-check, thirdparty-info]
+    if: >
+      always() &&
+      needs.fe-codestyle-check.result == 'success' &&
+      (needs.thirdparty-info.result == 'success' || needs.thirdparty-info.result == 'skipped')
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: clean
         run: |
@@ -379,7 +389,7 @@ jobs:
         run: |
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
@@ -388,18 +398,22 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ "${{ needs.fe-checker.outputs.thirdparty }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always()
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG

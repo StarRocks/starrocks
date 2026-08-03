@@ -237,6 +237,12 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
+    // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
+    private final Set<String> viewExpansionPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     // Control whether to read Iceberg caches without populating/updating them for the current execution.
@@ -369,6 +375,13 @@ public class ConnectContext {
 
     /**
      * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     * <p>
+     * Note: callers that subsequently invoke {@link #setCurrentWarehouse(String)} or
+     * {@link #setCurrentWarehouseId(long)} must re-apply
+     * {@code setEnableMaterializedViewRewrite(false)} (and any other per-context
+     * session-variable override) AFTER the warehouse switch, because setCurrentWarehouse
+     * replaces the sessionVariable with a fresh clone of the global default and silently
+     * discards earlier overrides.
      */
     public static ConnectContext buildInner() {
         ConnectContext connectContext = new ConnectContext();
@@ -935,6 +948,10 @@ public class ConnectContext {
         return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
+    public String getCustomSessionName() {
+        return sessionVariable != null ? sessionVariable.getCustomSessionName() : "";
+    }
+
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
@@ -1258,6 +1275,10 @@ public class ConnectContext {
 
     public boolean isRelationAliasCaseInsensitive() {
         return relationAliasCaseInsensitive;
+    }
+
+    public Set<String> getViewExpansionPath() {
+        return viewExpansionPath;
     }
 
     public void setForwardTimes(int forwardTimes) {

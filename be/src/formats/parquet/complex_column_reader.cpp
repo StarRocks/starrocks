@@ -140,6 +140,22 @@ Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src_in) {
     return Status::OK();
 }
 
+Status ListColumnReader::finalize_lazy_state(ColumnPtr& col) {
+    auto* col_mut = col->as_mutable_raw_ptr();
+    ArrayColumn* array_column = nullptr;
+    if (col->is_nullable()) {
+        NullableColumn* nullable_column = down_cast<NullableColumn*>(col_mut);
+        DCHECK(nullable_column->data_column_raw_ptr()->is_array());
+        array_column = down_cast<ArrayColumn*>(nullable_column->data_column_raw_ptr());
+    } else {
+        DCHECK(col->is_array());
+        array_column = down_cast<ArrayColumn*>(col_mut);
+    }
+    auto& elements = array_column->elements_column();
+    RETURN_IF_ERROR(_element_reader->finalize_lazy_state(elements));
+    return Status::OK();
+}
+
 Status MapColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     NullableColumn* nullable_column = nullptr;
     MapColumn* map_column = nullptr;
@@ -231,25 +247,26 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
-                auto& child_column = struct_column->field_column(field_name);
+                ASSIGN_OR_RETURN(auto& child_column, struct_column->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;
             }
         } else {
-            return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));
+            return Status::InternalError(strings::Substitute("there is no match subfield reader for $0", field_name));
         }
     }
 
     if (UNLIKELY(first_read)) {
-        return Status::InternalError(strings::Substitute("All used subfield of struct type $1 is not exist",
+        return Status::InternalError(strings::Substitute("All used subfield of struct type $0 is not exist",
                                                          get_column_parquet_field()->name));
     }
 
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (_child_readers[field_name] == nullptr) {
-            auto* child_column = struct_column->field_column_raw_ptr(field_name);
+            ASSIGN_OR_RETURN(auto* child_column, struct_column->field_column_raw_ptr(field_name));
+
             child_column->append_default(real_read);
         }
     }
@@ -298,7 +315,7 @@ Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
         DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(column_mut);
     }
-    auto& field_col = struct_column->field_column(sub_field);
+    ASSIGN_OR_RETURN(auto& field_col, struct_column->field_column(sub_field));
     auto ans = _child_readers[sub_field]->filter_dict_column(field_col, filter, sub_field_path, layer + 1);
     return ans;
 }
@@ -328,16 +345,40 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] == nullptr) {
-                auto* dst_field = struct_column_dst->field_column_raw_ptr(field_name);
-                auto* src_field = struct_column_src->field_column_raw_ptr(field_name);
+                ASSIGN_OR_RETURN(auto* dst_field, struct_column_dst->field_column_raw_ptr(field_name));
+                ASSIGN_OR_RETURN(auto* src_field, struct_column_src->field_column_raw_ptr(field_name));
+
                 dst_field->swap_column(*src_field);
             } else {
-                auto& dst_field = struct_column_dst->field_column(field_name);
-                auto& src_field = struct_column_src->field_column(field_name);
+                ASSIGN_OR_RETURN(auto& dst_field, struct_column_dst->field_column(field_name));
+                ASSIGN_OR_RETURN(auto& src_field, struct_column_src->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
             }
         } else {
-            return Status::InternalError(strings::Substitute("there is no match subfield reader for $1", field_name));
+            return Status::InternalError(strings::Substitute("there is no match subfield reader for $0", field_name));
+        }
+    }
+    return Status::OK();
+}
+
+Status StructColumnReader::finalize_lazy_state(ColumnPtr& col) {
+    auto* col_mut = col->as_mutable_raw_ptr();
+    StructColumn* struct_column = nullptr;
+    if (col->is_nullable()) {
+        NullableColumn* nullable_column = down_cast<NullableColumn*>(col_mut);
+        DCHECK(nullable_column->data_column_raw_ptr()->is_struct());
+        struct_column = down_cast<StructColumn*>(nullable_column->data_column_raw_ptr());
+    } else {
+        DCHECK(col->is_struct());
+        struct_column = down_cast<StructColumn*>(col_mut);
+    }
+    const auto& field_names = struct_column->field_names();
+    for (size_t i = 0; i < field_names.size(); i++) {
+        const auto& field_name = field_names[i];
+        auto it = _child_readers.find(field_name);
+        if (it != _child_readers.end() && it->second != nullptr) {
+            ASSIGN_OR_RETURN(auto& child_col, struct_column->field_column(field_name));
+            RETURN_IF_ERROR(it->second->finalize_lazy_state(child_col));
         }
     }
     return Status::OK();
@@ -409,7 +450,7 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
         auto ret = column_reader->page_index_zone_map_filter({rewrite_subfield_predicate}, cur_row_ranges,
                                                              pred_relation, rg_first_row, rg_num_rows);
         // page_index_zone_map_filter failed, always return false, no page index filter happened
-        RETURN_IF(!res.ok(), false);
+        RETURN_IF(!ret.ok(), false);
 
         return ret.value();
     };

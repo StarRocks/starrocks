@@ -35,6 +35,7 @@ import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class PulsarTaskInfo extends RoutineLoadTaskInfo {
@@ -131,6 +132,14 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             tPulsarLoadInfo.setInitial_positions(getInitialPositions());
         }
         tPulsarLoadInfo.setProperties(routineLoadJob.getConvertedCustomProperties());
+        // Attach per-message source metadata only when the INCLUDE METADATA clause declares a column;
+        // otherwise the BE leaves the buffer metadata-free and reads every field from the payload.
+        // key/headers are gated more narrowly.
+        Set<RoutineLoadMetadata.StreamMetaKind> metaKinds = RoutineLoadMetadata.collectStreamMetaKinds(
+                routineLoadJob.getMetadata(), routineLoadJob.getDataSourceTypeName());
+        tPulsarLoadInfo.setNeed_source_metadata(!metaKinds.isEmpty());
+        tPulsarLoadInfo.setNeed_message_key(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.KEY));
+        tPulsarLoadInfo.setNeed_message_headers(metaKinds.contains(RoutineLoadMetadata.StreamMetaKind.HEADERS));
         tRoutineLoadTask.setPulsar_load_info(tPulsarLoadInfo);
         tRoutineLoadTask.setType(TLoadSourceType.PULSAR);
         tRoutineLoadTask.setParams(plan(routineLoadJob));

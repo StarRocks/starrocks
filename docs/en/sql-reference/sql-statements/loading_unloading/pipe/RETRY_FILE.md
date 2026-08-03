@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "RETRY FILE retries to load all data files or a specific data file in a pipe."
 ---
 
 # RETRY FILE

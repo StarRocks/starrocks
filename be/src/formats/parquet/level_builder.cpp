@@ -606,7 +606,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
                                     ctx._repeated_ancestor_def_level);
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
-        auto sub_col = struct_col->field_column(type_desc.field_names[i]);
+        ASSIGN_OR_RETURN(auto sub_col, struct_col->field_column(type_desc.field_names[i]));
         RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
                                             write_leaf_callback));
     }

@@ -16,6 +16,7 @@
 
 #include <bthread/types.h>
 
+#include <set>
 #include <shared_mutex>
 #include <variant>
 #include <vector>
@@ -38,6 +39,7 @@ struct TabletBasicInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
+class TGetTabletMetadataResponse;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -92,7 +94,29 @@ public:
 
     Status cache_tablet_metadata(const TabletMetadataPtr& metadata);
 
-    Status put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas);
+    // Persist every entry of |tablet_metas| into a single bundle metadata file named after the
+    // version they all share.
+    //
+    // |expected_tablet_ids| is the set of tablets the caller was asked to produce metadata for, or
+    // empty to skip the coverage check.
+    //
+    // The bundle is written with CREATE_OR_OPEN_WITH_TRUNCATE, i.e. the file IS the complete
+    // metadata for that version: a map short by even one tablet silently yields a version whose
+    // metadata is missing that tablet. That is unrecoverable once FE marks the version visible,
+    // because every later publish must read exactly that version as its base -- retries can only
+    // reproduce the same miss. So refuse to write anything unless the map covers the expected set.
+    // Extra tablets beyond that set are tolerated -- only under-coverage loses data.
+    //
+    // The set is only worth passing when it comes from a source independent of whatever produced
+    // |tablet_metas|; derived from the same place it would just compare that source against itself.
+    // Callers with no such source pass empty -- which is also what the single-argument overload
+    // does, leaving them exactly as they were.
+    Status put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas,
+                                      const std::set<int64_t>& expected_tablet_ids);
+
+    Status put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+        return put_bundle_tablet_metadata(tablet_metas, {});
+    }
 
     // When using get_tablet_metadata to determine whether a new version exists in publish version,
     // a valid expected_gtid must be passed in.
@@ -300,6 +324,13 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+    StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
+    // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
+    StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
+    // Parse (table_id, partition_id, index_id) from StarOS shard properties. Exposed for unit tests.
+    static Status parse_shard_properties(int64_t tablet_id,
+                                         const std::unordered_map<std::string, std::string>& properties,
+                                         int64_t* table_id, int64_t* partition_id, int64_t* index_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);

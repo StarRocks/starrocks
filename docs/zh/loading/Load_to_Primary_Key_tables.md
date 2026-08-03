@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在 Primary Key 表中通过 Stream Load、Broker Load 或 Routine Load 实现 INSERT、UPDATE、DELETE 操作。"
 keywords: ['zhujian']
 ---
 

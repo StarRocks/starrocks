@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DELETE 操作後，StarRocks が一定期間ゴミ箱にデータを保持し、RECOVER コマンドで誤削除したデータベース・テーブル・パーティションを復旧できます。"
 ---
 
 # データリカバリ

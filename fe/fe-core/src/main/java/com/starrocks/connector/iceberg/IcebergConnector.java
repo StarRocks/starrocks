@@ -52,7 +52,6 @@ public class IcebergConnector implements Connector {
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
-    private ExecutorService refreshOtherFeExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
     private final IcebergProcedureRegistry procedureRegistry;
@@ -119,7 +118,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties,
+                buildIcebergJobPlanningExecutor(), icebergCatalogProperties,
                 connectorProperties, procedureRegistry, commitQueueManager);
     }
 
@@ -149,14 +148,6 @@ public class IcebergConnector implements Connector {
         return icebergJobPlanningExecutor;
     }
 
-    public ExecutorService buildRefreshOtherFeExecutor() {
-        if (refreshOtherFeExecutor == null) {
-            refreshOtherFeExecutor = newWorkerPool(catalogName + "-refresh-others-fe-iceberg-metadata-cache",
-                    icebergCatalogProperties.getRefreshOtherFeIcebergCacheThreadNum());
-        }
-        return refreshOtherFeExecutor;
-    }
-
     private ExecutorService buildBackgroundJobPlanningExecutor() {
         return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
                 icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
@@ -172,9 +163,6 @@ public class IcebergConnector implements Connector {
                 .unRegisterCachingIcebergCatalog(catalogName);
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
-        }
-        if (refreshOtherFeExecutor != null) {
-            refreshOtherFeExecutor.shutdown();
         }
         if (commitQueueManager != null) {
             commitQueueManager.shutdownAll();

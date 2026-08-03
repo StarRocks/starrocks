@@ -26,6 +26,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "storage/flat_json_config.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -291,6 +292,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 }
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::SCHEMA_CHANGE);
     int64_t signatrue = agent_task_req->signature;
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
                                                      agent_task_req->task_req.base_tablet_id);
@@ -353,6 +355,7 @@ void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskR
 }
 
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::CLONE);
     StarRocksMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
@@ -576,6 +579,7 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
 }
 
 void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     const TCompactionReq& compaction_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -624,6 +628,7 @@ void run_compaction_control_task(const std::shared_ptr<CompactionControlTaskRequ
 }
 
 void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::SCHEMA_CHANGE);
     const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -973,6 +978,14 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 binlog_config.update(tablet_meta_info.binlog_config);
                 tablet->update_binlog_config(binlog_config);
                 break;
+            case TTabletMetaType::FLAT_JSON_CONFIG: {
+                FlatJsonConfig flat_json_config;
+                flat_json_config.update(tablet_meta_info.flat_json_config);
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " flat_json_config, version: " << flat_json_config.get_flat_json_config_version();
+                tablet->update_flat_json_config(flat_json_config);
+                break;
+            }
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;
@@ -1031,6 +1044,7 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
 
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req,
                               ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
@@ -1081,6 +1095,7 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
                                  ExecEnv* exec_env) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::REPLICATION);
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 

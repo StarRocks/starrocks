@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: Google Cloud Storage (GCS)
-description: "This topic describes how to authenticate with GCS"
+description: "How to configure StarRocks to authenticate with Google Cloud Storage (GCS)."
 ---
 
 # Authenticate to Google Cloud Storage

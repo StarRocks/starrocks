@@ -163,24 +163,33 @@ StatusOr<std::string> HiveUtils::iceberg_column_value(const TypeDescriptor& type
         timeinfo.tm_year = year - 1900;
         timeinfo.tm_mon = month - 1;
         char buffer[10];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m", &timeinfo);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg month partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr == "day") {
         const auto days_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(days_from_epoch) * 86400;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm_utc);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg day partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr == "hour") {
         const auto hours_from_epoch = ColumnViewer<TYPE_BIGINT>(column).value(idx);
         std::time_t seconds = static_cast<std::time_t>(hours_from_epoch) * 3600;
         std::tm tm_utc;
         gmtime_r(&seconds, &tm_utc);
         char buffer[20];
-        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
-        value = std::string(buffer);
+        size_t written = std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H", &tm_utc);
+        if (written == 0) {
+            return Status::InternalError("strftime overflow formatting iceberg hour partition");
+        }
+        value = std::string(buffer, written);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
         ASSIGN_OR_RETURN(value, column_value(type_desc, column, idx));
     } else if (transform_expr.compare(0, 6, "bucket") == 0) {

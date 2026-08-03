@@ -146,17 +146,15 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THdfsPartition& thrift_pa
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
-Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
-    RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
-    return Status::OK();
-}
-
 std::string HdfsPartitionDescriptor::debug_string() const {
     std::stringstream out;
     out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format
-        << ", partition_key_value_evals=" << Expr::debug_string(_partition_key_value_evals);
+        << ", partition_key_exprs=[";
+    for (size_t i = 0; i < _thrift_partition_key_exprs.size(); ++i) {
+        if (i > 0) out << ", ";
+        out << apache::thrift::ThriftDebugString(_thrift_partition_key_exprs[i]);
+    }
+    out << "])";
     return out.str();
 }
 
@@ -174,6 +172,9 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _input_format = tdesc.hdfsTable.input_format;
     _serde_lib = tdesc.hdfsTable.serde_lib;
     _serde_properties = tdesc.hdfsTable.serde_properties;
+    if (tdesc.hdfsTable.__isset.avro_schema_json) {
+        _avro_schema_json = tdesc.hdfsTable.avro_schema_json;
+    }
     _time_zone = tdesc.hdfsTable.time_zone;
 }
 
@@ -195,6 +196,10 @@ const std::string& HdfsTableDescriptor::get_serde_lib() const {
 
 const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
     return _serde_properties;
+}
+
+const std::string& HdfsTableDescriptor::get_avro_schema_json() const {
+    return _avro_schema_json;
 }
 
 const std::string& HdfsTableDescriptor::get_time_zone() const {
@@ -475,22 +480,33 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
     return tPartitionMap;
 }
 
-Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
-                                                const THdfsPartition& thrift_partition) {
-    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition));
-    RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
+Status HiveTableDescriptor::add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition) {
+    auto mismatch_status = [&](const HdfsPartitionDescriptor* old_partition) {
+        return Status::InternalError(
+                fmt::format("Partition id {} already exists with different partition_key_exprs. "
+                            "new partition (thrift) = {}, old_partition = {}",
+                            id, apache::thrift::ThriftDebugString(thrift_partition), old_partition->debug_string()));
+    };
+
     {
-        std::unique_lock lock(_map_mutex);
+        std::shared_lock lock(_map_mutex);
         const auto it = _partition_id_to_desc_map.find(id);
         if (it != _partition_id_to_desc_map.end()) {
             auto* old_partition = it->second;
-            if (partition->thrift_partition_key_exprs() != old_partition->thrift_partition_key_exprs()) {
-                return Status::InternalError(
-                        fmt::format("Partition id {} already exists. new partition = {}, old_partition = {}", id,
-                                    partition->debug_string(), old_partition->debug_string()));
+            if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+                return mismatch_status(old_partition);
             }
-        } else {
-            _partition_id_to_desc_map[id] = partition;
+            return Status::OK();
+        }
+    }
+
+    auto* partition = pool->add(new HdfsPartitionDescriptor(thrift_partition));
+    std::unique_lock lock(_map_mutex);
+    auto [it, inserted] = _partition_id_to_desc_map.emplace(id, partition);
+    if (!inserted) {
+        auto* old_partition = it->second;
+        if (thrift_partition.partition_key_exprs != old_partition->thrift_partition_key_exprs()) {
+            return mismatch_status(old_partition);
         }
     }
     return Status::OK();
@@ -745,9 +761,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             desc = pool->add(new EsTableDescriptor(tdesc));
             break;
         case TTableType::HDFS_TABLE: {
-            auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool));
-            desc = hdfs_desc;
+            desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::FILE_TABLE: {
@@ -757,20 +771,15 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_TABLE: {
             auto* iceberg_desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
-            RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool));
             desc = iceberg_desc;
             break;
         }
         case TTableType::DELTALAKE_TABLE: {
-            auto* delta_lake_desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool));
-            desc = delta_lake_desc;
+            desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::HUDI_TABLE: {
-            auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool));
-            desc = hudi_desc;
+            desc = pool->add(new HudiTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::PAIMON_TABLE: {
@@ -822,9 +831,6 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
         SlotDescriptor* slot_d = pool->add(new SlotDescriptor(tdesc));
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
-        if (!slot_d->col_name().empty()) {
-            (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
-        }
         // link to parent
         auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
@@ -861,17 +867,6 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     auto i = _slot_desc_map.find(id);
 
     if (i == _slot_desc_map.end()) {
-        return nullptr;
-    } else {
-        return i->second;
-    }
-}
-
-SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
-    // TODO: is there some boost function to do exactly this?
-    auto i = _slot_with_column_name_map.find(id);
-
-    if (i == _slot_with_column_name_map.end()) {
         return nullptr;
     } else {
         return i->second;

@@ -47,6 +47,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -291,8 +292,10 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             return entries;
         }
 
-        Set<DataFile> tmpDataFiles = Sets.newHashSet();
-        Set<DeleteFile> tmpDeleteFiles = Sets.newHashSet();
+        // Concurrent set: a plain HashSet mutated by the parallel manifest fill can report size()==expected
+        // while missing a file, letting an incomplete entry pass the read-side size check.
+        Set<DataFile> tmpDataFiles = ConcurrentHashMap.newKeySet();
+        Set<DeleteFile> tmpDeleteFiles = ConcurrentHashMap.newKeySet();
         if (shouldCacheDataFiles) {
             final Set<Integer> requestedColumnIds =
                     identifierFieldIds != null && !identifierFieldIds.isEmpty() ? identifierFieldIds : null;

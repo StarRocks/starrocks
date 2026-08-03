@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stream Load、Broker Load、Routine Load、INSERT、Spark Load、Pipe など StarRocks のデータロードオプション選択ガイド。"
 toc_max_heading_level: 3
 ---
 

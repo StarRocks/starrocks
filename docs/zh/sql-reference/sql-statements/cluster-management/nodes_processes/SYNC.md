@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SYNC 同步不同 Session 之间的数据一致性。"
 ---
 
 # SYNC

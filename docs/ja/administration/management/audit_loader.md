@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AuditLoader プラグインを使用して StarRocks 内のテーブルで監査ログを管理する方法。"
 ---
 
 # AuditLoader を使用して StarRocks 内の監査ログを管理する

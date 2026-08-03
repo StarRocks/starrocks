@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Data Cache 常见问题解答包括缓存未命中、性能问题的故障排除和解决方案。"
 ---
 
 # Data Cache 常见问题解答

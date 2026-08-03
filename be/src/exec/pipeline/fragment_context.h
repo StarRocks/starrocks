@@ -212,6 +212,13 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
+    // MorselQueueFactory must outlive the pipelines/operators declared below: a
+    // scan operator's ConnectorChunkSource::close() is invoked from ~ScanOperator
+    // during _pipelines teardown and calls back into the MorselQueueFactory via
+    // ScanOperatorFactory::morsel_queue_factory(). Declaring _morsel_queue_factories
+    // before _pipelines makes it destroyed after them, avoiding a use-after-free on
+    // non-EOF (cancel/error/limit) teardown paths.
+    MorselQueueFactoryMap _morsel_queue_factories;
     Pipelines _pipelines;
     ExecutionGroups _execution_groups;
     std::atomic<size_t> _num_finished_execution_groups = 0;
@@ -224,7 +231,6 @@ private:
 
     RuntimeFilterHub _runtime_filter_hub;
 
-    MorselQueueFactoryMap _morsel_queue_factories;
     workgroup::WorkGroupPtr _workgroup = nullptr;
 
     std::atomic<Status*> _final_status = nullptr;

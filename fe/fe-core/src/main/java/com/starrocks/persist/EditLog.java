@@ -591,6 +591,11 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
                     break;
                 }
+                case OperationType.OP_COLOCATE_RANGE_UPDATE: {
+                    final ColocateRangePersistInfo info = (ColocateRangePersistInfo) journal.data();
+                    globalStateMgr.getColocateTableIndex().replayColocateRangeUpdate(info);
+                    break;
+                }
                 case OperationType.OP_HEARTBEAT_V2: {
                     final HbPackage hbPackage = (HbPackage) journal.data();
                     GlobalStateMgr.getCurrentState().getHeartbeatMgr().replayHearbeat(hbPackage);
@@ -977,14 +982,11 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should refresh cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector stats cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns(), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
@@ -992,24 +994,18 @@ public class EditLog {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns());
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector histogram cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1017,10 +1013,7 @@ public class EditLog {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1775,6 +1768,20 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
     }
 
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info);
+    }
+
+    /**
+     * WAL-applier overload: the supplied applier runs after the journal record is durable,
+     * so the in-memory mutation matches the persisted state on both leader and follower.
+     * Used by the SplitTabletJob post-publish path so the ColocateRangeMgr update is
+     * sequenced with the same semantics as markGroupUnstable.
+     */
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info, walApplier);
+    }
+
     public void logHeartbeat(HbPackage hbPackage) {
         logJsonObject(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
@@ -2076,6 +2083,10 @@ public class EditLog {
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+    }
+
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log, walApplier);
     }
 
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log, WALApplier walApplier) {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Iceberg catalog は Iceberg データを StarRocks に手動作成なしで直接クエリおよび変換ロード。"
 toc_max_heading_level: 5
 keywords: ['iceberg']
 ---
@@ -83,6 +84,14 @@ Iceberg クラスターがストレージとして AWS S3 を使用している�
 
 :::
 
+##### Catalog PROPERTIES で HDFS クライアント設定をパススルーさせる
+
+**hdfs-site.xml** を FE/BE/CN の **conf** ディレクトリに配置する代わりに、`CREATE EXTERNAL CATALOG` の `PROPERTIES` に HDFS クライアント設定（HA 関連の `dfs.nameservices`、`dfs.ha.namenodes.<ns>`、`dfs.namenode.rpc-address.<ns>.<nn>`、`dfs.client.failover.proxy.provider.<ns>`、`fs.defaultFS` など）を直接記述できます。FE と BE/CN の両方がこれらの設定を受け取り、HDFS クライアントに適用します。
+
+この方法の主な利点は、**1 つの StarRocks クラスターから複数の独立した HDFS HA クラスターに同時にアクセスできる**ことです。各 FE/BE/CN の **conf** ディレクトリに配置できる **hdfs-site.xml** は 1 つだけなので、複数の HDFS HA クラスターの nameservice 設定を同一ファイル内で共存させることはできません。Catalog PROPERTIES でパススルーさせれば、各 Catalog がそれぞれ独立した HA 設定を保持でき、Catalog 間で干渉しません。
+
+完全な HA 設定例は下記の [例 - HDFS](#examples) を参照してください。
+
 ---
 
 #### Kerberos 認証
@@ -153,6 +162,7 @@ StarRock sがカタログへのデータアクセスを管理する方法に関�
 StarRocks がデータソースのメタストアと統合する方法に関する一連のパラメーターです。メタストアタイプに一致するタブを選択してください。
 
 <Tabs groupId="metastore">
+
 <TabItem value="HIVE" label="Hive metastore" default>
 
 ##### Hive metastore
@@ -181,6 +191,7 @@ Iceberg データをクエリする前に、Hive metastore ノードのホスト
   - 説明: Hive metastore の URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。<br />Hive metastore に高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
 
 </TabItem>
+
 <TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
@@ -247,6 +258,7 @@ AWS Glue 用の `MetastoreParams`:
 AWS Glue へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS Glue へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
 </TabItem>
+
 <TabItem value="REST" label="REST">
 
 ##### REST
@@ -468,6 +480,7 @@ StarRocks がストレージシステムと統合する方法に関する一連�
 ストレージタイプに一致するタブを選択してください。
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
@@ -752,6 +765,10 @@ Iceberg クラスターのストレージとして Google GCS を選択した場
 
 - REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
+  :::note
+  Vended Credential を使用する場合、StarRocks は REST カタログから払い出されたトークンで GCS に直接アクセスします。このとき、カタログに設定された `gcp.gcs.impersonation_service_account` は無視されます。
+  :::
+
 Google GCS 用の `StorageCredentialParams`:
 
 ###### gcp.gcs.service_account_email
@@ -793,7 +810,7 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | **パラメーター**                                 | **デフォルト**           | **説明**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Iceberg 関連のメタデータ（Table Cache、Partition Name Cache、Manifest 内の Data File Cache および Delete Data File Cache を含む）をキャッシュするかどうか。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 列の統計をキャッシュするかどうか。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 列の統計をキャッシュするかどうか。有効にすると、ファイルレベルの min/max プルーニングが有効な列（パーティションソース列、ソートキー列、identifier 列）の統計のみをキャッシュし、幅広いテーブルでの Manifest キャッシュのメモリ使用量を抑えます。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
@@ -810,6 +827,7 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
 以下の例は、使用するメタストアのタイプに応じて、Iceberg クラスターからデータをクエリするための Iceberg catalog `iceberg_catalog_hms` または `iceberg_catalog_glue` を作成します。ストレージタイプに一致するタブを選択してください。
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
@@ -954,6 +972,77 @@ PROPERTIES
 );
 ```
 
+##### HA が有効な HDFS クラスターへのアクセス
+
+対象の HDFS クラスターで HA が有効になっている場合、HA 設定をそのまま `PROPERTIES` に記述できます：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA 設定
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### 複数の HDFS HA クラスターへの同時アクセス
+
+同一の StarRocks クラスターから、複数の独立した HDFS HA クラスター上にある Iceberg テーブルをクエリしたい場合、HDFS クラスターごとに個別の Catalog を作成し、それぞれに独立した `dfs.nameservices` と HA 関連パラメーターを持たせるだけで構いません。各 Catalog は互いに干渉しません。
+
+```SQL
+-- Catalog A：HDFS HA クラスター cluster_a にアクセス
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+    "username" = "hdfs",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B：もう一つの HDFS HA クラスター cluster_b にアクセス
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
+);
+```
+
+
 </TabItem>
 
 <TabItem value="MINIO" label="MinIO" >
@@ -976,6 +1065,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
@@ -1201,7 +1291,7 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
-  
+
   - REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
 
   ```SQL
@@ -1222,7 +1312,7 @@ PROPERTIES
 
 </Tabs>
  
- ---
+---
 
 ## カタログの使用
 
@@ -1260,7 +1350,7 @@ Iceberg catalog とそのデータベースに切り替えるには、次のい�
   ```SQL
   USE <catalog_name>.<db_name>
   ```
- 
+
 ---
 
 ### Iceberg catalog の削除
@@ -1368,13 +1458,13 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- 単位: 秒  
+- 単位: 秒
 - デフォルト値: `86500`
 - 説明: メモリ内のキャッシュエントリが最後にアクセスされてから期限切れになるまでの時間。
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- 単位: 秒  
+- 単位: 秒
 - デフォルト値: `604800`、1 週間に相当
 - 説明: ディスク上のキャッシュエントリが最後にアクセスされてから期限切れになるまでの時間。
 

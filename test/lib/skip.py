@@ -70,4 +70,9 @@ skip_files = set([
     'test_window_skew_rewrite_with_mcv',
     'test_event_schedule_with_grf',
     # 'test_parquet_dict_null_predicate'
+    # refresh_mode=auto is not exposed to users; these tests exercise the AUTO path via
+    # SQL and are kept on disk for future revival when AUTO is re-introduced.
+    'test_ivm_with_iceberg_auto',
+    'test_ivm_with_iceberg_delete',
+    'test_ivm_with_iceberg_expire_snapshots',
 ])

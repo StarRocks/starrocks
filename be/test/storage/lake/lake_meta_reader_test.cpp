@@ -91,7 +91,7 @@ protected:
             txn_log->set_txn_id(txn_id);
             auto op_write = txn_log->mutable_op_write();
             for (auto& file : files) {
-                op_write->mutable_rowset()->add_segments(file.path);
+                op_write->mutable_rowset()->add_segment_metas()->set_filename(file.path);
             }
             op_write->mutable_rowset()->set_num_rows(5 * segments_per_rowset);
             op_write->mutable_rowset()->set_data_size(100);

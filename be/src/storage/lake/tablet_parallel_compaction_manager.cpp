@@ -29,6 +29,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
@@ -53,7 +54,7 @@ bool TabletParallelCompactionManager::_is_group_valid_for_compaction(const std::
     }
     if (group.size() == 1) {
         const auto& meta = group[0]->metadata();
-        return meta.overlapped() && meta.segments_size() >= 2;
+        return meta.overlapped() && meta.segment_metas_size() >= 2;
     }
     return false;
 }
@@ -109,7 +110,7 @@ TabletParallelCompactionManager::RowsetStats TabletParallelCompactionManager::_c
         }
         // Count effective segments
         if (meta.overlapped()) {
-            stats.total_segments += std::max(1, meta.segments_size());
+            stats.total_segments += std::max(1, meta.segment_metas_size());
         } else {
             stats.total_segments += 1;
         }
@@ -181,7 +182,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
     // Helper lambda to get segment count for a rowset
     auto get_rowset_segments = [](const RowsetPtr& rowset) -> int64_t {
         const auto& meta = rowset->metadata();
-        return std::max(1, meta.segments_size());
+        return std::max(1, meta.segment_metas_size());
     };
 
     for (size_t rowset_idx = 0; rowset_idx < all_rowsets.size(); rowset_idx++) {
@@ -300,12 +301,12 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_filter_inv
             const auto& rowset = group[0];
             const auto& meta = rowset->metadata();
             // An overlapped rowset with multiple segments can be compacted to merge its segments
-            bool can_compact_alone = meta.overlapped() && meta.segments_size() >= 2;
+            bool can_compact_alone = meta.overlapped() && meta.segment_metas_size() >= 2;
             if (can_compact_alone) {
                 filtered_groups.push_back(std::move(group));
                 VLOG(1) << "Parallel compaction: tablet=" << tablet_id
                         << " keeping single overlapped rowset (id=" << rowset->id()
-                        << ", segments=" << meta.segments_size() << ") as valid group";
+                        << ", segments=" << meta.segment_metas_size() << ") as valid group";
             } else {
                 discarded_rowset_ids.push_back(rowset->id());
             }
@@ -766,11 +767,17 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
 
     // If all subtasks are complete, notify the callback
     if (all_complete && callback) {
-        // Build merged context
-        // Note: skip_write_txnlog must be true so that merged txn_log is added to response
-        auto merged_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, state->version,
-                                                                      false /* force_base_compaction */,
-                                                                      true /* skip_write_txnlog */, callback);
+        // Build merged context.
+        // Honor the ORIGINATING request's skip_write_txnlog intent for the merged log:
+        //  - aggregate/file-bundling path (skip=true): keep skip=true so the merged log is returned
+        //    inline via CompactResponse.txn_logs for the aggregator to combine and persist once;
+        //  - regular path (skip=false): the individual subtasks were forced to skip_write_txnlog=true
+        //    only so their partial logs could be merged into one (a single tablet+txn has exactly one
+        //    txn log location). There is NO aggregator on this path, so the merged context must carry
+        //    skip=false and we persist the merged log below, exactly as a serial compaction would.
+        const bool req_skip_write_txnlog = callback->skip_write_txnlog();
+        auto merged_context = std::make_unique<CompactionTaskContext>(
+                txn_id, tablet_id, state->version, false /* force_base_compaction */, req_skip_write_txnlog, callback);
 
         // Copy table_id and partition_id from one of the completed subtask contexts.
         // These values are populated in TabletManager::compact() from shard info,
@@ -834,6 +841,24 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
                 // Partial success: some subtasks failed but at least one succeeded
                 VLOG(1) << "Parallel compaction partial success: tablet=" << tablet_id << ", txn_id=" << txn_id
                         << ", successful=" << successful_count << ", failed=" << failed_count;
+            }
+        }
+
+        // Persist the merged txn log on the regular (non-aggregate) path.
+        // On this path FE never sets skip_write_txnlog and there is no aggregator to consume
+        // CompactResponse.txn_logs, so if the merged log is not written to object storage here it is
+        // silently dropped: FE still sees an empty failed_tablets and commits the compaction txn, but
+        // the publish daemon later 404s on a txn log that was never written and the txn is stuck in
+        // COMMITTED forever, blocking every subsequent txn on the partition. Writing it here mirrors
+        // what a serial (non-parallel) compaction does in CompactionTask::execute(). put_txn_log()
+        // normalizes the log before saving. On the aggregate/file-bundling path
+        // (req_skip_write_txnlog == true) the log is instead returned via the RPC response and
+        // persisted as a single combined txn log by the aggregator, so we must NOT write it here.
+        if (!req_skip_write_txnlog && merged_context->status.ok() && merged_context->txn_log != nullptr) {
+            if (auto st = _tablet_mgr->put_txn_log(merged_context->txn_log); !st.ok()) {
+                LOG(WARNING) << "Failed to write merged parallel-compaction txn log, tablet=" << tablet_id
+                             << ", txn_id=" << txn_id << ": " << st;
+                merged_context->status.update(st);
             }
         }
 
@@ -1080,20 +1105,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 if (subtask_op.has_output_rowset()) {
                     const auto& output = subtask_op.output_rowset();
                     auto* merged_output = merged_compaction->mutable_output_rowset();
-                    DCHECK_EQ(output.segment_metas_size(), output.segments_size());
-                    // Add segments
-                    for (int i = 0; i < output.segments_size(); i++) {
-                        merged_output->add_segments(output.segments(i));
-                    }
-                    // Add segment_size
-                    for (int i = 0; i < output.segment_size_size(); i++) {
-                        merged_output->add_segment_size(output.segment_size(i));
-                    }
-                    // Add segment_encryption_metas
-                    for (int i = 0; i < output.segment_encryption_metas_size(); i++) {
-                        merged_output->add_segment_encryption_metas(output.segment_encryption_metas(i));
-                    }
-                    // Add segment_metas
+                    // Add segment_metas (canonical: carries filename/size/encryption/shared/bundle_offset).
                     const int merged_segment_idx_base = merged_output->segment_metas_size();
                     for (int i = 0; i < output.segment_metas_size(); i++) {
                         auto* segment_meta = merged_output->add_segment_metas();
@@ -1101,7 +1113,6 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                         // Rebuild segment_idx in the merged rowset's local id space.
                         segment_meta->set_segment_idx(merged_segment_idx_base + i);
                     }
-                    DCHECK_EQ(merged_output->segment_metas_size(), merged_output->segments_size());
 
                     total_num_rows += output.num_rows();
                     total_data_size += output.data_size();
@@ -1151,20 +1162,24 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 merged_output->set_num_rows(total_num_rows);
                 merged_output->set_data_size(total_data_size);
                 merged_output->set_overlapped(true);
-                merged_output->set_next_compaction_offset(merged_output->segments_size());
+                merged_output->set_next_compaction_offset(merged_output->segment_metas_size());
+                // Fresh uid: the manager-assembled merged compaction output is a new
+                // logical rowset distinct from the per-subtask outputs it concatenates.
+                tablet_reshard_helper::set_rowset_uid(merged_output);
             }
 
             // Log segment file names for debugging data consistency
             std::stringstream seg_names;
             const auto& merged_output_rowset = merged_compaction->output_rowset();
-            for (int i = 0; i < merged_output_rowset.segments_size(); i++) {
+            for (int i = 0; i < merged_output_rowset.segment_metas_size(); i++) {
                 if (i > 0) seg_names << ",";
-                seg_names << merged_output_rowset.segments(i);
+                seg_names << merged_output_rowset.segment_metas(i).filename();
             }
             VLOG(1) << "Merged large rowset split result: tablet=" << tablet_id << ", txn_id=" << txn_id
                     << ", large_rowset_id=" << large_rowset_id << ", subtask_count=" << sorted_subtask_ids.size()
-                    << ", total_segments=" << merged_output_rowset.segments_size() << ", total_rows=" << total_num_rows
-                    << ", total_data_size=" << total_data_size << ", merged_ssts=" << merged_compaction->ssts_size()
+                    << ", total_segments=" << merged_output_rowset.segment_metas_size()
+                    << ", total_rows=" << total_num_rows << ", total_data_size=" << total_data_size
+                    << ", merged_ssts=" << merged_compaction->ssts_size()
                     << ", merged_sst_ranges=" << merged_compaction->sst_ranges_size()
                     << ", compact_version=" << merged_compaction->compact_version() << ", input_rowsets=["
                     << JoinInts(std::vector<uint32_t>(merged_compaction->input_rowsets().begin(),
@@ -1308,6 +1323,9 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            // Snapshot the subtask input footprint onto the context so list_tasks() can
+            // surface it consistently for both running and completed subtasks.
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             // Store context pointer for real-time progress/status tracking
             it->second.context = context.get();
         }
@@ -1487,10 +1505,16 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
                 info.progress = 0;
             }
             info.status = Status::OK();
-            // Build profile with subtask-specific info
+            // Build profile combining CompactionTaskStats (from the running context, when
+            // available) with subtask-specific metadata. Falling back to a default-constructed
+            // stats object keeps the JSON schema stable when the context has not yet been linked.
+            CompactionTaskStats empty_stats;
+            const CompactionTaskStats* stats_ptr = &empty_stats;
+            if (subtask_info.context != nullptr && subtask_info.context->stats) {
+                stats_ptr = subtask_info.context->stats.get();
+            }
             info.profile =
-                    fmt::format(R"({{"subtask_id":{},"input_rowsets":{},"input_bytes":{},"is_parallel_subtask":true}})",
-                                subtask_id, subtask_info.input_rowset_ids.size(), subtask_info.input_bytes);
+                    stats_ptr->to_json_stats_with_subtask_metadata(subtask_id, subtask_info.input_rowset_ids.size());
         }
 
         // Add completed subtasks that haven't been cleaned up yet
@@ -1505,7 +1529,15 @@ void TabletParallelCompactionManager::list_tasks(std::vector<CompactionTaskInfo>
             info.finish_time = ctx->finish_time.load(std::memory_order_acquire);
             info.progress = ctx->progress.value();
             if (info.runs > 0 && ctx->stats) {
-                info.profile = ctx->stats->to_json_stats();
+                // Keep the PROFILE schema consistent with the running-subtasks branch above:
+                // emit subtask metadata alongside the stats whenever the context belongs to a
+                // parallel subtask.
+                if (ctx->subtask_id >= 0) {
+                    info.profile = ctx->stats->to_json_stats_with_subtask_metadata(
+                            ctx->subtask_id, static_cast<size_t>(ctx->subtask_input_rowsets));
+                } else {
+                    info.profile = ctx->stats->to_json_stats();
+                }
             }
             if (info.finish_time > 0) {
                 info.status = ctx->status;
@@ -1527,7 +1559,7 @@ bool TabletParallelCompactionManager::_is_large_rowset_for_split(const RowsetPtr
     // Skip rowsets where all segments have already been processed by a previous
     // split compaction. Re-splitting would just produce the same overlapped output
     // and cause an infinite compaction loop.
-    if (meta.next_compaction_offset() >= static_cast<uint32_t>(meta.segments_size())) {
+    if (meta.next_compaction_offset() >= static_cast<uint32_t>(meta.segment_metas_size())) {
         return false;
     }
 
@@ -1536,7 +1568,7 @@ bool TabletParallelCompactionManager::_is_large_rowset_for_split(const RowsetPtr
     // 2. data_size > max_bytes_per_subtask (larger than what a single subtask should handle)
     // 3. segments_size >= 4 (enough segments to split into at least 2 subtasks with 2 segments each)
     // 4. is_overlapped (non-overlapped rowsets don't need segment-level compaction)
-    return data_size >= min_size && data_size > max_bytes_per_subtask && meta.segments_size() >= 4 &&
+    return data_size >= min_size && data_size > max_bytes_per_subtask && meta.segment_metas_size() >= 4 &&
            rowset->is_overlapped();
 }
 
@@ -1546,7 +1578,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_split_large_rowset(c
     std::vector<SubtaskGroup> groups;
 
     const auto& meta = rowset->metadata();
-    int32_t total_segments = meta.segments_size();
+    int32_t total_segments = meta.segment_metas_size();
     int64_t total_data_size = rowset->data_size();
 
     if (total_segments < 2 || total_data_size <= 0) {
@@ -1757,7 +1789,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
             }
             // Only add groups that are valid for compaction (>= 2 rowsets or 1 overlapped rowset)
             if (g.rowsets.size() >= 2 || (g.rowsets.size() == 1 && g.rowsets[0]->is_overlapped() &&
-                                          g.rowsets[0]->metadata().segments_size() >= 2)) {
+                                          g.rowsets[0]->metadata().segment_metas_size() >= 2)) {
                 all_groups.push_back(std::move(g));
                 remaining_parallel--;
             } else {
@@ -2002,6 +2034,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             it->second.context = context.get();
         }
     }

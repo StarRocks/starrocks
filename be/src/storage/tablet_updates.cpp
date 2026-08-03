@@ -66,6 +66,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/pretty_printer.h"
@@ -1756,7 +1757,15 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             auto r = rowset->total_segment_data_size();
             if (r.ok()) {
                 full_rowset_size = r.value();
+                const bool has_merge_condition = rowset_meta_pb.txn_meta().has_merge_condition();
+                std::string merge_condition;
+                if (has_merge_condition) {
+                    merge_condition = rowset_meta_pb.txn_meta().merge_condition();
+                }
                 rowset->rowset_meta()->clear_txn_meta();
+                if (has_merge_condition) {
+                    rowset->rowset_meta()->set_merge_condition(merge_condition);
+                }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
                 // full_rowset_size is the segment file bytes (column data + embedded indexes).
@@ -5391,8 +5400,20 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            continue;
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // A rssid appears here only with non-empty rowids resolved from the primary index, so a 0-row
+            // segment means the index/rowset-meta disagree with the on-disk segment data. Silently skipping
+            // would return short read columns and later crash in append_selective; fail loudly instead.
+            std::string msg = strings::Substitute(
+                    "segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3; primary "
+                    "index/rowset-meta vs segment-data inconsistency (possibly a corrupt partial-update / "
+                    "auto-increment segment rewrite output)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),
@@ -5454,8 +5475,18 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
         }
-        if ((*segment)->num_rows() == 0) {
-            return Status::OK();
+        uint32_t segment_num_rows = (*segment)->num_rows();
+        // Test hook: allow forcing a 0-row segment to exercise the integrity guard below.
+        TEST_SYNC_POINT_CALLBACK("TabletUpdates::get_column_values:auto_increment_segment_num_rows", &segment_num_rows);
+        if (segment_num_rows == 0) {
+            // Same integrity guard as the main read loop: a 0-row segment with resolved rowids means the
+            // primary index / rowset meta disagree with the on-disk segment data.
+            std::string msg = strings::Substitute(
+                    "auto-increment: segment $0 (rssid $1) has 0 rows but $2 rowids are requested in tablet $3 "
+                    "(primary index/rowset-meta vs segment-data inconsistency)",
+                    seg_path, rssid, rowids.size(), _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
         }
         GetDeltaColumnContext ctx;
         RETURN_IF_ERROR(ctx.prepareGetDeltaColumnContext((*segment), _tablet.data_dir()->get_meta(),

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
 toc_max_heading_level: 5
 ---
 
@@ -193,6 +194,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
+| aws.glue.resource_share_type  | 否       | 通过设置发送给 AWS Glue `GetDatabases` API 的 `ResourceShareType`，控制 `SHOW DATABASES` 列出哪些数据库。不区分大小写。取值范围：`FOREIGN`（其他账户通过 AWS Resource Access Manager 与你的账户共享的数据库）、`FEDERATED`（引用外部数据源的数据库，如 JDBC 连接）、`ALL`（本地数据库加上前两者）。不指定时仅列出本地数据库。该参数仅影响列表结果：StarRocks 查询数据库时仍然使用 `hive.metastore.glue.catalogid` 配置的单一账户，因此列出的 `FOREIGN` 数据库仍无法查询，除非将 `hive.metastore.glue.catalogid` 也设置为其所有者账户，或在自己的 Data Catalog 中为其创建 [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html)；而 `FEDERATED` 数据库并非 Hive 兼容的数据库，无法通过该 Catalog 查询。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
@@ -256,9 +258,9 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 
 | 参数                            | 是否必须 | 说明                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。      |
 
 ##### 兼容 S3 协议的对象存储
 

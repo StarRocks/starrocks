@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to connect FineBI to StarRocks for visualized data analysis."
 ---
 
 # FineBI

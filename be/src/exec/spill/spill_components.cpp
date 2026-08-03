@@ -167,7 +167,11 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
     RETURN_IF_YIELD(yield_ctx.need_yield);
     RETURN_IF_ERROR(flush_ctx->output->flush());
     flush_ctx->output.reset();
-    DCHECK_EQ(flush_ctx->compact_input_num_rows, flush_ctx->block_group->num_rows());
+    // On cancellation the transfer stops early, so the compacted block group holds fewer rows than
+    // its input; only assert full compaction while the query is still running. Query cancel sets
+    // the runtime state (which the transfer honors) but not necessarily the spiller flag.
+    DCHECK(_runtime_state->is_cancelled() || _spiller->is_cancel() ||
+           flush_ctx->compact_input_num_rows == flush_ctx->block_group->num_rows());
     this->add_block_group(std::move(flush_ctx->block_group));
 
     return Status::OK();
@@ -671,6 +675,10 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     if (num_rows < 30) {
         return Status::OK();
     }
+    // Invariants enforced via CHECK so that a violation surfaces with a clear stack
+    // and diagnostic line instead of an OOB read in the locator loop below.
+    // See https://github.com/StarRocks/starrocks/issues/74074.
+    CHECK(!chunks.empty()) << "_compact_skew_chunks: empty chunks with num_rows=" << num_rows;
     // sample 30 row idx
     std::random_device rd;
     std::mt19937_64 gen(rd());
@@ -681,6 +689,12 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     }
     std::sort(samples.begin(), samples.end());
     size_t curr_chunk_idx = 0;
+    // Validate chunks[0] before the first dereference so a malformed leading entry
+    // produces a Check-failed line instead of a null-deref SIGSEGV.
+    CHECK(chunks[curr_chunk_idx] != nullptr)
+            << "_compact_skew_chunks: null chunk at idx 0; chunks.size=" << chunks.size();
+    CHECK(!chunks[curr_chunk_idx]->is_empty())
+            << "_compact_skew_chunks: empty chunk at idx 0; chunks.size=" << chunks.size();
     size_t curr_num_rows = chunks[curr_chunk_idx]->num_rows();
     phmap::flat_hash_map<uint32_t, size_t, StdHashWithSeed<uint32_t, PhmapSeed2>> hash_value_counts;
 
@@ -688,9 +702,14 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     for (auto idx : samples) {
         while (idx >= curr_num_rows) {
             ++curr_chunk_idx;
-            if (chunks[curr_chunk_idx] == nullptr || chunks[curr_chunk_idx]->is_empty()) {
-                continue;
-            }
+            CHECK_LT(curr_chunk_idx, chunks.size())
+                    << "_compact_skew_chunks: num_rows=" << num_rows
+                    << " disagrees with sum of chunks' row counts; curr_num_rows=" << curr_num_rows
+                    << " sample idx=" << idx << " chunks.size=" << chunks.size();
+            CHECK(chunks[curr_chunk_idx] != nullptr) << "_compact_skew_chunks: null chunk at idx " << curr_chunk_idx
+                                                     << " (chunks.size=" << chunks.size() << ")";
+            CHECK(!chunks[curr_chunk_idx]->is_empty()) << "_compact_skew_chunks: empty chunk at idx " << curr_chunk_idx
+                                                       << " (chunks.size=" << chunks.size() << ")";
             curr_num_rows += chunks[curr_chunk_idx]->num_rows();
         }
         const auto& curr_chunk = chunks[curr_chunk_idx];
@@ -700,10 +719,12 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         ++hash_value_counts[hash_value];
     }
     // compute frequency of sampled hash values.
-    for (auto& curr_chunk : chunks) {
-        if (curr_chunk == nullptr || curr_chunk->is_empty()) {
-            continue;
-        }
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        auto& curr_chunk = chunks[i];
+        CHECK(curr_chunk != nullptr) << "_compact_skew_chunks: null chunk in frequency pass at idx " << i
+                                     << " (chunks.size=" << chunks.size() << ")";
+        CHECK(!curr_chunk->is_empty()) << "_compact_skew_chunks: empty chunk in frequency pass at idx " << i
+                                       << " (chunks.size=" << chunks.size() << ")";
         auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         for (auto& hash_value : hash_values) {
@@ -827,6 +848,18 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
                 RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
+                    // A restore IO-task error is recorded in the spiller task status rather than
+                    // returned from trigger_restore; surface it instead of concluding a clean EOF,
+                    // otherwise a short read (corrupt/partial spill block, deserialize error) is
+                    // silently treated as end-of-partition and the split proceeds on partial data.
+                    RETURN_IF_ERROR(_spiller->task_status());
+                    // On cancellation the restore stops early with a partial read. Bail out instead
+                    // of continuing the split with an incomplete partition, which downstream assumes
+                    // was fully read. Query cancel sets the runtime state (which restore honors) but
+                    // not necessarily the spiller flag.
+                    if (_runtime_state->is_cancelled() || _spiller->is_cancel()) {
+                        return Status::Cancelled("query is cancelled during partition split");
+                    }
                     DCHECK_EQ(reader->read_rows(), partition->num_rows);
                     break;
                 }

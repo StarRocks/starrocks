@@ -101,7 +101,6 @@ public class HiveMetadata implements ConnectorMetadata {
     private final HiveStatisticsProvider statisticsProvider;
     private final Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor;
     private Executor updateExecutor;
-    private Executor refreshOthersFeExecutor;
     private final ConnectorProperties properties;
 
     public HiveMetadata(String catalogName,
@@ -111,7 +110,6 @@ public class HiveMetadata implements ConnectorMetadata {
                         HiveStatisticsProvider statisticsProvider,
                         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
                         Executor updateExecutor,
-                        Executor refreshOthersFeExecutor,
                         ConnectorProperties properties) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
@@ -120,8 +118,21 @@ public class HiveMetadata implements ConnectorMetadata {
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
-        this.refreshOthersFeExecutor = refreshOthersFeExecutor;
         this.properties = properties;
+    }
+
+    @Deprecated
+    public HiveMetadata(String catalogName,
+                        HdfsEnvironment hdfsEnvironment,
+                        HiveMetastoreOperations hmsOps,
+                        RemoteFileOperations fileOperations,
+                        HiveStatisticsProvider statisticsProvider,
+                        Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor,
+                        Executor updateExecutor,
+                        Executor refreshOthersFeExecutor,
+                        ConnectorProperties properties) {
+        this(catalogName, hdfsEnvironment, hmsOps, fileOperations, statisticsProvider, cacheUpdateProcessor,
+                updateExecutor, properties);
     }
 
     @Override
@@ -425,7 +436,16 @@ public class HiveMetadata implements ConnectorMetadata {
             Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
             if (columnStatistics.isEmpty()) {
                 double outputRowNums = statistics.getOutputRowCount();
-                statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys, outputRowNums);
+                if (session.getSessionVariable().enableHiveColumnStats()) {
+                    // Column stats enabled but unavailable (e.g. exception) — estimate from type/partition info
+                    statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys,
+                            outputRowNums);
+                } else {
+                    // Column stats explicitly disabled — keep UNKNOWN so the optimizer respects the intent
+                    Statistics.Builder unknownBuilder = Statistics.builder().setOutputRowCount(outputRowNums);
+                    columnRefOperators.forEach(c -> unknownBuilder.addColumnStatistic(c, ColumnStatistic.unknown()));
+                    statistics = unknownBuilder.build();
+                }
             }
         }
 
@@ -488,7 +508,7 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         HiveCommitter committer = new HiveCommitter(
-                hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
+                hmsOps, fileOps, updateExecutor, table, new Path(stagingDir));
         String writeType = isOverwrite ? "overwrite" : "insert";
         long startMs = System.currentTimeMillis();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {

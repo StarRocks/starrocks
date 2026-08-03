@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "JOIN"
+description: "Join operations combine data from two or more tables and then return a result set of some columns from some of them."
 ---
 
 # JOIN
@@ -255,7 +256,7 @@ Example:
 SELECT *
 FROM holdings h ASOF LEFT JOIN prices p             
 ON h.ticker = p.ticker            
-AND h.when >= p.when
+AND h.`when` >= p.`when`
 ORDER BY ALL;
 ```
 

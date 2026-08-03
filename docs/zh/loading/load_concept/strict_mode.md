@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "严格模式控制导入过程中如何处理数据类型转换失败的行，决定是否过滤无效数据。"
 ---
 
 # 严格模式

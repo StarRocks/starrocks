@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -60,6 +61,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -211,6 +214,10 @@ public class OptExternalPartitionPruner {
                 }
             }
         } else if (partitionPredicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cpo = (CompoundPredicateOperator) partitionPredicate;
+            if (cpo.isNot()) {
+                return false;
+            }
             ScalarOperator leftChild = partitionPredicate.getChild(0);
             ScalarOperator rightChild = partitionPredicate.getChild(1);
             return containsPartitionColumn(leftChild, partitionColRefSet)
@@ -239,6 +246,24 @@ public class OptExternalPartitionPruner {
             }
         }
         return false;
+    }
+
+    // Shared by Hive/Hudi/ODPS (HMS), Iceberg and Delta Lake: reject the query if it doesn't carry a usable
+    // partition predicate, when allow_lake_without_partition_filter is disabled.
+    private static void checkPartitionFilterRequired(LogicalScanOperator operator, OptimizerContext context,
+                                                      Table table, List<Column> partitionColumns) throws AnalysisException {
+        if (context.getSessionVariable().isAllowLakeWithoutPartitionFilter()) {
+            return;
+        }
+        if (!checkPartitionPredicates(operator, partitionColumns)) {
+            LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
+            throw new AnalysisException("Partition pruning is invalid, please check: "
+                    + "1. The partition predicate must be included. "
+                    + "2. The left and right children of the partition predicate cannot be function parameters. "
+                    + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                    + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                    + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
+        }
     }
 
     // get equivalence predicate which column ref is partition column
@@ -307,16 +332,7 @@ public class OptExternalPartitionPruner {
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!table.isUnPartitioned()) {
-                if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
-                        && !checkPartitionPredicates(operator, partitionColumns)) {
-                    LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
-                    throw new AnalysisException("Partition pruning is invalid, please check: "
-                            + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters. "
-                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
-                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
-                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
-                }
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
 
                 // get partition names
                 List<String> partitionNames;
@@ -381,6 +397,16 @@ public class OptExternalPartitionPruner {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
             }
+            if (!deltaLakeTable.isUnPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
+            }
+        } else if (table instanceof IcebergTable) {
+            // Iceberg splits are enumerated incrementally during scan-range dispatch (not upfront here), so only
+            // the partition-filter-required check (a pure predicate-shape check) can run at optimize time.
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (icebergTable.isPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, icebergTable.getPartitionColumns());
+            }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
                 columnToPartitionValuesMap, columnToNullPartitions);
@@ -416,10 +442,10 @@ public class OptExternalPartitionPruner {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
             }
 
-            int scanHivePartitionNumLimit = context.getSessionVariable().getScanHivePartitionNumLimit();
-            if (scanHivePartitionNumLimit > 0 && !table.isUnPartitioned()
-                    && selectedPartitionIds.size() > scanHivePartitionNumLimit) {
-                String msg = "Exceeded the limit of " + scanHivePartitionNumLimit + " max scan hive external partitions";
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of " + scanLakePartitionNumLimit + " max scan hive external partitions";
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
@@ -450,6 +476,24 @@ public class OptExternalPartitionPruner {
             long rowCount = getRowCount(splits);
             if (rowCount > 0) {
                 scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+
+            //check scan partition num
+            Set<BinaryRow> selectedPartitions = new HashSet<>();
+            for (Split split : splits) {
+                if (split instanceof DataSplit) {
+                    DataSplit dataSplit = (DataSplit) split;
+                    selectedPartitions.add(dataSplit.partition());
+                }
+            }
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitions.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
             }
         }
     }

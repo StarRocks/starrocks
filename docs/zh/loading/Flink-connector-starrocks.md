@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
 ---
 
 # 从 Apache Flink® 持续导入
@@ -20,10 +21,10 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -79,13 +80,13 @@ Flink connector JAR 文件的命名格式如下：
     sh build.sh <flink_version>
     ```
 
-    例如，如果您的环境中的 Flink 版本为1.15，您需要执行以下命令：
+    例如，如果您的环境中的 Flink 版本为1.16，您需要执行以下命令：
 
     ```Bash
-    sh build.sh 1.15
+    sh build.sh 1.16
     ```
 
-3. 前往 `target/` 目录，找到编译完成的 Flink connector JAR 文件，例如 `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`，该文件在编译过程中生成。
+3. 前往 `target/` 目录，找到编译完成的 Flink connector JAR 文件，例如 `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`，该文件在编译过程中生成。
 
     > **注意**：
     >
@@ -332,26 +333,26 @@ Flink connector JAR 文件的命名格式如下：
 
 ## 数据类型映射
 
-| Flink 数据类型                    | StarRocks 数据类型 |
-| --------------------------------- | ------------------ |
-| BOOLEAN                           | BOOLEAN            |
-| TINYINT                           | TINYINT            |
-| SMALLINT                          | SMALLINT           |
-| INTEGER                           | INTEGER            |
-| BIGINT                            | BIGINT             |
-| FLOAT                             | FLOAT              |
-| DOUBLE                            | DOUBLE             |
-| DECIMAL                           | DECIMAL            |
-| BINARY                            | INT                |
-| CHAR                              | STRING             |
-| VARCHAR                           | STRING             |
-| STRING                            | STRING             |
-| DATE                              | DATE               |
-| TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME           |
-| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME           |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;     |
-| MAP&lt;KT,VT&gt;                  | JSON STRING        |
-| ROW&lt;arg T...&gt;               | JSON STRING        |
+| Flink 数据类型                      | StarRocks 数据类型 |
+| ----------------------------------- | ------------------ |
+| `BOOLEAN`                           | `BOOLEAN`          |
+| `TINYINT`                           | `TINYINT`          |
+| `SMALLINT`                          | `SMALLINT`         |
+| `INTEGER`                           | `INTEGER`          |
+| `BIGINT`                            | `BIGINT`           |
+| `FLOAT`                             | `FLOAT`            |
+| `DOUBLE`                            | `DOUBLE`           |
+| `DECIMAL`                           | `DECIMAL`          |
+| `BINARY`                            | `INT`              |
+| `CHAR`                              | `STRING`           |
+| `VARCHAR`                           | `STRING`           |
+| `STRING`                            | `STRING`           |
+| `DATE`                              | `DATE`             |
+| `TIMESTAMP_WITHOUT_TIME_ZONE(N)`    | `DATETIME`         |
+| `TIMESTAMP_WITH_LOCAL_TIME_ZONE(N)` | `DATETIME`         |
+| `ARRAY<T>`                          | `ARRAY<T>`         |
+| `MAP<KT,VT>`                        | `JSON STRING`      |
+| `ROW<arg T...>`                     | `JSON STRING`      |
 
 ## 使用说明
 
@@ -678,7 +679,7 @@ DISTRIBUTED BY HASH(id);
 - 同步 schema change
 - 同步全量和增量数据
 
-快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
+快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/)。
 
 建议您使用 StarRocks v3.2.1 及以后的版本，以开启 [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)，来提高加减列的速度并降低资源使用。
 
@@ -793,7 +794,7 @@ DISTRIBUTED BY HASH(`id`);
 2. 在 Flink SQL 客户端按照以下方式创建表`score_board`：
    - DDL 中包括所有列的定义。
    - 将选项  `sink.properties.merge_condition` 设置为 `score`，要求 Flink connector 使用 `score`  列作为更新条件。
-   - 将选项 `sink.version` 设置为 `V1` ，要求 Flink connector 使用 Stream Load 接口导入数据。因为只有 Stream Load 接口支持条件更新。
+   - 将选项 `sink.version` 设置为 `V1` 或 `V2`。两者均支持条件更新。
 
       ```SQL
       CREATE TABLE `score_board` (

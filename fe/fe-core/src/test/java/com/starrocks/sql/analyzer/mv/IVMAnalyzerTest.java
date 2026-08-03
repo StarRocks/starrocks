@@ -18,21 +18,32 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.IntegerType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -83,6 +94,659 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(result.isPresent(), "aggregate MV query must produce an IVM rewrite result");
         assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
                 "aggregate MV must yield QUERY_COMPUTED: the query encodes group-by keys as __ROW_ID__");
+    }
+
+    /**
+     * bitmap_union(to_bitmap(col)) is the exact-distinct-count pattern. The analyzer normalizes it to
+     * bitmap_agg(col) (raw INT arg, BITMAP intermediate state), which IVM must accept and maintain via
+     * the already-registered bitmap_agg combinators.
+     */
+    @Test
+    public void testBitmapUnionAggregateYieldsIvmRewrite() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_bitmap "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_union(to_bitmap(c1)) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "bitmap_union aggregate MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy());
+    }
+
+    @Test
+    public void testHllUnionAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("hll_union(hll_hash(c1))");
+    }
+
+    @Test
+    public void testPercentileUnionAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("percentile_union(percentile_hash(c1))");
+    }
+
+    @Test
+    public void testBitmapUnionHashAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("bitmap_union(bitmap_hash(c1))");
+    }
+
+    /**
+     * The metric-state unions roll up an already-built sketch (bitmap_hash/hll_hash/percentile_hash
+     * here). Unlike bitmap_union(to_bitmap(...)), they are not normalized away, so IVM must accept
+     * each union directly and maintain it via its agg-state combinators.
+     */
+    private void assertMetricUnionYieldsIvmRewrite(String aggExpr) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_metric_union "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, " + aggExpr + " FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), aggExpr + " MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy());
+    }
+
+    /**
+     * A bare union-aggregate select item collapses to a single column: the state IS the visible
+     * output, so no hidden __AGG_STATE_ copy is stored. Creating the MV runs the CREATE-time
+     * trial, so this also exercises IvmRewriter.bindStateColumnsForAggregate end to end.
+     */
+    @Test
+    public void testUnionAggregateCollapsesStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_union(bitmap_hash(c1)) AS b "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse");
+            Column collapsed = mv.getColumn("b");
+            assertTrue(collapsed != null && !collapsed.isHidden(), "collapsed union column must be visible");
+            for (Column c : mv.getFullSchema()) {
+                assertFalse(c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX),
+                        "collapsed union MV must have no hidden state copy, got: " + c.getName());
+            }
+        });
+    }
+
+    /** Mixed aggregates: only the finalizable one keeps a hidden state column; unions collapse. */
+    @Test
+    public void testMixedAggregatesKeepOnlyFinalizableStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse_mixed "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, hll_union(hll_hash(c1)) AS h, sum(c1) AS ss, bitmap_union(bitmap_hash(c1)) AS b "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse_mixed");
+            long hiddenStates = mv.getFullSchema().stream()
+                    .filter(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX))
+                    .count();
+            assertEquals(1, hiddenStates, "only sum must keep a hidden state column");
+            assertTrue(mv.getFullSchema().stream()
+                            .anyMatch(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX + "_sum")),
+                    "the hidden state column must belong to sum");
+            assertFalse(mv.getColumn("h").isHidden(), "collapsed hll_union column must be visible");
+            assertFalse(mv.getColumn("b").isHidden(), "collapsed bitmap_union column must be visible");
+        });
+    }
+
+    /** A wrapped union (bitmap_count(bitmap_union(...))) cannot collapse: the visible output is the
+     *  finalized count, so the hidden state column must stay. */
+    @Test
+    public void testWrappedUnionAggregateKeepsStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse_wrapped "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_count(bitmap_union(bitmap_hash(c1))) AS cnt "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse_wrapped");
+            assertFalse(mv.getColumn("cnt").isHidden(), "finalized count column must be visible");
+            assertTrue(mv.getFullSchema().stream()
+                            .anyMatch(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX + "_bitmap_union")
+                                    && c.isHidden()),
+                    "wrapped union must keep its hidden state column");
+        });
+    }
+
+    /**
+     * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
+     * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
+     */
+    @Test
+    public void testGroupByWithoutAggregateYieldsQueryComputedStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_distinct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "GROUP BY-only MV query must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "GROUP BY without aggregate must yield QUERY_COMPUTED, not AUTO_INCREMENT");
+    }
+
+    /**
+     * SELECT DISTINCT (no GROUP BY) must yield QUERY_COMPUTED like the equivalent GROUP BY,
+     * else the MV's AUTO_INCREMENT BIGINT __ROW_ID__ can't match refresh's VARCHAR key.
+     */
+    @Test
+    public void testSelectDistinctYieldsQueryComputedStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_select_distinct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "SELECT DISTINCT MV query must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "SELECT DISTINCT must yield QUERY_COMPUTED, not AUTO_INCREMENT");
+    }
+
+    /**
+     * Distinct aggregates must be rejected at IVM analysis time; otherwise incremental
+     * refresh would silently produce wrong data (the rewrite drops the DISTINCT flag).
+     * MIN/MAX(DISTINCT) is not covered: the analyzer normalizes their DISTINCT away
+     * earlier, so isDistinct() is already false here.
+     */
+    @Test
+    public void testRejectDistinctAggregate() throws Exception {
+        String[] ddls = {
+                "CREATE MATERIALIZED VIEW mv_count_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, COUNT(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "CREATE MATERIALIZED VIEW mv_sum_distinct "
+                        + "REFRESH DEFERRED MANUAL "
+                        + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                        + "AS SELECT id, SUM(DISTINCT c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String ddl : ddls) {
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                    "INCREMENTAL refresh must reject distinct aggregates: " + ddl);
+            assertTrue(ex.getMessage().contains("does not support distinct aggregate"),
+                    "error message must mention distinct rejection, got: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * HAVING that references an aggregate must be rejected: aggregate IVM is UPSERT-only,
+     * so a group crossing the HAVING threshold across refreshes can't be maintained.
+     * Without this gate the rewrite failed with the opaque "__AGG_STATE__ columns size"
+     * mismatch because the HAVING aggregate survived un-rewritten.
+     */
+    @Test
+    public void testRejectHavingWithAggregate() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_having "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                + "GROUP BY id HAVING SUM(c1) > 10";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject HAVING that references an aggregate");
+        assertTrue(ex.getMessage().contains("does not support HAVING"),
+                "error message must mention HAVING rejection, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testRejectGroupByRollup() throws Exception {
+        // Non-plain GROUP BY has no IVM delta rule, so reject at CREATE. branch-4.1 has no
+        // GROUP BY ALL syntax (main's variant of this test), so exercise the guard via ROLLUP.
+        String ddl = "CREATE MATERIALIZED VIEW mv_group_rollup "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY ROLLUP(id)";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "INCREMENTAL refresh must reject ROLLUP");
+        assertTrue(ex.getMessage().contains("does not support")
+                        && ex.getMessage().contains("incremental view maintenance"),
+                "error must mention the unsupported grouping type, got: " + ex.getMessage());
+    }
+
+    /**
+     * HAVING over only group-by keys (no aggregate) is equivalent to a post-aggregation
+     * filter on stable keys — no threshold crossing — so it must still be accepted.
+     */
+    @Test
+    public void testAcceptHavingOnGroupKey() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_having_key "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` "
+                + "GROUP BY id HAVING id > 0";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+        assertTrue(result.isPresent(), "HAVING over only group-by keys must be accepted");
+    }
+
+    /**
+     * {@code COUNT(*)} in an aggregate MV query must be accepted by IVMAnalyzer.
+     *
+     * <p>Regression: until the fix that allows 0-arg count combinators, {@code count(*)}
+     * caused IVM rewrite to fail with {@code No matching function with signature: count_combine()}
+     * because {@code AggStateUtils.isSupportedAggStateFunction} excluded the 0-arg count form
+     * to protect AGG_STATE column DDL — but that DDL path is already blocked by the parser,
+     * so the exclusion was redundant and only blocked IVM.
+     */
+    @Test
+    public void testAggregateQueryWithCountStar() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_count_star "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, COUNT(*) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(),
+                "COUNT(*) aggregate MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                "COUNT(*) aggregate MV must yield QUERY_COMPUTED");
+    }
+
+    /**
+     * Aggregate-function whitelist: each (function, argument-type) combination listed in
+     * {@code IVM_SUPPORTED_AGG_FUNCTIONS} must be accepted by the analyzer.
+     */
+    @Test
+    public void testWhitelistAcceptsSupportedAggregates() throws Exception {
+        // t_numeric: id INT, c1 INT, c2 INT — all numeric.
+        // t0: id INT, data STRING, date STRING.
+        String[] ddls = {
+                // sum / avg over numeric
+                "SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, AVG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // min / max over numeric
+                "SELECT id, MIN(c1), MAX(c2) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // count(col) — count(*) is exercised by testAggregateQueryWithCountStar above.
+                "SELECT id, COUNT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                // approx_count_distinct / ndv
+                "SELECT id, APPROX_COUNT_DISTINCT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, NDV(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String selectSql : ddls) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_wl "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                    analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+            assertTrue(result.isPresent(), "whitelist must accept: " + selectSql);
+        }
+    }
+
+    /** {@code MIN(VARCHAR)} — widened in #73095 once state_union accepted compatible string types. */
+    @Test
+    public void testWhitelistAcceptsMinVarchar() throws Exception {
+        // t0.data is STRING (i.e. VARCHAR(65533) under the StarRocks type system).
+        assertWhitelistAccepts("SELECT id, MIN(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
+    /** {@code MAX(VARCHAR)} — same widening as MIN; covered by #73095. */
+    @Test
+    public void testWhitelistAcceptsMaxVarchar() throws Exception {
+        assertWhitelistAccepts("SELECT id, MAX(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
+    /**
+     * {@code AVG(DECIMAL)} — unblocked by #73012 which preserves the typed AggStateDesc
+     * on the state_union scalar so DECIMAL precision/scale survive the intermediate
+     * (sum, count) tuple. Use {@code CAST(c1 AS DECIMAL(10, 2))} since the mocked
+     * Iceberg tables only expose integer numeric columns.
+     */
+    @Test
+    public void testWhitelistAcceptsAvgDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, AVG(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    /** {@code MIN(DECIMAL)} — MIN/MAX state is the value itself; no AVG-style (sum, count) plumbing. */
+    @Test
+    public void testWhitelistAcceptsMinDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, MIN(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    /** {@code MAX(DECIMAL)} — symmetric to MIN(DECIMAL). */
+    @Test
+    public void testWhitelistAcceptsMaxDecimal() throws Exception {
+        assertWhitelistAccepts(
+                "SELECT id, MAX(CAST(c1 AS DECIMAL(10, 2))) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id");
+    }
+
+    /** {@code ARRAY_AGG(col)} (single arg) — newly whitelisted entry. */
+    @Test
+    public void testWhitelistAcceptsArrayAggSingleArg() throws Exception {
+        assertWhitelistAccepts("SELECT id, ARRAY_AGG(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
+    }
+
+    /**
+     * Aggregate-function whitelist: combinations not on the list must be rejected at
+     * CREATE time so the user sees a clear error instead of silently wrong data or a
+     * refresh-time crash.
+     */
+    @Test
+    public void testWhitelistRejectsUnsupportedAggregates() throws Exception {
+        record Case(String selectSql, String expectedFragment) { }
+        Case[] cases = {
+                // Unknown function: stddev is not on the whitelist.
+                new Case("SELECT id, STDDEV(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                        "does not support aggregate function: stddev"),
+        };
+
+        for (Case c : cases) {
+            assertWhitelistRejects(c.selectSql, c.expectedFragment);
+        }
+    }
+
+    /**
+     * {@code ARRAY_AGG(col ORDER BY key)} must be rejected: FunctionAnalyzer inlines the
+     * ORDER BY key as an extra child, so args.length > 1, while IVM state_union is unordered.
+     */
+    @Test
+    public void testWhitelistRejectsArrayAggOrderBy() throws Exception {
+        assertWhitelistRejects(
+                "SELECT id, ARRAY_AGG(data ORDER BY date) "
+                        + "FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                "does not support array_agg with argument types");
+    }
+
+    /**
+     * {@code SUM(VARCHAR)} must be rejected: SUM is whitelisted but its predicate is
+     * isFixedOrFloat || isDecimalV3, so STRING args are not accepted.
+     */
+    @Test
+    public void testWhitelistRejectsSumVarchar() throws Exception {
+        assertWhitelistRejects(
+                "SELECT id, SUM(data) FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id",
+                "does not support sum with argument types");
+    }
+
+    /**
+     * Trial must accept whitelisted aggregates end-to-end. The floor: a regression here
+     * means CREATE fails on known-good MVs.
+     */
+    @Test
+    public void testTrialRewriteAcceptsWhitelistedAggregates() throws Exception {
+        String[] ddls = {
+                "SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, AVG(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, MIN(c1), MAX(c2) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+                "SELECT id, COUNT(*), COUNT(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id",
+        };
+
+        for (String selectSql : ddls) {
+            String ddl = "CREATE MATERIALIZED VIEW mv_trial_pos "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS " + selectSql;
+            CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+            QueryStatement qs = stmt.getQueryStatement();
+            Analyzer.analyze(qs, connectContext);
+
+            IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+            Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                    analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+            assertTrue(result.isPresent(), "trial rewrite must accept: " + selectSql);
+            assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy(),
+                    "aggregate MV must yield QUERY_COMPUTED after trial: " + selectSql);
+        }
+    }
+
+    /**
+     * Trial must also accept the AUTO_INCREMENT path (non-aggregate scan), not just
+     * QUERY_COMPUTED. Different mock-MV schema and different rewrite shape.
+     */
+    @Test
+    public void testTrialRewriteAcceptsNonAggregateScan() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_trial_scan "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+        assertTrue(result.isPresent(), "trial rewrite must accept non-aggregate scan");
+        assertEquals(RowIdStrategy.AUTO_INCREMENT, result.get().rowIdStrategy(),
+                "non-aggregate scan must yield AUTO_INCREMENT after trial");
+    }
+
+    /**
+     * Drift simulation: whitelist accepts SUM(int), but the rewriter is mocked to throw.
+     * Verifies the trial catches the IllegalArgumentException, wraps it with the
+     * CREATE-time attribution prefix, and preserves the underlying message.
+     */
+    @Test
+    public void testTrialRewriteCatchesRewriterFailure() throws Exception {
+        new MockUp<IvmOpUtils>() {
+            @Mock
+            public ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
+                                                                ScalarOperator intermediateAgg,
+                                                                ScalarOperator aggStateRef) {
+                throw new IllegalArgumentException(
+                        "simulated rewriter drift: state union types do not match");
+            }
+        };
+
+        String ddl = "CREATE MATERIALIZED VIEW mv_trial_neg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "trial must reject when rewriter throws on a whitelisted shape");
+        assertTrue(ex.getMessage().contains("Failed to generate IVM refresh plan at CREATE time"),
+                "error must include trial-rewrite attribution, got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("simulated rewriter drift"),
+                "underlying rewriter failure message must be preserved, got: " + ex.getMessage());
+    }
+
+    /**
+     * Convergence failure: if a delta rule is missing for a plan operator the analyzer
+     * accepts, IvmRewriter's Phase 2 convergence check leaves the LogicalDeltaOperator
+     * unresolved and throws. Simulated here by neutering {@code IvmDeltaAggregateRule.check}
+     * so the rule never matches — same effect as someone adding a new aggregate-shaped
+     * operator without a matching delta rule.
+     */
+    @Test
+    public void testTrialRewriteCatchesConvergenceFailure() throws Exception {
+        new MockUp<IvmDeltaAggregateRule>() {
+            @Mock
+            public boolean check(OptExpression input, OptimizerContext context) {
+                return false;
+            }
+        };
+
+        String ddl = "CREATE MATERIALIZED VIEW mv_trial_convergence "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "trial must catch convergence failure when a delta rule is missing");
+        assertTrue(ex.getMessage().contains("Failed to generate IVM refresh plan at CREATE time"),
+                "error must include trial-rewrite attribution, got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("failed to fully resolve incremental markers"),
+                "underlying convergence failure must surface, got: " + ex.getMessage());
+    }
+
+    /**
+     * Session-var leak guard: even when the trial throws mid-rewrite, the try/finally
+     * must restore {@code enable_ivm_refresh} and {@code tvr_target_mv_id} so subsequent
+     * optimizer calls on this ConnectContext don't see polluted state and accidentally
+     * run IvmRewriter on non-IVM plans.
+     */
+    @Test
+    public void testTrialRewriteRestoresSessionVarsOnFailure() throws Exception {
+        boolean initialIvmEnabled = connectContext.getSessionVariable().isEnableIVMRefresh();
+        String initialTvrTargetMvId = connectContext.getSessionVariable().getTvrTargetMvId();
+
+        new MockUp<IvmOpUtils>() {
+            @Mock
+            public ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
+                                                                ScalarOperator intermediateAgg,
+                                                                ScalarOperator aggStateRef) {
+                throw new IllegalArgumentException("forced failure mid-rewrite");
+            }
+        };
+
+        String ddl = "CREATE MATERIALIZED VIEW mv_trial_sessvar "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL));
+
+        assertEquals(initialIvmEnabled, connectContext.getSessionVariable().isEnableIVMRefresh(),
+                "enable_ivm_refresh must be restored after trial failure");
+        assertEquals(initialTvrTargetMvId, connectContext.getSessionVariable().getTvrTargetMvId(),
+                "tvr_target_mv_id must be restored after trial failure");
+    }
+
+    /**
+     * Trial must not run for PCT — PCT refresh doesn't use IvmRewriter; a spurious trial
+     * would add latency and risk false positives.
+     */
+    @Test
+    public void testTrialRewriteNotInvokedForPCT() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_pct "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"pct\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.PCT);
+        assertFalse(result.isPresent(), "PCT mode must short-circuit before trial runs");
+    }
+
+    // ── whitelist test helpers ───────────────────────────────────────────────
+
+    private void assertWhitelistAccepts(String selectSql) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_wl "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS " + selectSql;
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+        assertTrue(result.isPresent(), "whitelist must accept: " + selectSql);
+    }
+
+    private void assertWhitelistRejects(String selectSql, String expectedFragment) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_wl_neg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS " + selectSql;
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL),
+                "whitelist must reject: " + selectSql);
+        assertTrue(ex.getMessage().toLowerCase().contains(expectedFragment.toLowerCase()),
+                "error message must contain '" + expectedFragment + "', got: " + ex.getMessage());
     }
 
     /**
@@ -185,7 +849,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
@@ -197,9 +861,128 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
-     * Aggregate incremental MV (QUERY_COMPUTED): refresh SQL uses positional form since
-     * the schema has no AUTO_INCREMENT columns; the query itself produces {@code __ROW_ID__}
-     * via encode(group_by_keys).
+     * Column identity across an ACTIVE round trip: a positional mis-bind of the DDL column list
+     * would rename columns without changing their count.
+     */
+    private static String schemaFingerprint(MaterializedView mv) {
+        return mv.getBaseSchema().stream()
+                .map(col -> String.format("%s|%s|key=%s|agg=%s|hidden=%s|auto=%s|null=%s",
+                        col.getName(), col.getType().toSql(), col.isKey(), col.getAggregationType(),
+                        col.isHidden(), col.isAutoIncrement(), col.isAllowNull()))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private void assertActiveRoundTripKeepsSchema(String mvName) throws Exception {
+        MaterializedView mv = getMv("test", mvName);
+        String before = schemaFingerprint(mv);
+
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " INACTIVE");
+        assertFalse(mv.isActive());
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " ACTIVE");
+        assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+
+        assertEquals(before, schemaFingerprint(getMv("test", mvName)));
+    }
+
+    /**
+     * The DDL rendered by {@code SHOW CREATE MATERIALIZED VIEW} is re-analyzed by
+     * {@code ALTER MATERIALIZED VIEW ... ACTIVE}, so its column list must pair with the
+     * defined query: no AUTO_INCREMENT {@code __ROW_ID__}, which the analyzer re-appends.
+     */
+    @Test
+    public void testAlterActiveRoundTripForAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_nonagg").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("(`id`, `data`, `date`)"),
+                    "AUTO_INCREMENT __ROW_ID__ must NOT be in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_nonagg");
+
+            Column rowIdCol = getMv("test", "mv_active_nonagg").getColumn(IvmOpUtils.COLUMN_ROW_ID);
+            assertNotNull(rowIdCol, "__ROW_ID__ must survive the active round trip");
+            assertTrue(rowIdCol.isAutoIncrement());
+        });
+    }
+
+    /** Same round trip with a partition column, which adds a PARTITION BY clause to the DDL. */
+    @Test
+    public void testAlterActiveRoundTripForPartitionedAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_nonagg_part "
+                + "REFRESH DEFERRED MANUAL "
+                + "PARTITION BY date "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t2` WHERE id > 1";
+        starRocksAssert.withMaterializedView(ddl, () ->
+                assertActiveRoundTripKeepsSchema("mv_active_nonagg_part"));
+    }
+
+    /**
+     * An aggregate MV's {@code __ROW_ID__} and {@code __AGG_STATE_*} columns are produced by the
+     * rewritten query, so they stay in the DDL column list and the analyzer regenerates them --
+     * in the same order, or the positional bind would swap column names.
+     */
+    @Test
+    public void testAlterActiveRoundTripForQueryComputedRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_agg "
+                + "REFRESH DEFERRED MANUAL ORDER BY (id) "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT SUM(c2) AS s2, c1, id, MAX(c1) AS mx "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_agg").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("`" + IvmOpUtils.COLUMN_ROW_ID + "`"),
+                    "QUERY_COMPUTED __ROW_ID__ must stay in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_agg");
+        });
+    }
+
+    /**
+     * The exemption above is positional, not prefix-based: a user-authored name that merely
+     * looks like a state column stays subject to the normal column-name rules -- otherwise it
+     * would smuggle in forbidden characters and become a hidden column.
+     */
+    @Test
+    public void testUserAuthoredStateLikeColumnNameStillRejected() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_fake_state_name (`a`, `__AGG_STATE_bad=x`, `c`, `d`) "
+                + "REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        Exception ex = assertThrows(Exception.class, () -> Analyzer.analyze(stmt, connectContext),
+                "a user-authored __AGG_STATE_* name must still be format-checked");
+        assertTrue(ex.getMessage().contains("Incorrect column name '__AGG_STATE_bad=x'"),
+                "error must name the rejected column, got: " + ex.getMessage());
+    }
+
+    /**
+     * {@code count(*)} names its state column {@code __AGG_STATE_count(*)}, which
+     * {@link com.starrocks.sql.analyzer.FeNameFormat} rejects for a user-authored column in
+     * shared-nothing mode. Re-analysis must not apply that check to IVM's own columns.
+     */
+    @Test
+    public void testAlterActiveRoundTripForStateColumnWithIllegalUserName() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_active_agg_count_star "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) AS s, COUNT(*) AS c "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            String createSql = getMv("test", "mv_active_agg_count_star").getMaterializedViewDdlStmt(false);
+            assertTrue(createSql.contains("`__AGG_STATE_count(*)`"),
+                    "expected the count(*) state column in the DDL column list, got: " + createSql);
+
+            assertActiveRoundTripKeepsSchema("mv_active_agg_count_star");
+        });
+    }
+
+    /**
+     * Aggregate incremental MV (QUERY_COMPUTED): the INSERT uses positional form because the
+     * schema has no AUTO_INCREMENT columns (contrast the non-agg case, which needs an explicit
+     * column list to omit the storage-filled __ROW_ID__).
      */
     @Test
     public void testGetIVMTaskDefinitionForQueryComputedUsesPositionalForm() throws Exception {
@@ -209,14 +992,32 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_taskdef_agg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_agg` "),
                     "aggregate MV uses positional INSERT, got: " + sql);
             assertFalse(sql.startsWith("INSERT INTO `mv_taskdef_agg` ("),
                     "no explicit column list expected (no AUTO_INCREMENT columns), got: " + sql);
-            assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
-                    "__ROW_ID__ must appear in the SELECT alias (produced by encode), got: " + sql);
+        });
+    }
+
+    /**
+     * New IVM MVs no longer persist the rewritten ivmDefineSql (refresh re-derives it), but
+     * CREATE must still derive the column schema from the rewritten tree — including the
+     * hidden __ROW_ID__ column.
+     */
+    @Test
+    public void testIncrementalMvDoesNotPersistIvmDefineSqlButKeepsRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_no_frozen_ivmdef "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_no_frozen_ivmdef");
+            assertTrue(mv.getIvmDefineSql() == null || mv.getIvmDefineSql().isEmpty(),
+                    "new IVM MV must not persist a frozen ivmDefineSql, got: " + mv.getIvmDefineSql());
+            assertNotNull(mv.getColumn(IvmOpUtils.COLUMN_ROW_ID),
+                    "schema derivation must still add the hidden __ROW_ID__ column");
         });
     }
 
@@ -239,7 +1040,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
         starRocksAssert.withMaterializedView(ddl, () -> {
             MaterializedView mv = getMv("test", "mv_reordered_nonagg");
-            String sql = mv.getIVMTaskDefinition();
+            String sql = mv.getIVMTaskDefinition(mv.getViewDefineSql());
 
             assertTrue(sql.startsWith("INSERT INTO `mv_reordered_nonagg` ("),
                     "must use explicit column list form, got: " + sql);
@@ -259,6 +1060,28 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         });
     }
 
+    @Test
+    public void testRewriteForRefreshUsesPinnedVersionAndStrategy() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_rf "
+                + "REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, null, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> r =
+                analyzer.rewriteForRefresh(MaterializedView.RefreshMode.INCREMENTAL, 0);
+
+        assertTrue(r.isPresent(), "GROUP BY query must be retractable");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, r.get().rowIdStrategy());
+        // Re-analyze so buildSimple sees the prepended __ROW_ID__/__AGG_STATE columns,
+        // mirroring the CREATE path (MaterializedViewAnalyzer re-analyzes before serializing).
+        Analyzer.analyze(r.get().queryStatement(), connectContext);
+        String sql = AstToSQLBuilder.buildSimple(r.get().queryStatement());
+        assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /**
@@ -273,4 +1096,5 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                 "expected CreateMaterializedViewStatement but got " + stmt.getClass().getSimpleName());
         return (CreateMaterializedViewStatement) stmt;
     }
+
 }

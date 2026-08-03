@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP INDEX drops a specified bitmap index on a table."
 ---
 
 # DROP INDEX

@@ -87,6 +87,13 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     }
 
     auto res = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets));
+    // Flattening all pairs into the key/value columns may exceed the 4GB capacity of
+    // BinaryColumn's uint32 offsets within a single chunk, which would silently wrap
+    // and corrupt the data. Fail the query instead.
+    if (auto st = res->capacity_limit_reached(); !st.ok()) {
+        return Status::CapacityLimitExceed("map constructor result exceeds column capacity limit, " +
+                                           std::string(st.message()));
+    }
 
     if (all_const) {
         res->assign(num_rows, 0);

@@ -151,7 +151,8 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context, bool use_cache = false, bool* cache_hit_out = nullptr);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -197,7 +198,8 @@ void AggregatorParams::init() {
         const TFunction& fn = desc.nodes[0].fn;
 
         if (AggStateUtils::is_count_function(fn.name.function_name)) {
-            // count function is always not nullable
+            // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
+            // re-derived from the real input nullability in _is_agg_result_nullable, not here.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
@@ -282,8 +284,6 @@ Status Aggregator::open(RuntimeState* state) {
         auto& opts = state->query_options();
         bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
         auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
-            std::vector<int> attached_udaf_idx;
-            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
@@ -294,7 +294,8 @@ Status Aggregator::open(RuntimeState* state) {
                     {
                         SCOPED_TIMER(_agg_stat->udaf_load_timer);
                         st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                               _agg_fn_ctxs[i], use_cache, use_cache ? &cache_hit : nullptr);
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
                     }
                     if (use_cache) {
                         if (cache_hit) {
@@ -303,13 +304,7 @@ Status Aggregator::open(RuntimeState* state) {
                             COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
                         }
                     }
-                    if (!st.ok()) {
-                        for (int idx : attached_udaf_idx) {
-                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
-                        }
-                        return st;
-                    }
-                    attached_udaf_idx.emplace_back(i);
+                    RETURN_IF_ERROR(st);
                 }
             }
             return Status::OK();
@@ -571,8 +566,10 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
 
 bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type) {
     const TFunction& fn = desc.nodes[0].fn;
-    // NOTE: For count, we cannot use agg_func_type since it's only mocked values.
-    if (fn.name.function_name == FUNCTION_COUNT) {
+    // NOTE: count and count_combine carry mocked agg_func_type values (non-nullable fast-path), so
+    // their NULL-skipping choice must come from the real input nullability on the plan node.
+    if (fn.name.function_name == FUNCTION_COUNT ||
+        fn.name.function_name == FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
         if (fn.arg_types.empty()) {
             return false;
         }
@@ -678,7 +675,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
 #ifndef __APPLE__
     for (int i = 0; i < _agg_functions.size(); i++) {
         if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
-            clear_java_udaf_states(_agg_fn_ctxs[i]);
+            _agg_fn_ctxs[i]->release_mems();
         }
     }
 #endif
@@ -758,7 +755,7 @@ void Aggregator::close(RuntimeState* state) {
 #ifndef __APPLE__
         for (int i = 0; i < _agg_functions.size(); i++) {
             if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
-                destroy_java_udaf_context(_agg_fn_ctxs[i]);
+                _agg_fn_ctxs[i]->release_mems();
             }
         }
 #endif

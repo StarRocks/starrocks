@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查看 Routine Load 导入作业下属导入任务的执行情况。"
 ---
 
 # SHOW ROUTINE LOAD TASK

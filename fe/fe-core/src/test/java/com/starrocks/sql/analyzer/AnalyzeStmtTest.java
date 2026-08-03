@@ -241,6 +241,35 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testExternalScanCapProperties() {
+        // Accepted on external tables.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1073741824')");
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '2147483648', " +
+                "'scan_files_cap' = '500', 'scan_rows_cap' = '10000000')");
+        // -1 (unlimited) is a legal value.
+        analyzeSuccess("analyze table hive0.tpch.customer properties('scan_rows_cap' = '-1')");
+
+        // Rejected on internal (OLAP) tables instead of being silently ignored.
+        analyzeFail("analyze full table db.tbl properties('scan_bytes_cap' = '1073741824')",
+                "Property 'scan_bytes_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_files_cap' = '500')",
+                "Property 'scan_files_cap' is only supported for external tables");
+        analyzeFail("analyze full table db.tbl properties('scan_rows_cap' = '10000')",
+                "Property 'scan_rows_cap' is only supported for external tables");
+
+        // Non-long values are rejected up front (same parser the collector uses), so they can't silently fall
+        // back to the config default at collection time.
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = 'abc')",
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_bytes_cap' = '1e9')",
+                "Property 'scan_bytes_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_files_cap' = '1.0')",
+                "Property 'scan_files_cap' value must be an integer");
+        analyzeFail("analyze table hive0.tpch.customer properties('scan_rows_cap' = '99999999999999999999')",
+                "Property 'scan_rows_cap' value must be an integer");
+    }
+
+    @Test
     public void testShow() throws MetaNotFoundException, AlreadyExistsException {
         String sql = "show analyze";
         analyzeSuccess(sql);
@@ -526,8 +555,9 @@ public class AnalyzeStmtTest {
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as bigint)) as string), " +
-                        "cast(min(cast(min as bigint)) as string), cast(avg(collection_size) as bigint) FROM column_statistics " +
+                        "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                        "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                        "cast(avg(collection_size) as bigint) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
@@ -734,13 +764,13 @@ public class AnalyzeStmtTest {
 
         String pattern = String.format("SELECT cast(10 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                 "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string), " +
+                "cast(max(cast(nullif(max, '') as string)) as string), cast(min(cast(nullif(min, '') as string)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
                 "UNION ALL SELECT cast(10 as INT), now(), db_id, table_id, column_name, " +
                 "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string), " +
+                "cast(max(cast(nullif(max, '') as bigint)) as string), cast(min(cast(nullif(min, '') as bigint)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());

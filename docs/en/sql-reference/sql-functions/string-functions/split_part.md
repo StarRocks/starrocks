@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Splits a string by a delimiter and returns the Nth part."
 ---
 
 # split_part

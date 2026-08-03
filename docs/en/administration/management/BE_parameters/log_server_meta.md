@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
+description: "BE configuration parameters for logging, server settings, and metadata management."
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -33,7 +34,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-This topic introduces the following types of FE configurations:
+This topic introduces the following types of BE configurations:
 - [Logging](#logging)
 - [Server](#server)
 - [Metadata and Cluster Management](#metadata-and-cluster-management)
@@ -194,6 +195,19 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The BE HTTP server port.
 - Introduced in: -
+
+### enable_http_auth
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Introduced in: v4.2.0
+- Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
+  - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.
+  - Stream Load and transaction endpoints that authenticate inside the handler using the load label + table grants: `/api/{db}/{table}/_stream_load`, `/api/transaction/{txn_op}`, `/api/transaction/load`.
+
+  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the session — use `SET DEFAULT ROLE <roles> TO <user>;` or set `activate_all_roles_on_login=true` if the role is granted but not default. LDAP / security-integration group → role mappings activate automatically.
 
 ### be_port
 
@@ -460,6 +474,15 @@ This topic introduces the following types of FE configurations:
 - Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio `>` rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
 - Introduced in: v3.2.0
 
+### enable_threadpool_catch_task_exception
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a ThreadPool worker swallows an exception thrown by a task and continues with the next task. When set to `false` (default), there is no catch clause enclosing the task body, so an exception that escapes the task finds no handler and terminates the BE process at the throw point. When set to `true`, the exception is logged at the ERROR level, the process-wide metric [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) is incremented, and the worker proceeds to the next task, which keeps the process alive. Note that keeping the worker alive does not make the task exception-safe: if a task signals its completion from a `DeferOp` or from its destructor while the statements that record its result are skipped, the waiter reads the task as successful, because an unset `Status` reads as OK. The failure then produces wrong results instead of an error. Set this item to `true` only to mitigate a crash loop, and expect the affected failures to become silent.
+- Introduced in: -
+
 ### ssl_private_key_path
 
 - Default: An empty string
@@ -603,7 +626,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: Yes
-- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent &gt; 0; set it &lt;= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
+- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when `metadata_cache_memory_limit_percent > 0`; set it to `<= 0` to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
 - Introduced in: v3.2.10
 
 ### retry_apply_interval_second
@@ -624,13 +647,13 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum cumulative retry time (in seconds) allowed for applying a pending version before the apply process gives up and the tablet enters an error state. The apply logic accumulates exponential/backoff intervals based on `retry_apply_interval_second` and compares the total duration against `retry_apply_timeout_second`. If `enable_retry_apply` is true and the error is considered retryable, apply attempts will be rescheduled until the accumulated backoff exceeds `retry_apply_timeout_second`; then apply stops and the tablet transitions to error. Explicitly non-retryable errors (e.g., Corruption) are not retried regardless of this setting. Tune this value to control how long StarRocks will keep retrying apply operations (default 7200s = 2 hours).
 - Introduced in: v3.3.13, v3.4.3, v3.5.0
 
-### txn_commit_rpc_timeout_ms
+### stream_load_thrift_rpc_timeout_ms
 
 - Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, txn_commit_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts.
+- Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, stream_load_thrift_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts. The legacy name `txn_commit_rpc_timeout_ms` is still accepted as a backward-compatible alias.
 - Introduced in: v3.2.0
 
 ### txn_map_shard_size

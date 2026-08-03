@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "公開鍵・秘密鍵・証明書など外部データソースアクセス用のファイルを作成・管理・削除します。"
 sidebar_position: 90
 ---
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "システム内のすべてのユーザーを表示します。"
 ---
 
 # SHOW USERS

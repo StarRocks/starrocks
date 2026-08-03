@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 使用中的其他常见问题。"
 ---
 
 # 其他问题

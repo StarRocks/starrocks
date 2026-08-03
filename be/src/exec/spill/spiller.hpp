@@ -37,6 +37,7 @@
 
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);
+DECLARE_FAIL_POINT(spill_restore_error);
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
@@ -242,6 +243,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+            SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
             auto yield_defer = yield_ctx.defer_finished();
             RETURN_IF(!guard.scoped_begin(), (void)0);
             DEFER_GUARD_END(guard);
@@ -266,6 +268,10 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
                 res = task.do_read(yield_ctx, serd_ctx);
 
                 FAIL_POINT_TRIGGER_EXECUTE(spill_restore_sleep, { sleep(10); });
+                // Simulate a non-EOF error coming out of the restore IO task
+                // (e.g. ColumnarSerde::deserialize hitting a short read).
+                FAIL_POINT_TRIGGER_EXECUTE(spill_restore_error,
+                                           { res = Status::InternalError("inject spill_restore_error"); });
 
                 if (yield_ctx.need_yield && !yield_ctx.is_finished()) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);

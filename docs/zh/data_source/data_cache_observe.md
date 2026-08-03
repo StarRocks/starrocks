@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "通过 SQL 查询和可视化工具监控 Data Cache 性能、使用量和健康指标。"
 ---
 
 # Data Cache 可观测性

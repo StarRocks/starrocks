@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Before 2.4, StarRocks supports access to FEs and BEs via IP address only."
 ---
 
 # Enable FQDN access

@@ -77,6 +77,8 @@ public:
         return _stream->get_numeric_statistics();
     }
 
+    IoStatsSnapshot get_io_stats_snapshot() const override;
+
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
     void release();

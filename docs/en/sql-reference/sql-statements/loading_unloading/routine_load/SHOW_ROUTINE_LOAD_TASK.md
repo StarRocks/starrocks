@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ROUTINE LOAD TASK shows the execution information of load tasks within a Routine Load job."
 ---
 
 # SHOW ROUTINE LOAD TASK

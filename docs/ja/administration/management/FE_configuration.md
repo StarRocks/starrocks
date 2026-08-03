@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks FE 設定リファレンス：fe.conf またはADMIN SET FRONTEND CONFIG で設定可能なすべての FE パラメーター。"
 ---
 
 import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'

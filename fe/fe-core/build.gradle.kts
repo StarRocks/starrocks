@@ -178,6 +178,7 @@ dependencies {
     implementation("org.apache.hadoop:hadoop-client") {
         exclude(group = "org.slf4j", module = "slf4j-reload4j")
         exclude(group = "ch.qos.reload4j", module = "reload4j")
+        exclude(group = "org.jline", module = "jline")
     }
     implementation("org.apache.hadoop:hadoop-client-api")
     implementation("org.apache.hadoop:hadoop-client-runtime") {
@@ -228,6 +229,7 @@ dependencies {
     }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
+    implementation("org.apache.orc:orc-core")
     implementation("org.apache.parquet:parquet-avro")
     implementation("org.apache.parquet:parquet-column")
     implementation("org.apache.parquet:parquet-common")
@@ -285,6 +287,9 @@ dependencies {
     }
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
+    // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+    // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+    implementation("org.tukaani:xz")
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:glue")
     implementation("software.amazon.awssdk:dynamodb")

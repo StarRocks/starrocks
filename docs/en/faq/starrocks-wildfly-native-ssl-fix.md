@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Hadoop Wildfly Native SSL Library Issue"
 sidebar_position: 99
+description: "How to resolve the Wildfly OpenSSL compatibility issue introduced by the Hadoop 3.4.3 upgrade in StarRocks."
 ---
 # FAQ: Hadoop 3.4.3 Wildfly Native SSL Library Issue in StarRocks
 

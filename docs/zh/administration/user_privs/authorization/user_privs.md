@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks权限系统概览，涵盖基于角色（RBAC）和基于身份（IBAC）的访问控制模型。"
 keywords: ['quanxian', 'yonghu']
 sidebar_position: 10
 ---

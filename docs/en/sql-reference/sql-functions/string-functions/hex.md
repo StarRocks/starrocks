@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a numeric or string value to its hexadecimal representation."
 ---
 
 # hex

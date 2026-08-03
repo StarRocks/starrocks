@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a string into a Base64-encoded string."
 ---
 
 # to_base64

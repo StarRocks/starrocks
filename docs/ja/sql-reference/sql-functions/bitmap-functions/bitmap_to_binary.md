@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Bitmap 値を Binary 文字列に変換します。"
 ---
 
 # bitmap_to_binary

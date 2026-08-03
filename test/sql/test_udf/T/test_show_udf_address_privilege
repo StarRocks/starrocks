@@ -1,0 +1,70 @@
+-- name: test_show_udf_address_privilege @no_arrow_flight_sql
+create database db_udf_priv_${uuid0};
+use db_udf_priv_${uuid0};
+
+drop user if exists u_udf_usage_${uuid0};
+drop user if exists u_udf_create_${uuid0};
+drop user if exists u_global_drop_${uuid0};
+drop user if exists u_global_create_${uuid0};
+
+create user u_udf_usage_${uuid0};
+create user u_udf_create_${uuid0};
+create user u_global_drop_${uuid0};
+create user u_global_create_${uuid0};
+
+grant impersonate on user root to u_udf_usage_${uuid0};
+grant impersonate on user root to u_udf_create_${uuid0};
+grant impersonate on user root to u_global_drop_${uuid0};
+grant impersonate on user root to u_global_create_${uuid0};
+
+CREATE FUNCTION udf_priv_echo_${uuid0}(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+
+CREATE GLOBAL FUNCTION global_udf_priv_echo_${uuid0}(int)
+RETURNS int
+symbol = "Echoint"
+type = "StarrocksJar"
+file = "${udf_url}/starrocks-jdbc/udf.jar";
+
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+
+execute as u_udf_usage_${uuid0} with no revert;
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+grant usage on function db_udf_priv_${uuid0}.udf_priv_echo_${uuid0}(int) to u_udf_usage_${uuid0};
+grant create function on database db_udf_priv_${uuid0} to u_udf_create_${uuid0};
+
+execute as u_udf_usage_${uuid0} with no revert;
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+execute as u_udf_create_${uuid0} with no revert;
+show full functions from db_udf_priv_${uuid0} like 'udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+execute as u_global_drop_${uuid0} with no revert;
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+grant drop on global function global_udf_priv_echo_${uuid0}(int) to u_global_drop_${uuid0};
+grant create global function on system to u_global_create_${uuid0};
+
+execute as u_global_drop_${uuid0} with no revert;
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+execute as u_global_create_${uuid0} with no revert;
+show full global functions like 'global_udf_priv_echo_${uuid0}';
+
+execute as root with no revert;
+drop global function global_udf_priv_echo_${uuid0}(int);
+drop database db_udf_priv_${uuid0} force;
+drop user u_udf_usage_${uuid0};
+drop user u_udf_create_${uuid0};
+drop user u_global_drop_${uuid0};
+drop user u_global_create_${uuid0};

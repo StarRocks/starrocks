@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "解码 Base64 编码的字符串，是 to_base64() 函数的反向函数。"
 ---
 
 # base64_decode_string

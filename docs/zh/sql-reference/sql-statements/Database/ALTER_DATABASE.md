@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "ALTER DATABASE configures the properties of the specified database."
 ---
 
 # ALTER DATABASE

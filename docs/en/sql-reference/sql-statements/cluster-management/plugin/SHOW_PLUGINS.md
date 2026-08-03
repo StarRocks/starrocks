@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PLUGINS is used to view the installed plugins."
 ---
 
 # SHOW PLUGINS

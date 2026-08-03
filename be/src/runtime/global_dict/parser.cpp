@@ -381,11 +381,10 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
         ColumnBuilder<LowCardDictType> builder(codes.size());
         // build code convert map
         for (int i = 0; i < num_rows; ++i) {
+            dict_opt_ctx->code_convert_map[codes[i]] = i;
             if (viewer.is_null(i)) {
-                dict_opt_ctx->code_convert_map[codes[i]] = 0;
                 builder.append_null();
             } else {
-                dict_opt_ctx->code_convert_map[codes[i]] = i;
                 builder.append(result_map.find(viewer.value(i))->second);
             }
         }

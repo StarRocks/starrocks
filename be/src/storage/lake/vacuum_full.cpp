@@ -213,6 +213,11 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     // 3. deleted txn log which have txn id < min_active_txn_id
     RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
 
+    // 4. Reclaim load_spill entries whose txn_id < min_active_txn_id. Best-effort.
+    auto spill_st =
+            vacuum_load_spill(root_loc, min_active_txn_id, request.cleanup_legacy_load_spill(), &vacuumed_files);
+    LOG_IF(WARNING, !spill_st.ok()) << "Fail to vacuum load spill under " << root_loc << ": " << spill_st;
+
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
     return Status::OK();

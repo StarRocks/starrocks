@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks Flink コネクタは DataStream API・Table API & SQL・Python API に対応し、Flink から StarRocks への継続的なデータロードを実現します。"
 ---
 
 # Apache Flink® からデータを継続的にロードする
@@ -16,10 +17,10 @@ Flink コネクタは DataStream API、Table API & SQL、Python API をサポー
 
 | コネクタ | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降      | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降      | 8    | 2.11,2.12 |
 
 ## Flink コネクタの取得
 
@@ -76,13 +77,13 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
       sh build.sh <flink_version>
       ```
 
-   例えば、環境の Flink バージョンが 1.15 の場合、以下のコマンドを実行する必要があります。
+   例えば、環境の Flink バージョンが 1.16 の場合、以下のコマンドを実行する必要があります。
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`）を見つけます。
+3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`）を見つけます。
 
 > **注意**
 >
@@ -327,26 +328,26 @@ v1.2.14 以降でサポートされています。Merge Commit を使用する�
 
 ## Flink と StarRocks 間のデータ型マッピング
 
-| Flink データ型                   | StarRocks データ型   |
-|-----------------------------------|-----------------------|
-| BOOLEAN                           | BOOLEAN               |
-| TINYINT                           | TINYINT               |
-| SMALLINT                          | SMALLINT              |
-| INTEGER                           | INTEGER               |
-| BIGINT                            | BIGINT                |
-| FLOAT                             | FLOAT                 |
-| DOUBLE                            | DOUBLE                |
-| DECIMAL                           | DECIMAL               |
-| BINARY                            | INT                   |
-| CHAR                              | STRING                |
-| VARCHAR                           | STRING                |
-| STRING                            | STRING                |
-| DATE                              | DATE                  |
-| TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME              |
-| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME              |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;        |
-| MAP&lt;KT,VT&gt;                  | JSON STRING           |
-| ROW&lt;arg T...&gt;               | JSON STRING           |
+| Flink データ型                      | StarRocks データ型     |
+|-------------------------------------|------------------------|
+| `BOOLEAN`                           | `BOOLEAN`              |
+| `TINYINT`                           | `TINYINT`              |
+| `SMALLINT`                          | `SMALLINT`             |
+| `INTEGER`                           | `INTEGER`              |
+| `BIGINT`                            | `BIGINT`               |
+| `FLOAT`                             | `FLOAT`                |
+| `DOUBLE`                            | `DOUBLE`               |
+| `DECIMAL`                           | `DECIMAL`              |
+| `BINARY`                            | `INT`                  |
+| `CHAR`                              | `STRING`               |
+| `VARCHAR`                           | `STRING`               |
+| `STRING`                            | `STRING`               |
+| `DATE`                              | `DATE`                 |
+| `TIMESTAMP_WITHOUT_TIME_ZONE(N)`    | `DATETIME`             |
+| `TIMESTAMP_WITH_LOCAL_TIME_ZONE(N)` | `DATETIME`             |
+| `ARRAY<T>`                          | `ARRAY<T>`             |
+| `MAP<KT,VT>`                        | `JSON STRING`          |
+| `ROW<arg T...>`                     | `JSON STRING`          |
 
 ## 使用上の注意
 
@@ -674,7 +675,7 @@ v1.2.9 以降、StarRocks 用の Flink コネクタはこのフレームワー�
 - スキーマ変更の同期
 - フルおよびインクリメンタルデータの同期
 
-クイックスタートについては、[Flink CDC 3.0 を使用して MySQL から StarRocks へのストリーミング ELT を行う](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks) を参照してください。
+クイックスタートについては、[Flink CDC 3.0 を使用して MySQL から StarRocks へのストリーミング ELT を行う](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/) を参照してください。
 
 [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を有効にするために、StarRocks v3.2.1 以降のバージョンを使用することをお勧めします。これにより、カラムの追加や削除の速度が向上し、リソース使用量が削減されます。
 
@@ -792,7 +793,7 @@ DISTRIBUTED BY HASH(`id`);
   
     - すべてのカラムを含む DDL を定義します。
     - コネクタにカラム `score` を条件として使用することを伝えるために、オプション `sink.properties.merge_condition` を `score` に設定します。
-    - コネクタに Stream Load を使用することを伝えるために、オプション `sink.version` を `V1` に設定します。
+    - オプション `sink.version` を `V1` または `V2` に設定します。どちらも条件付き更新をサポートしています。
 
     ```SQL
     CREATE TABLE `score_board` (

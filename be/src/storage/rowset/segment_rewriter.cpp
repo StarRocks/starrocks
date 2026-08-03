@@ -25,7 +25,8 @@ SegmentRewriter::SegmentRewriter() = default;
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
-                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
+                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+                                               SegmentFileMark segment_file_mark) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
@@ -66,6 +67,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
@@ -91,7 +93,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                               std::vector<uint32_t>& column_ids, MutableColumns* columns) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns* columns,
+                                               SegmentFileMark segment_file_mark) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -131,14 +134,25 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     seg_options.chunk_size = num_rows;
     seg_options.temporary_data = true;
 
-    auto res = rowset->segments()[segment_id]->new_iterator(src_schema, seg_options);
-    auto& itr = res.value();
+    ASSIGN_OR_RETURN(auto itr, rowset->segments()[segment_id]->new_iterator(src_schema, seg_options));
 
     if (itr) {
         auto st = itr->get_next(read_chunk);
-        DCHECK_EQ(read_chunk->num_rows(), num_rows);
+        itr->close();
+        // Do NOT swallow the read error: a transient read failure (page crc / decompress / io) here would
+        // otherwise leave read_chunk short, and the downstream append_chunk would silently emit a segment whose
+        // key columns have fewer rows than the value columns (segment num_rows=0 while value columns=N).
+        TEST_SYNC_POINT_CALLBACK("SegmentRewriter::rewrite_auto_increment:get_next", &st);
+        RETURN_IF_ERROR(st);
+        TEST_SYNC_POINT_CALLBACK("SegmentRewriter::rewrite_auto_increment:read_chunk", read_chunk);
+        if (UNLIKELY(read_chunk->num_rows() != num_rows)) {
+            auto msg = "rewrite_auto_increment: read " + std::to_string(read_chunk->num_rows()) +
+                       " rows from partial segment " + src_path + " but expected " + std::to_string(num_rows) +
+                       " rows (partial-update/auto-increment segment read inconsistency)";
+            LOG(ERROR) << msg;
+            return Status::InternalError(msg);
+        }
     }
-    itr->close();
 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
@@ -163,6 +177,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 

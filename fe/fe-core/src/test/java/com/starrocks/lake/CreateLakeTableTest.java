@@ -20,12 +20,17 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.proc.IndexInfoProcDir;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
@@ -33,10 +38,18 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
+import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
+import com.starrocks.thrift.TGetTabletMetadataRequest;
+import com.starrocks.thrift.TGetTabletMetadataResponse;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTabletRange;
 import com.starrocks.utframe.UtFrameUtils;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -49,6 +62,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -275,6 +289,38 @@ public class CreateLakeTableTest {
             ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
 
             Assertions.assertNotEquals(0, resultSet.getResultRows().size());
+        }
+    }
+
+    @Test
+    public void testCreateLakeTableWithFlatJson() throws Exception {
+        // enabled: flat_json.enable and the factors are rendered
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_on (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'true', 'flat_json.null.factor' = '0.15',\n" +
+                        "'flat_json.sparsity.factor' = '0.6', 'flat_json.column.max' = '30');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_on");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("true", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNotNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+        }
+
+        // disabled: only flat_json.enable is rendered, factors omitted
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.lake_flat_json_off (k int, j json)\n" +
+                        "duplicate key(k) distributed by hash(k) buckets 1\n" +
+                        "properties('flat_json.enable' = 'false');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "lake_flat_json_off");
+            Map<String, String> properties = lakeTable.getProperties();
+            Assertions.assertEquals("false", properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+            Assertions.assertNull(properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
         }
     }
 
@@ -580,5 +626,283 @@ public class CreateLakeTableTest {
                 snapshot, engine, metastore);
         LightWeightDeltaLakeTable light = new LightWeightDeltaLakeTable(table);
         Assertions.assertThrows(UnsupportedOperationException.class, light::getDeltaSnapshot);
+    }
+
+    @Test
+    public void testGetTabletMetadata() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.tablet_metadata_rpc_test\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        LakeTable lakeTable = getLakeTable("lake_test", "tablet_metadata_rpc_test");
+        Partition partition = lakeTable.getPartitions().stream().findFirst().get();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        long tabletId = index.getTablets().get(0).getId();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+
+        // hash distribution tablet: returns OK with schema, no range
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            req.setVersion(1);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            Assertions.assertEquals(1, batchResp.getResponsesSize());
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.OK, resp.getStatus().getStatus_code());
+            Assertions.assertTrue(resp.isSetMeta());
+            Assertions.assertEquals(tabletId, resp.getMeta().getTablet_id());
+            Assertions.assertTrue(resp.getMeta().isSetSchema());
+            Assertions.assertTrue(resp.getMeta().isSetCompression_type());
+            // hash distribution table should not have tablet_ranges set
+            Assertions.assertFalse(resp.getMeta().isSetTablet_ranges());
+        }
+
+        // version unset: defaults to 1, behaves identically
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.OK, resp.getStatus().getStatus_code());
+            Assertions.assertTrue(resp.isSetMeta());
+            Assertions.assertTrue(resp.getMeta().isSetSchema());
+        }
+
+        // unsupported version: returns NOT_IMPLEMENTED_ERROR
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            req.setVersion(2);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_IMPLEMENTED_ERROR, resp.getStatus().getStatus_code());
+        }
+
+        // range distribution tablet: tablet_ranges should contain all tablets' ranges
+        {
+            boolean savedRangeDistribution = Config.enable_range_distribution;
+            try {
+                Config.enable_range_distribution = true;
+                connectContext.getSessionVariable().setEnableRangeDistribution(true);
+                ExceptionChecker.expectThrowsNoException(() -> createTable(
+                        "create table lake_test.tablet_metadata_range_test\n" +
+                                "(c0 int, c1 string)\n" +
+                                "PRIMARY KEY(c0)"));
+                LakeTable rangeTable = getLakeTable("lake_test", "tablet_metadata_range_test");
+                Assertions.assertTrue(rangeTable.isRangeDistribution());
+
+                Partition rangePart = rangeTable.getPartitions().stream().findFirst().get();
+                MaterializedIndex rangeIndex = rangePart.getDefaultPhysicalPartition().getLatestBaseIndex();
+                int numTablets = rangeIndex.getTablets().size();
+                long rangeTabletId = rangeIndex.getTablets().get(0).getId();
+                TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+                req.setTable_id(rangeTable.getId());
+                req.setPartition_id(rangePart.getDefaultPhysicalPartition().getId());
+                req.setIndex_id(rangeIndex.getId());
+                req.setTablet_id(rangeTabletId);
+                req.setVersion(1);
+                TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+                batchReq.addToRequests(req);
+                TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+                TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+                Assertions.assertEquals(TStatusCode.OK, resp.getStatus().getStatus_code());
+                Assertions.assertTrue(resp.isSetMeta());
+                Assertions.assertTrue(resp.getMeta().isSetTablet_ranges());
+                Assertions.assertEquals(numTablets, resp.getMeta().getTablet_ranges().size());
+                Assertions.assertTrue(resp.getMeta().getTablet_ranges().containsKey(rangeTabletId));
+                // initial range is Range.all(), so bounds are not set
+                TTabletRange tabletRange = resp.getMeta().getTablet_ranges().get(rangeTabletId);
+                Assertions.assertFalse(tabletRange.isSetLower_bound());
+                Assertions.assertFalse(tabletRange.isSetUpper_bound());
+            } finally {
+                Config.enable_range_distribution = savedRangeDistribution;
+                connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            }
+        }
+
+        // non-existent tablet: returns NOT_FOUND
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(999999999L);
+            req.setPartition_id(1L);
+            req.setIndex_id(1L);
+            req.setTablet_id(999999999L);
+            req.setVersion(1);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // table_id not exist (tablet_id valid but table dropped): returns NOT_FOUND
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(999999999L);
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            req.setVersion(1);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // partition_id not exist: returns NOT_FOUND
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(999999999L);
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            req.setVersion(1);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // index_id not exist: returns NOT_FOUND
+        {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(999999999L);
+            req.setTablet_id(tabletId);
+            req.setVersion(1);
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+
+            TGetTabletMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // empty batch
+        {
+            TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+            TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            Assertions.assertFalse(batchResp.isSetResponses());
+        }
+    }
+
+    @Test
+    public void testGetTabletMetadataBatchSizeRejected() throws Exception {
+        // Multi-request batches are intentionally not implemented: see comment on
+        // getTabletMetadata. Verify that any batch with more than one request is rejected
+        // at the batch level and no per-request response is produced.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.tablet_metadata_batch_reject_test\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        LakeTable lakeTable = getLakeTable("lake_test", "tablet_metadata_batch_reject_test");
+        Partition partition = lakeTable.getPartitions().stream().findFirst().get();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+        TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();
+        for (Tablet tablet : index.getTablets()) {
+            TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tablet.getId());
+            req.setVersion(1);
+            batchReq.addToRequests(req);
+        }
+
+        TBatchGetTabletMetadataResponse batchResp = impl.getTabletMetadata(batchReq);
+        Assertions.assertEquals(TStatusCode.NOT_IMPLEMENTED_ERROR, batchResp.getStatus().getStatus_code());
+        Assertions.assertFalse(batchResp.isSetResponses());
+    }
+
+    @Test
+    public void testIndexSchemaProcReturnsRollupSchemaForLakeTable() throws Exception {
+        // Regression: SHOW PROC '/dbs/db/tbl/index_schema/<metaId>' (IndexInfoProcDir.lookup)
+        // used to gate on `getType() == OLAP`, which excludes shared-data LakeTable
+        // (type CLOUD_NATIVE). Lake tables fell into the else branch and returned the base
+        // index schema for every rollup instead of that rollup's own declared columns.
+        createTable("create table lake_test.t_index_schema_proc " +
+                "(k1 varchar(10) not null, k2 int not null, v1 int)\n" +
+                "duplicate key(k1, k2) distributed by hash(k1) buckets 1\n" +
+                "rollup (r1(k2, k1))\n" +
+                "properties('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("lake_test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_index_schema_proc");
+        Assertions.assertTrue(table.isCloudNativeTable());
+
+        IndexInfoProcDir dir = new IndexInfoProcDir(db, table);
+
+        // rollup r1 was declared as (k2, k1): the per-index proc must report exactly those
+        // two columns in that order, not the base table's full schema (k1, k2, v1).
+        long rollupMetaId = table.getIndexMetaIdByName("r1");
+        ProcResult rollupResult = dir.lookup(String.valueOf(rollupMetaId)).fetchResult();
+        List<String> rollupColumns = new ArrayList<>();
+        for (List<String> row : rollupResult.getRows()) {
+            rollupColumns.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k2", "k1"), rollupColumns);
+
+        // base index still reports its own full schema.
+        long baseMetaId = table.getBaseIndexMetaId();
+        ProcResult baseResult = dir.lookup(String.valueOf(baseMetaId)).fetchResult();
+        List<String> baseColumns = new ArrayList<>();
+        for (List<String> row : baseResult.getRows()) {
+            baseColumns.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k1", "k2", "v1"), baseColumns);
+    }
+
+    @Test
+    public void testDescShowsBaseColumnsForLakeTable() throws Exception {
+        // Regression for the DESC production path: ShowStmtAnalyzer builds
+        // /dbs/<db>/<tbl>/index_schema/<baseIndexMetaId> for the base schema, and
+        // IndexInfoProcDir.lookup() must resolve the base schema for a shared-data table.
+        // Previously the analyzer passed table.getId() for non-OLAP tables and relied on the
+        // getBaseSchema() fallback; after routing cloud-native tables through
+        // getSchemaByIndexMetaId(), the analyzer must pass the base index meta id instead.
+        createTable("create table lake_test.t_desc_lake " +
+                "(k1 varchar(10) not null, k2 int not null, v1 int)\n" +
+                "duplicate key(k1, k2) distributed by hash(k1) buckets 1\n" +
+                "rollup (r1(k2, k1))\n" +
+                "properties('replication_num' = '1');");
+        DescribeStmt stmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "desc lake_test.t_desc_lake", connectContext);
+        ShowResultSet rs = ShowExecutor.execute(stmt, connectContext);
+        List<String> fields = new ArrayList<>();
+        for (List<String> row : rs.getResultRows()) {
+            fields.add(row.get(0));
+        }
+        Assertions.assertEquals(List.of("k1", "k2", "v1"), fields);
     }
 }

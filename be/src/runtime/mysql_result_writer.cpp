@@ -36,12 +36,15 @@
 
 #include <column/column_helper.h>
 
+#include <optional>
+
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
+#include "runtime/mysql_column_writer.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
@@ -80,6 +83,68 @@ MysqlRowBufferOptions make_mysql_row_buffer_options(const TQueryOptions& query_o
     return options;
 }
 
+struct ColumnSerializeContext {
+    ColumnSerializeContext(MysqlColumnViewer viewer_, MysqlSerializeFn serializer_, const TypeDescriptor& type_desc_)
+            : viewer(std::move(viewer_)), serializer(serializer_), type_desc(type_desc_), use_viewer(true) {}
+
+    explicit ColumnSerializeContext(ColumnPtr column_)
+            : fallback_column(std::move(column_)), serializer(nullptr), use_viewer(false) {}
+
+    std::optional<MysqlColumnViewer> viewer;
+    ColumnPtr fallback_column;
+    MysqlSerializeFn serializer;
+    TypeDescriptor type_desc;
+    bool use_viewer;
+};
+
+inline void serialize_row(MysqlRowBuffer* buf, const std::vector<ColumnSerializeContext>& column_ctxs, int row_idx,
+                          bool is_binary_format) {
+    for (const auto& ctx : column_ctxs) {
+        if (ctx.use_viewer) {
+            ctx.serializer(ctx.viewer.value(), ctx.type_desc, buf, row_idx, is_binary_format);
+        } else {
+            if (is_binary_format && !ctx.fallback_column->is_nullable()) {
+                buf->update_field_pos();
+            }
+            ctx.fallback_column->put_mysql_row_buffer(buf, row_idx, is_binary_format);
+        }
+    }
+}
+
+Status build_column_contexts(const std::vector<ExprContext*>& output_expr_ctxs, Chunk* chunk,
+                             std::vector<ColumnSerializeContext>* column_ctxs, Columns* result_columns) {
+    int num_columns = output_expr_ctxs.size();
+    result_columns->reserve(num_columns);
+    column_ctxs->reserve(num_columns);
+
+    for (int i = 0; i < num_columns; ++i) {
+        ASSIGN_OR_RETURN(ColumnPtr column, output_expr_ctxs[i]->evaluate(chunk));
+        const auto& root_type = output_expr_ctxs[i]->root()->type();
+        TypeDescriptor serializer_type = root_type;
+        LogicalType physical_type = root_type.type;
+        if (root_type.type == TYPE_TIME) {
+            column = ColumnHelper::convert_time_column_from_double_to_str(column);
+            physical_type = TYPE_VARCHAR;
+            serializer_type.type = TYPE_VARCHAR;
+        }
+        // Mark BinaryColumns that carry VARBINARY data so push_binary is used inside nested types.
+        ColumnHelper::mark_binary_columns(column, root_type);
+
+        result_columns->emplace_back(std::move(column));
+        auto& stored_column = result_columns->back();
+
+        auto viewer_opt = type_dispatch_filter(physical_type, std::optional<MysqlColumnViewer>{},
+                                               MysqlColumnViewerBuilder(), stored_column);
+        if (viewer_opt.has_value()) {
+            auto serializer = get_mysql_serializer(physical_type);
+            column_ctxs->emplace_back(std::move(*viewer_opt), serializer, serializer_type);
+        } else {
+            column_ctxs->emplace_back(stored_column);
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
@@ -107,6 +172,11 @@ Status MysqlResultWriter::init(RuntimeState* state) {
     }
 
     return Status::OK();
+}
+
+void MysqlResultWriter::_init_profile() {
+    BufferControlResultWriter::_init_profile();
+    _expr_eval_timer = ADD_CHILD_TIMER(_parent_profile, "ExprEvalTime", "AppendChunkTime");
 }
 
 Status MysqlResultWriter::append_chunk(Chunk* chunk) {
@@ -139,45 +209,39 @@ Status MysqlResultWriter::append_chunk(Chunk* chunk) {
 StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
+    int num_columns = _output_expr_ctxs.size();
     auto result = std::make_unique<TFetchDataResult>();
     auto& result_rows = result->result_batch.rows;
     result_rows.resize(num_rows);
 
     Columns result_columns;
-    // Step 1: compute expr
-    int num_columns = _output_expr_ctxs.size();
-    result_columns.reserve(num_columns);
-
-    for (int i = 0; i < num_columns; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
-        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? ColumnHelper::convert_time_column_from_double_to_str(column)
-                         : column;
-        // Mark BinaryColumns that carry VARBINARY data so that push_binary is
-        // used when they appear inside nested types (ARRAY / MAP / STRUCT).
-        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
-        result_columns.emplace_back(std::move(column));
+    std::vector<ColumnSerializeContext> column_ctxs;
+    {
+        SCOPED_TIMER(_expr_eval_timer);
+        RETURN_IF_ERROR(build_column_contexts(_output_expr_ctxs, chunk, &column_ctxs, &result_columns));
     }
 
-    // Step 2: convert chunk to mysql row format row by row
     {
         _row_buffer->reserve(128);
         SCOPED_TIMER(_convert_tuple_timer);
+        size_t max_row_len = 0;
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
             }
-            // TODO: codegen here
-            for (auto& result_column : result_columns) {
-                if (_is_binary_format && !result_column->is_nullable()) {
-                    _row_buffer->update_field_pos();
-                }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
-            }
+            serialize_row(_row_buffer, column_ctxs, i, _is_binary_format);
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
-            _row_buffer->reserve(len * 1.1);
+            if (len > max_row_len) {
+                max_row_len = len;
+            }
+            // move_content swaps the buffer's storage into result_rows[i], leaving the
+            // buffer at zero capacity. Reserve every row so subsequent pushes don't
+            // reallocate inside the row; +10% headroom to absorb size variance.
+            if (max_row_len > 0) {
+                _row_buffer->reserve(max_row_len + max_row_len / 10);
+            }
         }
     }
     return result;
@@ -186,65 +250,63 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
 StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
+    int num_columns = _output_expr_ctxs.size();
     std::vector<TFetchDataResultPtr> results;
 
     Columns result_columns;
-    // Step 1: compute expr
-    int num_columns = _output_expr_ctxs.size();
-    result_columns.reserve(num_columns);
-
-    for (int i = 0; i < num_columns; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
-        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? ColumnHelper::convert_time_column_from_double_to_str(column)
-                         : column;
-        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
-        result_columns.emplace_back(std::move(column));
+    std::vector<ColumnSerializeContext> column_ctxs;
+    {
+        SCOPED_TIMER(_expr_eval_timer);
+        RETURN_IF_ERROR(build_column_contexts(_output_expr_ctxs, chunk, &column_ctxs, &result_columns));
     }
 
-    // Step 2: convert chunk to mysql row format row by row
     {
         TRY_CATCH_ALLOC_SCOPE_START()
         _row_buffer->reserve(128);
         size_t current_bytes = 0;
         int current_rows = 0;
+        size_t max_row_len = 0;
         SCOPED_TIMER(_convert_tuple_timer);
         auto result = std::make_unique<TFetchDataResult>();
-        auto& result_rows = result->result_batch.rows;
-        result_rows.resize(num_rows);
+        auto* result_rows = &result->result_batch.rows;
+        result_rows->resize(num_rows);
 
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
             }
-            for (auto& result_column : result_columns) {
-                if (_is_binary_format && !result_column->is_nullable()) {
-                    _row_buffer->update_field_pos();
-                }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
-            }
+            serialize_row(_row_buffer, column_ctxs, i, _is_binary_format);
             size_t len = _row_buffer->length();
 
             if (UNLIKELY(current_bytes + len >= _max_row_buffer_size)) {
-                result_rows.resize(current_rows);
+                result_rows->resize(current_rows);
                 results.emplace_back(std::move(result));
 
                 result = std::make_unique<TFetchDataResult>();
-                result_rows = result->result_batch.rows;
-                result_rows.resize(num_rows - i);
+                result_rows = &result->result_batch.rows;
+                result_rows->resize(num_rows - i);
 
                 current_bytes = 0;
                 current_rows = 0;
             }
-            _row_buffer->move_content(&result_rows[current_rows]);
-            _row_buffer->reserve(len * 1.1);
+            _row_buffer->move_content(&(*result_rows)[current_rows]);
+            if (len > max_row_len) {
+                max_row_len = len;
+            }
+            // move_content swaps the buffer's storage into result_rows[current_rows],
+            // leaving the buffer at zero capacity. Reserve every row so subsequent
+            // pushes don't reallocate inside the row; +10% headroom to absorb size
+            // variance.
+            if (max_row_len > 0) {
+                _row_buffer->reserve(max_row_len + max_row_len / 10);
+            }
 
             current_bytes += len;
             current_rows += 1;
         }
         if (current_rows > 0) {
-            result_rows.resize(current_rows);
+            result_rows->resize(current_rows);
             results.emplace_back(std::move(result));
         }
         TRY_CATCH_ALLOC_SCOPE_END()

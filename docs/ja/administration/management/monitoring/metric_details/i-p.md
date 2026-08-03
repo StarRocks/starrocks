@@ -200,6 +200,49 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `lake_compaction_failed`
+
+- 単位: 件数
+- 説明: 失敗したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_partial_success`
+
+- 単位: 件数
+- 説明: 部分的に成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_running`
+
+- 単位: 件数
+- 説明: 現在実行中のストレージ・コンピュート分離（lake）コンパクションジョブの数。
+
+## `lake_compaction_running_tasks`
+
+- 単位: 件数
+- 説明: 実行中のすべてのストレージ・コンピュート分離（lake）コンパクションジョブにわたって、現在コンパクション中の tablet 数。これはスケジューラが `lake_compaction_max_tasks` 設定で上限を設ける際に用いる単位と同じで、コンパクションジョブ（パーティションごとに 1 つ）を数える `lake_compaction_running` よりも細かい粒度です。1 つのジョブは tablet ごとに 1 つの tablet 単位タスクに分割されます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_score_at_trigger`
+
+- 単位: スコア
+- タイプ: Gauge
+- 説明: 直近にストレージ・コンピュート分離（lake）コンパクションジョブを起動したパーティションのコンパクションスコア（整数に丸めた値）。値はそのパーティション内タブレットの *最大* スコア（`Quantiles.getMax()`）で、スケジューラがコンパクション対象パーティションを選ぶ判定基準と一致します。トリガごとに各パーティションで 1 回更新され、Gauge は最新の更新値を保持します。この Gauge は減衰しません。Leader FE では、コンパクションが実行されていないときは直近のトリガ値を保持します（0 にリセットされません）。この値はプロセスローカル（Leader 上のインメモリカウンターで、永続化されません）であるため、FE Leader のフェイルオーバー後、新しく昇格した Leader は 0 から開始し、最初のコンパクショントリガまで 0 を報告します——前の Leader の値は引き継ぎません。この指標を単独で参照するのではなく、`lake_compaction_running > 0` と組み合わせてアラートを設定してください。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` を返し値は 0 になるため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_success`
+
+- 単位: 件数
+- 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_vacuum_del_file_batch_size_minute`
+
+- 単位: 件数（バッチあたりファイル数）
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける Vacuum の直近 60 秒の `DeleteObjects` バッチあたり平均ファイル数。
+
+## `lake_vacuum_del_file_retries_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける Vacuum の直近 60 秒に発生した削除リトライ回数。一時的なオブジェクトストレージのスロットリング（SlowDown / try-again）を可視化する。
+
 ## `load_bytes`
 
 - 単位: バイト

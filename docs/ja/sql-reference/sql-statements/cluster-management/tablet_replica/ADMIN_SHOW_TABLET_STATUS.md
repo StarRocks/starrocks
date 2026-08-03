@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN SHOW TABLET STATUS は、共有データクラスター内のクラウドネイティブテーブルまたはマテリアライズドビューの Tablet ステータスを表示します。"
 ---
 
 # ADMIN SHOW TABLET STATUS

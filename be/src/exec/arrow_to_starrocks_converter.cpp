@@ -28,6 +28,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
@@ -688,19 +689,16 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             }
         } else if constexpr (at_is_datetime<AT>) {
             auto timezone = concrete_type->timezone();
-            if (timezone.empty()) {
-                // Quote from https://github.com/apache/arrow/blob/4743e181596b9ee45c6b063bcf59fdf9eb72418f/cpp/src/arrow/type.h#L1217
-
-                /// If a TimestampType is constructed without a timezone (or, equivalently, if the
-                /// timezone supplied is an empty string) then the resulting Arrow field (column) is
-                /// considered "timezone-naive".  The producer of a timezone-naive column may populate
-                /// its constituent integer arrays with datetime values from any timezone; the consumer
-                /// of a timezone-naive column should make no assumptions about the interoperability or
-                /// comparability of the values of such a column with those of any other timestamp
-                /// column or datetime value.
-
-                // When the parquet timezone is empty, populate data with runtime timezone instead.
-                timezone = ctx->state->timezone();
+            const bool is_timezone_naive = timezone.empty();
+            if (is_timezone_naive) {
+                // Arrow timezone-naive = Parquet isAdjustedToUTC=false. Per
+                // Parquet LogicalTypes.md TIMESTAMP, the value must be
+                // displayed "the same way, regardless of the local time zone
+                // in effect." Use UTC so the cctz lookup yields offset=0 and
+                // convert_datetime becomes a no-op for the wall-clock case.
+                // Matches Trino's `DateTimeZone.UTC` pattern in
+                // ColumnReaderFactory.java for the same case.
+                timezone = "UTC";
             }
 
             cctz::time_zone ctz;
@@ -901,8 +899,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
-
-            auto* child_col = struct_col->field_column_raw_ptr(child_name);
+            ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
             auto child_array = struct_array->GetFieldByName(child_name);
 
             if (child_array == nullptr) {
@@ -957,6 +954,16 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
+// Fallback "raw type" picker used by build_arrow_column_convert_plan when the user's
+// target LogicalType has no direct converter in global_optimized_arrow_conv_table.
+// The chosen raw LT becomes the Phase-1 destination; a SQL CAST then bridges raw -> user LT.
+//
+// Note: this is an unordered_map keyed by ArrowTypeId, so each Arrow type maps to exactly
+// ONE LogicalType (initializer-list duplicates keep the first insertion). All nested Arrow
+// types (LIST/LARGE_LIST/FIXED_SIZE_LIST/MAP/STRUCT) intentionally fall back to TYPE_JSON
+// here because JSON has the widest set of outgoing SQL casts. Strong-typed targets
+// (ARRAY/MAP/STRUCT) are handled in their own switch cases in build_arrow_column_convert_plan
+// and never read this table.
 static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_conv_table{
         STRICT_ARROW_CONV_ENTRY_R(TYPE_BOOLEAN, ArrowTypeId::BOOL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_TINYINT, ArrowTypeId::INT8, ArrowTypeId::UINT8),
@@ -972,10 +979,8 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_STRUCT, ArrowTypeId::STRUCT),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST,
+                                  ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{

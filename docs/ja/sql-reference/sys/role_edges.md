@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "role_edges ビューをクエリしてロールの被付与者を確認できます。"
 ---
 
 # role_edges

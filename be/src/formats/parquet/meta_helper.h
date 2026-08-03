@@ -99,6 +99,8 @@ public:
                               std::unordered_set<std::string>& existed_column_names) const override;
 
 private:
+    friend class LakeMetaHelperTest;
+
     void _init_field_mapping();
     bool _is_valid_type(const ParquetField* parquet_field, const TIcebergSchemaField* field_schema,
                         const TypeDescriptor* type_descriptor) const;

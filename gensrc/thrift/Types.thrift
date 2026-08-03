@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 
 typedef i64 TTimestamp
 typedef i32 TPlanNodeId
@@ -219,6 +220,8 @@ enum TTaskType {
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
     EXTERNAL_CLUSTER_SNAPSHOT,
+    // Placeholder for external cluster snapshot feature.
+    TABLET_RESTORE,
     NUM_TASK_TYPE
 }
 
@@ -392,6 +395,7 @@ struct TFunction {
   34: optional bool isolated
   35: optional string input_type
   36: optional string content
+  37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 enum TLoadJobState {
@@ -624,6 +628,14 @@ struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TClusterSnapshotPartitionSpec {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 physical_partition_id
 }
 
 enum TTxnType {

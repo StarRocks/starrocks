@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "从日期中减去指定的时间间隔。"
 ---
 
 # date_sub,subdate

@@ -1,0 +1,43 @@
+-- name: test_iceberg_transform_zero_width
+
+-- Regression for SIGFPE crash in MathFunctions::iceberg_truncate_int / iceberg_bucket_*.
+-- The second argument (truncate width / bucket count) was read once and used directly
+-- as a modulo divisor: `val % width` (truncate) and `(hash & INT_MAX) % width` (bucket),
+-- with no width != 0 guard. A width of 0 made the integer idiv raise SIGFPE and crash BE
+-- (be/src/exprs/math_functions.cpp). The fix validates width > 0 and returns a normal
+-- InvalidArgument error instead of dividing by zero.
+--
+-- This case fires width=0 against every transform variant (each of which used to kill
+-- BE), then asserts BE is still serving queries -- mirroring test_flat_json_write_fail.
+
+create table t0 (
+  i32 int not null,
+  i64 bigint not null,
+  d32 decimal(9,2) not null,
+  s   varchar(20) not null,
+  dt  date not null,
+  ts  datetime not null
+) PROPERTIES ("replication_num"="1");
+
+insert into t0 values (5, 5, 10.65, 'abc', '2024-01-01', '2024-01-01 12:00:00');
+
+-- Each of these used to SIGFPE the BE. The result is unchecked (the exact error is not
+-- asserted); the regression is that BE must NOT crash on width=0.
+[UC] select __iceberg_transform_truncate(i32, 0) from t0;
+[UC] select __iceberg_transform_truncate(i64, 0) from t0;
+[UC] select __iceberg_transform_truncate(d32, 0) from t0;
+[UC] select __iceberg_transform_bucket(i32, 0) from t0;
+[UC] select __iceberg_transform_bucket(i64, 0) from t0;
+[UC] select __iceberg_transform_bucket(d32, 0) from t0;
+[UC] select __iceberg_transform_bucket(s, 0) from t0;
+[UC] select __iceberg_transform_bucket(dt, 0) from t0;
+[UC] select __iceberg_transform_bucket(ts, 0) from t0;
+
+-- BE must still be alive and serving queries after the (now graceful) failures.
+select count(*) from t0;
+
+-- A valid positive width must still produce correct results.
+select __iceberg_transform_truncate(i32, 10) from t0;
+select __iceberg_transform_bucket(i32, 8) from t0;
+
+drop table t0;

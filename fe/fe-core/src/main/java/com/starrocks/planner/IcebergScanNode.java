@@ -35,6 +35,8 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -47,6 +49,7 @@ import com.starrocks.type.Type;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.metrics.ScanReportParser;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -173,6 +176,34 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
+        // Filter against the read schema (the targeted snapshot's schema for time travel), not the
+        // current native schema, so snapshot-only column names (e.g. a column before a later rename)
+        // are not dropped before IcebergMetadata calls scan.select(fieldNames).
+        Set<String> readSchemaColumnNames = icebergTable.getReadSchema().columns().stream()
+                .map(Types.NestedField::name)
+                .collect(Collectors.toSet());
+        List<String> requiredColumnNames = desc.getSlots().stream()
+                .map(slot -> slot.getColumn().getName())
+                .filter(readSchemaColumnNames::contains)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Bounded-cost statistics-scan budgets: the external ANALYZE job stashes these on the session
+        // variable so they ride the normal query path to the connector without a bespoke ANALYZE->connector
+        // channel. These variables are INVISIBLE but NOT read-only (the job must set them at runtime), so a
+        // user could SET/SET GLOBAL them; a truncated scan on an ordinary query would silently drop rows.
+        // Only honor the budget inside a statistics-collection context so a plain SELECT can never be capped.
+        long scanBytesCap = -1;
+        long scanFilesCap = -1;
+        long scanRowsCap = -1;
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null && connectContext.isStatisticsConnection()) {
+            SessionVariable sessionVariable = connectContext.getSessionVariable();
+            scanBytesCap = sessionVariable.getExternalStatsScanBytesCap();
+            scanFilesCap = sessionVariable.getExternalStatsScanFilesCap();
+            scanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
+        }
+
         GetRemoteFilesParams params =
                 IcebergGetRemoteFilesParams.newBuilder()
                         .setAllParams(tableFullMORParams)
@@ -181,6 +212,10 @@ public class IcebergScanNode extends ScanNode {
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
                         .setUsedForDelete(usedForDelete)
+                        .setFieldNames(requiredColumnNames)
+                        .setScanBytesCap(scanBytesCap)
+                        .setScanFilesCap(scanFilesCap)
+                        .setScanRowsCap(scanRowsCap)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
@@ -445,5 +480,12 @@ public class IcebergScanNode extends ScanNode {
 
     public Set<DeleteFile> getEqualAppliedDeleteFiles() {
         return scanRangeSource.getEqualAppliedDeleteFiles();
+    }
+
+    public Optional<Long> getBaseSnapshotId() {
+        if (tvrVersionRange == null) {
+            return Optional.empty();
+        }
+        return tvrVersionRange.end();
     }
 }

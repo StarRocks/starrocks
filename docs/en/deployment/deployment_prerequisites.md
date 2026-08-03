@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Hardware and software requirements for servers before deploying StarRocks."
 ---
 
 # Deployment Prerequisites

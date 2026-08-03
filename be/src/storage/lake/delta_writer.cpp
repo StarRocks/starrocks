@@ -30,6 +30,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
@@ -39,6 +41,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
@@ -85,7 +88,15 @@ public:
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override {
-        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+        // Serial flush: write() below produces this flush's own segment (even a delete-only flush
+        // writes a 0-row segment for the empty upsert chunk), which will occupy index
+        // segments().size() since flush_del_file() runs before it. The delete logically follows that
+        // segment (delete rssid = rowset_id + op_offset), so it sorts after this flush's own upserts
+        // and before any later-flush re-upsert of the same key, preserving the in-transaction order.
+        // A leading delete-only flush is handled the same way: its empty segment takes this slot and
+        // the re-upsert lands in a later segment that correctly wins.
+        const uint32_t op_offset = static_cast<uint32_t>(_writer->segments().size());
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes, op_offset));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
@@ -108,7 +119,8 @@ public:
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
-                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn)
+                             GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn,
+                             std::shared_ptr<const TabletSchema> tablet_schema)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -119,6 +131,7 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
+              _tablet_schema(std::move(tablet_schema)),
               _immutable_tablet_size(immutable_tablet_size),
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
@@ -252,6 +265,15 @@ private:
 
     int64_t _max_buffer_size;
 
+    // Effective "preserve in-transaction upsert/delete order" for this load, snapshotted ONCE (in
+    // build_schema_and_writer, once the schema is known) via pk_preserve_txn_delete_order_enabled(): the
+    // config OR the separate-sort-key load-spill path (which always needs op-aware ordering). It must not
+    // change mid-load: it drives both whether the spill path keeps the __op column (fixing
+    // LoadChunkSpiller's serde/schema from the first chunk) and whether finish() emits del_op_offsets.
+    // Reading the mutable configs live in each place could tear a single load across the legacy and
+    // op-aware paths.
+    bool _preserve_txn_delete_order = false;
+
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
@@ -375,15 +397,23 @@ const DictColumnsValidMap* DeltaWriterImpl::global_dict_columns_valid_info() con
 //    WHY: Condition merge requires reading old values during ingestion, which conflicts with spilling
 // 2. Partial updates are involved
 //    WHY: Partial updates need to merge with existing data, requiring all columns in memory
-// 3. Separate sort keys are used
-//    WHY: Sort key handling requires special memory layout incompatible with spilling
+// 3. Separate sort keys are used AND eager PK-index build is NOT supported for this schema
+//    Note: separate-sort-key tables normally DO spill -- the spill orders the merge output by the
+//    sort key (primary keys are not adjacent), so duplicate primary keys are resolved by the unsort
+//    SST writer, which runs under eager build. Spilling is disabled only for the narrow case where
+//    eager build is unavailable (V1 single non-VARCHAR/CHAR key, or metadata not yet cached), because
+//    there is then no unsort SST writer to resolve dups and lazy publish rebuild would tie-break by
+//    sort-key order instead of flush order. In that case the load falls back to the non-spill memtable
+//    path, which is correct: for PK tables the memtable sorts by primary key and removes duplicates
+//    first, then re-sorts by the sort key (see MemTable::_sort).
 //
 // For non-PK tables: Always allow spilling if globally enabled (no special constraints)
 bool DeltaWriterImpl::should_enable_load_spill() const {
     return config::enable_load_spill &&
            (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS ||
             ((config::ignore_merge_condition_inside_same_transaction || _merge_condition.empty()) &&
-             !is_partial_update() && !_tablet_schema->has_separate_sort_key()));
+             !is_partial_update() &&
+             (!_tablet_schema->has_separate_sort_key() || pk_index_eager_build_supported(*_tablet_schema))));
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -392,6 +422,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN([[maybe_unused]] auto tablet, _tablet_manager->get_tablet(_tablet_id));
         RETURN_IF_ERROR(init_tablet_schema());
         RETURN_IF_ERROR(init_write_schema());
+        // Snapshot the effective preserve-order decision once, now that the schema is known.
+        _preserve_txn_delete_order = pk_preserve_txn_delete_order_enabled(*_tablet_schema);
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
             _tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_manager, _tablet_id, _write_schema,
                                                                         _txn_id, nullptr, false /** no compaction**/,
@@ -403,17 +435,28 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
+            // Eager PK-index build (the unsort SST writer that a separate-sort-key spill load needs to
+            // dedup non-adjacent duplicate primary keys) is enabled at merge time by try_enable, which
+            // fires for any spilled load and, for separate-sort-key tables, regardless of size
+            // (merge_blocks_to_segments / init_parallel_merge). A single flush never spills and takes the
+            // direct write_single_flush* path, which does not need it. So there is no build-time force
+            // here; the decision follows the data volume (whether the load actually spills).
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
+                // Pass txn_id to LoadSpillBlockManager so that spill files are placed under
+                // the flat layout <tablet_root>/load_spill_txns/<txn_id_hex>_<load_id>_<frag_id>_<seq>,
+                // enabling offline vacuum to reclaim expired entries by comparing the leading
+                // hex txn_id against the cluster-wide min_active_txn_id.
                 _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr,
+                        /*enable_flat_layout=*/true, _txn_id);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
-            _mem_table_sink =
-                    std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(), _profile);
+            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(),
+                                                                  _profile, _preserve_txn_delete_order);
             // Use concurrent flush token to improve the flush speed when spilling is enabled.
             // PERFORMANCE: Concurrent mode allows multiple memtables to flush in parallel,
             // which improves throughput when data is spilled to temporary storage before
@@ -794,47 +837,87 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     table_schema_key->set_schema_id(_tablet_schema->id());
 
     for (const auto& f : _tablet_writer->segments()) {
-        uint32_t segment_idx = op_write->mutable_rowset()->segments_size();
-        op_write->mutable_rowset()->add_segments(f.path);
-        op_write->mutable_rowset()->add_segment_size(f.size.value());
-        op_write->mutable_rowset()->add_segment_encryption_metas(f.encryption_meta);
-        if (f.bundle_file_offset.has_value() && f.bundle_file_offset.value() >= 0) {
-            op_write->mutable_rowset()->add_bundle_file_offsets(f.bundle_file_offset.value());
-        }
-        auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
-        segment_meta->set_num_rows(f.num_rows);
-        segment_meta->set_segment_idx(segment_idx);
+        uint32_t segment_idx = op_write->rowset().segment_metas_size();
+        f.to_proto(segment_idx, op_write->mutable_rowset()->add_segment_metas());
     }
-    for (const auto& f : _tablet_writer->dels()) {
-        op_write->add_dels(f.path);
-        op_write->add_del_encryption_metas(f.encryption_meta);
+    {
+        const auto& del_op_offsets = _tablet_writer->del_op_offsets();
+        size_t del_idx = 0;
+        for (const auto& f : _tablet_writer->dels()) {
+            auto* del_meta = op_write->add_dels_meta();
+            to_file_meta_pb(f, del_meta);
+            ++del_idx;
+        }
+        // Carry the per-del op_offset (parallel to dels_meta, index by del_id) so the apply/persist
+        // path can preserve in-transaction upsert/delete ordering. A kUnknownDelOpOffset entry (spill /
+        // concurrent flush) keeps the array aligned and is read as "not recorded" -> max segment id.
+        // Only emitted when the effective preserve-order snapshot is on (pk_preserve_txn_delete_order_enabled
+        // -- the config, which defaults on, OR any separate-sort-key table). The separate-sort-key path
+        // MUST emit it: its parallel merge can split a key's DELETE and later re-UPSERT across tasks, and
+        // without the offsets the earlier del file would erase the later re-insert. This is new on-disk
+        // state (del_op_offsets) that a pre-feature BE (rollback / not-yet-upgraded node / cross-version
+        // OpReplication target) would misread; its read side must be deployed fleet-wide before relying on
+        // it (see the seg_delvecs read-side backport).
+        if (_preserve_txn_delete_order) {
+            for (size_t i = 0; i < del_idx; ++i) {
+                op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
+            }
+        }
+        // Carry the per-del tombstone count (parallel to dels_meta, index by del_id). Unlike
+        // del_op_offsets this has no downgrade-safety concern: a pre-fix reader simply ignores
+        // DelfileWithRowsetId.num_rows, so it is emitted unconditionally.
+        const auto& del_num_rows = _tablet_writer->del_num_rows();
+        for (size_t i = 0; i < del_idx; ++i) {
+            op_write->add_del_num_rows(i < del_num_rows.size() ? del_num_rows[i] : 0);
+        }
     }
     for (const auto& sst : _tablet_writer->ssts()) {
-        auto* file_meta = op_write->add_ssts();
-        file_meta->set_name(sst.path);
-        file_meta->set_size(sst.size.value());
-        file_meta->set_encryption_meta(sst.encryption_meta);
+        to_file_meta_pb(sst, op_write->add_ssts());
     }
     for (auto& sst_range : _tablet_writer->sst_ranges()) {
         op_write->add_sst_ranges()->CopyFrom(sst_range);
     }
+    // Per-segment dedup delete vectors from the unsort SST writer (separate-sort-key PK). Kept
+    // parallel to `ssts` by index; an entry with no data means that segment had no dedup losers.
+    // The bitmap version is a placeholder here; publish stamps it with the real tablet version.
+    // Only the separate-sort-key path can leave intra-segment duplicate-PK losers, so only it emits
+    // seg_delvecs: the common sort-key==PK path would otherwise append one empty entry per SST (and hand
+    // a pre-feature publisher an unknown field for no reason). Publish guards missing indices as empty,
+    // so emitting nothing here is equivalent to emitting all-empty entries.
+    if (_tablet_schema->has_separate_sort_key()) {
+        for (const auto& seg_del_rowids : _tablet_writer->seg_delvecs()) {
+            auto* seg_delvec_pb = op_write->add_seg_delvecs();
+            if (!seg_del_rowids.empty()) {
+                DelVector dv;
+                dv.init(0 /* version stamped at publish */, seg_del_rowids.data(), seg_del_rowids.size());
+                seg_delvec_pb->set_version(0);
+                seg_delvec_pb->set_data(dv.save());
+            }
+        }
+    }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
-    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    op_write->mutable_rowset()->set_overlapped(op_write->rowset().segment_metas_size() > 1);
+    // Mint the rowset's global uid here so it lives in the txn log and is inherited
+    // identically by every split child this write may be cross-published to. This is a
+    // freshly built op_write (no uid to inherit), so always assign one.
+    tablet_reshard_helper::set_rowset_uid(op_write->mutable_rowset());
 
-    // We can support partial update with row mode to be used with condition update at the same time.
+    // Column-mode PCU combined with condition update requires the condition column to be part of
+    // the partial update column set: the handler compares old vs new values from the partial chunk
+    // itself and cannot read the new value otherwise.
     if (is_partial_update() && !_merge_condition.empty() &&
         (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
          _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
-        return Status::NotSupported("partial update with column mode and condition update at the same time");
+        if (_write_schema->field_index(_merge_condition) == static_cast<size_t>(-1)) {
+            return Status::NotSupported(fmt::format(
+                    "partial update with column mode requires merge_condition column '{}' to be included in the "
+                    "partial update column set",
+                    _merge_condition));
+        }
     }
 
     // handle partial update
-    // If there is bundle data file, we will skip preload pk state, because the bundle data file hasn't been
-    // flushed to storage yet.
-    bool skip_pk_preload = config::skip_pk_preload || op_write->rowset().bundle_file_offsets_size() > 0;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr) {
         if (is_partial_update()) {
@@ -846,11 +929,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             }
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
-            } else {
-                skip_pk_preload = true;
             }
             // handle partial update
             op_write->mutable_txn_meta()->set_partial_update_mode(_partial_update_mode);
@@ -879,10 +960,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 }
             }
 
-            if (op_write->rewrite_segments_size() == 0) {
+            if (op_write->rewrite_segments_meta_size() == 0) {
                 // rewrite segments are useless now, just for compatibility
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                for (auto i = 0; i < op_write->rowset().segment_metas_size(); i++) {
+                    op_write->add_rewrite_segments_meta()->set_name(gen_segment_filename(_txn_id));
                 }
             }
         }
@@ -912,15 +993,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     ADD_COUNTER_RELAXED(_stats.finish_put_txn_log_time_ns, commit_txn_duration_ns);
     StarRocksMetrics::instance()->delta_writer_txn_commit_duration_us.increment(commit_txn_duration_ns /
                                                                                 NANOSECS_PER_USEC);
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !skip_pk_preload) {
-        // preload update state here to minimaze the cost when publishing.
-        FAIL_POINT_TRIGGER_EXECUTE_OR_DEFAULT(load_pk_preload, (void)PK_PRELOAD_FP_ACTION(_txn_id, _tablet_id),
-                                              tablet.update_mgr()->preload_update_state(*txn_log, &tablet));
-    }
-    auto pk_preload_duration_ns = watch.elapsed_time() - put_txn_log_ts;
-    ADD_COUNTER_RELAXED(_stats.finish_pk_preload_time_ns, pk_preload_duration_ns);
-    StarRocksMetrics::instance()->delta_writer_pk_preload_duration_us.increment(pk_preload_duration_ns /
-                                                                                NANOSECS_PER_USEC);
     VLOG(2) << "txn_log: " << txn_log->DebugString();
 
     if (config::enable_tablet_write_log) {
@@ -933,7 +1005,7 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                op_write->rowset().segment_metas_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
                 sst_output_files, sst_output_bytes);
     }
 
@@ -1027,11 +1099,14 @@ void DeltaWriterImpl::release_resources() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
-    if (_load_spill_block_mgr != nullptr) {
-        // ignore the return status of clear_parent_path,
-        // because the spill blocks will be cleared by GC later.
-        (void)_load_spill_block_mgr->clear_parent_path();
-    }
+    // Lake spill files moved from per-load directory layout
+    //   <root>/load_spill/<load_id_uuid>/<file>
+    // to flat
+    //   <root>/load_spill_txns/<txn_id_hex>_..._<seq>
+    // vacuum now reclaims by parsing txn_id_hex from the filename, removing
+    // per-load LIST. clear_parent_path() no longer applies (no per-load dir);
+    // deletion is done by TabletInternalParallelMergeTask after a successful
+    // merge, with vacuum_full as the asynchronous fallback for residuals.
     {
         // Take exclusive lock before resetting _flush_token to prevent race with cancel()
         // and get_flush_token(), which may be accessing _flush_token concurrently.
@@ -1277,11 +1352,15 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_schema_id == 0)) {
         return Status::InvalidArgument("schema_id not set");
     }
-    auto impl =
-            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
-                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
-                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
-                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn);
+    if (UNLIKELY(_tablet_schema != nullptr && _tablet_schema->id() != _schema_id)) {
+        return Status::InvalidArgument(
+                fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
+    }
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
+                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+                                    _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
+                                    _global_dicts, _is_multi_statements_txn, _tablet_schema);
     return std::make_unique<DeltaWriter>(impl);
 }
 

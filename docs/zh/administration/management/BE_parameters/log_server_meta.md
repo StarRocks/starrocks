@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for logging, server settings, and metadata management."
 sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
 ---
@@ -30,7 +31,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [日志](#日志)
 - [服务器](#服务器)
 - [元数据和集群管理](#元数据和集群管理)
@@ -183,6 +184,19 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE HTTP Server 端口。
 - 引入版本：-
 
+### enable_http_auth
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 引入版本：v4.2.0
+- 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
+  - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
+  - Stream Load 及 transaction 接口，由 handler 内基于 load label + 表级授权识别身份：`/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
+
+  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）——若已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;` 或将 `activate_all_roles_on_login` 设为 `true`。LDAP / security integration 的组 → 角色映射会自动激活。
+
 ### be_port
 
 - 默认值：9060
@@ -279,7 +293,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(&lt;0 或 &gt;100)按 100 处理。
+- 描述：一致性相关任务的内存百分比上限。启动时会取 `consistency_max_memory_limit`（字节）与 `process_mem_limit * percent / 100` 的较小值作为最终上限；`process_mem_limit` 为 -1 时视为不限制。非法取值(`<`0 或 `>`100)按 100 处理。
 - 引入版本：v3.2.0
 
 ### consistency_max_memory_limit
@@ -470,6 +484,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：在决定是否以压缩形式通过网络发送序列化的 row-batches 时使用的阈值（uncompressed_size / compressed_size）。当尝试压缩时（例如在 DataStreamSender、exchange sink、tablet sink 的索引通道、dictionary cache writer 中），StarRocks 会计算 compress_ratio = uncompressed_size / compressed_size；仅当 compress_ratio `>` rpc_compress_ratio_threshold 时才使用压缩后的负载。默认值 1.1 意味着压缩数据必须至少比未压缩小约 9.1% 才会被使用。将该值调低以偏好压缩（以更多 CPU 换取更小的带宽）；将其调高以避免压缩开销，除非压缩能带来更大的尺寸缩减。注意：此项适用于 RPC/shuffle 序列化，仅在启用 row-batch 压缩（compress_rowbatches）时生效。
 - 引入版本：v3.2.0
 
+### enable_threadpool_catch_task_exception
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：ThreadPool 的工作线程是否吞掉任务抛出的异常并继续执行下一个任务。设置为 `false`（默认）时，任务体外层没有 catch 语句，任务抛出的异常找不到处理者，会在抛出点终止 BE 进程。设置为 `true` 时，异常以 ERROR 级别记入日志，进程级指标 [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) 加一，工作线程继续执行下一个任务，进程得以存活。注意工作线程存活并不意味着任务是异常安全的：如果任务通过 `DeferOp` 或析构函数发出完成信号，而记录结果的语句被跳过，等待方会把该任务读作成功，因为未赋值的 `Status` 读出来就是 OK。此时故障不会报错，而是产生错误的结果。仅在需要缓解崩溃循环时将该项设置为 `true`，并预期相关故障会变为静默。
+- 引入版本：-
+
 ### ssl_private_key_path
 
 - 默认值：空字符串
@@ -587,13 +610,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：事务 apply 重试的超时时间。
 - 引入版本：-
 
-### txn_commit_rpc_timeout_ms
+### stream_load_thrift_rpc_timeout_ms
 
 - 默认值：60000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：BE 发往 FE 的事务提交/stream load 相关 Thrift RPC 的超时时长上限，也用于连接池中超时连接的关闭。实际超时会结合请求上下文计算，但不会超过该值；需与 FE `thrift_client_timeout_ms` 保持一致以避免不匹配。
+- 描述：BE 发往 FE 的事务提交/stream load 相关 Thrift RPC 的超时时长上限，也用于连接池中超时连接的关闭。实际超时会结合请求上下文计算，但不会超过该值；需与 FE `thrift_client_timeout_ms` 保持一致以避免不匹配。旧名称 `txn_commit_rpc_timeout_ms` 仍作为向后兼容的别名保留。
 - 引入版本：v3.2.0
 
 ### enable_retry_apply

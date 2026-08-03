@@ -1,0 +1,33 @@
+-- name: test_colocate_range_self_join_on_prefix @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_self_${uuid0}:k1');
+-- result:
+-- !result
+insert into t (k1, k2, v)
+select x % 50, x, x from table(generate_series(1, 100)) as g(x);
+-- result:
+-- !result
+select count(*) from t a join t b on a.k1 = b.k1;
+-- result:
+200
+-- !result
+select count(*) from t a join t b on a.k1 = b.k1 where a.v >= 0;
+-- result:
+200
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

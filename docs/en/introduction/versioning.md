@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "StarRocks version naming conventions: MAJOR.MINOR.PATCH format, prerelease designations, and how to interpret version numbers."
+---
+
 # Version naming
 
 Purpose: To provide a unified and clear explanation of the current naming conventions for StarRocks software packages.

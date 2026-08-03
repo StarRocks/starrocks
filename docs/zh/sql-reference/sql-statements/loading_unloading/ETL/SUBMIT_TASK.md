@@ -1,6 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "为 ETL 语句创建异步任务，支持长时间运行和定期执行。"
 ---
+
+import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -34,6 +37,15 @@ AS <etl_statement>
 ## PROPERTIES
 
 您可以通过添加 `session.` 前缀的会话变量来更改任务运行时的连接上下文配置。
+
+| **属性** | **类型** | **说明** |
+| -------- | -------- | -------- |
+| `session.query_timeout` | Integer | 查询超时时间。单位：秒。取值范围：1 到 259200。默认值：`300`。自 v3.4.0 起，该变量不适用于 INSERT 操作。 |
+| `session.insert_timeout` | Integer | INSERT 操作的超时时间。单位：秒。默认值：`14400`。自 v3.4.0 起支持。 |
+| `session.enable_profile` | Boolean | 是否为任务开启查询 Profile。默认值：`false`。 |
+| `session.new_planner_optimize_timeout` | Integer | 查询优化器的超时时间。单位：毫秒。默认值：`3000`。 |
+
+<PropertyWarehouse />
 
 例如，以下语句提交了一个名为 `test_task` 的任务，并启用了查询分析和增加了查询超时时间：
 

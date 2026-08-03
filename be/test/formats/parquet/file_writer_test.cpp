@@ -36,7 +36,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScanStats g_hdfs_scan_stats;
+static HdfsScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {
@@ -48,6 +48,7 @@ protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
         std::vector<Utils::SlotDesc> slot_descs;
@@ -55,7 +56,7 @@ protected:
             auto type_name = type_desc.debug_string();
             slot_descs.push_back({type_name, type_desc});
         }
-        slot_descs.push_back({""});
+        slot_descs.push_back({});
 
         TupleDescriptor* tuple_desc =
                 parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
@@ -63,7 +64,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = (_create_scan_range(_file_path, file_size));
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_scan_stats;
+        ctx->stats = &g_hdfs_stats;
 
         return ctx;
     }
@@ -138,6 +139,7 @@ protected:
     std::string _file_path{"/dummy_file.parquet"};
     RuntimeState* _runtime_state;
     ObjectPool _pool;
+    HdfsScannerContext _scanner_ctx;
 };
 
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {
