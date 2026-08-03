@@ -29,6 +29,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -61,6 +62,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -309,6 +312,12 @@ public class StatisticsCalculatorTest {
         }
     }
 
+    /**
+     * Operator level test for both call sites that ask the statistics storage for a subfield path: the projection of a
+     * scan operator, and a LogicalProject on top of a scan. A query reaches the first one, see
+     * {@link #testQueryWithSubfieldOfArrayElement()}, but not the second one, because the project is merged into the
+     * scan projection before statistics are estimated. That branch is therefore covered by a hand built operator tree.
+     */
     @Test
     public void testSkipStatisticsForSubfieldOfArrayElement() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -437,6 +446,71 @@ public class StatisticsCalculatorTest {
             Assertions.assertEquals(expected.getDistinctValuesCount(), actual.getDistinctValuesCount());
         } finally {
             globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    /**
+     * Query level regression test for the same bug. `ass[1].a` reaches the optimizer as a SubfieldOperator whose root
+     * is an expression instead of a table column, so before the fix the scan asked the statistics storage for the path
+     * `3: ass,1.a`, which no table column can ever match.
+     * <p>
+     * The statistics storage below reproduces what production then does with such a path: the loader behind
+     * CachedStatisticStorage resolves every requested path with StatisticUtils#getQueryStatisticsColumnType, which
+     * rejects an unknown root column, and CachedStatisticStorage falls back to unknown statistics for the whole
+     * requested batch. Since one scan requests all of its subfield paths in a single batch, the unsupported path also
+     * throws away the statistics of the valid `st1.s1` path selected by the same query. That is the user visible
+     * impact: a repeated failing statistics lookup plus worse cost estimates for the other columns of the projection.
+     */
+    @Test
+    public void testQueryWithSubfieldOfArrayElement() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_subfield_statistics` (\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `st1` struct<s1 int, s2 int> NULL,\n" +
+                "  `ass` array<struct<a int, b int>> NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        ColumnStatistic structSubfieldStatistic = new ColumnStatistic(1, 10, 0, 4, 5);
+        List<String> requestedColumns = new ArrayList<>();
+        List<String> rejectedRequests = new ArrayList<>();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        // the test table has no data, keep the scan instead of letting PruneEmptyScanRule replace it with values
+        boolean originalPruneEmptyOutputScan = FeConstants.enablePruneEmptyOutputScan;
+        FeConstants.enablePruneEmptyOutputScan = false;
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                try {
+                    columns.forEach(column -> StatisticUtils.getQueryStatisticsColumnType(table, column));
+                } catch (SemanticException e) {
+                    rejectedRequests.add(columns.toString());
+                    return super.getColumnStatistics(table, columns);
+                }
+                return columns.stream()
+                        .map(column -> "st1.s1".equals(column) ? structSubfieldStatistic : ColumnStatistic.unknown())
+                        .collect(Collectors.toList());
+            }
+        });
+        try {
+            String plan = UtFrameUtils.getPlanAndFragment(connectContext,
+                            "select ass[1].a, st1.s1 from test_subfield_statistics")
+                    .second.getExplainString(TExplainLevel.COSTS);
+
+            Assertions.assertTrue(rejectedRequests.isEmpty(),
+                    "unsupported statistics path requested: " + rejectedRequests);
+            Assertions.assertTrue(requestedColumns.contains("st1.s1"),
+                    "statistics of the supported subfield path were not requested: " + requestedColumns);
+            Assertions.assertTrue(plan.contains("-->[1.0, 10.0, 0.0, 4.0, 5.0] ESTIMATE"), plan);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = originalPruneEmptyOutputScan;
+            globalStateMgr.setStatisticStorage(originalStorage);
+            starRocksAssert.dropTable("test_subfield_statistics");
         }
     }
 
