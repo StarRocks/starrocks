@@ -117,6 +117,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         null_options.meta->set_length(1);
         null_options.meta->set_encoding(DEFAULT_ENCODING);
         null_options.meta->set_compression(opts.meta->compression());
+        null_options.meta->set_compression_level(opts.meta->compression_level());
         null_options.meta->set_is_nullable(false);
 
         TypeInfoPtr tinyint_type_info = get_type_info(TYPE_TINYINT);
@@ -133,6 +134,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         offsets_options.meta->set_length(4);
         offsets_options.meta->set_encoding(DEFAULT_ENCODING);
         offsets_options.meta->set_compression(opts.meta->compression());
+        offsets_options.meta->set_compression_level(opts.meta->compression_level());
         offsets_options.meta->set_is_nullable(false);
         offsets_options.need_zone_map = false;
         offsets_options.need_bloom_filter = false;

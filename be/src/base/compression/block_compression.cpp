@@ -1131,10 +1131,19 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZlibBlockCompression::instance();
         break;
     case CompressionTypePB::ZSTD:
-        if (compression_level != -1) {
+        // ZSTD is the only codec that consumes the level. Treat any out-of-range level as "use the
+        // default": ColumnMetaPB::compression_level has no default sentinel in segment.proto, so a meta
+        // that never set it reads back 0, and instance(0) would hand back nullptr.
+        if (compression_level >= 1 && compression_level <= 22) {
             *codec = ZstdBlockCompression::instance(compression_level);
         } else {
             *codec = ZstdBlockCompression::instance();
+        }
+        // A null codec means NO_COMPRESSION to every caller -- PageIO writes the raw page body. Never
+        // reach that state by accident, or compression silently turns itself off.
+        if (*codec == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("failed to get zstd codec for compression level $0", compression_level));
         }
         break;
     case CompressionTypePB::GZIP:
