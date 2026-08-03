@@ -1162,11 +1162,8 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
         writer_opts.meta->set_encoding(PLAIN_ENCODING);
         writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
         // Mimic segment_writer, which stamps the table compression_level (default
-        // -1). Leaving it at the proto default 0 makes get_block_compression_codec
-        // resolve ZSTD via ZstdBlockCompression::instance(0), which returns nullptr
-        // for any level outside [1,22] -- the column would then be written
-        // uncompressed and the compression-dict gate (which requires a non-null
-        // ZSTD codec) could never fire. Same stamp as the sibling
+        // -1), so the writer resolves the codec the same way production does rather
+        // than through the proto default 0. Same stamp as the sibling
         // test_compression_dict_train_mode / testCompressionDictOnFlatJson tests.
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
