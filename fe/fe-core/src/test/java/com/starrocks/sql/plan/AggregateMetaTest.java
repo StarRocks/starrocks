@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.GsonBuilder;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
@@ -71,6 +75,33 @@ public class AggregateMetaTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: max(2: v2)\n" +
                 "  |  group by:");
+    }
+
+    @Test
+    public void testCaptureColumnMinMaxIntoQueryDump() throws Exception {
+        OlapTable t0 = (OlapTable) starRocksAssert.getTable("test", "t0");
+        // Seed the real replay path (no BE) so the meta-scan rule accepts the min/max and the capture hook fires;
+        // this also exercises the ColumnMinMaxMgr.getStats replay short-circuit.
+        ColumnMinMaxMgr.replayPut(t0.getId(), ColumnId.create("v2"), new IMinMaxStatsMgr.ColumnMinMax("1", "200"));
+        ColumnMinMaxMgr.replayPut(t0.getId(), ColumnId.create("v3"), new IMinMaxStatsMgr.ColumnMinMax("1", "200"));
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        connectContext.getSessionVariable().setEnableQueryDump(true);
+        try {
+            getFragmentPlan("SELECT MAX(v2), MIN(v3) FROM t0");
+            QueryDumpInfo dumpInfo = (QueryDumpInfo) connectContext.getDumpInfo();
+            Assertions.assertTrue(dumpInfo.getTableColumnMinMaxMap().values().stream()
+                            .anyMatch(m -> m.containsKey("v2") && m.containsKey("v3")),
+                    "meta-scan rewrite should capture v2/v3 min/max into the dump");
+            String json = new GsonBuilder()
+                    .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpSerializer())
+                    .create().toJson(dumpInfo, QueryDumpInfo.class);
+            Assertions.assertTrue(json.contains("column_min_max") && json.contains("200"),
+                    "serialized dump should carry a column_min_max section, json:\n" + json);
+        } finally {
+            connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+            connectContext.getSessionVariable().setEnableQueryDump(false);
+            ColumnMinMaxMgr.clearReplayMinMax();
+        }
     }
 
     @Test

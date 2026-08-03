@@ -1,6 +1,5 @@
 -- name: test_vector_index_insert @sequential @native
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 CREATE TABLE t1 (
     id bigint(20) NOT NULL,
@@ -117,4 +116,3 @@ insert into t2 select id, v2, v1 from t2;
 select * from t2 order by id, v1, v2;
 
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

@@ -241,8 +241,8 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
     }
 
     // Create filesystem
-    std::shared_ptr<FileSystem> fs =
-            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)));
 
     // For delete files, we only need file_path and row_position columns
     std::vector<std::string> column_names = {"file_path", "pos"};

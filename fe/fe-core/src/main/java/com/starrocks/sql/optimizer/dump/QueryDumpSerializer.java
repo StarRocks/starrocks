@@ -37,11 +37,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -124,6 +127,47 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
+        // External-catalog (iceberg/hive/...) tables: record each table's real catalog explicitly, keyed like
+        // table_meta (db.table). This lets replay recreate the external catalog directly by name, independent
+        // of the legacy "resource" concept. Older dumps omit this section; replay then infers the catalog from
+        // the SQL, so this stays backward compatible.
+        JsonObject externalCatalogData = new JsonObject();
+        for (Pair<String, Table> entry : tableMetaPairs) {
+            String catalogName = entry.second.getCatalogName();
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                externalCatalogData.addProperty(entry.first + "." + entry.second.getName(), catalogName);
+            }
+        }
+        if (externalCatalogData.size() > 0) {
+            dumpJson.add("external_table_catalog", externalCatalogData);
+        }
+        // External-catalog table total row counts (keyed db.table). Iceberg has no hms scanRowCount to carry
+        // it, and without it replay would fall back to a tiny default that clamps NDV/cardinality.
+        if (!dumpInfo.getExternalTableRowCountMap().isEmpty()) {
+            JsonObject externalRowCountData = new JsonObject();
+            for (Map.Entry<String, Long> entry : dumpInfo.getExternalTableRowCountMap().entrySet()) {
+                externalRowCountData.addProperty(entry.getKey(), entry.getValue());
+            }
+            dumpJson.add("external_table_row_count", externalRowCountData);
+        }
+        // Iceberg partition spec (transforms) + partition names, so replay can rebuild a real PartitionSpec
+        // and reproduce partition pruning. Keyed db.table. Only present for partitioned iceberg tables.
+        if (!dumpInfo.getExternalTablePartitionNameMap().isEmpty()) {
+            JsonObject specData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionSpecMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                specData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_spec", specData);
+            JsonObject namesData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionNameMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                namesData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_names", namesData);
+        }
         // hive meta store table info
         if (!dumpInfo.getHmsTableMap().isEmpty()) {
             JsonObject externalTableInfoData = new JsonObject();
@@ -201,6 +245,45 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         if (tableColumnHistogram.size() > 0) {
             dumpJson.add("column_histogram", tableColumnHistogram);
+        }
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- the dict
+        // strings are raw column data, exactly like the histogram exclusion above.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
+            }
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
+            }
+        }
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
+        }
+        // column min/max: captured so replay reproduces the meta-scan / group-by-compressed-key rewrites, which
+        // are otherwise lost offline (production ColumnMinMaxMgr has no BE -> no min/max). Keyed like
+        // column_statistics (db.table -> column). Not emitted on the desensitized path -- min/max are raw
+        // column data, like the global dict and histogram exclusions above.
+        JsonObject tableColumnMinMax = new JsonObject();
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                dumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            JsonObject columnMinMaxes = new JsonObject();
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                JsonObject minMax = new JsonObject();
+                minMax.addProperty("min", columnEntry.getValue().minValue());
+                minMax.addProperty("max", columnEntry.getValue().maxValue());
+                columnMinMaxes.add(columnEntry.getKey(), minMax);
+            }
+            if (columnMinMaxes.size() > 0) {
+                tableColumnMinMax.add(entry.getKey(), columnMinMaxes);
+            }
+        }
+        if (tableColumnMinMax.size() > 0) {
+            dumpJson.add("column_min_max", tableColumnMinMax);
         }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());

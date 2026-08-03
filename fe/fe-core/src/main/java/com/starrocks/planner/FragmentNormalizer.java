@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.expression.ExprToNormalFormVisitor;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -53,6 +54,7 @@ import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -304,6 +306,13 @@ public class FragmentNormalizer {
         return exprList.stream().map(this::normalizeExpr).collect(Collectors.toList());
     }
 
+    // The time zone the BE will evaluate this plan with, normalized the same way
+    // CoordinatorPreprocessor.genQueryGlobals() normalizes it before putting it into TQueryGlobals.
+    private String getNormalizedTimeZone() {
+        String timezone = execPlan.getConnectContext().getSessionVariable().getTimeZone();
+        return "CST".equals(timezone) ? TimeUtils.DEFAULT_TIME_ZONE : timezone;
+    }
+
     public boolean computeDigest(PlanNode cachePointNode) {
         try {
             if (uncacheable || selectedRangeMap.isEmpty()) {
@@ -319,6 +328,12 @@ public class FragmentNormalizer {
             for (TGlobalDict dict : dicts) {
                 digest.update(serializer.serialize(dict));
             }
+            // Session variables that change how expressions are evaluated on the BE are not part of the
+            // plan, so semantically-equivalent plans evaluated under different variables would otherwise
+            // share cache entries. time_zone is such a variable: from_unixtime/unix_timestamp/convert_tz
+            // are evaluated against RuntimeState::timezone, so two sessions that only differ in time_zone
+            // must not reuse each other's per-tablet results.
+            digest.update(getNormalizedTimeZone().getBytes(StandardCharsets.UTF_8));
 
             List<SlotId> slotIds = cachePointNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
@@ -774,6 +789,22 @@ public class FragmentNormalizer {
 
         // Not cacheable unless Aggregation node is found
         if (firstAggNode == null) {
+            return false;
+        }
+
+        // Not cacheable if an AggregationNode of the leftmost path builds runtime filters itself
+        // (AGG_IN_FILTER/TOPN_FILTER). Such a filter probes the OlapScanNode that feeds the cache
+        // interpolation point, so the per-tablet results that get populated only contain the rows that
+        // survived it. Its content is decided at run time -- it depends on which tablets this instance
+        // happened to scan, in which order, and which of them were served from the cache -- so unlike a
+        // JoinNode's runtime filter, whose build side is packed into the digest together with the data
+        // versions of its OlapScanNodes, there is nothing here that could be packed into the cache key.
+        // A populated entry would therefore not be a function of the cache key, and would produce wrong
+        // results as soon as it is read back by a query that needs the rows the filter dropped.
+        boolean aggBuildsRuntimeFilters = leftNodesTopDown.stream()
+                .filter(node -> node instanceof AggregationNode)
+                .anyMatch(node -> !((AggregationNode) node).getBuildRuntimeFilters().isEmpty());
+        if (aggBuildsRuntimeFilters) {
             return false;
         }
 

@@ -4289,8 +4289,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(traits.get(0).isAppendOnly());
         Assertions.assertTrue(traits.get(1).isAppendOnly());
 
-        // Verify contiguous delta boundaries: snap2→snap3, snap4→snap4
-        // (snap3 is the REPLACE snapshot ID — used as boundary but not emitted as a trait)
+        // A mid-range REPLACE keeps owning the boundary: cutting a refresh batch at snap3 covers snap2's
+        // appends and nothing more, which is exactly what this trait's stats account for.
         TvrTableDelta delta0 = traits.get(0).getTvrDelta();
         Assertions.assertEquals(snap2.snapshotId(), delta0.start().get());
         Assertions.assertEquals(snap3.snapshotId(), delta0.end().get());
@@ -4301,7 +4301,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testListTableDeltaTraitsAllReplaceReturnsEmpty() {
+    public void testListTableDeltaTraitsAllReplaceSpansWholeRangeWithoutStats() {
         // snap1: APPEND (used as exclusive start)
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         Snapshot snap1 = mockedNativeTableA.currentSnapshot();
@@ -4323,8 +4323,53 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
 
-        // Only REPLACE in range — should return empty
-        Assertions.assertTrue(traits.isEmpty());
+        // Compaction-only range: one append-only delta spanning it, carrying no rows. An empty list would
+        // read as "no delta derivable" and permanently break the incremental refresh.
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+        Assertions.assertEquals(snap1.snapshotId(), traits.get(0).getTvrDelta().start().get());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().end().get());
+        Assertions.assertEquals(0, traits.get(0).getTvrDeltaStats().getAddedRows());
+        Assertions.assertEquals(0, traits.get(0).getTvrDeltaStats().getAddedFileSize());
+    }
+
+    @Test
+    public void testListTableDeltaTraitsTrailingConsecutiveReplacesKeepRangeEnd() {
+        // snap1: APPEND (used as exclusive start)
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+
+        // snap2: APPEND — the only logical change in range
+        mockedNativeTableA.newAppend().appendFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        // snap3, snap4: two back-to-back compactions closing the range
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap3.operation());
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A_2).addFile(FILE_A).commit();
+        Snapshot snap4 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap4.operation());
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap4.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+
+        // MVIVMRefreshProcessor rejects the refresh unless the newest delta ends exactly at the range end,
+        // so a trailing run of skipped REPLACEs must not pull that boundary back onto one of them.
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().start().get());
+        Assertions.assertEquals(snap4.snapshotId(), traits.get(0).getTvrDelta().end().get());
+        Assertions.assertNotEquals(snap3.snapshotId(), traits.get(0).getTvrDelta().end().get());
     }
 
     @Test

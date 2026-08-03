@@ -1029,8 +1029,15 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
 }
 
 // TODO: remote list objects requests
+// |is_range_distribution| arrives from FE and is then strengthened, never weakened, by what the dropped
+// tablets' own metadata says. A range-distributed table's tablets share physical data files with the
+// tablets a reshard produced, so this path must not delete their data -- the tablets that inherited those
+// files are still reading them. Reading it off the dropped tablet's metadata is not enough on its own,
+// because a reshard leaves that metadata behind for vacuum to remove, and once it is gone the tablet
+// looks non-range and its still-shared files were deleted. FE reads the table definition, so its answer
+// survives that; an older FE sends nothing and leaves only the metadata-derived answer, as before.
 Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_dir,
-                           const std::vector<int64_t>& tablet_ids) {
+                           const std::vector<int64_t>& tablet_ids, bool is_range_distribution) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
 
@@ -1080,8 +1087,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     AsyncFileDeleter deleter(config::lake_vacuum_min_batch_delete_size);
     // Used to avoid deleting shared files that are shared by multiple tablets.
     AsyncSharedFileDeleter dummy_shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
-
-    bool is_range_distribution = false;
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
@@ -1335,7 +1340,7 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     // not own tablet_ids[0]. Pick a locally-owned tablet id as the root-location anchor
     // so downstream fs ops don't trigger a get-shard-info RPC.
     auto root_dir = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(tablet_ids));
-    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
+    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids, request.is_range_distribution());
     st.to_protobuf(response->mutable_status());
 }
 

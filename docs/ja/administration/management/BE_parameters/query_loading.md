@@ -657,6 +657,105 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `RuntimeEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
 - 導入バージョン: v3.2.0
 
+### enable_vector_index_block_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: IVFPQ インデックスをインバーテッドリストの Block 単位でキャッシュするかどうかを指定します。有効にすると、StarRocks はクエリに必要な IVFPQ Block のみをロードしてキャッシュします。無効にすると、IVFPQ インデックスファイル全体をキャッシュします。HNSW のキャッシュ方式には影響しません。
+- 導入バージョン: -
+
+### config_vector_index_build_concurrency
+
+- デフォルト: 8
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: はい
+- 説明: 各ベクターインデックス構築で使用する OpenMP スレッド数です。StarRocks は実効値を少なくとも `1` に調整します。`vector_index_build_max_cpu_ratio` とともに、非同期ベクターインデックス構築スレッドプールのサイズも決定します。
+- 導入バージョン: -
+
+### config_vector_index_default_build_threshold
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: ベクターインデックスを構築するために必要な Segment のデフォルト最小行数です。インデックスプロパティ `index_build_threshold` はこの値を上書きします。IVFPQ では、トレーニングに十分な行数を確保するため、実効しきい値は少なくとも `nlist` になります。
+- 導入バージョン: -
+
+### vector_index_build_max_cpu_ratio
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: 比率
+- 変更可能: はい
+- 説明: 非同期ベクターインデックス構築で使用できる BE/CN CPU コアの目標比率です。構築 CPU 予算は `max(2, floor(cpu_cores * value))` で、構築プールのサイズはこの予算と `config_vector_index_build_concurrency` から決まります。最小予算が `2` のため、小規模なマシンや小さい比率では実効値が設定比率を超える場合があります。
+- 導入バージョン: -
+
+### enable_vector_adaptive_search
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: HNSW ベクターインデックスの適応型 `ef_search` スケーリングを有効にするマスタースイッチです。有効にすると、BE は Segment の行数に基づいて実効 `ef_search` を調整し、Compaction により Segment が大きくなった場合の再現率低下を抑えます。`false` にすると、ユーザーが指定した `ef_search` をそのまま使用します。
+- 導入バージョン: -
+
+### vector_query_cache_capacity
+
+- デフォルト: `20%`
+- タイプ: String
+- 単位: バイト、単位サフィックス（`K`/`M`/`G`/`T`）または BE `mem_limit` に対する割合（`%`）
+- 変更可能: はい
+- 説明: StarRocks が管理するベクターインデックスキャッシュの総容量です。同じ LRU で HNSW のインデックス全体と、`enable_vector_index_block_cache=true` の場合の IVF-PQ のリスト単位 Block を管理します。絶対バイト数（`4294967296`）、単位付きの値（`4G`、`512M`）、または BE プロセスメモリ上限に対する割合（`20%`）を指定できます。BE 起動時と HTTP `/api/update_config` による更新時に適用されます。**v4.2.0 での動作変更：** 以前のバージョンは絶対バイト数のみを受け付け、デフォルトは 512 MB でした。この設定を明示的に上書きせずにアップグレードすると、キャッシュサイズは BE メモリの 20% に変更されます。
+- 導入バージョン: v3.4.0
+
+### vector_adaptive_ef_alpha
+
+- デフォルト: 1.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 適応型 `ef_search` の増加率です。スケーリング係数は `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)` です。値を大きくすると再現率をより積極的に高めますが、クエリごとの CPU コストが増加します。`enable_vector_adaptive_search=true` かつ `segment_rows > vector_adaptive_ef_baseline_rows` の場合のみ有効です。
+- 導入バージョン: -
+
+### vector_adaptive_ef_baseline_rows
+
+- デフォルト: 300000
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 適応型 `ef_search` を拡大しない Segment 行数の基準値です。この値以下の Segment は指定された `ef_search` を使用し、この値を超える Segment は大きな HNSW グラフを補うため実効 `ef_search` が増加します。`enable_vector_adaptive_search=true` の場合のみ有効です。
+- 導入バージョン: -
+
+### vector_adaptive_ef_cap
+
+- デフォルト: 8.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 適応型 `ef_search` の倍率上限です。非常に大きな Segment でもスケーリング係数をこの値以下に抑え、CPU とレイテンシーの増加を制限します。`enable_vector_adaptive_search=true` の場合のみ有効です。
+- 導入バージョン: -
+
+### vector_index_brute_selectivity_threshold
+
+- デフォルト: 0.01
+- タイプ: Double
+- 単位: 比率
+- 変更可能: はい
+- 説明: 残余スカラーフィルターを持つベクタークエリを、フィルター付き HNSW 探索から正確なスコア計算へ切り替える選択率しきい値です。一致行数が Segment 全体のこの割合以下の場合、StarRocks はフィルター後の候補を直接スコアリングします。`0` に設定すると比率判定を無効にします。候補数がクエリの `k` 以下の場合の独立したショートサーキットは引き続き有効です。
+- 導入バージョン: -
+
+### vector_index_build_flush_threshold_rows
+
+- デフォルト: 262144
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 各ベクターインデックスビルダーのステージングバッファが、行をメモリ内インデックスへ追加する前に保持する最大行数です。HNSW Flat 構築時のステージングバッファメモリを制限しますが、トレーニング済みインデックス自体のサイズは制限しません。`0` に設定すると中間 Flush を無効にし、Segment 全体をバッファします。
+- 導入バージョン: -
+
 ### vector_chunk_size
 
 - デフォルト: 4096
