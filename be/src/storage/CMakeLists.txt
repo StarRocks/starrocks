@@ -70,7 +70,6 @@ set(STORAGE_FILES
     storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
-    segment_footer_collector.cpp
     storage_engine.cpp
     storage_metrics.cpp
     data_dir.cpp
