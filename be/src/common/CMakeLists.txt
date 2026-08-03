@@ -14,24 +14,9 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
-<<<<<<< HEAD
 add_library(Common STATIC
   daemon.cpp
-=======
-set(COMMON_FILES
-  bloom_filter.cpp
-  block_split_bloom_filter.cpp
-  bthread_timer.cpp
-  brpc/brpc_stub_cache.cpp
-  brpc/internal_service_recoverable_stub.cpp
-  brpc/lake_service_recoverable_stub.cpp
-  brpc_helper.cpp
-  configbase.cpp
-  config_update_registry.cpp
-  config.cpp
   crash_watchdog.cpp
-  glog_init.cpp
->>>>>>> c2f305af63 ([BugFix] Force BE exit when the fatal-signal handler hangs after marking the process as crashing (#76491))
   greplog.cpp
   status.cpp
   statusor.cpp
