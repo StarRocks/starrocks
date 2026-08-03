@@ -117,6 +117,19 @@ jobs:
           git checkout ${pr_branch}
           git push -u origin ${pr_branch}
 
+      # Ordering: if a file-overlapping, earlier-merged cd-sync PR is still open,
+      # this PR must wait -> RES != True -> created as pending (see Create pending pr).
+      - name: previous check
+        id: previous-check
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          check_res=$(python3 lib/pr_sequence_checker_reverse.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
+          echo "${check_res}"
+          conflict_prs=$(echo ${check_res} | awk -F'Files:' '{print $1}' | awk -F' ' '{print $NF}')
+          echo CONFLICT_PRS=${conflict_prs} >> $GITHUB_OUTPUT
+          res=$(echo ${check_res} | tail -n 1)
+          echo RES=${res} >> $GITHUB_OUTPUT
+
       - name: refresh base before cherry-pick
         run: |
           cd ${{ github.workspace }}
@@ -133,12 +146,31 @@ jobs:
 
       - name: Create pull request
         id: create_pr
+        if: steps.previous-check.outputs.RES == 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
           BODY: "Reverse sync of ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }} (commit ${{ inputs.COMMIT_ID }})."
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
+
+      # A file-overlapping predecessor is still open -> hold this PR as pending.
+      # cd-sync-pipeline.yml skips `pending` PRs; cd-scan-pending.yml releases it
+      # (removes pending + re-dispatches this workflow) once predecessors merge.
+      - name: Create pending pull request
+        id: create_pending_pr
+        if: steps.previous-check.outputs.RES != 'True'
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }},pending
+          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
         run: |
@@ -177,6 +209,9 @@ jobs:
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
+          elif [[ "${{ steps.create_pending_pr.outcome }}" == 'success' ]]; then
+            msg_type="pending"
+            this_pr_url=${{ steps.create_pending_pr.outputs.pr_url }}
           elif [[ "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             exit 0
           else
@@ -184,6 +219,15 @@ jobs:
             this_pr_url=""
           fi
           python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
+
+      # Kick the pending scan so a just-created pending PR is (re)evaluated promptly,
+      # and any now-releasable pending PR (predecessor merged) gets picked up.
+      - name: Trigger pending scan
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh workflow run cd-scan-pending.yml -R ${{ github.repository }} || true
 
       - name: clean
         if: always()
