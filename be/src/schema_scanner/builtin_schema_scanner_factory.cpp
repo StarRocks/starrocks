@@ -34,7 +34,6 @@
 #include "schema_scanner/schema_collations_scanner.h"
 #include "schema_scanner/schema_column_stats_usage_scanner.h"
 #include "schema_scanner/schema_columns_scanner.h"
-#include "schema_scanner/schema_compression_dict_stats_scanner.h"
 #include "schema_scanner/schema_dummy_scanner.h"
 #include "schema_scanner/schema_fe_metrics_scanner.h"
 #include "schema_scanner/schema_fe_tablet_schedules_scanner.h"
@@ -124,8 +123,6 @@ std::unique_ptr<SchemaScanner> BuiltinSchemaScannerFactory::create(TSchemaTableT
         return std::make_unique<SchemaVariablesScanner>(TVarType::VERBOSE);
     case TSchemaTableType::SCH_BE_TABLETS:
         return std::make_unique<SchemaBeTabletsScanner>();
-    case TSchemaTableType::SCH_COMPRESSION_DICT_STATS:
-        return std::make_unique<SchemaCompressionDictStatsScanner>();
     case TSchemaTableType::SCH_BE_METRICS:
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_FE_METRICS:
