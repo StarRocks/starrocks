@@ -2060,6 +2060,36 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         auto& group = groups[group_idx];
         int32_t subtask_id = static_cast<int32_t>(group_idx);
 
+        // Nothing below is exception-safe on its own: the bookkeeping (vector growth, the
+        // running_subtasks[] node allocation) and submit_func() itself can throw std::bad_alloc. If that
+        // happens once this subtask has been registered but before it was handed to the thread pool, the
+        // entry would describe a subtask that never runs, so running_subtasks could never drain and
+        // is_complete() (`running_subtasks.empty() && total_subtasks_created > 0`) would never become true
+        // -- the tablet would never call finish_task() and its compact RPC would hang. Undo the
+        // registration while unwinding so the state keeps describing only subtasks that are really running.
+        bool registered = false;
+        bool submitted = false;
+        DeferOp rollback_registration([&] {
+            if (!registered || submitted) {
+                return;
+            }
+            {
+                std::lock_guard<std::mutex> lock(state_ptr->mutex);
+                auto it = state_ptr->running_subtasks.find(subtask_id);
+                if (it != state_ptr->running_subtasks.end()) {
+                    unmark_rowsets_compacting(state_ptr.get(), it->second.input_rowset_ids);
+                    if (group.type == SubtaskType::LARGE_ROWSET_PART) {
+                        auto& split_ids = state_ptr->large_rowset_split_groups[group.large_rowset_id];
+                        split_ids.erase(std::remove(split_ids.begin(), split_ids.end(), subtask_id),
+                                        split_ids.end());
+                    }
+                    state_ptr->running_subtasks.erase(it);
+                    state_ptr->total_subtasks_created--;
+                }
+            }
+            _running_subtasks--;
+        });
+
         // Collect rowset IDs
         std::vector<uint32_t> rowset_ids;
         int64_t input_bytes = group.total_bytes;
@@ -2109,6 +2139,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         }
 
         _running_subtasks++;
+        // From here on the subtask is registered: rollback_registration owns undoing it until the submit
+        // below succeeds.
+        registered = true;
 
         // Submit task to thread pool (token already acquired)
         Status submit_st;
@@ -2164,6 +2197,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                 }
             }
             _running_subtasks--;
+            // This branch has just undone the registration itself; stop rollback_registration from
+            // repeating it.
+            registered = false;
 
             // Release token for this failed subtask
             release_token(false);
@@ -2187,6 +2223,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         }
 
         subtasks_created++;
+        // The subtask is now owned by the thread pool and will report its own completion, so the
+        // registration must survive this scope.
+        submitted = true;
 
         // Test hook: lets a test throw from here, i.e. *after* a subtask has been submitted and is running.
         // A throw in this window must not route the tablet into the caller's fallback path, or the tablet
