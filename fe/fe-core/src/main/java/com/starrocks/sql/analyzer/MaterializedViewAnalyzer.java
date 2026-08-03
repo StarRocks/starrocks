@@ -60,6 +60,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.analyzer.mv.IvmTrialRewriter;
 import com.starrocks.sql.analyzer.mv.MVBaseTablePartitionHandlers;
 import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
 import com.starrocks.sql.analyzer.mv.RowIdStrategy;
@@ -486,6 +487,11 @@ public class MaterializedViewAnalyzer {
             }
             // check and analyze distribution
             checkDistribution(context, statement, aliasTableMap);
+            // The trial target must observe the final target schema and normalized distribution.
+            // AUTO retains its existing fallback contract and does not run CREATE-time trial compilation.
+            if (refreshMode.isIncremental()) {
+                IvmTrialRewriter.runTrial(context, statement, queryStatement);
+            }
             return null;
         }
 
@@ -1361,11 +1367,11 @@ public class MaterializedViewAnalyzer {
             boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
 
             if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                // Primary key MVs must be normalized first, regardless of the range-distribution default:
-                // an incremental MV is forced to hash distribution on all key columns (its row-id/merge
-                // semantics depend on it), while for a non-incremental primary key MV this is a no-op that
-                // returns the given (or absent) distribution.
-                distributionDesc = checkDistributionForPrimaryKey(statement);
+                // Incremental/AUTO primary-key MVs keep an internally injected RANGE descriptor, and an
+                // omitted clause selects RANGE when the session default is enabled. Explicit HASH/RANDOM,
+                // or an omitted clause with the range default disabled, is normalized to HASH over every
+                // target key column while preserving an explicitly requested bucket count.
+                distributionDesc = checkDistributionForPrimaryKey(statement, enableRangeDistribution);
                 if (distributionDesc == null && enableRangeDistribution) {
                     // No distribution specified and range distribution is enabled: use it as the default.
                     distributionDesc = new RangeDistributionDesc();
@@ -1399,11 +1405,20 @@ public class MaterializedViewAnalyzer {
             DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
         }
 
-        private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement) {
+        private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement,
+                                                                  boolean enableRangeDistribution) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             boolean isGeneratedByIncrementalMV = statement.getCurrentRefreshMode().isIncrementalOrAuto();
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
+            }
+            // RANGE has no SQL syntax. It is either selected for an omitted clause or injected by
+            // internal DDL reconstruction, and must not be normalized back to HASH.
+            if (distributionDesc instanceof RangeDistributionDesc
+                    || (distributionDesc == null && enableRangeDistribution)) {
+                RangeDistributionDesc result = new RangeDistributionDesc();
+                statement.setDistributionDesc(result);
+                return result;
             }
             // if the mv is primary key, we use hash distribution with all key columns.
             List<String> keyColNames = statement.getMvColumnItems()
