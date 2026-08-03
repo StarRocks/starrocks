@@ -479,10 +479,14 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static String validateFileIndex(String name, String fileIndex) throws IOException {
-        if (fileIndex == null || !VALID_FILE_INDEXES.contains(StringUtils.lowerCase(fileIndex.trim()))) {
+        if (fileIndex == null) {
             throw new IOException(name + " config error: " + fileIndex + ", must be one of min/max/nomax");
         }
-        return fileIndex.trim();
+        String normalized = StringUtils.lowerCase(fileIndex.trim());
+        if (!VALID_FILE_INDEXES.contains(normalized)) {
+            throw new IOException(name + " config error: " + fileIndex + ", must be one of min/max/nomax");
+        }
+        return normalized;
     }
 
     private static String buildDeleteConditions(String glob, String deleteAge, int deleteCount) {
