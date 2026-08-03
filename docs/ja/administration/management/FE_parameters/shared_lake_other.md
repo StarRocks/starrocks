@@ -658,6 +658,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：有効にすると、PublishVersionDaemon は同じ Lake (共有データ) テーブル/パーティションの準備完了トランザクションをバッチ処理し、トランザクションごとの公開を発行するのではなく、まとめてバージョンを公開します。RunMode shared-data では、デーモンは getReadyPublishTransactionsBatch() を呼び出し、publishVersionForLakeTableBatch(...) を使用してグループ化された公開操作を実行します (RPC を削減し、スループットを向上させます)。無効の場合、デーモンは publishVersionForLakeTable(...) を介してトランザクションごとの公開にフォールバックします。実装は、スイッチが切り替えられたときに重複公開を避けるために内部セットを使用して進行中の作業を調整し、`lake_publish_version_max_threads` を介したスレッドプールサイズ設定の影響を受けます。
 - 導入時期：v3.2.0
 
+### `lake_enable_batch_publish_multi_table`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：バッチ発行 (Batch Publish) が連続する複数テーブルトランザクションを 1 回の発行操作にまとめることを許可するかどうか。同じテーブル群にまたがる小さなアトミックトランザクションを高頻度でコミットするワークロード（例えば、複数のテーブルに書き込む CDC パイプライン）に有効です。このようなワークロードでは、トランザクションごとの発行が共有テーブルの依存チェーン上で直列化され、コミットから可視化までのレイテンシーが増大します。`lake_enable_batch_publish_version` が `true` の場合にのみ有効です。すべての FE ノードがこの機能をサポートするバージョンにアップグレードされた後にのみ、このパラメータを有効にしてください。旧バージョンで動作している FE Follower が複数テーブルのトランザクションバッチをリプレイすると、最初のテーブルの Visible Log のみが適用されます。
+- 導入時期：v4.1.5
+
 ### `lake_enable_tablet_creation_optimization`
 
 - デフォルト：false
