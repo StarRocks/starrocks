@@ -292,7 +292,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：`train` 模式下训练出的字典的大小上限。默认值为 64 KB，而非 zstd 命令行工具惯用的 110 KB：在真实的 agent 日志数据集（3 个大列，原始数据 372 MB）上实测，64 KB 在每一列上都优于 112 KB 和 256 KB。原因是字典本质上是高频子串的码表，其收益衰减很快，而字典自身的字节需要按“列 + Segment”各存储一份（在一个 41 MB 的列上，256 KB 的字典就占总量的 0.6%，足以改变排名）。只有在单列 Segment 非常大的场景下才值得尝试更大的取值。取值小于等于 `0` 时禁用字典训练，该列回退为普通 ZSTD 压缩。请注意，真正决定训练字典质量的是 `compression_dict_train_pages` 而非本参数。本参数仅在 `train` 模式下生效；`sample` 模式下字典大小由 `compression_dict_sample_bytes` 限定。
+- 描述：`train` 模式下训练出的字典的大小上限。默认值为 64 KB，而非 zstd 命令行工具惯用的 110 KB：在真实的 agent 日志数据集（3 个大列，原始数据 372 MB）上实测，64 KB 在每一列上都优于 112 KB 和 256 KB。原因是字典本质上是高频子串的码表，其收益衰减很快，而字典自身的字节需要按“列 + Segment”各存储一份（在一个 41 MB 的列上，256 KB 的字典就占总量的 0.6%，足以改变排名）。只有在单列 Segment 非常大的场景下才值得尝试更大的取值。取值小于等于 `0` 时禁用字典训练，该列保留表本身配置的压缩算法（除非建表时指定了 `compression`，否则为 LZ4），且不写入压缩字典。只有该开关为 `true` 时才会把该列的压缩算法覆盖为 ZSTD，因此关闭开关不会把列悄悄改成 ZSTD 编码。请注意，真正决定训练字典质量的是 `compression_dict_train_pages` 而非本参数。本参数仅在 `train` 模式下生效；`sample` 模式下字典大小由 `compression_dict_sample_bytes` 限定。
 - 引入版本：v4.2
 
 ### compression_dict_min_sample_bytes
