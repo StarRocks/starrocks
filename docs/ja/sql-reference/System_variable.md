@@ -771,26 +771,6 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **デフォルト**: false
 
-<<<<<<< HEAD
-=======
-### enable_explain_in_profile
-
-* **スコープ**: Session
-* **説明**: この変数が `true` で、かつクエリに対してプロファイルが生成される場合、実行された計画の `EXPLAIN COSTS` テキストがプロファイルの `Summary` セクション内に `ExplainPlan` というキーで埋め込まれます。これにより、稼働中のクラスターにアクセスできない状態で保存済みのプロファイル成果物だけを使ってスロークエリを切り分ける際に、ランタイムメトリクスと並べてオプティマイザーの基数推定、列統計、述語、ランタイムフィルター宣言、および全体の計画コストを確認できます。
-
-  プロファイルに埋め込まれる計画は、他の永続化される SQL 成果物と同じ非機密化制御に従います。`FILES(...)` などに含まれる資格情報リテラルは常に編集され、述語や射影のリテラルは、クラスター全体の FE 設定 `enable_sql_desensitize_in_log` またはセッション変数 `enable_desensitize_explain` のいずれかが有効な場合にダイジェスト形式で表示されます。
-* **デフォルト**: false
-* **データ型**: boolean
-
-### profile_log_latency_threshold_ms
-
-* **スコープ**: Session
-* **説明**: FE が `fe.profile.log` にプロファイルを書き込むための最小クエリレイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみプロファイルを記録します。`-1`（デフォルト）に設定すると、FE 設定の `profile_log_latency_threshold_ms` が使用されます。`0` に設定するとすべてのプロファイルを記録します。正の値（例: `1000`）に設定すると、レイテンシがその値（ミリ秒）以上のクエリのみを記録します。このセッション変数で接続ごとにクラスタ全体の設定を上書きできます。
-* **デフォルト**: -1
-* **データ型**: long
-* **単位**: ミリ秒
-
->>>>>>> e360d41aca ([Enhancement] Allow including EXPLAIN COSTS output in profile (#73005))
 ### enable_query_cache
 
 * **説明**: Query Cache 機能を有効にするかどうかを指定します。有効な値: true および false。`true` はこの機能を有効にし、`false` はこの機能を無効にします。この機能が有効な場合、[Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios) の適用シナリオで指定された条件を満たすクエリに対してのみ機能します。
