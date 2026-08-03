@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
@@ -47,34 +47,29 @@ public class OlapPartitionScanLimitTest {
                     "values('1','a','2024-09-20'),('2','a','2024-09-21')," +
                     "('3','a','2024-09-22'),('4','a','2024-09-23'),('5','a','2024-09-24')," +
                     "('6','a','2024-09-25'),('7','a','2024-09-26')");
-            //check default value 0
-            stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
-            ResultSet rs = stmt.getResultSet();
-            Assertions.assertTrue(rs.next(), "count(*) must return exactly one row");
-            Assertions.assertEquals(5, rs.getInt(1));
-            //check set value -1
+            // The limit is enforced on the FE while planning, which is all this test can observe:
+            // PseudoBackend never produces result rows (QueryProgress#getFetchDataResult returns eos
+            // with no row batch), so a select always comes back empty here and the returned count
+            // cannot be asserted. What is asserted is whether the query is accepted or rejected.
+            String query = "select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';";
+
+            //check default value 0, means no limit
+            stmt.execute(query);
+            //check set value -1, means no limit
             stmt.execute("set scan_olap_partition_num_limit=-1;");
-            stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
-            rs = stmt.getResultSet();
-            Assertions.assertTrue(rs.next(), "count(*) must return exactly one row");
-            Assertions.assertEquals(5, rs.getInt(1));
-            //check set value 3
+            stmt.execute(query);
+            //check set value 3, 5 partitions have to be scanned so the query must be rejected
             stmt.execute("set scan_olap_partition_num_limit=3;");
-            try {
-                stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
-            } catch (Exception e) {
-                String exp = "Exceeded the limit of number of olap table partitions to be scanned. Number of partitions " +
-                        "allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or " +
-                        "change the limit by set variable scan_olap_partition_num_limit.";
-                Assertions.assertTrue(e.getMessage().contains(exp));
-            }
+            SQLException e = Assertions.assertThrows(SQLException.class, () -> stmt.execute(query));
+            String exp = "Exceeded the limit of number of olap table partitions to be scanned. Number of partitions " +
+                    "allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or " +
+                    "change the limit by set variable scan_olap_partition_num_limit.";
+            Assertions.assertTrue(e.getMessage().contains(exp), e.getMessage());
             //check set invalid value abc
-            try {
-                stmt.execute("set scan_olap_partition_num_limit=abc;");
-            } catch (Exception e) {
-                String exp = "Incorrect argument type to variable 'scan_olap_partition_num_limit'";
-                Assertions.assertTrue(e.getMessage().contains(exp));
-            }
+            e = Assertions.assertThrows(SQLException.class,
+                    () -> stmt.execute("set scan_olap_partition_num_limit=abc;"));
+            exp = "Incorrect argument type to variable 'scan_olap_partition_num_limit'";
+            Assertions.assertTrue(e.getMessage().contains(exp), e.getMessage());
         } finally {
             PseudoCluster.getInstance().shutdown(true);
         }
