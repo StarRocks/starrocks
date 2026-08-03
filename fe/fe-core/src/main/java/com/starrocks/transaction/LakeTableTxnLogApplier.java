@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +78,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+        applyVisibleLog(txnState, commitInfo, db, false);
+    }
+
+    // deferVersionAdvance is set only on the batch-publish path. When true, this method does NOT advance the
+    // partition's visible version (nor run the per-txn continuity Precondition); it only does the per-txn
+    // bookkeeping (dataVersion, compaction score, reshard signal). applyVisibleLogBatch validates version
+    // continuity across the batch and advances each touched partition's visible version exactly once, at batch
+    // end, so lock-free query planning never samples an intermediate version whose BE .meta object was never
+    // materialized (BE materializes a single .meta bundle at the batch's final version).
+    private void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db,
+            boolean deferVersionAdvance) {
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
@@ -98,13 +111,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
 
-            // The version of a replication transaction may not continuously
-            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                    || txnState.isVersionOverwrite()
-                    || partitionCommitInfo.isDoubleWrite()
-                    || version == partition.getVisibleVersion() + 1);
-
-            partition.updateVisibleVersion(version, versionTime);
+            // In the batch-publish path the visible version is advanced once at batch end (see
+            // applyVisibleLogBatch), not here, so lock-free query planning never samples an intermediate
+            // version whose BE .meta object was never materialized.
+            if (!deferVersionAdvance) {
+                // The version of a replication transaction may not continuously
+                Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        || txnState.isVersionOverwrite()
+                        || partitionCommitInfo.isDoubleWrite()
+                        || version == partition.getVisibleVersion() + 1);
+                partition.updateVisibleVersion(version, versionTime);
+            }
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 partition.setDataVersion(partitionCommitInfo.getDataVersion());
                 if (partitionCommitInfo.getVersionEpoch() > 0) {
@@ -213,9 +230,58 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        // BE materializes a single .meta object at the batch's final version, so exposing an intermediate
+        // version to lock-free query planning would route a scan to a .meta that was never written (404).
+        // We therefore advance each touched partition's visible version exactly once, at the end, jumping
+        // straight from the batch's start to its final (materialized) new_version. Runs under the db write
+        // lock. Both the leader (finishTransactionBatch) and follower replay (replayUpsertTransactionStateBatch)
+        // reach here via updateCatalogAfterVisibleBatch, so the guarantee holds symmetrically on every FE that
+        // plans queries locally.
+        //
+        // Three passes so the failure path is side-effect-free: (1) validate per-partition version continuity
+        // across the whole batch, (2) apply each txn's per-txn bookkeeping with the version advance deferred,
+        // (3) advance each touched partition's visible version once. Validating before (2) ensures a malformed
+        // or replayed batch with a version gap is rejected WITHOUT partially updating the catalog (dataVersion,
+        // compaction/dict bookkeeping, tablet stats, reshard signal).
+        Map<Long, Long> finalVersion = new LinkedHashMap<>();
+        Map<Long, Long> finalVersionTime = new HashMap<>();
+        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
+            if (txnState.isShadowRewrite()) {
+                continue;
+            }
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
+            for (PartitionCommitInfo pci : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                long partitionId = pci.getPhysicalPartitionId();
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                if (partition == null) {
+                    continue;
+                }
+                long version = pci.getVersion();
+                // Per-partition version continuity within the batch: the first txn to touch a partition must
+                // start at visibleVersion+1 and each subsequent one steps by exactly 1. Replication /
+                // version-overwrite / double-write txns may legitimately be non-continuous and are exempt
+                // (mirrors the per-txn Precondition applyVisibleLog runs on the non-batch path).
+                boolean mayBeNonContinuous =
+                        txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                                || txnState.isVersionOverwrite() || pci.isDoubleWrite();
+                long expected = finalVersion.containsKey(partitionId)
+                        ? finalVersion.get(partitionId) + 1 : partition.getVisibleVersion() + 1;
+                Preconditions.checkState(mayBeNonContinuous || version == expected,
+                        "batch publish version not continuous: partition=" + partitionId
+                                + " expected=" + expected + " actual=" + version);
+                finalVersion.put(partitionId, version);
+                finalVersionTime.put(partitionId, pci.getVersionTime());
+            }
+        }
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
             TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
-            applyVisibleLog(txnState, tableCommitInfo, db);
+            applyVisibleLog(txnState, tableCommitInfo, db, true);
+        }
+        for (Map.Entry<Long, Long> entry : finalVersion.entrySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(entry.getKey());
+            if (partition != null) {
+                partition.updateVisibleVersion(entry.getValue(), finalVersionTime.get(entry.getKey()));
+            }
         }
     }
 }
