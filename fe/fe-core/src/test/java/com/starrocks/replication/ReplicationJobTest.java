@@ -49,10 +49,14 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,6 +118,28 @@ public class ReplicationJobTest {
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        if (job == null || job.getState() != ReplicationJobState.COMMITTED || job.getTransactionId() <= 0) {
+            return;
+        }
+
+        DatabaseTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getDatabaseTransactionMgr(db.getId());
+        TransactionState transactionState = transactionMgr.getTransactionState(job.getTransactionId());
+        if (transactionState != null && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            Deencapsulation.invoke(transactionMgr, "writeLock");
+            try {
+                transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
+                Deencapsulation.invoke(transactionMgr, "unprotectUpsertTransactionState", transactionState);
+            } finally {
+                Deencapsulation.invoke(transactionMgr, "writeUnlock");
+            }
+            Assertions.assertEquals(TransactionStatus.VISIBLE,
+                    transactionMgr.getTransactionState(job.getTransactionId()).getTransactionStatus());
+        }
     }
 
     @Test
