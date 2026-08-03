@@ -212,9 +212,15 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
+    ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
     // create file reader
+<<<<<<< HEAD:be/src/exec/hdfs_scanner_parquet.cpp
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
                                                     _scanner_params.datacache_options,
+=======
+    _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), file_size,
+                                                    _scanner_ctx->datacache_options,
+>>>>>>> 2154578486 ([BugFix] Check the status before unwrapping a StatusOr (#77052)):be/src/connector/hive/scanner/hdfs_scanner_parquet.cpp
                                                     _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
