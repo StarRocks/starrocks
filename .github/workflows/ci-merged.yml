@@ -15,41 +15,12 @@ env:
   PR_NUMBER: ${{ github.event.number }}
 
 jobs:
-  backport:
-    runs-on: ubuntu-latest
-    if: >
-      github.event.pull_request.merged == true &&
-      github.base_ref == 'main' && 
-      github.repository == 'StarRocks/starrocks' &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
-
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-    steps:
-      - name: backport branch-${{ matrix.version }}
-        if: contains(github.event.pull_request.labels.*.name, matrix.version)
-        uses: thollander/actions-comment-pull-request@v2
-        with:
-          message: |
-            @Mergifyio backport branch-${{ matrix.version }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, matrix.version)
-        with:
-          labels: ${{ matrix.version }}
-
-  # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
-  # job above and only PRINTS the computed target set (never posts @Mergifyio), for
-  # reconciliation against the manual matrix before cutover. continue-on-error so it
-  # can never affect the merge. Depends on ci-tool #4910/#4911 being on the runner.
-  backport-fanout-shadow:
-    name: Backport Fan-out (dry-run shadow)
+  # Backport fan-out engine (CUTOVER: real). Computes targets from PR type +
+  # .github/.status / .github/.lts + issue containment and posts `@Mergifyio backport
+  # branch-X`. Replaces the removed static version-matrix backport job (manual
+  # checkboxes -> auto). Requires ci-tool backport_fanout on /var/lib/ci-tool.
+  backport-fanout:
+    name: Backport Fan-out
     runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged == true &&
@@ -57,15 +28,14 @@ jobs:
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
-    continue-on-error: true
     env:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
     steps:
-      - name: fan-out dry-run
+      - name: fan-out
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+          python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --no-dry-run
 
   thirdparty-filter:
     runs-on: ubuntu-latest
