@@ -39,6 +39,7 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk_factory.h"
@@ -55,6 +56,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_common.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
@@ -1348,5 +1350,108 @@ TEST_F(RowsetTest, copy_files_to_reports_missing_clucene_gin_index) {
     auto res = rowset->copy_files_to(dst_dir);
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_not_found()) << res.status().to_string();
+}
+
+TEST_F(RowsetTest, copy_files_to_reports_existing_index_path) {
+    auto schema = create_gin_tablet_schema(TYPE_CLUCENE);
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_existing_gin";
+    ASSERT_TRUE(fs::create_directories(dst_dir).ok());
+
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_gin_rowset(schema, src_dir, rowset_id);
+
+    std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dst_dir, rowset_id.to_string(), 0, 100);
+    ASSERT_TRUE(fs::create_directories(dst_index_path).ok());
+
+    auto res = rowset->copy_files_to(dst_dir);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_already_exist()) << res.status().to_string();
+    std::string err = res.status().to_string();
+    ASSERT_TRUE(err.find(dst_index_path) != std::string::npos) << err;
+}
+
+TEST_F(RowsetTest, remove_skips_builtin_gin_index) {
+    auto schema = create_gin_tablet_schema(TYPE_BUILTIN);
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_gin_rowset(schema, src_dir, rowset_id);
+
+    ASSERT_OK(rowset->remove());
+    ASSERT_FALSE(fs::path_exist(Rowset::segment_file_path(src_dir, rowset_id, 0)));
+}
+
+// remove() tolerates a missing CLucene directory: merge_status filters is_not_found.
+TEST_F(RowsetTest, remove_tolerates_missing_clucene_gin_index) {
+    auto schema = create_gin_tablet_schema(TYPE_CLUCENE);
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_gin_rowset(schema, src_dir, rowset_id);
+
+    ASSERT_OK(rowset->remove());
+    ASSERT_FALSE(fs::path_exist(Rowset::segment_file_path(src_dir, rowset_id, 0)));
+}
+
+TEST_F(RowsetTest, horizontal_writer_dtor_skips_builtin_gin_index) {
+    auto tablet_schema = create_gin_tablet_schema(TYPE_BUILTIN);
+
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema, &writer_context);
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.writer_type = kHorizontal;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
+
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    auto cols = chunk->columns();
+    cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+    cols[1]->as_mutable_ptr()->append_datum(Datum(Slice("apple")));
+    ASSERT_OK(rowset_writer->add_chunk(*chunk));
+    ASSERT_OK(rowset_writer->flush());
+
+    std::string segment_path =
+            Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
+    ASSERT_TRUE(fs::path_exist(segment_path));
+
+    // Destroying an unbuilt writer runs the garbage cleanup path, which must skip the
+    // builtin GIN index directory handling.
+    rowset_writer.reset();
+    ASSERT_FALSE(fs::path_exist(segment_path));
+}
+
+TEST_F(RowsetTest, vertical_writer_dtor_skips_builtin_gin_index) {
+    auto tablet_schema = create_gin_tablet_schema(TYPE_BUILTIN);
+
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema, &writer_context);
+    writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.writer_type = kVertical;
+    writer_context.max_rows_per_segment = 4096;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_OK(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
+
+    {
+        std::vector<uint32_t> column_indexes{0};
+        auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
+        auto chunk = ChunkFactory::new_chunk(schema, 16);
+        chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
+        ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
+        ASSERT_OK(rowset_writer->flush_columns());
+    }
+
+    std::string segment_path =
+            Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
+    ASSERT_TRUE(fs::path_exist(segment_path));
+
+    rowset_writer.reset();
+    ASSERT_FALSE(fs::path_exist(segment_path));
 }
 } // namespace starrocks
