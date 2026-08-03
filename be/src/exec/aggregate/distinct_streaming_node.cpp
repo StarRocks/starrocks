@@ -218,11 +218,16 @@ pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::Pip
                 context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
+<<<<<<< HEAD
     if (limit() != -1) {
         ops_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
+=======
+    ops_with_source =
+            ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops_with_source);
+>>>>>>> 329a039bd0 ([BugFix] Remove the global limit for streaming distinct (#77086))
     return ops_with_source;
 }
 
