@@ -96,8 +96,7 @@ public class StatisticsEstimateUtils {
         }
 
         // Neither side has buckets
-        boolean noBuckets = (left == null || left.getBuckets() == null || left.getBuckets().isEmpty())
-                && (right == null || right.getBuckets() == null || right.getBuckets().isEmpty());
+        boolean noBuckets = (left == null || left.getBuckets().isEmpty()) && (right == null || right.getBuckets().isEmpty());
 
         // The merged MCV rows account for at least 50% of the total rows.
         final double totalRowCount = leftRowCount + rightRowCount;

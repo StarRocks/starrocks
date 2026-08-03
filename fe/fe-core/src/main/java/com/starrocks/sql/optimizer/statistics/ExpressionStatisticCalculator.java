@@ -208,7 +208,7 @@ public class ExpressionStatisticCalculator {
 
             if (!childStat.isUnknown() && childStat.getHistogram() != null && child.getType().isBoolean()) {
                 Map<String, Long> mcv = childStat.getHistogram().getMCV();
-                if (mcv != null && (!mcv.isEmpty())) {
+                if (!mcv.isEmpty()) {
                     String trueKey = booleanToMcvValue(true);
                     String falseKey = booleanToMcvValue(false);
 
@@ -1085,7 +1085,7 @@ public class ExpressionStatisticCalculator {
         private Histogram transformHistogramForDateTrunc(String fmtString, ColumnStatistic dateStatistic,
                                                          Type resultType) {
             final var histogram = dateStatistic.getHistogram();
-            if (histogram == null || histogram.getMCV() == null || histogram.getMCV().isEmpty()) {
+            if (histogram == null || histogram.getMCV().isEmpty()) {
                 return null;
             }
 
@@ -1183,7 +1183,7 @@ public class ExpressionStatisticCalculator {
                     // If condition MCVs are available, use branch row weights and collapse
                     // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
-                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                    if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
                         final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
                         final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
@@ -1250,7 +1250,7 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
+            if (condStat.getHistogram() == null) {
                 return null;
             }
 
@@ -1259,8 +1259,8 @@ public class ExpressionStatisticCalculator {
             long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
             long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
 
-            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
-            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+            final boolean thenHasHist = thenStat.getHistogram() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null;
 
             // If neither branch has a histogram, nothing to propagate.
             if (!thenHasHist && !elseHasHist) {
