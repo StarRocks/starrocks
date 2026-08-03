@@ -100,6 +100,17 @@ public class PaimonPredicateConverterTest {
     }
 
     @Test
+    public void testLargeInPredicateIsDroppedNotThrown() {
+        List<Object> rawValues = Arrays.asList(11, 22, 333);
+        com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator op =
+                new com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator(
+                        "f0 IN (11, 22, 333)", rawValues, rawValues.size(), false, IntegerType.INT,
+                        Lists.newArrayList(F0));
+        Predicate result = CONVERTER.convert(op);
+        Assertions.assertNull(result);
+    }
+
+    @Test
     public void testEq() {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0, value);
