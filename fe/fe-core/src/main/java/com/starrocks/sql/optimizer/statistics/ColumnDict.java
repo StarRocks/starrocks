@@ -32,7 +32,7 @@ public final class ColumnDict extends StatsVersion {
      * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
      * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
      */
-    private static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
+    public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
         int aPos = a.position();
         int bPos = b.position();
         int aLen = a.limit() - aPos;
