@@ -268,9 +268,7 @@ public class PushDownDistinctAggregateRewriter {
             if (ctx.groupBys.isEmpty() || ctx.aggregations.isEmpty()) {
                 return AggRewriteInfo.NOT_REWRITE;
             }
-            List<ColumnRefOperator> groupBys = ctx.groupBys.values().stream().map(ScalarOperator::getUsedColumns)
-                    .flatMap(colSet -> colSet.getStream().map(factory::getColumnRef)).distinct()
-                    .collect(Collectors.toList());
+            List<ColumnRefOperator> groupBys = pushDownGroupBys(ctx);
 
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             ColumnRefSet scanOutputColRefSet = new ColumnRefSet(scanOp.getOutputColumns());
@@ -315,12 +313,28 @@ public class PushDownDistinctAggregateRewriter {
                 return AggRewriteInfo.NOT_REWRITE;
             }
 
+            // The aggregation pushed down below this projection replaces every aggregated argument column by
+            // the column holding the partial aggregate, so those argument columns are gone from the child
+            // output unless they are also grouping keys of the pushed-down aggregation.
+            ColumnRefSet survivingColumns = new ColumnRefSet(pushDownGroupBys(rewriteInfo.getCtx()));
+
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOp.getColumnRefMap().entrySet()) {
-                newColumnRefMap.put((ColumnRefOperator) replacer.rewrite(entry.getKey()),
-                        replacer.rewrite(entry.getValue()));
+                ColumnRefOperator newKey = (ColumnRefOperator) replacer.rewrite(entry.getKey());
+                newColumnRefMap.put(newKey, replacer.rewrite(entry.getValue()));
+                // A remapped column that is still a grouping key is still produced by the child, and the
+                // operators above may read it, so it has to be emitted under its original name as well.
+                // A remapped column that is not, however, must not be kept: the projection would read a
+                // column its child no longer produces, which breaks statistics derivation and yields an
+                // invalid plan.
+                if (!newKey.equals(entry.getKey()) && survivingColumns.contains(entry.getKey())) {
+                    newColumnRefMap.put(entry.getKey(), entry.getValue());
+                }
             }
+            projectOp.getColumnRefMap().clear();
             projectOp.getColumnRefMap().putAll(newColumnRefMap);
+            // The projection is mutated in place, so its cached row output info no longer describes it.
+            projectOp.clearRowOutputInfo();
             rewriteInfo.setOp(optExpression);
             return rewriteInfo;
         }
@@ -366,6 +380,16 @@ public class PushDownDistinctAggregateRewriter {
 
     public PreVisitor preVisitor = new PreVisitor();
     public PostVisitor postVisitor = new PostVisitor();
+
+    /**
+     * The grouping keys of the aggregation that is pushed down onto the scan, which together with the
+     * partial aggregate columns are the only columns that aggregation emits.
+     */
+    private List<ColumnRefOperator> pushDownGroupBys(AggregatePushDownContext ctx) {
+        return ctx.groupBys.values().stream().map(ScalarOperator::getUsedColumns)
+                .flatMap(colSet -> colSet.getStream().map(factory::getColumnRef)).distinct()
+                .collect(Collectors.toList());
+    }
 
     public static ColumnRefSet getReferencedColumnRef(Collection<ScalarOperator> operators) {
         ColumnRefSet refSet = new ColumnRefSet();
