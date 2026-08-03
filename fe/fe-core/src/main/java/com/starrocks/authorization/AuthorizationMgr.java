@@ -311,8 +311,11 @@ public class AuthorizationMgr {
                     Lists.newArrayList("*", "*", "*")));
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.VIEW.equals(objectType)
-                || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                || ObjectType.DATABASE.equals(objectType)
+                || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+            objects.add(provider.generateObject(objectType,
+                    Lists.newArrayList("*", "*", "*")));
+            collection.grant(objectType, actionList, objects, false);
+        } else if (ObjectType.DATABASE.equals(objectType)
                 || ObjectType.PIPE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*", "*")));
