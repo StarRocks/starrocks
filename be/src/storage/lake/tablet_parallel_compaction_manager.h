@@ -267,11 +267,14 @@ private:
                                   const ReleaseTokenFunc& release_token);
 
     // Submit subtasks from SubtaskGroup to thread pool (new API for large rowset split)
-    // Returns the number of subtasks successfully submitted
+    // Returns the number of subtasks successfully submitted.
+    // |submitted_out|, when non-null, is kept up to date with that count as the subtasks are handed to the
+    // thread pool, so it stays readable if this throws. The tablet state cannot be used for that: a subtask
+    // may already have completed and cleaned the state up by the time the exception is handled.
     StatusOr<int> submit_subtasks_from_groups(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
                                               std::vector<SubtaskGroup> groups, bool force_base_compaction,
                                               ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                              const ReleaseTokenFunc& release_token);
+                                              const ReleaseTokenFunc& release_token, int* submitted_out = nullptr);
 
     // Execute a single subtask for large rowset split (segment range mode)
     void execute_subtask_segment_range(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,

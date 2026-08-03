@@ -706,8 +706,37 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                                                                       max_bytes, std::move(callback), release_token));
 
     // Step 4: Submit subtasks
-    return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
-                                       acquire_token, release_token);
+    //
+    // Decide here whether an escaping exception may be reported to the caller, because only here is the
+    // "did anything get submitted" answer race-free. `submitted` is on this stack, so it survives; the
+    // tablet state does not answer the question reliably -- a subtask that fails fast (a missing segment
+    // file, an unreachable object store) can complete, run finish_task() and have the state cleaned up
+    // before the exception is even handled, which would make the state look like "nothing was submitted".
+    // Acting on that stale answer lets the caller fall back to normal compaction for a tablet that has
+    // already completed, producing a second finish_task() for one tablet id and a SIGSEGV in it.
+    int submitted = 0;
+    try {
+        return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
+                                           acquire_token, release_token, &submitted);
+    } catch (const std::exception& e) {
+        if (submitted > 0) {
+            LOG(WARNING) << "Exception after submitting " << submitted << " parallel compaction subtask(s); they own "
+                         << "the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id << ": "
+                         << e.what();
+            return submitted;
+        }
+        cleanup_tablet(tablet_id, txn_id);
+        return Status::InternalError(
+                strings::Substitute("exception while submitting parallel compaction subtasks: $0", e.what()));
+    } catch (...) {
+        if (submitted > 0) {
+            LOG(WARNING) << "Unknown exception after submitting " << submitted << " parallel compaction subtask(s); "
+                         << "they own the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id;
+            return submitted;
+        }
+        cleanup_tablet(tablet_id, txn_id);
+        return Status::InternalError("unknown exception while submitting parallel compaction subtasks");
+    }
 }
 
 std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::get_tablet_state(int64_t tablet_id,
@@ -1960,7 +1989,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
 StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         const std::shared_ptr<TabletParallelCompactionState>& state_ptr, std::vector<SubtaskGroup> groups,
         bool force_base_compaction, ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-        const ReleaseTokenFunc& release_token) {
+        const ReleaseTokenFunc& release_token, int* submitted_out) {
     int64_t tablet_id = state_ptr->tablet_id;
     int64_t txn_id = state_ptr->txn_id;
     int64_t version = state_ptr->version;
@@ -2195,6 +2224,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         // The subtask is now owned by the thread pool and will report its own completion, so the
         // registration must survive this scope.
         submitted = true;
+        if (submitted_out != nullptr) {
+            *submitted_out = subtasks_created;
+        }
 
         // Test hook: lets a test throw from here, i.e. *after* a subtask has been submitted and is running.
         // A throw in this window must not route the tablet into the caller's fallback path, or the tablet
