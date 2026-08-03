@@ -195,7 +195,7 @@ public class MockJournal implements Journal {
         }
 
         @Override
-        public String transferToMaster(String nodeName, int timeoutMs, boolean force) {
+        public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
             return nodeName;
         }
     }

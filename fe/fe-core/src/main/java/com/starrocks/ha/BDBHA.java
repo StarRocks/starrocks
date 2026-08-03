@@ -150,7 +150,7 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
-    public String transferToMaster(String nodeName, int timeoutMs, boolean force) {
+    public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
             throw new IllegalStateException("replication group admin is not available, cannot transfer leader");
@@ -162,7 +162,7 @@ public class BDBHA implements HAProtocol {
             // timeoutMs for the target replica to catch up, then completes the transfer. On the master
             // this triggers the in-place safe demotion path (no System.exit on a clean handoff).
             String winner = replicationGroupAdmin.transferMaster(candidates, timeoutMs, TimeUnit.MILLISECONDS, force);
-            LOG.info("transfer leader to {} (force={}, timeoutMs={}) succeeded, new master is {}",
+            LOG.info("transfer leader to {} (force={}, timeoutMs={}) succeeded, new leader is {}",
                     nodeName, force, timeoutMs, winner);
             return winner;
         } catch (DatabaseException | IllegalStateException | IllegalArgumentException e) {

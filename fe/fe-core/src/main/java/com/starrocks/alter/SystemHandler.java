@@ -204,7 +204,7 @@ public class SystemHandler extends AlterHandler {
                 // in-place safe demotion.
                 final int catchUpTimeoutMs = 30000;
                 GlobalStateMgr.getCurrentState().getHaProtocol()
-                        .transferToMaster(target.getNodeName(), catchUpTimeoutMs, clause.isForce());
+                        .transferToLeader(target.getNodeName(), catchUpTimeoutMs, clause.isForce());
             });
             return null;
         }
