@@ -96,8 +96,8 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(i
     if (runtime_state == nullptr) {
         return Status::InternalError("IcebergChunkSinkContext requires runtime_state");
     }
-    std::shared_ptr<FileSystem> fs =
-            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
     auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(

@@ -190,6 +190,13 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ann_params
+
+* **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
+* **Default**: `""`
+* **Data type**: String
+* **Scope**: Session
+
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
@@ -1186,6 +1193,13 @@ The following variables tune the back-pressure behavior and only take effect whe
 * **Data Type**: boolean
 * **Introduced in**: v3.2.4
 
+### enable_vector_index_refine
+
+* **Description**: Whether to recompute exact distances from the original vectors and rerank candidates returned by a quantized vector index. This variable applies to IVFPQ and HNSW indexes using the `sq4`, `sq8`, or `pq` quantizer. It has no effect on unquantized HNSW indexes (`quantizer = flat`). Enabling it can improve result accuracy but increases I/O and computation. Use `EXPLAIN` and check `Refine: ON/OFF` to confirm whether refinement is active.
+* **Default**: `false`
+* **Data type**: Boolean
+* **Scope**: Session
+
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.
@@ -1322,6 +1336,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
+### k_factor
+
+* **Description**: Multiplies the query `LIMIT` to determine how many vector index candidates each Segment returns. Values greater than `1` can improve recall after candidates from multiple Segments are merged, but increase index, memory, and downstream processing costs. The final candidate count is clamped to at least `1`.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
 
 ### lake_bucket_assign_mode
 
@@ -1600,6 +1621,13 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
   * `never`: Never cache the data.
 * **Default**: auto
 * **Introduced in**: v3.3.2
+
+### pq_refine_factor
+
+* **Description**: Additional candidate multiplier for a vector range search when `enable_vector_index_refine` is enabled. It is applied after `k_factor`. Increasing it can improve recall before exact-distance reranking, but increases index, I/O, and distance-computation costs.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
 
 ### query_cache_agg_cardinality_limit
 

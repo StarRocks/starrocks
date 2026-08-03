@@ -56,7 +56,7 @@ This topic introduces the following types of BE configurations:
 - Type: Long
 - Unit: Rows
 - Is mutable: Yes
-- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded. The row count includes segment rows plus the tombstone (delete) rows recorded in del files, so a delete-heavy workload that produces a few large del files also counts toward this threshold; del files written by older versions that did not record a row count contribute 0.
 - Introduced in: -
 
 ### download_buffer_size
@@ -112,6 +112,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
+- Introduced in: v4.2
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Introduced in: v4.2
 
 ### enable_lake_pk_compaction_score_gate
 

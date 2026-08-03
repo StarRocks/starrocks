@@ -500,6 +500,10 @@ public class CreateTableAnalyzer {
                                 !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
                 }
+            } else {
+                // A range-distributed duplicate key table's sort key defines the tablet range
+                // boundaries; every sort key column type must be encodable as a key on the BE.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
             }
         } else {
             // we should check sort key column type if table is primary key table
@@ -523,7 +527,9 @@ public class CreateTableAnalyzer {
                     }
                 }
             } else if (keysType == KeysType.DUP_KEYS) {
-                // sort key column of duplicate table has no limitation
+                // A duplicate key table's sort key columns are encoded on the BE (short-key index)
+                // regardless of distribution, so their types must be BE-encodable here too.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
@@ -558,6 +564,39 @@ public class CreateTableAnalyzer {
                 }
             } else {
                 throw new SemanticException("Table type:" + keysType.toSql() + " does not support sort key column");
+            }
+        }
+    }
+
+    // Reject sort key (ORDER BY) columns whose type the BE cannot encode as a key. Sort key columns
+    // are written into the short-key index via an order-preserving KeyCoder; a type without a key
+    // coder (JSON, complex, floating-point, metric, variant, and TIME) would crash the BE encoder,
+    // so fail cleanly at CREATE TABLE instead. Column resolution is case-insensitive to match
+    // OlapTableFactory.
+    private static void checkSortKeyTypesEncodable(List<OrderByElement> orderByElements,
+                                                   List<ColumnDef> columnDefs, List<String> columnNames) {
+        for (OrderByElement orderByElement : orderByElements) {
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+            if (column == null) {
+                throw new SemanticException("Unknown column '%s' in order by clause",
+                        ExprToSql.toSql(orderByElement.getExpr()));
+            }
+            int idx = -1;
+            for (int i = 0; i < columnNames.size(); i++) {
+                if (columnNames.get(i).equalsIgnoreCase(column)) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx == -1) {
+                throw new SemanticException("Column '%s' does not exist", column);
+            }
+            ColumnDef cd = columnDefs.get(idx);
+            Type t = cd.getType();
+            if (!t.canDistributedBy()) {
+                throw new SemanticException(
+                        "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
             }
         }
     }

@@ -81,6 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
@@ -207,6 +208,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
+
+    // Set once the scan-range heap-safety warning has been evaluated for this scan node. MUST stay an
+    // instance field: a method-local flag makes planning quadratic in the number of physical
+    // partitions, which is the regression #64158 introduced and this field restores.
+    private boolean alreadyCheckedScanRangeNumSafe = false;
 
     private boolean usePreparedPhysicalSplitScan = false;
 
@@ -630,7 +636,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         selectedPartitionNames.add(partition.getName());
 
         checkSomeAliveComputeNode();
-        boolean checkScanRangeSize = false;
 
         // Batch retrieve all tablets' location info in shared-data mode
         Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
@@ -759,11 +764,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             scanRangeLocations.setScan_range(scanRange);
 
             bucketSeq2locations.put(tabletId2BucketSeq.get(tabletId), scanRangeLocations);
-            if (!checkScanRangeSize) {
-                long scanRangeSize = getEstimatedScanRangeFootprint(scanRange);
-                checkIfScanRangeNumSafe(scanRangeSize);
-                checkScanRangeSize = true;
-            }
+            checkScanRangeNumSafeOnce(scanRange);
 
             result.add(scanRangeLocations);
         }
@@ -858,7 +859,36 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         }
     }
 
-    public void checkIfScanRangeNumSafe(long scanRangeSize) {
+    /**
+     * Runs {@link #checkIfScanRangeNumSafe} the first time it is called on this scan node, and does
+     * nothing on every later call -- every call after the first is a single field read, so this is
+     * safe to call from the per-tablet loop.
+     *
+     * <p>The guard lives here rather than at the call site on purpose. The check is O(selected
+     * physical partitions), while callers run once per physical partition, so a caller-side guard is
+     * what made planning quadratic (#64158). Keeping it here means a new call site cannot
+     * reintroduce that by forgetting to hoist a flag.
+     *
+     * <p>{@code sampleScanRange} is only a size sample: {@link #getEstimatedScanRangeFootprint}
+     * measures it once per JVM and reuses that figure for every table thereafter.
+     */
+    private void checkScanRangeNumSafeOnce(TScanRange sampleScanRange) {
+        if (alreadyCheckedScanRangeNumSafe) {
+            return;
+        }
+        checkIfScanRangeNumSafe(getEstimatedScanRangeFootprint(sampleScanRange));
+        alreadyCheckedScanRangeNumSafe = true;
+    }
+
+    /**
+     * Warn when this scan node's scan ranges look large enough to threaten the FE heap.
+     * Diagnostic only: it never alters the plan.
+     *
+     * <p>O(selected physical partitions). Do not call directly from a per-partition or per-tablet
+     * loop -- go through {@link #checkScanRangeNumSafeOnce}.
+     */
+    @VisibleForTesting // package-private, not private: this JMockit version cannot fake private methods
+    void checkIfScanRangeNumSafe(long scanRangeSize) {
         long totalPartitionNum = 0;
         long totalTabletsNum = 0;
         for (long partitionId : selectedPartitionIds) {
@@ -916,7 +946,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
-        if (Config.enable_experimental_vector) {
+        // Only report the ANN state for tables that actually carry a vector index, so plans of
+        // ordinary tables stay unchanged.
+        boolean hasVectorIndex = olapTable.getIndexes().stream()
+                .anyMatch(idx -> idx.getIndexType() == IndexDef.IndexType.VECTOR);
+        if (hasVectorIndex) {
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 output.append(vectorSearchOptions.getExplainString(prefix));
             } else {

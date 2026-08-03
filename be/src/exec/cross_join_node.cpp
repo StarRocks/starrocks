@@ -177,8 +177,8 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     ASSIGN_OR_RETURN(auto left_ops, _children[0]->decompose_to_pipeline(context));
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<ProbeFactory>(
-            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
+            context->next_operator_id(), id(), child(0)->record_desc(), child(1)->record_desc(), _sql_join_conjuncts,
+            std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
             std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     pipeline::init_runtime_filter_for_operator(*this, left_factory.get(), context, rc_rf_probe_collector);

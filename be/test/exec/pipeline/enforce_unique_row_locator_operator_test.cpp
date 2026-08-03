@@ -342,8 +342,8 @@ class EnforceUniqueRowLocatorNodeTest : public ::testing::Test {
 protected:
     void SetUp() override {
         TDescriptorTable t_desc_table;
-        // ExecNode builds a RowDescriptor from row_tuples and requires at least one
-        // tuple, so register a single tuple (id 1) holding the two row-locator slots.
+        // ExecNode builds a RecordDescriptor from row_tuples, so register a single
+        // tuple (id 1) holding the two row-locator slots.
         TTupleDescriptor t_tuple_desc;
         t_tuple_desc.id = 1;
         t_desc_table.tupleDescriptors.push_back(t_tuple_desc);

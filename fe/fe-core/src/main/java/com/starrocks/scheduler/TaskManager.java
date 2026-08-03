@@ -45,6 +45,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -386,15 +387,40 @@ public class TaskManager implements MemoryTrackable {
             return null;
         }
         TaskRun taskRun = buildTaskRun(task, option);
-        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                getMVRefreshProcessExecPlan(taskRun, task, option, statement);
+        ExecPlan execPlan = processExecPlan == null ? null : processExecPlan.execPlan();
         String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        if (execPlan == null) {
+            // A planning failure never lands here -- it propagates as DmlException.
+            if (!explainString.endsWith("\n")) {
+                // TRACE TIMES/LOGS output ends without a trailing newline.
+                explainString += "\n";
+            }
+            explainString += noRefreshPlanMessage(processExecPlan) + "\n";
+        }
         // add extra info
         String extraInfo = getExtraExplainInfo(taskRun, statement);
         if (!Strings.isNullOrEmpty(extraInfo)) {
             explainString += "\n" + extraInfo;
         }
         return explainString;
+    }
+
+    private static String noRefreshPlanMessage(MVRefreshProcessor.ProcessExecPlan processExecPlan) {
+        MVRefreshProcessor.ProcessExecPlan.SkipReason skipReason =
+                processExecPlan == null ? null : processExecPlan.skipReason();
+        if (skipReason == null) {
+            return "REFRESH SKIPPED: no refresh plan was produced";
+        }
+        // Exhaustive on purpose: a new SkipReason must not silently inherit an "up to date" claim.
+        return switch (skipReason) {
+            case MV_UP_TO_DATE -> "NO REFRESH NEEDED: the materialized view is already up to date";
+            case SCOPE_UP_TO_DATE -> "NO REFRESH NEEDED: the requested partitions are already up to date, "
+                    + "other partitions of the materialized view may still be stale";
+            case STALE_PINNED_BATCH -> "REFRESH SKIPPED: another refresh job owns the pinned partition ranges";
+        };
     }
 
     public TaskRun buildTaskRun(Task task, ExecuteOption option) {
@@ -426,7 +452,9 @@ public class TaskManager implements MemoryTrackable {
     /**
      * Get the MV refresh execution plan for the given task.
      */
-    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
+    public MVRefreshProcessor.ProcessExecPlan getMVRefreshProcessExecPlan(TaskRun taskRun, Task task,
+                                                                          ExecuteOption option,
+                                                                          StatementBase statement) {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
@@ -447,7 +475,7 @@ public class TaskManager implements MemoryTrackable {
             // prepare the task run context
             taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
             // execute the task run
-            return mvRefreshProcessor.getMVRefreshExecPlan();
+            return mvRefreshProcessor.getMVRefreshProcessExecPlan();
         } catch (Exception e) {
             LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
             throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,

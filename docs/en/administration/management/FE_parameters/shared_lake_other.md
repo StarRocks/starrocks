@@ -627,6 +627,15 @@ This topic introduces the following types of FE configurations:
 - Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
 - Introduced in: v3.2.0
 
+### `lake_enable_batch_publish_multi_table`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Introduced in: v4.1.5
+
 ### `lake_enable_tablet_creation_optimization`
 
 - Default: false
@@ -653,6 +662,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
+
+### `lake_vector_index_build_warehouse`
+
+- Default: `default_warehouse`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Warehouse used to run asynchronous vector index build tasks in shared-data clusters. Set this item to a non-default warehouse name to isolate vector index builds from query and load workloads. If the configured warehouse is `default_warehouse`, empty, missing, or unavailable, StarRocks uses the table's recorded background warehouse and finally falls back to the default warehouse.
+- Introduced in: v4.2.0
 
 ### `lake_vi_build_load_tail_delay_ms`
 

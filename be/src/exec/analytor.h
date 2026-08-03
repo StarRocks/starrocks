@@ -20,6 +20,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/global_types.h"
 #include "common/memory/mem_hook_allocator.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
@@ -117,8 +118,7 @@ class Analytor final : public pipeline::ContextWithDependency {
 
 public:
     ~Analytor() override;
-    Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
-             bool use_hash_based_partition);
+    Analytor(const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
@@ -281,7 +281,6 @@ private:
     bool _is_closed = false;
     // TPlanNode is only valid in the PREPARE and INIT phase
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 
@@ -329,11 +328,6 @@ private:
 
     std::vector<ExprContext*> _order_ctxs;
     MutableColumns _order_columns;
-
-    // Tuple id of the buffered tuple (identical to the input child tuple, which is
-    // assumed to come from a single SortNode). NULL if both partition_exprs and
-    // order_by_exprs are empty.
-    TTupleId _buffered_tuple_id = 0;
 
     bool _has_udaf = false;
     // There are many reasons requiring the materializing processing.
@@ -427,11 +421,10 @@ class AnalytorFactory;
 using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
 class AnalytorFactory {
 public:
-    AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                    const TupleDescriptor* result_tuple_desc, const bool use_hash_based_partition)
+    AnalytorFactory(size_t dop, const TPlanNode& tnode, const TupleDescriptor* result_tuple_desc,
+                    const bool use_hash_based_partition)
             : _analytors(dop),
               _tnode(tnode),
-              _child_row_desc(child_row_desc),
               _result_tuple_desc(result_tuple_desc),
               _use_hash_based_partition(use_hash_based_partition) {}
     AnalytorPtr create(int i);
@@ -439,7 +432,6 @@ public:
 private:
     Analytors _analytors;
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     const bool _use_hash_based_partition;
 };

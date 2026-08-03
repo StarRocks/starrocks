@@ -569,6 +569,63 @@ public class CreateTableAnalyzerTest {
     }
 
     @Test
+    public void testDupTableSortKeyTypeRestriction() {
+        // A sort key column is encoded on the BE via a KeyCoder; types without one (JSON, TIME, ...)
+        // crash the short-key encoder, so they must be rejected at CREATE TABLE for duplicate key
+        // tables under BOTH range and non-range distribution (#11611).
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            // JSON sort key, range distribution -> reject (JSON has no BE key coder).
+            analyzeFail("CREATE TABLE test_create_table_db.dup_range_json_sortkey\n" +
+                    "(k1 int, c json) DUPLICATE KEY(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // TIME sort key, range distribution -> reject (canDistributedBy() allows TIME, but the BE
+            // has no TIME key coder; canDistributedBy() excludes it).
+            analyzeFail("CREATE TABLE test_create_table_db.dup_range_time_sortkey\n" +
+                    "(k1 int, c time) DUPLICATE KEY(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // A normal (int) sort key -> pass. The ORDER BY reference uses a different case than the
+            // column definition to confirm case-insensitive resolution (matching OlapTableFactory).
+            analyzeSuccess("CREATE TABLE test_create_table_db.dup_range_int_sortkey\n" +
+                    "(k1 int, c int) DUPLICATE KEY(k1) ORDER BY(C)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");");
+
+            // Non-range distribution: the same crash is reachable (the sort key is still short-key
+            // encoded), so JSON/TIME must be rejected here too.
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            analyzeFail("CREATE TABLE test_create_table_db.dup_norange_json_sortkey\n" +
+                    "(k1 int, c json) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+            analyzeFail("CREATE TABLE test_create_table_db.dup_norange_time_sortkey\n" +
+                    "(k1 int, c time) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");",
+                    "Sort key column[c] type not supported");
+
+            // Non-range int sort key still passes.
+            analyzeSuccess("CREATE TABLE test_create_table_db.dup_norange_int_sortkey\n" +
+                    "(k1 int, c int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) ORDER BY(c)\n" +
+                    "PROPERTIES (\"replication_num\" = \"1\");");
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+        }
+    }
+
+    @Test
+    public void testTimeKeyColumnRejected() {
+        // TIME has no BE key coder, so it can't be a key column (a key column is also the implicit
+        // short/sort key). canDistributedBy() now excludes TIME, so ColumnDefAnalyzer rejects it.
+        analyzeFail("CREATE TABLE test_create_table_db.time_key_tbl\n" +
+                "(k1 time, v int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(v)\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");",
+                "Invalid data type of key column");
+    }
+
+    @Test
     public void testCreateTableForceRange() {
         boolean oldEnableRangeDistribution = Config.enable_range_distribution;
         Config.enable_range_distribution = false;

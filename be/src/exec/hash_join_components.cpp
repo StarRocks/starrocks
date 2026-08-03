@@ -571,12 +571,10 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_hash_table_probing_bytes_per_
     }
 
     // 3. output bytes
-    for (auto* tuple : param.build_row_desc->tuple_descriptors()) {
-        for (const auto* slot : tuple->slots()) {
-            if (param.build_output_slots.empty() || param.build_output_slots.contains(slot->id())) {
-                estimated_each_row += get_size_of_fixed_length_type(slot->type().type);
-                estimated_each_row += type_estimated_overhead_bytes(slot->type().type);
-            }
+    for (auto* slot : param.build_record_desc->slots()) {
+        if (param.build_output_slots.empty() || param.build_output_slots.contains(slot->id())) {
+            estimated_each_row += get_size_of_fixed_length_type(slot->type().type);
+            estimated_each_row += type_estimated_overhead_bytes(slot->type().type);
         }
     }
 
@@ -588,11 +586,9 @@ size_t AdaptivePartitionHashJoinBuilder::_estimate_probe_row_bytes(const HashTab
     size_t size = 0;
 
     // shuffling probe bytes
-    for (auto* tuple : param.probe_row_desc->tuple_descriptors()) {
-        for (const auto* slot : tuple->slots()) {
-            size += get_size_of_fixed_length_type(slot->type().type);
-            size += type_estimated_overhead_bytes(slot->type().type);
-        }
+    for (auto* slot : param.probe_record_desc->slots()) {
+        size += get_size_of_fixed_length_type(slot->type().type);
+        size += type_estimated_overhead_bytes(slot->type().type);
     }
 
     return std::max<size_t>(size, 1);

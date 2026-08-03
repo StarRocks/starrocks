@@ -45,6 +45,7 @@ import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -63,6 +64,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -957,6 +959,102 @@ public class DatabaseTransactionMgrTest {
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
     }
 
+    private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {
+        return new TransactionState(GlobalStateMgrTestUtil.testDbId1, tableIds, txnId,
+                "replay_mt_" + txnId, UUIDUtil.genTUniqueId(),
+                TransactionState.LoadJobSourceType.FRONTEND,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
+                -1, 60 * 1000L);
+    }
+
+    private static void addCommitInfo(TransactionState txn, long tableId, long physicalPartitionId,
+                                      long version, long versionTime) {
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        if (tableCommitInfo == null) {
+            tableCommitInfo = new TableCommitInfo(tableId);
+            txn.putIdToTableCommitInfo(tableId, tableCommitInfo);
+        }
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(physicalPartitionId, version, versionTime));
+    }
+
+    @Test
+    public void testReplayMultiTableTransactionStateBatch() throws StarRocksException {
+        long table2Id = 20000L;
+        long partition2Id = 20001L;
+
+        // Register a second lake-style table into the slave catalog only: replay is a
+        // follower-side path and must apply the visible logs of every table in the batch.
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        MaterializedIndex index2 = new MaterializedIndex(table2Id, IndexState.NORMAL);
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        Partition partition2 = new Partition(partition2Id, partition2Id + 100, "testTable2",
+                index2, distributionInfo);
+        partition2.getDefaultPhysicalPartition().updateVisibleVersion(GlobalStateMgrTestUtil.testStartVersion);
+        partition2.getDefaultPhysicalPartition().setNextVersion(GlobalStateMgrTestUtil.testStartVersion + 1);
+        List<Column> columns = new ArrayList<>();
+        Column k1 = new Column("k1", IntegerType.INT);
+        k1.setIsKey(true);
+        columns.add(k1);
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partition2Id, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partition2Id, (short) 3);
+        OlapTable table2 = new OlapTable(table2Id, "testTable2", columns, KeysType.AGG_KEYS,
+                partitionInfo, distributionInfo);
+        table2.addPartition(partition2);
+        table2.setIndexMeta(table2Id, "testTable2", columns, 0, GlobalStateMgrTestUtil.testSchemaHash1,
+                (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table2.setBaseIndexMetaId(table2Id);
+        Database slaveDb = slaveGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        slaveDb.registerTableUnlocked(table2);
+
+        OlapTable slaveTable1 = (OlapTable) slaveGlobalStateMgr.getLocalMetastore()
+                .getTable(slaveDb.getId(), GlobalStateMgrTestUtil.testTableId1);
+        PhysicalPartition slaveT1Partition = slaveTable1.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        PhysicalPartition slaveT2Partition = partition2.getDefaultPhysicalPartition();
+        long t1BaseVersion = slaveT1Partition.getVisibleVersion();
+        long t2BaseVersion = slaveT2Partition.getVisibleVersion();
+
+        // txnA and txnB write both tables, txnC writes only table1 (a subset of the head set)
+        long versionTime = System.currentTimeMillis();
+        List<Long> bothTables = Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1, table2Id);
+        TransactionState txnA = makeVisibleBatchTxn(9001L, bothTables);
+        addCommitInfo(txnA, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 1, versionTime);
+        addCommitInfo(txnA, table2Id, slaveT2Partition.getId(), t2BaseVersion + 1, versionTime);
+        TransactionState txnB = makeVisibleBatchTxn(9002L, bothTables);
+        addCommitInfo(txnB, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 2, versionTime);
+        addCommitInfo(txnB, table2Id, slaveT2Partition.getId(), t2BaseVersion + 2, versionTime);
+        TransactionState txnC = makeVisibleBatchTxn(9003L,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+        addCommitInfo(txnC, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 3, versionTime);
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(Lists.newArrayList(txnA, txnB, txnC));
+        stateBatch.setTransactionVisibleInfo();
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
+
+        // both tables' visible versions advanced; table2 only by the two txns that write it
+        assertEquals(t1BaseVersion + 3, slaveT1Partition.getVisibleVersion());
+        assertEquals(t2BaseVersion + 2, slaveT2Partition.getVisibleVersion());
+
+        DatabaseTransactionMgr slaveDbTransMgr =
+                slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9001L).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9002L).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9003L).getTransactionStatus());
+    }
+
     @Test
     public void testFinishTransactionBatchReturnsLatestStateBatch() throws StarRocksException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
@@ -1700,5 +1798,27 @@ public class DatabaseTransactionMgrTest {
         table.setBaseIndexMetaId(indexId);
         table.setReplicationNum((short) 3);
         db.registerTableUnlocked(table);
+    }
+
+    @Test
+    public void testIsPreviousTransactionsFinishedExcludeTxnIds() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        // Use a dedicated table id so the setUp fixture's transactions do not interfere.
+        long uniqueTableId = 987654L;
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(uniqueTableId), "exclude_txn_ids_label", transactionSource,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION, Config.stream_load_default_timeout_second);
+        long watermark = masterTransMgr.getTransactionIDGenerator().peekNextTransactionId();
+
+        try {
+            // A running transaction with id <= watermark blocks by default...
+            Assertions.assertFalse(masterTransMgr.isPreviousTransactionsFinished(watermark,
+                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId)));
+            // ...but is skipped when its id is excluded.
+            Assertions.assertTrue(masterTransMgr.isPreviousTransactionsFinished(watermark,
+                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId), Sets.newHashSet(txnId)));
+        } finally {
+            masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, "cleanup");
+        }
     }
 }

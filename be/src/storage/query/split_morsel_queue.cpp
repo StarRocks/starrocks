@@ -362,6 +362,11 @@ Status PhysicalSplitMorselQueue::_init_segment() {
             return Status::OK();
         }
         RETURN_IF_ERROR(rowset->load());
+        // Prime the segment list so a transient load failure fails the query here instead of
+        // leaving the split iterator with a null _range that later crashes has_more(). Unlike
+        // get_segments(), get_segments_checked() surfaces the real load status (issue #75203).
+        auto segments_or = rowset->get_segments_checked();
+        RETURN_IF_ERROR(segments_or.status());
     }
 
     _num_segment_rest_rows = 0;

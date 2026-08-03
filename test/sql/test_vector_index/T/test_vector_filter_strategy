@@ -9,7 +9,6 @@
 --   which is not rewritten) -- checked via assert_equal_result. PRE-vs-BRUTE is
 --   a BE-runtime choice not visible in EXPLAIN (always VECTORINDEX: ON).
 -- ===========================================================================
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 
 CREATE TABLE vt (
@@ -121,4 +120,3 @@ function: assert_equal_result("select id from vt_pk where cat < 5 order by appro
 DROP TABLE vt_pk;
 
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "false");

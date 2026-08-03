@@ -238,4 +238,22 @@ TEST(SparseRangeIteratorTest, remaining_rows) {
     EXPECT_EQ(0u, iter.remaining_rows());
 }
 
+// Regression test for issue #75203: CN SIGSEGV @0x0 in
+// PhysicalSplitMorselQueue::_try_get_split_from_single_tablet().
+//
+// The physical-split loop evaluates `_segment_range_iter.has_more()` in its while
+// condition. On empty/edge tablets the iterator can still be default-constructed
+// (its _range pointer is null) when has_more() is reached. Before the fix has_more()
+// did an unconditional `_index < _range->_ranges.size()`, dereferencing the null
+// _range -> std::vector::size() read at address 0 -> SIGSEGV @0x0 (exactly the crash
+// stack in the issue: has_more() inlined into _try_get_split_from_single_tablet()).
+//
+// A default-constructed iterator has no ranges, so has_more() must report false
+// rather than dereference null. Without the fix this line is an ASAN
+// null/heap-buffer-overflow read; with it, it returns false.
+TEST(SparseRangeIteratorTest, has_more_on_default_constructed_is_null_safe) {
+    SparseRangeIterator<> iter; // default-constructed: _range == nullptr
+    EXPECT_FALSE(iter.has_more());
+}
+
 } // namespace starrocks

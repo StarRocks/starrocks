@@ -33,6 +33,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "io/io_profiler.h"
 #include "runtime/time_guard.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
@@ -483,15 +484,38 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
+    // NOTE: the put_tablet_metadata_us total is already recorded by the caller's scope in
+    // MetaFileBuilder::finalize(); do not re-open it here or the counter would double-count.
     auto t0 = butil::gettimeofday_us();
 
     // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
     // segment_metas (so a BE rolled back to a pre-feature version can still read this metadata),
     // without mutating the shared, immutable metadata object.
     auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
-    RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    {
+        // Deep-copy + legacy-array normalization is pure CPU; time it apart from the remote write.
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_normalize_us");
+        RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+    }
 
-    RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    // Record the serialized payload size so a slow publish can be attributed to metadata bloat
+    // (driven by rowset / delvec-entry count) rather than object-store write latency.
+    TRACE_COUNTER_INCREMENT("tablet_meta_bytes", static_cast<int64_t>(serializable_metadata->ByteSizeLong()));
+
+    // Snapshot the thread-local IO counters around the object-store write so the real network
+    // write+sync time is separated from the protobuf serialize CPU inside save_lake_protobuf.
+    // The fs writers record add_write/add_sync into TLS unconditionally, so meta_put_write_ns is
+    // populated even when the global IO profiler is not running.
+    IOProfiler::IOStat io_before;
+    IOProfiler::take_tls_io_snapshot(&io_before);
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("meta_save_us");
+        RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
+    }
+    const auto io_delta = IOProfiler::calculate_scoped_tls_io(io_before);
+    TRACE_COUNTER_INCREMENT("meta_put_write_ns", static_cast<int64_t>(io_delta.write_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_sync_ns", static_cast<int64_t>(io_delta.sync_time_ns));
+    TRACE_COUNTER_INCREMENT("meta_put_write_bytes", static_cast<int64_t>(io_delta.write_bytes));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
@@ -550,13 +574,47 @@ int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& c
     return candidates.front();
 }
 
+// Refuse to persist a bundle that does not cover every tablet in |expected_tablet_ids|.
+//
+// This is an invariant of the file format rather than defensive paranoia: the file name encodes a
+// version and the write truncates, so the bundle IS the whole metadata of that version. A map short
+// by even one tablet silently yields a version that lacks it, which is unrecoverable once FE marks
+// the version visible, because every later publish must read exactly that version as its base and
+// can only reproduce the same miss. Failing here instead leaves the version unpublished, which is
+// retryable.
+static Status check_bundle_tablet_metadata_coverage(const std::map<int64_t, TabletMetadataPB>& tablet_metas,
+                                                    const std::set<int64_t>& expected_tablet_ids) {
+    std::string missing;
+    size_t missing_count = 0;
+    for (int64_t expected_id : expected_tablet_ids) {
+        if (tablet_metas.find(expected_id) != tablet_metas.end()) {
+            continue;
+        }
+        // Cap the id list: a whole sub-request can go missing at once, and this string ends up in
+        // the publish error that FE retries every few milliseconds.
+        if (missing_count < 16) {
+            missing.append(missing.empty() ? "" : ",").append(std::to_string(expected_id));
+        }
+        ++missing_count;
+    }
+    if (missing_count > 0) {
+        return Status::InternalError(
+                fmt::format("refuse to write incomplete bundle tablet metadata: missing {} of {} tablets [{}{}]",
+                            missing_count, expected_tablet_ids.size(), missing, missing_count > 16 ? ",..." : ""));
+    }
+    return Status::OK();
+}
+
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
-Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas,
+                                                 const std::set<int64_t>& expected_tablet_ids) {
     TEST_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
+
+    RETURN_IF_ERROR(check_bundle_tablet_metadata_coverage(tablet_metas, expected_tablet_ids));
 
     std::vector<int64_t> candidate_tablet_ids;
     candidate_tablet_ids.reserve(tablet_metas.size());
