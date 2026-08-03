@@ -250,7 +250,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             boolean shouldInline = switch (cteRelation.getMaterializationHint()) {
                 case NOT_MATERIALIZED -> true;
                 case MATERIALIZED -> false;
-                case NONE -> cteRelation.getRefs() <= 1 || cteContext.isForceInline();
+                // isForceInline() flips once the number of distinct reused CTE moulds exceeds the
+                // limit, and it stays true because the mould map only grows. A CTE that was already
+                // registered (decided to be reused) must keep being re-anchored in every duplicated
+                // copy of an enclosing CTE's definition; otherwise later copies would emit consumes
+                // referencing its id with no matching anchor in that copy (orphan consume ->
+                // "no executable plan"). Only brand-new moulds encountered past the limit are inlined.
+                case NONE -> cteRelation.getRefs() <= 1
+                        || (cteContext.isForceInline() && !cteContext.hasRegisteredCte(cteRelation.getCteMouldId()));
             };
             if (shouldInline) {
                 continue;
