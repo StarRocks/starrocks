@@ -18,6 +18,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
@@ -2186,6 +2187,11 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         }
 
         subtasks_created++;
+
+        // Test hook: lets a test throw from here, i.e. *after* a subtask has been submitted and is running.
+        // A throw in this window must not route the tablet into the caller's fallback path, or the tablet
+        // would get a second CompactionTaskContext and thus a second finish_task().
+        TEST_SYNC_POINT("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit");
 
         if (group.type == SubtaskType::NORMAL) {
             VLOG(1) << "Parallel compaction: created NORMAL subtask " << subtask_id << " for tablet " << tablet_id

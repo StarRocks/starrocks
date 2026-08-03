@@ -15,6 +15,7 @@
 #include "storage/lake/compaction_scheduler.h"
 
 #include <atomic>
+#include <new>
 #include <system_error>
 #include <thread>
 
@@ -673,6 +674,72 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes
 
         EXPECT_TRUE(injected.load());
     }
+}
+
+// Companion to the test above, for the dangerous arm it cannot reach. That test injects its throw at the
+// ":create_parallel_tasks" hook, which fires *before* create_parallel_tasks() runs, so no subtask has been
+// submitted yet and falling back to normal compaction is safe.
+//
+// Here the throw lands *after* a subtask was already submitted and is running (the real shape of a
+// std::bad_alloc from the per-group bookkeeping in submit_subtasks_from_groups). That subtask already owns
+// the tablet's single finish_task(): TabletParallelCompactionState::is_complete() is
+// `running_subtasks.empty() && total_subtasks_created > 0`, so it fires when the subtask completes. If the
+// tablet were *also* routed into the fallback path, finish_task() would run twice for one tablet id, push
+// _contexts past tablet_ids_size(), and dereference the `_response` the first completion already nulled ->
+// SIGSEGV. So the RPC must complete exactly once.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_submit_completes_rpc_once) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    // Throw only on the first submitted subtask, so at least one subtask stays in flight.
+    std::atomic<bool> thrown{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit",
+                            [&](void* /*arg*/) {
+                                if (!thrown.exchange(true)) {
+                                    throw std::bad_alloc();
+                                }
+                            });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit");
+        sync_point->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // The in-flight subtask completes the RPC; wait() must not hang.
+    latch->wait();
+
+    EXPECT_TRUE(thrown.load());
+    // Exactly one finish_task() ran for the single tablet: finish_task() appends one compact_stat per call,
+    // so a second (crashing) completion would show up here as an extra entry.
+    EXPECT_EQ(1, response.compact_stats_size());
 }
 
 } // namespace starrocks::lake
