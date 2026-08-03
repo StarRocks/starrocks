@@ -58,8 +58,12 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
         return Status::OK();
     }
 
+    // Defence in depth: the FE analyzer already requires a string literal here. get_const_value()
+    // casts the constant's data column straight to a BinaryColumn, so a non-constant or NULL
+    // argument would be a wild read rather than an error.
+    RETURN_IF(!context->is_notnull_constant_column(0),
+              Status::InvalidArgument("Tokenize function requires a non-null constant string parameter"));
     auto column = context->get_constant_column(0);
-    RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     if (method != "english" && method != "standard" && method != "chinese") {
         return Status::NotSupported("Unknown method '" + method.to_string() +
@@ -80,8 +84,9 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
         return Status::InvalidArgument("Tokenize function only call by tokenize('<index_type>', str_column)");
     }
 
+    RETURN_IF(!context->is_notnull_constant_column(0),
+              Status::InvalidArgument("Tokenize function requires a non-null constant string parameter"));
     auto method_column = context->get_constant_column(0);
-    RETURN_IF(method_column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(method_column);
 
     auto* ts = context->get_or_create_thread_state<GinTokenizeThreadState>([&]() {
