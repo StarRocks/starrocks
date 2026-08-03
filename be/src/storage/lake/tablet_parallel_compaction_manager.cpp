@@ -2051,8 +2051,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                     unmark_rowsets_compacting(state_ptr.get(), it->second.input_rowset_ids);
                     if (group.type == SubtaskType::LARGE_ROWSET_PART) {
                         auto& split_ids = state_ptr->large_rowset_split_groups[group.large_rowset_id];
-                        split_ids.erase(std::remove(split_ids.begin(), split_ids.end(), subtask_id),
-                                        split_ids.end());
+                        split_ids.erase(std::remove(split_ids.begin(), split_ids.end(), subtask_id), split_ids.end());
                     }
                     state_ptr->running_subtasks.erase(it);
                     state_ptr->total_subtasks_created--;
