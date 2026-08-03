@@ -25,12 +25,6 @@
 
 #include <memory>
 
-<<<<<<< HEAD:be/test/util/thrift_client_test.cpp
-=======
-#include "base/network/network_util.h"
-#include "base/testutil/assert.h"
-#include "common/util/thrift_client_cache.h"
->>>>>>> 7b2cf89145 ([BugFix] Fix Thrift client leak after cache invalidation (#77072)):be/test/common/thrift_client_test.cpp
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "testutil/assert.h"
@@ -91,22 +85,6 @@ void MockedFrontendService::init() {
     sleep(1);
 }
 
-<<<<<<< HEAD:be/test/util/thrift_client_test.cpp
-TEST(ThriftRpcClientCacheTest, test_all) {
-    MockedFrontendService service;
-    service.init();
-    TGetProfileResponse rep;
-    TGetProfileRequest req;
-
-    auto client_cache = std::make_unique<FrontendServiceClientCache>(config::max_client_cache_size_per_host);
-    TNetworkAddress address = make_network_address("127.0.0.1", service.get_port());
-    Status status;
-    FrontendServiceConnection client(client_cache.get(), address, 1000, &status);
-    ASSERT_OK(status);
-    client->getQueryProfile(rep, req);
-    ASSERT_OK(client.reopen(100));
-    client->getQueryProfile(rep, req);
-=======
 class ThriftClientTest : public testing::Test {
 protected:
     static void SetUpTestSuite() {
@@ -132,18 +110,18 @@ private:
 std::unique_ptr<MockedFrontendService> ThriftClientTest::_service;
 std::unique_ptr<MockedFrontendService> ThriftClientTest::_other_service;
 
-TEST_F(ThriftClientTest, test_open_close_and_reopen) {
+TEST_F(ThriftClientTest, test_all) {
     TGetProfileResponse rep;
     TGetProfileRequest req;
 
-    ThriftClient<FrontendServiceClient> client("127.0.0.1", service()->get_port());
-    ASSERT_OK(client.open());
-    client.iface()->getQueryProfile(rep, req);
-
-    client.close();
-    ASSERT_OK(client.open_with_retry(3, 100));
-    client.iface()->getQueryProfile(rep, req);
->>>>>>> 7b2cf89145 ([BugFix] Fix Thrift client leak after cache invalidation (#77072)):be/test/common/thrift_client_test.cpp
+    auto client_cache = std::make_unique<FrontendServiceClientCache>(config::max_client_cache_size_per_host);
+    TNetworkAddress address = make_network_address("127.0.0.1", service()->get_port());
+    Status status;
+    FrontendServiceConnection client(client_cache.get(), address, 1000, &status);
+    ASSERT_OK(status);
+    client->getQueryProfile(rep, req);
+    ASSERT_OK(client.reopen(100));
+    client->getQueryProfile(rep, req);
 }
 
 TEST_F(ThriftClientTest, release_client_after_close_connections) {
