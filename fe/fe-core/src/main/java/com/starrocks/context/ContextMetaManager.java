@@ -112,20 +112,11 @@ public class ContextMetaManager extends LeaderDaemon {
         // re-election. (The old FrontendDaemon design could not do this: its runOneCycle parked in
         // while(!isReady()) during demotion, so the reset branch was never reached.)
         ensureDatabase();
-        // The FRAGMENTS DDL declares both an inline `INDEX … USING GIN ("parser"="english")`
-        // and an inline `INDEX … USING VECTOR (...HNSW...)` on the embedding column. Both
-        // indexes are gated by experimental flags that default to false; without them
-        // CREATE TABLE for context_entity_fragments raises a SemanticException and the
-        // module silently degrades to zero search hits. We require operators to opt in
-        // explicitly rather than flipping the flags globally — those flags also affect any
-        // other subsystem that reads them, so silently mutating them was a footgun.
-        if (!com.starrocks.common.Config.enable_experimental_gin
-                || !com.starrocks.common.Config.enable_experimental_vector) {
-            LOG.warn("semantic-context bootstrap is blocked: enable_experimental_gin={}, "
-                            + "enable_experimental_vector={}. Set both to true via "
-                            + "`ADMIN SET FRONTEND CONFIG` to enable the semantic-context module.",
-                    com.starrocks.common.Config.enable_experimental_gin,
-                    com.starrocks.common.Config.enable_experimental_vector);
+        // The fragments DDL includes a GIN index, so bootstrap must wait until GIN is enabled.
+        if (!com.starrocks.common.Config.enable_experimental_gin) {
+            LOG.warn("semantic-context bootstrap is blocked: enable_experimental_gin={}. "
+                            + "Set it to true via `ADMIN SET FRONTEND CONFIG` to enable the semantic-context module.",
+                    com.starrocks.common.Config.enable_experimental_gin);
             return;
         }
         for (TableKeeper keeper : keepers) {

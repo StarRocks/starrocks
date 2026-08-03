@@ -465,7 +465,7 @@ The TVF surface raises the same errors as `SemanticException` / `ContextExceptio
 
 ## Prerequisites
 
-The internal-context fragments table carries an inline GIN inverted index on `fragment_text` and a vector index on `embedding`. Both indexes are gated by experimental FE configs (`enable_experimental_gin`, `enable_experimental_vector`), both of which now default to `true` so a fresh install just works. If a hardened deployment pins either flag off, the bootstrap daemon creates the `__internal_context` database but skips all fragment/index tables — CONTEXT UPSERT then silently drops fragments and every search returns zero hits. To recover, set both flags back to true (`ADMIN SET FRONTEND CONFIG` is picked up within one 60s daemon tick, no FE restart needed) and re-add them to `fe.conf` so the setting survives a restart.
+The internal-context fragments table carries an inline GIN inverted index on `fragment_text` and a vector index on `embedding`. Vector indexes are always available, while the GIN index requires the experimental FE config `enable_experimental_gin`, which defaults to `false`. If this flag is disabled, the bootstrap daemon creates the `__internal_context` database but skips all fragment/index tables — CONTEXT UPSERT then silently drops fragments and every search returns zero hits. To recover, set `enable_experimental_gin` to `true` (`ADMIN SET FRONTEND CONFIG` is picked up within one 60s daemon tick, no FE restart needed) and add it to `fe.conf` so the setting survives a restart.
 
 ## Embedding provider configuration
 

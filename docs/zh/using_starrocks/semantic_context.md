@@ -464,7 +464,7 @@ TVF 接口在出错时抛出同样的 `SemanticException` / `ContextException`�
 
 ## 前置条件
 
-内部 fragments 表的 `fragment_text` 列上建有内联 GIN 倒排索引，`embedding` 列上建有向量索引。这两个索引分别由 FE 实验配置 `enable_experimental_gin` 与 `enable_experimental_vector` 控制；这两个开关现在默认均为 `true`，使全新部署开箱即用。如果某个加固部署将其中任一 flag 关闭，引导 daemon 只会创建 `__internal_context` 库、但跳过所有 fragment/索引表——此时 CONTEXT UPSERT 会静默丢弃 fragments，所有检索结果都为 0。恢复方法：将两个 flag 重新设为 true（`ADMIN SET FRONTEND CONFIG` 会在一个 60s 的 daemon tick 内生效，无需重启 FE），并将其写回 `fe.conf` 以在重启后保留。
+内部 fragments 表的 `fragment_text` 列上建有内联 GIN 倒排索引，`embedding` 列上建有向量索引。向量索引始终可用；GIN 索引仍要求开启 FE 实验配置 `enable_experimental_gin`，其默认值为 `false`。如果该开关关闭，引导 daemon 只会创建 `__internal_context` 库、但跳过所有 fragment/索引表——此时 CONTEXT UPSERT 会静默丢弃 fragments，所有检索结果都为 0。恢复方法：将 `enable_experimental_gin` 设为 `true`（`ADMIN SET FRONTEND CONFIG` 会在一个 60s 的 daemon tick 内生效，无需重启 FE），并将其写入 `fe.conf` 以在重启后保留。
 
 ## Embedding provider 配置
 
