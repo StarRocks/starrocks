@@ -142,7 +142,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                         mv.getName());
                 // No base-table change means the MV is confirmed fresh as of this run's start.
                 confirmFreshness();
-                return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+                // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
+                return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
             }
         }
 
@@ -164,7 +165,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             insertStmt = prepareRefreshPlan();
         }
         recordImvSourceRangesOnTaskRun();
-        return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
+        return ProcessExecPlan.success(mvContext.getExecPlan(), insertStmt);
     }
 
     /**
