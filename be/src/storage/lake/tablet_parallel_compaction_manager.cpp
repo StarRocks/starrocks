@@ -2028,6 +2028,24 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     VLOG(1) << "Parallel compaction: acquired all " << tokens_acquired << " tokens for tablet " << tablet_id
             << ", txn_id=" << txn_id;
 
+    int subtasks_created = 0;
+    int64_t submitted_bytes = 0;
+
+    // All `total_groups` tokens are held from here on, and each submitted subtask releases its own on
+    // completion. Every ordinary exit below settles the rest explicitly and sets `tokens_settled`; an exception
+    // would otherwise strand them, and with compact_threads defaulting to 4, leaking a couple per failure
+    // starves lake compaction for the whole BE until it restarts. So install this guard immediately after the
+    // acquisition succeeds -- everything below it, including the split bookkeeping, can throw std::bad_alloc.
+    bool tokens_settled = false;
+    DeferOp release_unused_tokens([&] {
+        if (tokens_settled) {
+            return;
+        }
+        for (int32_t j = subtasks_created; j < total_groups; j++) {
+            release_token(false);
+        }
+    });
+
     // Record expected split counts for each large rowset as a safety net.
     // Even though we've acquired all tokens, thread pool submission can still fail.
     // This allows get_merged_txn_log() to detect incomplete splits.
@@ -2053,23 +2071,6 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // Now create and submit all subtasks. Since we've acquired all tokens,
     // we won't have partial large-rowset splits due to token exhaustion.
     // Thread pool submission failures are still possible but rare.
-    int subtasks_created = 0;
-    int64_t submitted_bytes = 0;
-
-    // All `total_groups` tokens are held now, and each submitted subtask releases its own on completion. Every
-    // exit below settles the rest explicitly and sets `tokens_settled` -- except an exception, which would
-    // otherwise strand them: with compact_threads defaulting to 4, leaking a couple per failure quickly starves
-    // lake compaction for the whole BE until it restarts. Give them back while unwinding.
-    bool tokens_settled = false;
-    DeferOp release_unused_tokens([&] {
-        if (tokens_settled) {
-            return;
-        }
-        for (int32_t j = subtasks_created; j < total_groups; j++) {
-            release_token(false);
-        }
-    });
-
     for (size_t group_idx = 0; group_idx < groups.size(); group_idx++) {
         auto& group = groups[group_idx];
         int32_t subtask_id = static_cast<int32_t>(group_idx);
@@ -2087,6 +2088,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             if (!registered || submitted) {
                 return;
             }
+            bool nothing_left_running = false;
             {
                 std::lock_guard<std::mutex> lock(state_ptr->mutex);
                 auto it = state_ptr->running_subtasks.find(subtask_id);
@@ -2099,8 +2101,18 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                     state_ptr->running_subtasks.erase(it);
                     state_ptr->total_subtasks_created--;
                 }
+                nothing_left_running = state_ptr->running_subtasks.empty();
             }
             _running_subtasks--;
+            if (nothing_left_running && submitted_out != nullptr) {
+                // Every subtask submitted so far has already completed, and each of those completions saw
+                // this registration still present -- is_complete() requires running_subtasks to be empty --
+                // so none of them performed the completion transition. Removing the entry here does not
+                // re-check it, and no further completion is coming, so nothing would ever call finish_task()
+                // and the compact RPC would hang. Report that no subtask owns this tablet's completion, which
+                // sends the caller down the fallback path instead.
+                *submitted_out = 0;
+            }
         });
 
         // Collect rowset IDs
