@@ -450,11 +450,8 @@ echo "Get params:
     WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
-<<<<<<< HEAD
     WITH_COMPRESS               -- $WITH_COMPRESS
-=======
     WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
->>>>>>> 0b610a91c86... [Enhancement] Add --with-glibc-compat to keep BE loadable on older glibc (#76990)
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
