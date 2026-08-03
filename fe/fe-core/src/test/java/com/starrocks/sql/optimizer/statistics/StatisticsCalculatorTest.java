@@ -35,6 +35,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
@@ -42,22 +43,30 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -297,6 +306,137 @@ public class StatisticsCalculatorTest {
             Assertions.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
             Assertions.assertEquals(ref.getType().getTypeSize() * 1000 * partitions.size(),
                     expressionContext.getStatistics().getComputeSize(), 0.001);
+        }
+    }
+
+    @Test
+    public void testSkipStatisticsForSubfieldOfArrayElement() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Type arrayType = new ArrayType(structType);
+        Column arrayColumn = new Column("bucket_array", arrayType, true);
+        ColumnRefOperator arrayRef = columnRefFactory.create("bucket_array", arrayType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        CollectionElementOperator arrayElement = new CollectionElementOperator(
+                structType, arrayRef, ConstantOperator.createInt(1), false);
+        SubfieldOperator subfield = new SubfieldOperator(
+                arrayElement, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(arrayRef, arrayColumn),
+                ImmutableMap.of(arrayColumn, arrayRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        List<String> requestedColumns = new ArrayList<>();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            Assertions.assertTrue(requestedColumns.contains("bucket_array"));
+            Assertions.assertFalse(requestedColumns.stream().anyMatch(column -> column.contains(",")));
+            Assertions.assertTrue(expressionContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+
+            requestedColumns.clear();
+            scanOperator.setProjection(null);
+            OptExpression scanExpression = OptExpression.create(scanOperator);
+            scanExpression.setStatistics(Statistics.builder()
+                    .setOutputRowCount(100)
+                    .addColumnStatistic(arrayRef, ColumnStatistic.unknown())
+                    .build());
+            OptExpression projectExpression = OptExpression.create(
+                    new LogicalProjectOperator(ImmutableMap.of(outputRef, subfield)), scanExpression);
+            ExpressionContext projectContext = new ExpressionContext(projectExpression);
+
+            new StatisticsCalculator(projectContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            Assertions.assertTrue(requestedColumns.isEmpty());
+            Assertions.assertTrue(projectContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    @Test
+    public void testStatisticsForDirectSubfield() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Column structColumn = new Column("bucket_struct", structType, true);
+        ColumnRefOperator structRef = columnRefFactory.create("bucket_struct", structType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        SubfieldOperator subfield = new SubfieldOperator(
+                structRef, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(structRef, structColumn),
+                ImmutableMap.of(structColumn, structRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        ColumnStatistic expected = new ColumnStatistic(1, 10, 0, 8, 5);
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.equals(List.of("bucket_struct.bucket_id"))) {
+                    return List.of(expected);
+                }
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            ColumnStatistic actual = expressionContext.getStatistics().getColumnStatistic(outputRef);
+            Assertions.assertFalse(actual.isUnknown());
+            Assertions.assertEquals(expected.getMinValue(), actual.getMinValue());
+            Assertions.assertEquals(expected.getMaxValue(), actual.getMaxValue());
+            Assertions.assertEquals(expected.getDistinctValuesCount(), actual.getDistinctValuesCount());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
         }
     }
 
