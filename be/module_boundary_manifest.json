@@ -833,6 +833,7 @@
         "exprs_ext/table_function/",
         "exprs/",
         "storage/",
+        "fs/",
         "runtime/",
         "column/",
         "types/",
@@ -842,7 +843,7 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["service/", "http/", "agent/", "connector/"],
-      "allowed_target_deps": ["Expr", "Storage", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Expr", "Storage", "FileSystem", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep table-function extensions in ExprTableFunction; reusable table-function contracts belong in Expr."
     },
     {

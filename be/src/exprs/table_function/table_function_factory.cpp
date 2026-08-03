@@ -22,7 +22,6 @@
 #include "exprs/table_function/generate_series.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/multi_unnest.h"
-#include "exprs/table_function/parquet_read_rows.h"
 #include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
@@ -127,10 +126,6 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
     APPLY_FOR_ALL_INT_TYPE(M)
 #undef M
-
-    // ----=====---- parquet_read_rows ----====----
-    add_function_mapping("parquet_read_rows", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_BIGINT, TYPE_JSON},
-                         std::make_shared<ParquetReadRows>());
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;

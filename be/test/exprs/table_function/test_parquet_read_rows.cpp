@@ -35,7 +35,7 @@
 #include "column/nullable_column.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/statusor.h"
-#include "exprs/table_function/parquet_read_rows.h"
+#include "exprs_ext/table_function/parquet_read_rows.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"

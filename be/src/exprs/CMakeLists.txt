@@ -119,7 +119,6 @@ set(EXPR_FILES
   substring_index.cpp
   table_function/json_each.cpp
   table_function/table_function_factory.cpp
-  table_function/parquet_read_rows.cpp
   time_functions.cpp
   udf/java/java_udf.cpp
   udf/java/java_udf_context.cpp

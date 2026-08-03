@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/table_function/parquet_read_rows.h"
+#include "exprs_ext/table_function/parquet_read_rows.h"
 
 #include <arrow/array.h>
 #include <arrow/buffer.h>
