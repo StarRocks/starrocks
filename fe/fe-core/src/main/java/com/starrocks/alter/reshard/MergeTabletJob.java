@@ -31,7 +31,6 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -116,35 +115,12 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
-            OlapTable olapTable = getOlapTable();
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new TabletReshardException(
-                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
-            }
-            if (GlobalStateMgr.getCurrentState().getReplicationMgr().isTableUnderReplication(dbId, tableId)) {
-                throw new TabletReshardException("Table " + olapTable.getName() + " is under replication");
-            }
-            olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
-        } catch (TabletReshardException e) {
-            // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
-            // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
-            throw new StarRocksException(e.getMessage(), e);
-        }
+        initTableReservation(dbId, tableId);
     }
 
     @Override
     public void rollbackInit() throws StarRocksException {
-        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
-            OlapTable olapTable = getOlapTable();
-            if (olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
-                throw new TabletReshardException(
-                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
-            }
-            olapTable.setState(OlapTable.OlapTableState.NORMAL);
-        } catch (TabletReshardException e) {
-            throw new StarRocksException(e.getMessage(), e);
-        }
+        rollbackTableReservation(dbId, tableId);
     }
 
     /*
@@ -658,25 +634,7 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     private LockedObject<OlapTable> getLockedTable(LockType lockType) {
-        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable());
-    }
-
-    private OlapTable getOlapTable() {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-        if (!(table instanceof OlapTable)) { // Table is dropped or its id no longer identifies an OLAP table
-            // Only force ABORTING when the job is past the abortable PENDING window. At admission
-            // (PENDING, not yet queued) and during runPendingJob (still PENDING), the run()
-            // wrapper's abort() can handle the transition cleanly — avoiding a journal entry for
-            // a job that may never be queued (admission-time table-dropped race). The errorMessage
-            // assignment is paired with setJobState here so it only fires when it is actually
-            // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
-            if (!canAbort()) {
-                errorMessage = "Table not found";
-                setJobState(JobState.ABORTING);
-            }
-            throw new TabletReshardException("Table not found. " + this);
-        }
-        return (OlapTable) table;
+        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable(dbId, tableId));
     }
 
     private void registerReshardingTablets() {
@@ -720,7 +678,7 @@ public class MergeTabletJob extends TabletReshardJob {
      * diff-and-purge cycle.
      */
     void createShardsOnStarOS() {
-        OlapTable table = getOlapTable();
+        OlapTable table = getOlapTable(dbId, tableId);
         try {
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();

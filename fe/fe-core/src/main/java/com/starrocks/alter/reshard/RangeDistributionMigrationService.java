@@ -662,10 +662,15 @@ public final class RangeDistributionMigrationService {
             Range<Tuple> range = ranges.get(i).getRange();
             validateTuple(range.getLowerBound(), columns);
             validateTuple(range.getUpperBound(), columns);
+            if (!range.isMinimum() && !range.isLowerBoundIncluded()) {
+                throw new IllegalArgumentException("Finite lower bound must be inclusive");
+            }
+            if (!range.isMaximum() && range.isUpperBoundIncluded()) {
+                throw new IllegalArgumentException("Finite upper bound must be exclusive");
+            }
             if (!range.isMinimum() && !range.isMaximum()) {
                 int comparison = range.getLowerBound().compareTo(range.getUpperBound());
-                if (comparison > 0 || comparison == 0
-                        && !(range.isLowerBoundIncluded() && range.isUpperBoundIncluded())) {
+                if (comparison >= 0) {
                     throw new IllegalArgumentException("Range is inverted or empty");
                 }
             }

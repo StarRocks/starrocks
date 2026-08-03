@@ -254,6 +254,25 @@ class RangeDistributionMigrationServiceTest {
     }
 
     @Test
+    void nonCanonicalBoundOrientationAndClosedPointAreRejectedBeforeSubmission() {
+        Tuple boundary = tuple(0, "a");
+        List<TabletRange> oppositeOrientation = List.of(
+                new TabletRange(Range.of(null, boundary, false, true)),
+                new TabletRange(Range.of(boundary, null, false, false)));
+        Assertions.assertEquals("INCOMPATIBLE",
+                status(service().reconcile(request("opposite-orientation", oppositeOrientation))));
+        Assertions.assertTrue(jobs.jobs.isEmpty());
+
+        List<TabletRange> closedPoint = List.of(
+                range(null, boundary),
+                new TabletRange(Range.of(boundary, boundary, true, true)),
+                new TabletRange(Range.of(boundary, null, false, false)));
+        Assertions.assertEquals("INCOMPATIBLE",
+                status(service().reconcile(request("closed-point", closedPoint))));
+        Assertions.assertTrue(jobs.jobs.isEmpty());
+    }
+
+    @Test
     void protocolRejectsUnknownDuplicateEmptyAndInvalidRangeInputs() {
         JsonObject unknown = decodedRequest("unknown", twoRanges());
         unknown.addProperty("unexpected", true);

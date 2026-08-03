@@ -18,9 +18,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -263,6 +266,59 @@ public abstract class TabletReshardJob implements Writable {
 
     /* Roll back the table reservation when admission journaling definitely did not commit. */
     public abstract void rollbackInit() throws StarRocksException;
+
+    /**
+     * Shared admission transition for split and merge jobs. The table WRITE lock covers table
+     * resolution, state validation, replication exclusion, subclass validation, and reservation.
+     */
+    protected final void initTableReservation(long dbId, long tableId) throws StarRocksException {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            OlapTable olapTable = getOlapTable(dbId, tableId);
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new TabletReshardException(
+                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+            }
+            if (GlobalStateMgr.getCurrentState().getReplicationMgr().isTableUnderReplication(dbId, tableId)) {
+                throw new TabletReshardException("Table " + olapTable.getName() + " is under replication");
+            }
+            validateTableReservationUnderLock(olapTable);
+            olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        } catch (TabletReshardException e) {
+            // Surface admission rejection as a checked exception so callers do not queue a doomed job.
+            throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
+    /** Subclass admission checks executed while the table WRITE lock is held. */
+    protected void validateTableReservationUnderLock(OlapTable olapTable) {
+    }
+
+    /** Shared rollback of a reservation whose admission journal definitely did not commit. */
+    protected final void rollbackTableReservation(long dbId, long tableId) throws StarRocksException {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            OlapTable olapTable = getOlapTable(dbId, tableId);
+            if (olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
+                throw new TabletReshardException(
+                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
+            }
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        } catch (TabletReshardException e) {
+            throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
+    /** Resolve the live OLAP table and preserve the existing post-PENDING abort behavior. */
+    protected final OlapTable getOlapTable(long dbId, long tableId) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (!(table instanceof OlapTable)) {
+            if (!canAbort()) {
+                errorMessage = "Table not found";
+                setJobState(JobState.ABORTING);
+            }
+            throw new TabletReshardException("Table not found. " + this);
+        }
+        return (OlapTable) table;
+    }
 
     protected abstract void runPendingJob();
 
