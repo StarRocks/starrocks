@@ -18,8 +18,8 @@
 
 #include "base/testutil/assert.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
@@ -371,13 +371,24 @@ TEST(QueryContextManagerTest, testReadStats) {
 
 class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
 public:
+    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
+                    bool is_pipeline) override {
+        (void)query_options;
+        (void)params;
+        ++num_opened_queries;
+        last_query_id = query_id;
+        last_is_pipeline = is_pipeline;
+    }
+
     void close_query(const TUniqueId& query_id) override {
         ++num_closed_queries;
         last_query_id = query_id;
     }
 
+    int num_opened_queries = 0;
     int num_closed_queries = 0;
     TUniqueId last_query_id;
+    bool last_is_pipeline = false;
 };
 
 TEST(QueryContextManagerTest, testRuntimeFilterCoordinatorClosedOnQueryContextDestruction) {

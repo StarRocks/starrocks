@@ -43,7 +43,7 @@ import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
-import com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook;
+import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -80,6 +80,7 @@ import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -203,6 +204,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -707,6 +709,8 @@ public class StmtExecutor {
             return "Update";
         } else if (parsedStmt instanceof DeleteStmt) {
             return "Delete";
+        } else if (parsedStmt instanceof MergeIntoStmt) {
+            return "MergeInto";
         } else {
             return "Query";
         }
@@ -853,8 +857,8 @@ public class StmtExecutor {
                         }
                     }
                 } else {
-                    // Sample-Based Tablet Pre-Split runs pre-plan; see InsertFromFilesPreSplitHook for rationale.
-                    InsertFromFilesPreSplitHook.maybeRunPreSplit(parsedStmt, context);
+                    // Sample-Based Tablet Pre-Split runs pre-plan; see InsertPreSplitHook for rationale.
+                    InsertPreSplitHook.maybeRunPreSplit(parsedStmt, context);
                     execPlan = StatementPlanner.plan(parsedStmt, context);
                     if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
                         context.getDumpInfo().setExplainInfo(execPlan.getExplainString(TExplainLevel.COSTS));
@@ -1279,7 +1283,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
@@ -1302,7 +1306,7 @@ public class StmtExecutor {
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
@@ -1593,6 +1597,7 @@ public class StmtExecutor {
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
         maybeEmbedExplainPlanInProfile(profile, plan);
+        appendStatsSourceToProfile(profile, plan);
         // Capture the session timezone now so that the async profile task uses the same zone
         // as START_TIME (the context may change before the async task runs).
         java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
@@ -1646,6 +1651,40 @@ public class StmtExecutor {
             }
         };
         return coord.tryProcessProfileAsync(task);
+    }
+
+    /**
+     * Traverse scan operators in the profiled plan and record per-table StatsSource
+     * into a dedicated section of the runtime profile.
+     */
+    private void appendStatsSourceToProfile(RuntimeProfile profile, ExecPlan plan) {
+        if (plan == null) {
+            return;
+        }
+        ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+        if (profilingPlan == null) {
+            return;
+        }
+        RuntimeProfile statsSourceProfile = new RuntimeProfile("StatsSource");
+        for (ProfilingExecPlan.ProfilingFragment fragment : profilingPlan.getFragments()) {
+            collectStatsSource(fragment.getRoot(), statsSourceProfile);
+        }
+        profile.addChild(statsSourceProfile);
+    }
+
+    private static void collectStatsSource(ProfilingExecPlan.ProfilingElement element,
+                                           RuntimeProfile statsSourceProfile) {
+        if (element == null) {
+            return;
+        }
+        if (element.instanceOf(ScanNode.class)) {
+            String tableName = element.getUniqueInfos().get("Table");
+            String label = tableName != null ? tableName : String.valueOf(element.getId());
+            statsSourceProfile.addInfoString(label, element.getStatsSource().name());
+        }
+        for (ProfilingExecPlan.ProfilingElement child : element.getChildren()) {
+            collectStatsSource(child, statsSourceProfile);
+        }
     }
 
     /**
@@ -2078,7 +2117,8 @@ public class StmtExecutor {
     /**
      * The query result batch will piggyback query statistics in it
      */
-    private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
+    @VisibleForTesting
+    void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             statisticsForAuditLogFromPlaceholder = false;
@@ -2093,8 +2133,16 @@ public class StmtExecutor {
             }
 
             analyzePlanWithExecStats(execPlan);
-            if (context.isArrowFlightSql()) {
-                context.updateReturnRows(statisticsForAuditLog.getReturnedRows());
+            // Arrow Flight SQL and OUTFILE queries do not deliver result rows to the client through
+            // the normal row batches (the responseRowBatch path in the result loop is skipped for
+            // both), so context.returnRows is never accumulated from batch sizes for them. Take the
+            // row count from the BE-reported statistics instead. Other queries already count rows
+            // per batch in the result loop, so they must NOT enter here to avoid double counting.
+            if (context.isArrowFlightSql() || isOutfileQuery) {
+                Long returnedRows = statisticsForAuditLog.getReturnedRows();
+                if (returnedRows != null) {
+                    context.updateReturnRows(returnedRows);
+                }
             }
 
             if (null == statisticsForAuditLog.statsItems || statisticsForAuditLog.statsItems.isEmpty()) {
@@ -3165,7 +3213,13 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId(),
                 insertStmt.isDynamicOverwrite());
-        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
+        // A READ lock is enough here: the job is fully built above and the critical
+        // section only writes the job-creation edit log; no table state is read or
+        // mutated. The lock merely keeps the table from being dropped until the job
+        // creation is durable, and InsertOverwriteJobRunner.prepare() re-validates the
+        // table after this. Note it provides NO exclusion between concurrent insert
+        // overwrite jobs on the same table (see InsertOverwriteJobRunner).
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.READ)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
@@ -3175,7 +3229,7 @@ public class StmtExecutor {
                     job.isDynamicOverwrite());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
@@ -3516,7 +3570,7 @@ public class StmtExecutor {
                 return;
             }
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
-                    || stmt instanceof UpdateStmt)) {
+                    || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
@@ -3643,6 +3697,10 @@ public class StmtExecutor {
                     } else {
                         attachment = new InsertTxnCommitAttachment(loadedRows);
                     }
+                    if (insertStmt.isShadowRewrite()) {
+                        attachment.setShadowRewriteWatershedTxnId(insertStmt.getShadowRewriteWatershedTxnId());
+                        attachment.setShadowRewriteAlterVersion(insertStmt.getShadowRewriteAlterVersion());
+                    }
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows);
                 }
@@ -3699,8 +3757,11 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
-                } else if (targetTable.isBlackHoleTable()) {
-                    // black hole table does not need txn
+                } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+                    // INSERT INTO FILES(...) (table function) and black hole tables begin no FE txn
+                    // (see the transaction-begin skip and the commit path), so there is nothing to
+                    // abort here. `database` is null for a table function table, so calling
+                    // abortTransaction(database.getId(), ...) would throw an NPE.
                 } else {
                     transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
                             Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
@@ -3807,6 +3868,8 @@ public class StmtExecutor {
             ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
         } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else if (dmlType == DmlType.MERGE_INTO) {
+            ConnectorMetricsMgr.increaseIcebergMergeTotalFail(t);
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
             ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);

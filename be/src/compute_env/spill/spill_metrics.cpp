@@ -18,6 +18,8 @@ namespace starrocks {
 
 namespace {
 
+#define REGISTER_SPILL_METRIC(name) registry->register_metric(#name, &name)
+
 void register_labeled(MetricRegistry* registry, const char* storage_type, SpillMetrics::LabeledCounters* bucket) {
     MetricLabels labels;
     labels.add("storage_type", storage_type);
@@ -68,8 +70,20 @@ void SpillMetrics::install(MetricRegistry* registry) {
     registry->register_metric("spill_disk_bytes_used", MetricLabels().add("storage_type", "remote"),
                               _remote_disk_bytes_used.get());
 
+    _parked_with_uncovered_reason_total = std::make_unique<IntCounter>(MetricUnit::OPERATIONS);
+    registry->register_metric("spill_parked_with_uncovered_reason_total", _parked_with_uncovered_reason_total.get());
+
     register_labeled(registry, "local", &_local);
     register_labeled(registry, "remote", &_remote);
+
+    REGISTER_SPILL_METRIC(load_spill_local_blocks_read_total);
+    REGISTER_SPILL_METRIC(load_spill_local_blocks_write_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_blocks_read_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_blocks_write_total);
+    REGISTER_SPILL_METRIC(load_spill_local_bytes_read_total);
+    REGISTER_SPILL_METRIC(load_spill_local_bytes_write_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_bytes_read_total);
+    REGISTER_SPILL_METRIC(load_spill_remote_bytes_write_total);
 }
 
 } // namespace starrocks

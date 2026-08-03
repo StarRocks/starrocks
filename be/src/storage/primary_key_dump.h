@@ -19,8 +19,8 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

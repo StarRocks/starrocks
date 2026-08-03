@@ -56,7 +56,7 @@ This topic introduces the following types of BE configurations:
 - Type: Long
 - Unit: Rows
 - Is mutable: Yes
-- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded. The row count includes segment rows plus the tombstone (delete) rows recorded in del files, so a delete-heavy workload that produces a few large del files also counts toward this threshold; del files written by older versions that did not record a row count contribute 0.
 - Introduced in: -
 
 ### download_buffer_size
@@ -86,6 +86,24 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_pk_preserve_txn_delete_order
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Introduced in: v4.1.4
+
+### lake_enable_protobuf_file_checksum
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -94,6 +112,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
+- Introduced in: v4.2
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Introduced in: v4.2
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -149,6 +185,24 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### enable_lake_prepared_split_pre_refinement
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a prepared-physical-split lake scan (see the session variable `enable_lake_prepared_physical_split_scan`) issues an extra coarse-range morsel over an un-pruned segment range while the seed page-pruning is still running, so otherwise-idle drivers stay busy until the refined ranges land. Disabling it never drops data (the coarse range is always a superset that the refined ranges subtract from); it only trades early parallelism for less redundant coarse scanning.
+- Introduced in: v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: The upper bound on `splitted_scan_rows` (the number of rows scanned per split morsel) applied only when the prepared-physical-split lake scan is enabled (see the session variable `enable_lake_prepared_physical_split_scan`). The effective bound is `min(tablet_internal_parallel_max_splitted_scan_rows, this)`, so it can only make split morsels finer -- cutting a large tablet into more sub-range morsels that fill otherwise-idle drivers -- never coarser. Takes effect only in a shared-data cluster.
+- Introduced in: v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - Default: -1
@@ -173,6 +227,14 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
+### lake_vacuum_min_batch_delete_size
+
+- Default: 200
+- Type: Int64
+- Unit: Number of files
+- Is mutable: Yes
+- Description: The number of stale files Vacuum batches into a single `DeleteObjects` request on a shared-data cluster. A larger batch amortizes per-call HTTP / auth / signing overhead and reduces the prefix-level request rate against the object store, at the cost of higher single-call latency and a larger replay cost when a transient error retries. Users running on AWS S3 are encouraged to raise this further (up to the protocol cap of 1000) where per-request server time is nearly batch-size insensitive.
 
 ### loop_count_wait_fragments_finish
 
@@ -230,7 +292,7 @@ This topic introduces the following types of BE configurations:
 
 ### starlet_use_star_cache
 
-- Default: false in v3.1 and true from v3.2.3
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -286,7 +348,7 @@ This topic introduces the following types of BE configurations:
 
 ### datacache_disk_size
 
-- Default: 0
+- Default: 100%
 - Type: String
 - Unit: -
 - Is mutable: Yes
@@ -316,13 +378,13 @@ This topic introduces the following types of BE configurations:
 - Default: 130172
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
 
 ### datacache_mem_size
 
-- Default: 0
+- Default: 20%
 - Type: String
 - Unit: -
 - Is mutable: Yes
@@ -543,7 +605,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
 - Introduced in: v3.1
 
@@ -552,7 +614,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
 - Introduced in: v3.1
 
@@ -561,7 +623,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit:
-- Is mutable: Yes
+- Is mutable: No
 - Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
@@ -570,7 +632,7 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit: -
-- Is mutable: Yes
+- Is mutable: No
 - Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
 - Introduced in: v3.1
 
@@ -635,7 +697,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1000000
 - Type: Int
 - Unit: Bytes
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum length of input values for bitmap functions.
 - Introduced in: -
 
@@ -644,7 +706,7 @@ This topic introduces the following types of BE configurations:
 - Default: 200000
 - Type: Int
 - Unit: Bytes
-- Is mutable: No
+- Is mutable: Yes
 - Description: The maximum length of input values for the to_base64() function.
 - Introduced in: -
 

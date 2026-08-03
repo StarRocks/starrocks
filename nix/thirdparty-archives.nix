@@ -9,10 +9,10 @@ let
       md5 = "955b6faedf32ec2ce1b7725561d15618";
       sha256 = "00nnmg2mazx8i1brxzvbmfq5j7738md884373nx8jq0096di4222";
     };
-    "arrow-apache-arrow-19.0.1.tar.gz" = {
-      url = "https://github.com/apache/arrow/archive/refs/tags/apache-arrow-19.0.1.tar.gz";
-      md5 = "8c5091da0f8fb41a47d7f4dad7b712df";
-      sha256 = "0snqca1wlkxc22n8k2gs21g6py8r575hwwgqns3cqhc8jl28b2ac";
+    "arrow-apache-arrow-24.0.0.tar.gz" = {
+      url = "https://github.com/apache/arrow/archive/refs/tags/apache-arrow-24.0.0.tar.gz";
+      md5 = "66c53bd00baa79034bd2ca167beea436";
+      sha256 = "0a3b43avih2kiniav2rhp24awdhmxhzp4fmvlr6lqci6iwc8vqcl";
     };
     "avro-release-1.12.0.tar.gz" = {
       url = "https://github.com/apache/avro/archive/refs/tags/release-1.12.0.tar.gz";
@@ -269,10 +269,10 @@ let
       md5 = "282e54a68911f516b15d07136c78592b";
       sha256 = "19hprnr6c87490m8531vl9ygnhzbkw7whz1yy1lk09njzjq8xccj";
     };
-    "protobuf-3.14.0.tar.gz" = {
-      url = "https://github.com/google/protobuf/archive/v3.14.0.tar.gz";
-      md5 = "0c9d2a96f3656ba7ef3b23b533fb6170";
-      sha256 = "04v1q7g6kx9nwm1fs8dix27iszh3ycnsidf8wry00mnns02zdxfh";
+    "protobuf-3.16.1.tar.gz" = {
+      url = "https://github.com/google/protobuf/archive/v3.16.1.tar.gz";
+      md5 = "6294f01dedea72a76b9e113369f55097";
+      sha256 = "0zsxh0lxcn874rmhjzcqqx1bhqpnxalvh2yscsgr9x1d1fq5i4gv";
     };
     "pulsar-client-3.3.0.tar.gz" = {
       url = "https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz";
@@ -324,20 +324,20 @@ let
       md5 = "70e48cba7fecf289153d009791c9977f";
       sha256 = "07v5b365vz6bjdlqw4vwcna4yhaf6xzxny31hfq159ijg3q7gdhn";
     };
-    "starrocks-clucene-2026.04.09.tar.gz" = {
-      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz";
-      md5 = "a06ce32908dad5b2b834b19a8879a2c8";
-      sha256 = "1a40dmgchxcbalxr1xvl1ma3k11z34qa934v4f0i0az3kqpcyrmb";
+    "starrocks-clucene-2026.06.23.tar.gz" = {
+      url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
+      md5 = "774561443bc372ec6e8e56f46f3e9f4a";
+      sha256 = "04wpgq7bq923bh2fbp9g2ljqd8svx8k5rvfa99bqjrxnfmnhn3hp";
     };
     "streamvbyte-0.5.1.tar.gz" = {
       url = "https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz";
       md5 = "251d9200d27dda9120653b4928a23a86";
       sha256 = "0287mwpqc83rgs7rmc3iilsl6bnnldf8791ppgs7j2zrh8sl1wmh";
     };
-    "thrift-0.23.0.tar.gz" = {
-      url = "https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz";
-      md5 = "7b62f4258ded41e233a638fe8b9fcf64";
-      sha256 = "0vzlx0xv0g8xs6zz4l7zll8664cc40qnj6asdk8i67xfs8rdjn8q";
+    "thrift-0.24.0.tar.gz" = {
+      url = "https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz";
+      md5 = "232e035ff80c5fb4b7243f0be3a76b02";
+      sha256 = "1r66jr1wx0jgzlzzpag3zvia9gzbak2z474kn0qxdhf5lhwmiyp0";
     };
     "vectorscan-5.4.12.tar.gz" = {
       url = "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz";
@@ -349,10 +349,10 @@ let
       md5 = "161cbf4c347f6daadacfb749c31842f8";
       sha256 = "1g943v85ipgyxb62hrn54fsc5aicihrp6rwvj0pb6p19l181swym";
     };
-    "xsimd-13.2.0.tar.gz" = {
-      url = "https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz";
-      md5 = "f451a1c57d2a4fdc0ba663be438dced4";
-      sha256 = "0yj4hbdfrhwkdny6fb7yq5jbw6pldp1m671jf3f5l64cahywvn7d";
+    "xsimd-14.0.0.tar.gz" = {
+      url = "https://github.com/xtensor-stack/xsimd/archive/refs/tags/14.0.0.tar.gz";
+      md5 = "75c0d34cf7011924ba19978076c76dc1";
+      sha256 = "1khd94aipz09blfxvnp53g9r4frsbx68v4yn146c2ma9jlv05php";
     };
     "xxHash-0.8.3.tar.gz" = {
       url = "https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz";
@@ -365,9 +365,9 @@ let
       sha256 = "1l87r6h8qccba1yjx6n13q36yh0wrq3rzz9nnraq5ssjr2lmmipr";
     };
     "zstd-1.5.7.tar.gz" = {
-      url = "https://github.com/facebook/zstd/archive/v1.5.7.tar.gz";
-      md5 = "619a019adbbc4536e7fb93cdbb01af3e";
-      sha256 = "1qrf074w0wlykrj3pgfs5qp90s374a05pa0wdvjm82djar2jimrp";
+      url = "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz";
+      md5 = "780fc1896922b1bc52a4e90980cdda48";
+      sha256 = "18vgkvh7w6zw4jn2aj1mp0yv98m4fk52ay6da0wh4pm194gyaczb";
     };
   };
 
@@ -460,11 +460,11 @@ let
 
   bySystem = {
     "x86_64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
@@ -486,7 +486,7 @@ let
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
       "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
@@ -521,7 +521,7 @@ let
       "simdutf-5.2.8.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
+      "xsimd-14.0.0.tar.gz"
       "libxml2-2.11.7.tar.gz"
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
@@ -531,11 +531,11 @@ let
       "benchgen-26.03.11.tar.gz"
     ];
     "aarch64-linux" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
@@ -557,7 +557,7 @@ let
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
       "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
@@ -590,7 +590,7 @@ let
       "simdutf-5.2.8.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
+      "xsimd-14.0.0.tar.gz"
       "libxml2-2.11.7.tar.gz"
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"
@@ -600,11 +600,11 @@ let
       "benchgen-26.03.11.tar.gz"
     ];
     "aarch64-darwin" = [
-      "starrocks-clucene-2026.04.09.tar.gz"
+      "starrocks-clucene-2026.06.23.tar.gz"
       "libevent-24236aed01798303745470e6c498bf606e88724a.zip"
       "openssl-OpenSSL_1_1_1m.tar.gz"
-      "thrift-0.23.0.tar.gz"
-      "protobuf-3.14.0.tar.gz"
+      "thrift-0.24.0.tar.gz"
+      "protobuf-3.16.1.tar.gz"
       "gflags-2.2.2.tar.gz"
       "glog-0.7.1.tar.gz"
       "googletest-release-1.10.0.tar.gz"
@@ -626,7 +626,7 @@ let
       "librdkafka-2.11.0.tar.gz"
       "pulsar-client-3.3.0.tar.gz"
       "flatbuffers-v1.10.0.tar.gz"
-      "arrow-apache-arrow-19.0.1.tar.gz"
+      "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
@@ -659,7 +659,7 @@ let
       "simdutf-5.2.8.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
-      "xsimd-13.2.0.tar.gz"
+      "xsimd-14.0.0.tar.gz"
       "libxml2-2.11.7.tar.gz"
       "azure-storage-files-shares_12.12.0.tar.gz"
       "libdivide-v5.2.0.tar.gz"

@@ -35,10 +35,12 @@
 #include "compute_env/spill/serde.h"
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spill_metrics.h"
+#include "compute_env/spill/spill_observable.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "compute_env/spill/task_executor.h"
 #include "fs/fs.h"
 #include "gen_cpp/InternalService_types.h"
+#include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
 
@@ -169,6 +171,45 @@ public:
 
     const SpillProcessMetrics& metrics() { return _metrics; }
 
+    // Notification layer. It lives on the Spiller and survives reset_state, so the observer lists outlive
+    // reallocation of the writer/reader.
+    SpillEventObservable& observable() { return _observable; }
+
+    void notify_sink_observers() { _observable.notify_sink_observers(); }
+    void notify_source_observers() { _observable.notify_source_observers(); }
+
+    // The single place that owns the completion order for spiller IO:
+    //   publish -> decrement the in-flight count -> notify.
+    // The notify runs after both the predicates (published by publish_fn) and the count are visible, so one
+    // notify serves every sleeper: the OUTPUT_FULL/INPUT_EMPTY predicate sleepers re-check predicates that
+    // are already open, and a PENDING_FINISH driver gating on the count sees it already at its new value.
+    // The caller must keep the notified observers alive across the call: a task body calls this through
+    // defer_complete_io (the notify runs inside the task's query-lifetime guard window), and the
+    // submit-failure compensation calls it directly on the pipeline thread, where the executing driver
+    // itself keeps the query alive. Every completion path goes through here.
+    template <class PublishFn>
+    void complete_io(PublishFn&& publish_fn, bool wake_sink) {
+        std::forward<PublishFn>(publish_fn)();
+        decrease_in_flight_io();
+        if (wake_sink) {
+            notify_sink_observers();
+        }
+        notify_source_observers();
+    }
+
+    // RAII form of complete_io for IO task bodies; see IOCompletion below. The guard must already be
+    // scoped_begin'd; the returned object runs the completion and then guard.scoped_end() at scope exit.
+    template <class PublishFn, class Guard>
+    [[nodiscard]] auto defer_complete_io(PublishFn publish_fn, bool wake_sink, const Guard& guard);
+
+    // Counts in-flight IO across writer (flush) and reader (restore) tasks. It is in addition to the
+    // per-writer/reader counters, which stay as lifetime gates for transient readers. It is incremented
+    // before submit at every choke point, and decremented in the same defer as the per-task counter.
+    void increase_in_flight_io() { _in_flight_io.fetch_add(1, std::memory_order_acq_rel); }
+    void decrease_in_flight_io() { _in_flight_io.fetch_sub(1, std::memory_order_acq_rel); }
+
+    bool has_running_io_tasks() const { return _in_flight_io.load(std::memory_order_acquire) > 0; }
+
     // set partitions for spiller only works when spiller has partitioned spill writer
     void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
     // init partition by `num_partitions`
@@ -229,10 +270,7 @@ public:
 
     bool is_cancel() const { return _is_cancel; }
 
-    void cancel() {
-        _is_cancel = true;
-        _writer->cancel();
-    }
+    void cancel() { _is_cancel = true; }
 
     void set_finished() { cancel(); }
 
@@ -303,6 +341,54 @@ private:
     size_t _max_sorted_block_cnt = 0;
     std::atomic_bool _is_cancel = false;
     std::atomic_bool _global_spill_triggered{false};
+
+    SpillEventObservable _observable;
+    // Count of in-flight flush/restore IO tasks. It survives reset_state (it lives on the Spiller, not on
+    // the writer/reader), so it can gate teardown and re-prepare against tasks that captured raw
+    // writer/reader pointers.
+    std::atomic<int64_t> _in_flight_io{0};
 };
+
+// RAII completion for an IO task body, returned by Spiller::defer_complete_io. At scope exit it runs the
+// completion (complete_io: publish -> decrement -> notify) and then the guard's scoped_end, in that order.
+// The order matters for correctness, not for style: scoped_end releases the query-lifetime pin the guard
+// took in scoped_begin, and that pin is what keeps the notified observers alive -- if scoped_end ran first,
+// the notify could dereference freed observers. Do not reorder. cancel_for_yield() drops the completion AND
+// marks the yield context unfinished in one call (on a yield-resubmit the task lives on, keeps its
+// in-flight increment, and re-enters scoped_begin on its next run); scoped_end still runs to balance this
+// invocation's begin. The two cancels are coupled on purpose: cancelling the completion without cancelling
+// the yield defer would let the executor drop the task with the in-flight count still held.
+template <class PublishFn, class Guard>
+class IOCompletion {
+public:
+    IOCompletion(Spiller* spiller, PublishFn publish_fn, bool wake_sink, const Guard& guard)
+            : _spiller(spiller), _publish_fn(std::move(publish_fn)), _wake_sink(wake_sink), _guard(guard) {}
+    ~IOCompletion() noexcept {
+        if (!_cancelled) {
+            _spiller->complete_io(_publish_fn, _wake_sink);
+        }
+        _guard.scoped_end();
+    }
+    template <class YieldDefer>
+    void cancel_for_yield(YieldDefer& yield_defer) {
+        _cancelled = true;
+        yield_defer.cancel();
+    }
+    DISALLOW_COPY_AND_MOVE(IOCompletion);
+
+private:
+    Spiller* _spiller;
+    PublishFn _publish_fn;
+    const bool _wake_sink;
+    const Guard& _guard;
+    bool _cancelled = false;
+};
+
+template <class PublishFn, class Guard>
+[[nodiscard]] auto Spiller::defer_complete_io(PublishFn publish_fn, bool wake_sink, const Guard& guard) {
+    // Returned as a prvalue: C++17 guaranteed elision constructs it in the caller's variable, so the
+    // deleted copy/move constructors are never used.
+    return IOCompletion<PublishFn, Guard>(this, std::move(publish_fn), wake_sink, guard);
+}
 
 } // namespace starrocks::spill

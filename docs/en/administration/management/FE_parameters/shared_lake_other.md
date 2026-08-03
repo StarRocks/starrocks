@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## View FE configuration items
@@ -368,8 +370,8 @@ This topic introduces the following types of FE configurations:
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions.
+- Is mutable: Yes
+- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions. Setting it to `0` or a negative value disables AutoVacuum entirely.
 - Introduced in: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`
@@ -625,6 +627,15 @@ This topic introduces the following types of FE configurations:
 - Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
 - Introduced in: v3.2.0
 
+### `lake_enable_batch_publish_multi_table`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Introduced in: v4.1.5
+
 ### `lake_enable_tablet_creation_optimization`
 
 - Default: false
@@ -651,6 +662,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
+
+### `lake_vector_index_build_warehouse`
+
+- Default: `default_warehouse`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Warehouse used to run asynchronous vector index build tasks in shared-data clusters. Set this item to a non-default warehouse name to isolate vector index builds from query and load workloads. If the configured warehouse is `default_warehouse`, empty, missing, or unavailable, StarRocks uses the table's recorded background warehouse and finally falls back to the default warehouse.
+- Introduced in: v4.2.0
 
 ### `lake_vi_build_load_tail_delay_ms`
 
@@ -715,6 +735,8 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
+
+<EditonSpecificFEItemSharedLakeOther />
 
 ## Other
 
@@ -935,7 +957,7 @@ This topic introduces the following types of FE configurations:
 
 ### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
+- Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
@@ -1041,6 +1063,33 @@ This topic introduces the following types of FE configurations:
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Background refresh interval for the JDBC table row-count cache. After this interval, the stale value is returned immediately while a reload runs asynchronously in the background. Overridable per-catalog via the catalog property `jdbc_row_count_cache_refresh_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- Default: 1200
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Hard eviction TTL for JDBC table row-count cache entries. Entries not accessed within this window are evicted. Must be greater than `jdbc_row_count_cache_refresh_sec`. Overridable per-catalog via the catalog property `jdbc_row_count_cache_expire_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_max_size`
+
+- Default: 10000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of entries in the JDBC table row-count cache per catalog. Limits memory growth for catalogs with large numbers of tables. Overridable per-catalog via the catalog property `jdbc_row_count_cache_max_size`.
+- Introduced in: -
+
 ### `jdbc_minimum_idle_connections`
 
 - Default: 1
@@ -1061,7 +1110,7 @@ This topic introduces the following types of FE configurations:
 
 ### `jwt_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1187,7 +1236,7 @@ This topic introduces the following types of FE configurations:
 
 ### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
+- Default: 8
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1259,7 +1308,7 @@ This topic introduces the following types of FE configurations:
 
 ### `oauth2_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1434,6 +1483,6 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 

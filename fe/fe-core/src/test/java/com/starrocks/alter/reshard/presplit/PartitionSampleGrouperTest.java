@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -47,6 +48,7 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -180,7 +182,7 @@ public class PartitionSampleGrouperTest {
                 rowWithPartitionCells(Variant.of(IntegerType.INT, "1"))));
 
         try (MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
             assertTrue(out.isEmpty());
         }
 
@@ -214,7 +216,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-28", "p20260528");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(3, out.size());
             assertEquals(5, out.get(0).samples().size());
@@ -241,7 +243,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size());
             assertEquals(10, out.get(0).samples().size());
@@ -272,7 +274,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
 
-            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             analyzerUtils.verify(() -> AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
                     eq(table), eq(List.of(List.of("2026-05-26"))), eq(false), any()), times(1));
@@ -294,7 +296,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size());
             AddPartitionClause clause = out.get(0).analyzedClause();
@@ -321,7 +323,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size());
             PartitionSamples ps = out.get(0);
@@ -346,7 +348,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size());
             PartitionSamples ps = out.get(0);
@@ -370,7 +372,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertTrue(out.isEmpty(), "non-empty existing partition must be dropped");
         }
@@ -394,7 +396,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertTrue(out.isEmpty(), "multi-tablet existing partition must be dropped");
             assertEquals(ineligibleBaseline + 1L,
@@ -424,7 +426,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertTrue(out.isEmpty(), "stale catalog must drop the group");
             assertEquals(baseline + 1L, eligibilitySkipCount(SkipReason.STALE_CATALOG_STATE));
@@ -452,7 +454,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertTrue(out.isEmpty(), "stale catalog must drop the group");
             assertEquals(baseline + 1L, eligibilitySkipCount(SkipReason.STALE_CATALOG_STATE));
@@ -488,7 +490,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-28", "p20260528");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(3, out.size());
             assertEquals(5, out.get(0).samples().size());
@@ -520,7 +522,7 @@ public class PartitionSampleGrouperTest {
             // 2026-05-27 -> succeeds
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size());
             assertEquals("p20260527", out.get(0).partitionName());
@@ -535,7 +537,7 @@ public class PartitionSampleGrouperTest {
         SampleSet samples = sampleSetOf(Collections.emptyList());
 
         try (MockedConstruction<Locker> ignored = Mockito.mockConstruction(Locker.class)) {
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
             assertTrue(out.isEmpty());
         }
     }
@@ -548,7 +550,7 @@ public class PartitionSampleGrouperTest {
         Tuple sortOnly = tuple(Variant.of(IntegerType.INT, "1"));
         SampleSet samples = new SampleSet(List.of(sortOnly), Estimates.ZERO);
 
-        List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+        List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
         assertTrue(out.isEmpty());
     }
 
@@ -581,7 +583,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-28", "p20260528");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(2, out.size());
             assertEquals(5, out.get(0).samples().size());
@@ -613,7 +615,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(2, out.size());
             assertEquals(baseline,
@@ -658,7 +660,7 @@ public class PartitionSampleGrouperTest {
                         })) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
         }
 
         assertEquals(1, lockCalls.get(), "exactly one intensive READ lock must be acquired");
@@ -693,7 +695,7 @@ public class PartitionSampleGrouperTest {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26 01:00:00", "p20260526");
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26 23:00:00", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(1, out.size(), "two raw values resolving to one partition must merge into one entry");
             assertEquals("p20260526", out.get(0).partitionName());
@@ -759,7 +761,7 @@ public class PartitionSampleGrouperTest {
                         return clause;
                     });
 
-            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
         }
 
         assertEquals(2, analyzeCalls.get(), "analyze must run for both distinct raw values");
@@ -805,7 +807,7 @@ public class PartitionSampleGrouperTest {
                 stubAnalyzerToReturnClauseFor(analyzerUtils, table, date, "p" + date.replace("-", ""));
             }
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertEquals(2, out.size(), "cap=2 must keep exactly the two heaviest groups");
             assertTrue(getPartitionCalls.get() <= 2,
@@ -838,7 +840,7 @@ public class PartitionSampleGrouperTest {
                 MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
             stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
 
-            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES);
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
 
             assertTrue(out.isEmpty(), "non-empty existing partition must be dropped");
             assertEquals(ineligibleBaseline + 1L,
@@ -846,6 +848,68 @@ public class PartitionSampleGrouperTest {
                     "non-empty existing partition must bump PARTITION_NOT_ELIGIBLE_POST_CREATE");
             assertEquals(emptyBaseline, eligibilitySkipCount(SkipReason.GROUPER_EMPTY),
                     "an ineligible-but-present group must NOT bump GROUPER_EMPTY");
+        }
+    }
+
+    @Test
+    public void carriesSecondaryIndexTuplesIntoGroupedRows() {
+        // A sample carrying a secondary (rollup) index tuple must pass the id-tagged
+        // IndexTuple through into every grouped SampleRow. Verified against the
+        // pre-create branch (no partition installed) so the conditional carry is
+        // isolated from the catalog re-resolve.
+        long rollupMetaId = 4001L;
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+
+        List<Tuple> sortTuples = List.of(tuple(Variant.of(IntegerType.INT, "7")));
+        List<Tuple> partitionTuples = List.of(tuple(Variant.of(DateType.DATE, "2026-05-26")));
+        List<List<IndexTuple>> secondaryTuples = List.of(List.of(
+                new IndexTuple(rollupMetaId, List.of(Variant.of(IntegerType.INT, "70")))));
+        SampleSet samples = new SampleSet(sortTuples, partitionTuples,
+                List.of(rollupMetaId), secondaryTuples, Estimates.ZERO);
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(rollupMetaId));
+
+            assertEquals(1, out.size());
+            List<IndexTuple> carried = out.get(0).samples().get(0).secondaryIndexTuples();
+            assertEquals(1, carried.size(), "the rollup IndexTuple must be carried into the grouped row");
+            assertEquals(rollupMetaId, carried.get(0).indexMetaId());
+        }
+    }
+
+    @Test
+    public void dropsPartitionWhenResolvedSecondaryIdSetDiffersFromSampled() {
+        // The sampler projected a rollup (id 4001) but the existing partition resolves
+        // to base only -> the resolved secondary id set ({}) differs from the sampled
+        // set ({4001}) -> drop as PARTITION_NOT_ELIGIBLE_POST_CREATE.
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        installPartitionWithTablets(table, "p20260526", 9001L, List.of(8001L), /*rowCount*/ 0L);
+
+        MetricRepo.hasInit = true;
+        long baseline = eligibilitySkipCount(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+
+        SampleSet samples = sampleSetOf(List.of(tuple(Variant.of(DateType.DATE, "2026-05-26"))));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(4001L));
+
+            assertTrue(out.isEmpty(),
+                    "a resolved secondary id set differing from the sampled set must drop the partition");
+            assertEquals(baseline + 1L, eligibilitySkipCount(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE));
         }
     }
 
@@ -869,6 +933,13 @@ public class PartitionSampleGrouperTest {
         PartitionInfo info = mock(PartitionInfo.class);
         when(info.getPartitionColumns(any())).thenReturn(partitionColumns);
         when(table.getPartitionInfo()).thenReturn(info);
+        // Base index meta so MetaUtils.getRangeDistributionColumns resolves a scalar sort key
+        // when the grouper re-resolves the partition's visible-index targets under its READ lock.
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+        when(baseMeta.getSchema()).thenReturn(List.of(new Column("k", IntegerType.BIGINT)));
+        when(baseMeta.getSortKeyIdxes()).thenReturn(List.of(0));
+        when(table.getIndexMetaByMetaId(BASE_INDEX_META_ID)).thenReturn(baseMeta);
         return table;
     }
 
@@ -913,7 +984,10 @@ public class PartitionSampleGrouperTest {
         }
         when(baseIndex.getTablets()).thenReturn(tablets);
         when(baseIndex.getRowCount()).thenReturn(rowCount);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(partitionName)).thenReturn(partition);
     }

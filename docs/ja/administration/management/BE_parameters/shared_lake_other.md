@@ -56,7 +56,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Long
 - 単位: 行
 - 変更可能: Yes
-- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。この行数には Segment の行数に加えて del ファイルに記録された tombstone（削除）行数が含まれるため、少数の大きな del ファイルを生成する削除の多いワークロードもこの閾値に計上されます。行数を記録していない旧バージョンで書き込まれた del ファイルは 0 として計上されます。
 - 導入バージョン: -
 
 ### download_buffer_size
@@ -86,6 +86,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでのクラウドネイティブテーブルコンパクションのためのリーダーのリモート I/O バッファサイズ。デフォルト値は 1MB です。この値を増やすことでコンパクションプロセスを加速できます。
 - 導入バージョン: v3.2.3
 
+### lake_enable_pk_preserve_txn_delete_order
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。
+- 導入バージョン: v4.1.4
+
+### lake_enable_protobuf_file_checksum
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの Tablet メタデータおよびトランザクションログファイルを、Adler-32 チェックサム付きで書き込むかどうか。これにより、これらのファイルの破損を読み取り時に検出できます。この項目の設定にかかわらず、読み取り側はチェックサムが存在する場合は常に自動的に検出して検証します。この項目は書き込み形式のみを制御します。クラスタが、チェックサム形式に対応していないバージョンへダウングレードされる可能性がある場合にのみ、この項目を `false` に設定してください。ローリングアップグレードまたはダウングレードの期間中、古い BE または CN は旧来のリーダーを使用するため、新形式で書き込まれたファイルを解析できません。
+- 導入バージョン: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -94,6 +112,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したとき、または手動の `ALTER TABLE ... COMPACT` がベースコンパクションを強制したときに実行されます。両方のしきい値を十分大きく設定すると自動トリガーを無効化できます。
+- 導入バージョン: v4.2
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- デフォルト: 10000000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
+- 導入バージョン: v4.2
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -149,6 +185,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
 - 導入バージョン: v4.2
 
+### enable_lake_prepared_split_pre_refinement
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: prepared-physical-split lake スキャン（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）が、シードのページプルーニングがまだ実行中の間に、プルーニングされていない segment 範囲をカバーする追加の coarse-range morsel を発行するかどうか。これにより、リファインされた範囲が確定するまで、本来アイドル状態のドライバーをビジー状態に保ちます。無効にしてもデータが失われることはありません（coarse 範囲は常にリファイン範囲が差し引く対象のスーパーセットです）。早期の並列性を、冗長な coarse スキャンの削減と引き換えにするだけです。
+- 導入バージョン: v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- デフォルト: 262144
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: prepared-physical-split lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（split morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、split morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
+- 導入バージョン: v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - デフォルト: -1
@@ -173,6 +227,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
+
+### lake_vacuum_min_batch_delete_size
+
+- デフォルト: 200
+- タイプ: Int64
+- 単位: ファイル数
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、Vacuum が単一の `DeleteObjects` リクエストにまとめる古いファイルの数。バッチを大きくすると、呼び出しごとの HTTP / 認証 / 署名オーバーヘッドが摊销され、オブジェクトストレージの prefix 単位リクエストレートへの圧力も軽減されますが、一回あたりの latency が上がり、瞬間的なエラーで retry した際の replay コストも増えます。AWS S3 では `DeleteObjects` のサーバー処理時間が batch size にほとんど依存しないため、AWS S3 ユーザーはこの値をプロトコル上限の `1000` までさらに引き上げることを推奨します。
 
 ### loop_count_wait_fragments_finish
 

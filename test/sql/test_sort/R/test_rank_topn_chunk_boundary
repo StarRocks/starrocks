@@ -1,0 +1,54 @@
+-- name: test_rank_topn_chunk_boundary
+CREATE TABLE rk (id INT, v VARCHAR(32))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO rk SELECT generate_series, lpad(cast(generate_series AS varchar), 10, '0')
+FROM TABLE(generate_series(1, 100000));
+-- result:
+-- !result
+set chunk_size = 128;
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set full_sort_max_buffered_bytes = 1024;
+-- result:
+-- !result
+set full_sort_max_buffered_rows = 200;
+-- result:
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 128;
+-- result:
+128
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 129;
+-- result:
+129
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 130;
+-- result:
+130
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 256;
+-- result:
+256
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 257;
+-- result:
+257
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 384;
+-- result:
+384
+-- !result
+select count(*) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 385;
+-- result:
+385
+-- !result
+select max(rk) from (select id, v, rank() over (order by v) rk from rk) s where rk <= 129;
+-- result:
+129
+-- !result

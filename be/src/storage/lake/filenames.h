@@ -22,7 +22,9 @@
 #include "base/string/string_parser.hpp"
 #include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
+#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
+#include "storage_primitive/lake_file_name.h"
 
 namespace starrocks::lake {
 
@@ -33,66 +35,6 @@ constexpr static const int kTabletMetadataLockFilenameLength = 55;
 constexpr static const int64 kInitialVersion = 1;
 
 constexpr static const char* const kGCFileName = "GC.json";
-
-inline bool is_segment(std::string_view file_name) {
-    return HasSuffixString(file_name, ".dat");
-}
-
-inline bool is_del(std::string_view file_name) {
-    return HasSuffixString(file_name, ".del");
-}
-
-inline bool is_delvec(std::string_view file_name) {
-    return HasSuffixString(file_name, ".delvec");
-}
-
-inline bool is_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".log");
-}
-
-inline bool is_txn_slog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".slog");
-}
-
-inline bool is_txn_vlog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".vlog");
-}
-
-inline bool is_tablet_metadata(std::string_view file_name) {
-    return HasSuffixString(file_name, ".meta");
-}
-
-inline bool is_tablet_initial_metadata(std::string_view file_name) {
-    return HasPrefixString(file_name, "0000000000000000_");
-}
-
-inline bool is_tablet_metadata_lock(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lock");
-}
-
-inline bool is_sst(std::string_view file_name) {
-    return HasSuffixString(file_name, ".sst");
-}
-
-inline bool is_cols(std::string_view file_name) {
-    return HasSuffixString(file_name, ".cols");
-}
-
-// Index Delta Group payload file produced by ADD INDEX fast-path schema change.
-// One .idx per ADD INDEX alter per segment, holding bloom-filter / bitmap /
-// ngram-bloom blobs (GIN keeps its own per-column inverted directory and is
-// referenced by IndexDeltaGroupEntryPB.index_file by directory name).
-inline bool is_idx(std::string_view file_name) {
-    return HasSuffixString(file_name, ".idx");
-}
-
-// Check if file is a Lake Compaction Rows Mapper file
-// WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
-// for correct cleanup behavior. Remote lcrm files must not be deleted immediately
-// after use since they may be accessed by multiple nodes during parallel pk execution.
-inline bool is_lcrm(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lcrm");
-}
 
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
@@ -145,10 +87,6 @@ inline std::string combined_txn_log_filename(int64_t txn_id) {
     return fmt::format("{:016X}.logs", txn_id);
 }
 
-inline bool is_combined_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".logs");
-}
-
 inline int64_t parse_combined_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     CHECK_EQ(21, file_name.size());
@@ -166,28 +104,33 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
-// Generate vector index filename from segment filename.
-// e.g. "0123_abcd.dat" + index_id 123 -> "0123_abcd_123.vi"
-inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t index_id) {
+// Generate vector index filename from segment filename. The tablet_id disambiguates
+// segments that share a physical file across tablets (file bundling), where the recorded
+// segment filename is the shared bundle name and the offset alone is not on the read path;
+// without it those tablets would collide on the same .vi path and overwrite each other.
+// Non-bundled segments carry it too (redundant but keeps naming uniform, no special-casing).
+// e.g. "0123_abcd.dat" + tablet 9 + index 123 -> "0123_abcd_9_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t tablet_id, int64_t index_id) {
     if (segment_filename.ends_with(".dat")) {
-        return fmt::format("{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), index_id);
+        return fmt::format("{}_{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), tablet_id, index_id);
     }
-    return fmt::format("{}_{}.vi", segment_filename, index_id);
+    return fmt::format("{}_{}_{}.vi", segment_filename, tablet_id, index_id);
 }
 
 // Compute the vector-index file path that sits next to a segment file in shared-data
 // layout: split |segment_path| into directory + basename, compute the .vi filename
 // from the basename, then re-join under the original directory.
 //
-//   "data/000_abcd.dat"  + 0  -> "data/000_abcd_0.vi"
-//   "/foo/bar/seg.dat"   + 5  -> "/foo/bar/seg_5.vi"
-//   "seg.dat"            + 7  -> "seg_7.vi"            (no directory part)
-//   "/seg.dat"           + 1  -> "seg_1.vi"            (root-only directory)
-inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t index_id) {
+//   "data/000_abcd.dat"  + tablet 9 + 0  -> "data/000_abcd_9_0.vi"
+//   "/foo/bar/seg.dat"   + tablet 9 + 5  -> "/foo/bar/seg_9_5.vi"
+//   "seg.dat"            + tablet 9 + 7  -> "seg_9_7.vi"            (no directory part)
+//   "/seg.dat"           + tablet 9 + 1  -> "seg_9_1.vi"            (root-only directory)
+inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t tablet_id,
+                                                           int64_t index_id) {
     const size_t last_slash = segment_path.find_last_of('/');
     std::string_view basename =
             (last_slash == std::string_view::npos) ? segment_path : segment_path.substr(last_slash + 1);
-    std::string vi_filename = gen_vector_index_filename(basename, index_id);
+    std::string vi_filename = gen_vector_index_filename(basename, tablet_id, index_id);
     if (last_slash == std::string_view::npos) {
         return vi_filename;
     }
@@ -198,8 +141,21 @@ inline std::string gen_vector_index_path_from_segment_path(std::string_view segm
     return fmt::format("{}/{}", dir, vi_filename);
 }
 
-inline bool is_vector_index(std::string_view file_name) {
-    return HasSuffixString(file_name, ".vi");
+// The per-segment unique id embedded in a persisted segment's .vi filenames
+// (segment_vector_index_uid): its value is the id of the tablet that WROTE the segment, used purely
+// as a unique key and carried verbatim across tablet split so every reader resolves the same .vi.
+// Every segment that records vector_index_ids also records this uid (stamped at write time by the
+// tablet writers / segment rewrite), so callers must only ask for it on a vector-indexed segment;
+// the DCHECK guards that invariant.
+inline int64_t resolve_segment_vector_index_uid(const SegmentMetadataPB& segment_meta) {
+    DCHECK(segment_meta.has_segment_vector_index_uid())
+            << "vector-indexed segment missing its recorded vector index uid: " << segment_meta.filename();
+    return segment_meta.segment_vector_index_uid();
+}
+
+// .vi filename for one index of a persisted (vector-indexed) segment, named by its recorded uid.
+inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB& segment_meta, int64_t index_id) {
+    return gen_vector_index_filename(segment_meta.filename(), resolve_segment_vector_index_uid(segment_meta), index_id);
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration

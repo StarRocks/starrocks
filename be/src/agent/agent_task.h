@@ -15,9 +15,9 @@
 #pragma once
 
 #include "agent/task_worker_pool.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/runtime_fwd.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
 

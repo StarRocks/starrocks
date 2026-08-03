@@ -29,9 +29,10 @@
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/runtime_filter/runtime_filter_helper.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -176,14 +177,14 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     ASSIGN_OR_RETURN(auto left_ops, _children[0]->decompose_to_pipeline(context));
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<ProbeFactory>(
-            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
+            context->next_operator_id(), id(), child(0)->record_desc(), child(1)->record_desc(), _sql_join_conjuncts,
+            std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
             std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     pipeline::init_runtime_filter_for_operator(*this, left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
-        left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                                  context->degree_of_parallelism());
+        left_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_adpative_passthrough_exchange(
+                context, runtime_state(), id(), left_ops, context->degree_of_parallelism());
     }
     left_ops.emplace_back(std::move(left_factory));
 
@@ -192,8 +193,8 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     }
 
     if (_interpolate_passthrough && !context->is_colocate_group()) {
-        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
-                                                                         context->degree_of_parallelism(), true);
+        left_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), left_ops, context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {

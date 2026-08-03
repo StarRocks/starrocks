@@ -20,9 +20,9 @@
 #include "common/runtime_profile.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

@@ -19,6 +19,7 @@
 #include "storage/kv_store.h"
 #include "storage/primary_index.h"
 #include "storage/tablet.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {

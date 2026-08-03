@@ -32,6 +32,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -47,6 +48,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -64,6 +66,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -143,12 +146,46 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+
+        // The superseded (old) split-parent index is scheduled for removal in the recycle bin (issue
+        // #75993) but LEFT INSTALLED on the partition, so an in-flight query planned against it can
+        // finish reading until the retention expires. Its tablets stay registered in the inverted
+        // index, and because the index is still on the partition its shards stay protected from the
+        // per-shard StarMgrMetaSyncer reaper.
         for (Long tabletId : oldTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }
+        Assertions.assertNotNull(physicalPartition.getIndex(materializedIndex.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
+                .isMaterializedIndexRecycled(materializedIndex.getId()));
+
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+    }
+
+    @Test
+    public void testRunBumpsOptimisticVersion() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+
+        long beforeSplit = table.lastSchemaUpdateTime.get();
+
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
+        tabletReshardJob.init();
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+
+        // runRunningJob() -> addNewMaterializedIndexes() installs the split-child indexes and changes
+        // the partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
+        // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
+        // "Invalid tablet id ... The tablet may have been dropped". This runs on the RUNNING step.
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+
+        long afterSplit = table.lastSchemaUpdateTime.get();
+        Assertions.assertTrue(afterSplit > beforeSplit,
+                "split must bump lastSchemaUpdateTime (before=" + beforeSplit + ", after=" + afterSplit + ")");
     }
 
     @Test
@@ -303,9 +340,24 @@ public class SplitTabletJobTest {
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                       boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
+            }
+        };
+
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
             }
         };
 
@@ -317,6 +369,20 @@ public class SplitTabletJobTest {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
+    }
+
+    // The job's warehouse defaults to "unset" (null -> background) and is settable by the pre-split
+    // caller (base-class TabletReshardJob#setWarehouseId, also used by the merge job). The
+    // empty-source -> spread / non-empty -> PACK behavior is covered by the end-to-end
+    // external-boundaries flow and StarOSAgentTest#testCreateShardsForSplitSpreadDropsWithShardPin.
+    @Test
+    public void testWarehouseIdDefaultsUnsetAndIsSettable() throws Exception {
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
+        Assertions.assertNull(job.getWarehouseId(),
+                "warehouse defaults to unset (null -> background warehouse)");
+        job.setWarehouseId(12345L);
+        Assertions.assertEquals(Long.valueOf(12345L), job.getWarehouseId(),
+                "caller applies the load's warehouse id");
     }
 
     // -------------------------------------------------------------------------
@@ -358,7 +424,7 @@ public class SplitTabletJobTest {
                 tabletRangeLowerOnly(200));
 
         TabletReshardJob tabletReshardJob = SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTabletId, newTabletRanges);
+                db, table, Map.of(oldTabletId, newTabletRanges));
         Assertions.assertNotNull(tabletReshardJob);
 
         // The SplittingTablet inside the job must carry the FE-supplied
@@ -395,7 +461,9 @@ public class SplitTabletJobTest {
         MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
                 newMaterializedIndex.getTablets().size());
-        Assertions.assertNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
+        // The old tablet is retained (parked in the recycle bin with the superseded index), not deleted
+        // immediately, so an in-flight split-parent read can finish (issue #75993).
+        Assertions.assertNotNull(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(oldTabletId));
 
         // TabletRangePB (generated jprotobuf class) has no equals override;
         // compare the underlying Range<Tuple> which does. The values must
@@ -416,15 +484,15 @@ public class SplitTabletJobTest {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId,
-                        List.of(tabletRange(0, 100))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(oldTabletId, List.of(tabletRange(0, 100)))));
     }
 
     @Test
     public void testForExternalBoundariesRejectsUnknownTablet() {
         Assertions.assertThrows(StarRocksException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, /*oldTabletId=*/Long.MAX_VALUE,
-                        List.of(tabletRange(0, 100), tabletRange(100, 200))));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
+                        Map.of(/*oldTabletId=*/Long.MAX_VALUE, List.of(tabletRange(0, 100), tabletRange(100, 200)))));
     }
 
     // external boundaries must respect the tablet_reshard_max_split_count cap that the
@@ -440,7 +508,7 @@ public class SplitTabletJobTest {
             tooMany.add(tabletRange(i * 100, (i + 1) * 100));
         }
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, oldTabletId, tooMany));
+                () -> SplitTabletJobFactory.forExternalBoundaries(db, table, Map.of(oldTabletId, tooMany)));
     }
 
     // Installs a MockUp on MockLakeService that intercepts both publishVersion and
@@ -656,6 +724,40 @@ public class SplitTabletJobTest {
         return result;
     }
 
+    @Test
+    public void testRunCleaningCancelsPreviousCompactions() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        splitJob.endTransactionId = 5000L;
+
+        Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
+        AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                    Set<Long> includePartitionIds) {
+                includePartitionIdsArg.set(includePartitionIds);
+                return ignoredCompactionTxnIds;
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+                    Set<Long> excludeTransactionIds) {
+                excludeTxnIdsArg.set(excludeTransactionIds);
+                return false;
+            }
+        };
+
+        // The cleaning phase cancels the previous compactions on the resharded partitions and forwards
+        // the returned ignored txn ids to the wait; while the wait is unsatisfied the job stays CLEANING.
+        splitJob.runCleaningJob();
+        Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+        Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
     private TabletReshardJob createTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
@@ -692,7 +794,8 @@ public class SplitTabletJobTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 throw new DdlException("simulated StarOS failure");
             }
         };

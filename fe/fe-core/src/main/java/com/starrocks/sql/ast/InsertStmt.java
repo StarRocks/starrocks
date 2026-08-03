@@ -96,6 +96,14 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+    private boolean isShadowRewrite = false;
+    private Long targetWriteIndexId = null;
+    // For a shadow-rewrite INSERT: the watershed txn id the converted op_schema_change log must be
+    // keyed by, and the alter version W it is anchored at. Forwarded to the InsertTxnCommitAttachment
+    // at commit so the publish path can convert the committed op_write into op_schema_change@W.
+    private long shadowRewriteWatershedTxnId = 0;
+    private long shadowRewriteAlterVersion = 0;
+
     // hint in each part of ast. used to ast to sql
     protected List<HintNode> hintNodes;
 
@@ -203,6 +211,38 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isVersionOverwrite() {
         return isVersionOverwrite;
+    }
+
+    public void setShadowRewrite(boolean isShadowRewrite) {
+        this.isShadowRewrite = isShadowRewrite;
+    }
+
+    public boolean isShadowRewrite() {
+        return isShadowRewrite;
+    }
+
+    public void setTargetWriteIndexId(Long targetWriteIndexId) {
+        this.targetWriteIndexId = targetWriteIndexId;
+    }
+
+    public Long getTargetWriteIndexId() {
+        return targetWriteIndexId;
+    }
+
+    public void setShadowRewriteWatershedTxnId(long shadowRewriteWatershedTxnId) {
+        this.shadowRewriteWatershedTxnId = shadowRewriteWatershedTxnId;
+    }
+
+    public long getShadowRewriteWatershedTxnId() {
+        return shadowRewriteWatershedTxnId;
+    }
+
+    public void setShadowRewriteAlterVersion(long shadowRewriteAlterVersion) {
+        this.shadowRewriteAlterVersion = shadowRewriteAlterVersion;
+    }
+
+    public long getShadowRewriteAlterVersion() {
+        return shadowRewriteAlterVersion;
     }
 
     public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {

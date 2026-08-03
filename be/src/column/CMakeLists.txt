@@ -21,9 +21,9 @@ ADD_BE_LIB(ColumnCore
         struct_column.cpp
         raw_buffer.cpp
         column.cpp
-        column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
+        type_converter.cpp
         mysql_row_buffer.cpp
         german_string.cpp
         global_dict/decoder.cpp
@@ -39,6 +39,10 @@ ADD_BE_LIB(ColumnCore
         nullable_column.cpp
         decimalv3_column.cpp
         json_column.cpp
+        flat_json/flat_json_internal.cpp
+        flat_json/json_flat_path.cpp
+        flat_json/json_flattener.cpp
+        flat_json/json_merger.cpp
         adaptive_nullable_column.cpp
         append_with_mask.cpp
         column_helper.cpp
@@ -46,6 +50,8 @@ ADD_BE_LIB(ColumnCore
         arrow/arrow_to_starrocks_converter.cpp
         arrow/arrow_to_json_converter.cpp
         arrow/column_to_arrow_converter.cpp
+        arrow/type_to_arrow_converter.cpp
+        arrow/record_batch_converter.cpp
         datum_convert.cpp
         logical_type_size.cpp
         runtime_type_traits.cpp
@@ -58,9 +64,10 @@ ADD_BE_LIB(ColumnCore
         variant_merger.cpp
         column_hash/column_hash.cpp
         adaptive_offsets.cpp
+        serde/column_array_serde.cpp
 )
 
-target_link_libraries(ColumnCore PRIVATE arrow)
+target_link_libraries(ColumnCore PRIVATE arrow streamvbyte)
 
 ADD_BE_LIB(ChunkCore
         chunk_factory.cpp
@@ -76,3 +83,22 @@ ADD_BE_LIB(ChunkCore
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)
+
+ADD_BE_LIB(ColumnSortCore
+        sorting/compare_column.cpp
+        sorting/sort_column.cpp
+        sorting/sort_permute.cpp
+        sorting/sort_helper.h
+        sorting/sort_permute.h
+        sorting/sorting.h
+)
+
+target_link_libraries(ColumnSortCore PUBLIC
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)

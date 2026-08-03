@@ -44,6 +44,7 @@
 namespace starrocks {
 
 class ExecEnv;
+class PublishVersionManager;
 class Status;
 class TAgentTaskRequest;
 class TAgentResult;
@@ -58,7 +59,7 @@ public:
 
     ~AgentServer();
 
-    Status init();
+    Status start();
 
     void stop();
 
@@ -78,23 +79,13 @@ public:
     // Returns nullptr if `type` is not a valid value of `TTaskType::type`.
     ThreadPool* get_thread_pool(int type) const;
 
+    PublishVersionManager* publish_version_manager() const;
+
     // Dedicated pool for per-file copy in lake-to-lake replication. Returned pool is distinct
     // from `get_thread_pool(TTaskType::REPLICATE_SNAPSHOT)` so that the outer agent task can
     // submit per-file sub-tasks and call ThreadPoolToken::wait() on them without tripping the
     // thread-pool self-deadlock guard.
     ThreadPool* get_lake_replicate_file_thread_pool() const;
-
-    // Dedicated pool used by lake schema-change inner sub-tasks (currently only
-    // the ADD INDEX fast path's per-segment index building). Physically isolated
-    // from the alter_tablet outer pool to avoid pool-exhaustion deadlock.
-    // Capacity = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism.
-    ThreadPool* get_lake_schema_change_thread_pool() const;
-
-    // Recompute and apply the lake_schema_change pool max size from the current
-    // values of `alter_tablet_worker_count` and
-    // `lake_schema_change_per_tablet_parallelism`. Invoked from the dynamic
-    // config update callback when either knob changes.
-    void update_lake_schema_change_thread_pool_max();
 
     void stop_task_worker_pool(TaskWorkerType type) const;
 

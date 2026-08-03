@@ -46,6 +46,11 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: 小さなファイルキャッシュの数。
 
+## `spill_parked_with_uncovered_reason_total`
+
+- 単位: カウント
+- 説明: pipeline driver がスピル待ちでパークされたが、宣言された待機理由がどのウェイクアップ購読にもカバーされていなかった回数。健全なシステムでは常に 0 です。0 以外の値は、パークされた driver を起こすものが存在しないこと（ウェイクアップテーブルの欠陥。クエリはキャンセルされるまで停止する可能性があります）を意味するため、アラートの対象とすべきです。発生のたびに BE ログへレート制限付きの WARNING も出力されます。
+
 ## `snmp`
 
 - 単位: -
@@ -279,6 +284,23 @@ description: "Alphabetical s"
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。現在この BE の StarOSWorker に割り当てられている shard 数（worker のローカル shard テーブルのサイズ）。値は `StarOSWorker::add_shard` および `StarOSWorker::remove_shard` の内部で同期的に書き込まれ（mutation 時に push される方式）、メトリクス取得時に再計算されるわけではありません。したがって取得される値は、直近に発生した shard テーブルの変更結果を反映します。BE シャットダウン時に gauge はリセットされず、次回の mutation が発生するまで前回の値を保持します。BE 間の shard 分布バランスを観測したり、FE 側の配置結果との乖離を検出するために利用できます。
 
+## `starrocks_fe_alter_duration_ms`
+
+- 単位: ミリ秒
+- タイプ: サマリー
+- ラベル: `execution_mode` (`fse`、`legacy_fse`、または `rewrite`)、`is_leader`
+- 説明: ALTER TABLE の変更を適用するのにかかった時間 (ミリ秒)。ステートメント単位。報告するのは Leader FE (`is_leader="true"`) のみです。0.75、0.95、0.98、0.99、0.999 の分位値と `_sum`、`_count` を含みます。`execution_mode` ラベルは変更の適用方法を示します。
+  - `fse`: 現行の Fast Schema Evolution (FSE) で、ステートメント実行中に即座に完了します。
+  - `legacy_fse`: 旧来の FSE パスで、バックグラウンドで実行され通常はるかに遅くなります。`cloud_native_fast_schema_evolution_v2` が無効な共有データ (shared-data) クラスターでのみ発生します (デフォルトは有効で、その場合は `fse`)。
+  - `rewrite`: 変更のためにテーブルデータを物理的に書き換える必要があった場合 (例: 列の型変更) を示し、これもバックグラウンドで実行されます。
+
+## `starrocks_fe_alter_operation_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type` (`add_column`、`drop_column`、または `modify_column`)、`is_leader`
+- 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -455,6 +477,55 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: ブラックリストに登録されたSQLがインターセプトされた回数。
 
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: なし
+- 説明: スコープ付きの同期統計情報待機が、クエリ単位の統計情報待機予算を使い切ったため継続できなかった回数、または残り予算のタイムアウトに達した回数の合計。クエリ単位の予算スコープなしで実行される単発の待機は、このメトリックには含まれません。
+
+## `starrocks_fe_statistics_cache_entries`
+
+- 単位: カウント
+- タイプ: ゲージ
+- ラベル: `cache` — 統計情報キャッシュの名前: `table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats`、または `multi_column_stats`。
+- 説明: 対象の統計情報キャッシュ（Caffeine ベース）に現在保持されているおおよそのエントリ数。キャッシュごとの最大値は FE 設定 `statistic_cache_columns` で制御されます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 対象の統計情報キャッシュから（サイズまたは有効期限により）退避されたエントリの累積数。キャッシュサイズに対してこの値が継続的に増加する場合は、`statistic_cache_columns` の引き上げを検討してください。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 統計情報キャッシュから提供されたルックアップの累積数。`starrocks_fe_statistics_cache_miss_count` と合わせてキャッシュヒット率を算出できます。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: Caffeine ローダーが例外で完了したため失敗した統計情報キャッシュロードの累積数。欠落している統計情報行は空の結果としてキャッシュされ、ロード失敗ではなくロード成功としてカウントされます。値が 0 以外で増加し続ける場合、統計情報テーブルの読み取りでエラーが発生していることを示します。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: 成功した統計情報キャッシュのロードの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `cache` — 取り得る値は `starrocks_fe_statistics_cache_entries` を参照してください。
+- 説明: キャッシュに見つからずロードをトリガーした統計情報キャッシュのルックアップの累積数。FE 設定 `enable_statistic_cache_metrics` が `true` に設定されている場合にのみ登録・公開されます。
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - 単位: カウント
@@ -517,13 +588,13 @@ description: "Alphabetical s"
 
 - 単位: ミリ秒
 - タイプ: ヒストグラム
-- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。両方の本番経路で更新されます — INSERT-from-FILES の hook（`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）と Broker Load の hook（`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
+- 説明: 受理されたサンプリングベースのタブレット事前分割 reshard ジョブの `FINISHED` をコーディネーターが待機した壁時計時間。すべての本番取り込み種別で更新されます — INSERT-from-FILES と INSERT-from-table（いずれも `InsertPreSplitHook` 経由、`StmtExecutor` で `StatementPlanner.plan` が取り込みトランザクションを開く前に呼ばれる）、および Broker Load（`BrokerLoadPreSplitHook` 経由、`BrokerLoadJob.createLoadingTask` で `beginTxn` が `T_load` を開く前に呼ばれる）で、いずれも共有の `PreSplitFlow` を通じて同期待機します。テスト用の `runPreSplit` 同期待機ラッパーでも更新されます。いずれの経路でも、トリガーとなった取り込み自身が分割後のタブレットレイアウトに対してプランされます。
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。INSERT-from-FILES 本番経路でタイムアウト時に発火します（INSERT は**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます — デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウトとなり得ます。INSERT 自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。Broker Load 本番経路は待機しないため、このカウンタは更新されません。
+- 説明: サンプリングベースのタブレット事前分割で post-submit ハードキャップが発火した累計回数。受理された reshard ジョブが `tablet_pre_split_post_submit_wait_seconds` 以内に `FINISHED` に到達しなかったときにインクリメントされます。すべての本番取り込み種別でタイムアウト時に発火します — INSERT-from-FILES、INSERT-from-table、および Broker Load（いずれも共有の `PreSplitFlow` を通じて同期待機）。テスト用の `runPreSplit` 同期待機ラッパーでも発火します。取り込みはこのとき**中止せずに継続実行**し、その時点で可視のタブレットレイアウトに対してプランされます（デーモンがまだ遷移していなければ元の単一タブレットレイアウト、待機放棄後にデーモンがレースで完了した場合は部分的／完全に分割後のレイアウト）。取り込み自体は中止されないため、`tablet_pre_split_load_abort` はインクリメントされません。
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
@@ -542,6 +613,12 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 瞬間的
 - 説明: 各BEノード上のタブレット数を示します。
+
+## `starrocks_fe_txn_max_committed_pending_publish_ms`
+
+- 単位: ms
+- タイプ: 瞬間的
+- 説明: 現在 `COMMITTED` 状態にあり `VISIBLE` への発行を待っているトランザクションのうち、最も長く滞留しているものの待機時間（ミリ秒）。つまり、コミット済みでまだ発行されていない最も古いトランザクションの経過時間です。トランザクション完了後に記録される概要（summary）メトリックである `starrocks_fe_txn_publish_*` とは異なり、これは現在の最悪ケースの待機時間をリアルタイムに示すゲージ（gauge）です。この値は `db` ラベルによってデータベースごとに、かつ Leader FE ノード（`is_leader="true"`）のみが報告します。発行待ちのコミット済みトランザクションがない場合は `0` を返します。値が高い、または継続的に増加している場合、バージョンの発行が停止しているか、コミットに遅れていることを示します。
 
 ## `starrocks_fe_txn_publish_ack_latency_ms`
 
@@ -639,4 +716,3 @@ description: "Alphabetical s"
 - 説明: Stream Loadリクエストの合計数。
 
 ##### SPLIT
-

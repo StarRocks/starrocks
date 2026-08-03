@@ -14,6 +14,7 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.TabletSchedCtx;
@@ -94,6 +95,24 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
         Assertions.assertTrue(output.contains("result=\"hit\""));
         Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
+    public void testAlterColumnMetricsExposure() {
+        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
+        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
+        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
+        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
     }
   
     public void testPlanAdvisorMetricsExposure() {
@@ -666,5 +685,24 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("ctas"));
         Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("CTAS"));
         Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeWriteType(null));
+    }
+
+    @Test
+    public void testDictCacheMemoryMetric() {
+        // The gauge must be registered and expose a non-negative byte value on read.
+        Assertions.assertNotNull(MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+        Long value = MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES.getValue();
+        Assertions.assertNotNull(value);
+        Assertions.assertTrue(value >= 0L, "dict cache memory must be non-negative, got " + value);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_low_cardinality_dict_cache_bytes"),
+                "low_cardinality_dict_cache_bytes should be exposed");
+        Assertions.assertTrue(output.contains("# TYPE ut_low_cardinality_dict_cache_bytes gauge"),
+                "low_cardinality_dict_cache_bytes should be declared as a gauge");
     }
 }

@@ -25,6 +25,7 @@
 #include "base/container/raw_container.h"
 #include "base/string/slice.h"
 #include "common/status.h"
+#include "formats/csv/csv_defaults.h"
 #include "formats/io/formatted_output_stream.h"
 #include "types/date_value.h"
 #include "types/decimalv2_value.h"
@@ -71,15 +72,35 @@ public:
         ArrayFormatType array_format_type = ArrayFormatType::kDefault;
         // [Only used in Hive now!]
         // Control hive array's element delimiter.
-        char array_hive_collection_delimiter = '\002';
+        char array_hive_collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
         // [Only used in Hive now!]
         // mapkey_delimiter is the separator between key and value in map.
         // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter is
         // used to generate collection delimiter in Hive.
-        char array_hive_mapkey_delimiter = '\003';
+        char array_hive_mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
         // [Only used in Hive now!]
         // Control array nested level, used to generate collection delimiter in Hive.
         size_t array_hive_nested_level = 1;
+
+        // [Only used in Hive now!]
+        // Non-zero when this scan uses LazySimpleSerDe's ESCAPED BY. NullableConverter
+        // uses it to decide null on the RAW (pre-unescape) bytes before deciding whether
+        // to unescape: "\N" is null even though it unescapes to "N", while "\\N"
+        // unescapes to a literal "\N" string that would otherwise be mistaken for null.
+        // Left 0 for OpenCSVSerde even though that format has its own escape character
+        // (its splitter fully resolves quotes/escapes before any converter runs, so no
+        // unescape work remains) -- and for every non-Hive caller (existing behavior).
+        char escape = 0;
+
+        // Whether a field spelled exactly "\N" is SQL NULL. True for LazySimpleSerDe
+        // (serialization.null.format's default) and for every legacy CSV caller
+        // (broker/stream load), where "\N" has always meant NULL. The Hive scanner sets
+        // it to false for OpenCSVSerde, which has NO null-literal concept at all: its
+        // fields are always strings, so input "\\N" (escaped backslash + N) must come
+        // out as the two-character string "\N", not NULL. This is a static property of
+        // the serde -- distinct from `escape`, which only says whether unescape work is
+        // still pending in the converter.
+        bool hive_null_literal = true;
 
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;
@@ -101,6 +122,13 @@ public:
     virtual bool read_string(Column* column, const Slice& s, const Options& options) const = 0;
 
     virtual bool read_quoted_string(Column* column, const Slice& s, const Options& options) const = 0;
+
+    // True for converters (Map/Array) whose OWN separator scanning still needs the raw,
+    // not-yet-unescaped bytes -- e.g. an escaped array-element separator like "a\|b|c"
+    // must stay intact until ArrayConverter has found its OWN element boundaries.
+    // NullableConverter checks this to decide whether it may safely unescape `s` before
+    // delegating, or must pass `s` through untouched for the child to split further.
+    virtual bool consumes_raw_bytes() const { return false; }
 
 protected:
     template <char quote>

@@ -21,6 +21,8 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.FlussTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -213,6 +215,10 @@ public class OptExternalPartitionPruner {
                 }
             }
         } else if (partitionPredicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cpo = (CompoundPredicateOperator) partitionPredicate;
+            if (cpo.isNot()) {
+                return false;
+            }
             ScalarOperator leftChild = partitionPredicate.getChild(0);
             ScalarOperator rightChild = partitionPredicate.getChild(1);
             return containsPartitionColumn(leftChild, partitionColRefSet)
@@ -241,6 +247,24 @@ public class OptExternalPartitionPruner {
             }
         }
         return false;
+    }
+
+    // Shared by Hive/Hudi/ODPS (HMS), Iceberg and Delta Lake: reject the query if it doesn't carry a usable
+    // partition predicate, when allow_lake_without_partition_filter is disabled.
+    private static void checkPartitionFilterRequired(LogicalScanOperator operator, OptimizerContext context,
+                                                      Table table, List<Column> partitionColumns) throws AnalysisException {
+        if (context.getSessionVariable().isAllowLakeWithoutPartitionFilter()) {
+            return;
+        }
+        if (!checkPartitionPredicates(operator, partitionColumns)) {
+            LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
+            throw new AnalysisException("Partition pruning is invalid, please check: "
+                    + "1. The partition predicate must be included. "
+                    + "2. The left and right children of the partition predicate cannot be function parameters. "
+                    + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                    + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                    + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
+        }
     }
 
     // get equivalence predicate which column ref is partition column
@@ -309,16 +333,7 @@ public class OptExternalPartitionPruner {
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!table.isUnPartitioned()) {
-                if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
-                        && !checkPartitionPredicates(operator, partitionColumns)) {
-                    LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
-                    throw new AnalysisException("Partition pruning is invalid, please check: "
-                            + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters. "
-                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
-                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
-                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
-                }
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
 
                 // get partition names
                 List<String> partitionNames;
@@ -334,6 +349,20 @@ public class OptExternalPartitionPruner {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
                                     table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+                }
+
+                // For the query dump, capture the FULL (unfiltered) partition name list so replay can
+                // reproduce the true denominator in partitions=X/Y. The list used for pruning above may
+                // already be value-filtered, which would collapse the denominator to the pruned count.
+                if (context.getDumpInfo() != null) {
+                    List<String> allPartitionNames =
+                            effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)
+                                    ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                                            table.getCatalogName(), table.getCatalogDBName(),
+                                            table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
+                                    : partitionNames;
+                    context.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(),
+                            table.getCatalogTableName()).setPartitionNames(allPartitionNames);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
@@ -374,6 +403,9 @@ public class OptExternalPartitionPruner {
                 long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
+        } else if (table instanceof FlussTable) {
+            initFlussPartitionInfo(operator, context, columnToPartitionValuesMap, columnToNullPartitions,
+                    (FlussTable) table);
         } else if (table instanceof DeltaLakeTable) {
             // Init columnToPartitionValuesMap for delta lake, it will be used in classifyConjuncts function
             // to classify partition conjuncts
@@ -382,6 +414,16 @@ public class OptExternalPartitionPruner {
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+            }
+            if (!deltaLakeTable.isUnPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
+            }
+        } else if (table instanceof IcebergTable) {
+            // Iceberg splits are enumerated incrementally during scan-range dispatch (not upfront here), so only
+            // the partition-filter-required check (a pure predicate-shape check) can run at optimize time.
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (icebergTable.isPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, icebergTable.getPartitionColumns());
             }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),
@@ -399,6 +441,57 @@ public class OptExternalPartitionPruner {
             } else {
                 operator.getScanOperatorPredicates().getNonPartitionConjuncts().add(scalarOperator);
             }
+        }
+    }
+
+    private static void initFlussPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
+                                               Map<ColumnRefOperator,
+                                                       ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                               Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+                                               FlussTable flussTable) throws AnalysisException {
+        List<Column> partitionColumns = flussTable.getPartitionColumns();
+        List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
+        for (Column column : partitionColumns) {
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+            columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+            columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
+            partitionColumnRefOperators.add(partitionColumnRefOperator);
+        }
+
+        List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
+        if (!flussTable.isUnPartitioned()) {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(flussTable.getCatalogName(), flussTable.getCatalogDBName(),
+                            flussTable.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+            for (String partitionName : partitionNames) {
+                List<String> values = toPartitionValues(partitionName);
+                PartitionKey partitionKey = createPartitionKey(values, partitionColumns, flussTable);
+                partitionKeys.add(new Pair<>(partitionKey, context.getNextUniquePartitionId()));
+            }
+        } else {
+            partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
+        }
+
+        partitionKeys.stream().parallel().forEach(entry -> {
+            PartitionKey key = entry.first;
+            long partitionId = entry.second;
+            List<LiteralExpr> literals = key.getKeys();
+            for (int i = 0; i < literals.size(); i++) {
+                ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
+                LiteralExpr literal = literals.get(i);
+                if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
+                    columnToNullPartitions.get(columnRefOperator).add(partitionId);
+                    continue;
+                }
+
+                Set<Long> partitions = columnToPartitionValuesMap.get(columnRefOperator)
+                        .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
+                partitions.add(partitionId);
+            }
+        });
+
+        for (Pair<PartitionKey, Long> entry : partitionKeys) {
+            operator.getScanOperatorPredicates().getIdToPartitionKey().put(entry.second, entry.first);
         }
     }
 
@@ -429,7 +522,6 @@ public class OptExternalPartitionPruner {
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof PaimonTable) {
-            PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
@@ -471,6 +563,29 @@ public class OptExternalPartitionPruner {
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
+        } else if (table instanceof FlussTable) {
+            ListPartitionPruner partitionPruner =
+                    new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
+                            scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
+            Collection<Long> selectedPartitionIds = partitionPruner.prune();
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+            }
+
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of number of fluss table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitionIds.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
+            }
+
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         }
     }
 

@@ -655,7 +655,7 @@ public class InsertPlanTest extends PlanTestBase {
         String sql = "explain insert into t0 select * from t0";
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        new StatementPlanner().plan(statementBase, connectContext);
         Assertions.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 

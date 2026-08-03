@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -50,6 +51,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class AnalyzeInsertTest {
 
@@ -98,6 +100,31 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into tmc values (1,2,3)",
                 "Inserted target column count: 2 doesn't match select/value column count: 3");
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
+    }
+
+    /**
+     * An internal shadow-rewrite INSERT writes only the target rollup index via a column-subset target
+     * list, so a base required (NOT NULL, no-default) column that the rollup does not carry must NOT be
+     * required in the column permutation. {@code insert into tnotnull(v1) ...} omits the NOT NULL,
+     * no-default base column {@code v2}; as a plain INSERT this fails with "must be explicitly mentioned
+     * in column permutation" (see {@link #testInsert()}), but with the shadow-rewrite flags set the
+     * required-columns check is skipped and analysis succeeds. No user INSERT can set isShadowRewrite,
+     * so this relaxation is reachable only by the internal rewrite job.
+     */
+    @Test
+    public void testShadowRewriteSkipsRequiredColumnCheck() {
+        // Sanity: as a plain INSERT this omission is rejected.
+        analyzeFail("insert into tnotnull(v1) values(1)",
+                "must be explicitly mentioned in column permutation");
+
+        // Same statement, marked as an internal shadow rewrite with a target write index set: the
+        // required-columns loop is skipped, so analysis must NOT throw the permutation error.
+        StatementBase stmt = parseSql("insert into tnotnull(v1) values(1)");
+        Assertions.assertTrue(stmt instanceof InsertStmt);
+        InsertStmt insertStmt = (InsertStmt) stmt;
+        insertStmt.setShadowRewrite(true);
+        insertStmt.setTargetWriteIndexId(12345L);
+        Analyzer.analyze(insertStmt, getConnectContext());
     }
 
     @Test

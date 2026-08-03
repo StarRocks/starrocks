@@ -44,6 +44,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
@@ -56,12 +57,16 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -84,7 +89,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -518,8 +522,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             } else {
-                long tableId = txnStateBatch.getTableId();
-                if (!publishingLakeTransactionsBatchTableId.contains(tableId)) {
+                // A single-table batch involves exactly one table; a multi-table batch
+                // (lake_enable_batch_publish_multi_table) involves the union of its
+                // transactions' tables. Every involved table must be free before this batch
+                // may start, so that two in-flight publishes never share a table.
+                List<Long> batchTableIdList = txnStateBatch.getTableIdList();
+                if (batchTableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
                     // When the `enable_lake_batch_publish_version` switch is just set to true,
                     // it is possible that the result of publish task
                     // sent by `publishVersionForLakeTable` has not been returned,
@@ -538,10 +546,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     if (needWait) {
                         continue;
                     }
-                    publishingLakeTransactionsBatchTableId.add(tableId);
+                    publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
-                    future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
+                    future.thenRun(() -> batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             }
         }
@@ -609,6 +617,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         //  The mapping is shadow index id -> ShadowIndexTxnBatch
         Map<Long, ShadowIndexTxnBatch> shadowIndexTxnBatches = null;
         Set<Tablet> normalTablets = null;
+        List<Tablet> carryForwardTablets = null;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -638,6 +647,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
 
             useAggregatePublish = table.isFileBundling();
+            Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 computeResource = txnState.getComputeResource();
@@ -662,8 +672,26 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     } else {
                         normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
                         normalTablets.addAll(index.getTablets());
+                        // Key by metaId, not physical index id: a tablet reshard (split/merge)
+                        // replaces an index with a new physical id but the SAME metaId. Keying by
+                        // physical id would make carry-forward treat the reshard'd base index as
+                        // "untouched" and re-publish its child tablets as no-op normal tablets while
+                        // they are also cross-published from their parent -- the two tasks then
+                        // self-collide on the per-tablet publish lock and wedge the partition.
+                        publishedNormalIndexMetaIds.add(index.getMetaId());
                     }
                 }
+            }
+            // File bundling stores the metadata of ALL tablets of a partition version in a single bundle file.
+            // The batched transactions' index views are point-in-time (for lake compaction snapshotted at txn
+            // begin); if a rollup/MV index became visible after they began, none of them touch it, so publishing
+            // the new version would write a bundle WITHOUT that index's tablets and permanently wedge the
+            // partition. Carry forward every currently-visible NORMAL index none of these transactions touched
+            // so the new bundle stays a complete whole-partition snapshot. See collectFileBundlingCarryForwardTablets.
+            if (useAggregatePublish) {
+                carryForwardTablets = collectFileBundlingCarryForwardTablets(
+                        partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
+                        publishedNormalIndexMetaIds);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -702,14 +730,20 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+                // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, null, vectorIndexBuildInfos);
+                            computeResource, tabletStats, vectorIndexBuildInfos);
+                } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
+                    aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
+                            startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
+                            tabletStats, vectorIndexBuildInfos);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
-                            compactionScores, nodeToTablets, computeResource, null, vectorIndexBuildInfos);
+                            compactionScores, nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -719,6 +753,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, allFromCompaction);
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+                if (!tabletStats.isEmpty()) {
+                    stateBatch.setTabletStats(tableId, partitionId, tabletStats);
+                }
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
         } catch (Exception e) {
@@ -830,48 +867,54 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
 
         long dbId = txnStateBatch.getDbId();
-        long tableId = txnStateBatch.getTableId();
+        List<Long> tableIdList = txnStateBatch.getTableIdList();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
 
-        // Step 1: Collect first version per partition across the batch
-        // partitionId -> firstVersion (from the earliest txn in the batch that touches it)
-        Map<Long, Long> partitionFirstVersions = new LinkedHashMap<>();
+        // Step 1: Collect first version per (table, partition) across the batch
+        // tableId -> partitionId -> firstVersion (from the earliest txn in the batch that touches it)
+        Map<Long, Map<Long, Long>> tableToPartitionFirstVersions = new LinkedHashMap<>();
         for (TransactionState state : states) {
-            TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
-            if (tableCommitInfo == null) {
-                continue;
-            }
-            for (Map.Entry<Long, PartitionCommitInfo> entry :
-                    tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
-                partitionFirstVersions.putIfAbsent(entry.getKey(), entry.getValue().getVersion());
+            for (Long tableId : state.getTableIdList()) {
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
+                Map<Long, Long> partitionFirstVersions =
+                        tableToPartitionFirstVersions.computeIfAbsent(tableId, k -> new LinkedHashMap<>());
+                for (Map.Entry<Long, PartitionCommitInfo> entry :
+                        tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                    partitionFirstVersions.putIfAbsent(entry.getKey(), entry.getValue().getVersion());
+                }
             }
         }
 
-        // Step 2: Check each partition's first version against visibleVersion
+        // Step 2: Check each partition's first version against visibleVersion.
+        // Partition ids are globally unique, so one gap set covers all tables.
         Set<Long> gapPartitions = new HashSet<>();
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable(dbId, tableId);
-        if (table == null) {
-            return txnStateBatch;
-        }
-
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(dbId, tableIdList, LockType.READ);
         try {
-            for (Map.Entry<Long, Long> entry : partitionFirstVersions.entrySet()) {
-                long partitionId = entry.getKey();
-                long firstVersion = entry.getValue();
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                if (partition != null
-                        && partition.getVisibleVersion() + 1 != firstVersion
-                        // REPLICATION txns may have non-consecutive versions, skip check
-                        && states.get(0).getSourceType()
-                                != TransactionState.LoadJobSourceType.REPLICATION) {
-                    gapPartitions.add(partitionId);
+            for (Map.Entry<Long, Map<Long, Long>> tableEntry : tableToPartitionFirstVersions.entrySet()) {
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                        .getLocalMetastore().getTable(dbId, tableEntry.getKey());
+                if (table == null) {
+                    continue; // table has been dropped
+                }
+                for (Map.Entry<Long, Long> entry : tableEntry.getValue().entrySet()) {
+                    long partitionId = entry.getKey();
+                    long firstVersion = entry.getValue();
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    if (partition != null
+                            && partition.getVisibleVersion() + 1 != firstVersion
+                            // REPLICATION txns may have non-consecutive versions, skip check
+                            && states.get(0).getSourceType()
+                                    != TransactionState.LoadJobSourceType.REPLICATION) {
+                        gapPartitions.add(partitionId);
+                    }
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(dbId, tableIdList, LockType.READ);
         }
 
         if (gapPartitions.isEmpty()) {
@@ -880,8 +923,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         // Step 3: Find the first transaction that touches any gap-affected partition
         for (int i = 0; i < states.size(); i++) {
-            TableCommitInfo tableCommitInfo = states.get(i).getTableCommitInfo(tableId);
-            if (tableCommitInfo != null) {
+            TransactionState state = states.get(i);
+            for (Long tableId : state.getTableIdList()) {
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
                 for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
                     if (gapPartitions.contains(partitionId)) {
                         if (i == 0) {
@@ -910,27 +957,30 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
-        // pick up all tableCommitInfo
-        // only one table,if batch has multi transactionState for now,
-        // the batch only has one transactionState for multi table.
+        // Pick up all tableCommitInfos of every txn in the batch. Without
+        // lake_enable_batch_publish_multi_table all txns share one table; with it table sets
+        // may differ across txns. Publish stays per (table, partition):
+        // partition ids are globally unique, so the map below is keyed by partition id alone.
         long dbId = txnStateBatch.getDbId();
-        long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
         states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
-            TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
-            Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
-            for (Long partitionId : partitionCommitInfoMap.keySet()) {
-                if (!publishVersionDataMap.containsKey(partitionId)) {
-                    publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
+            for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
+                long tableId = tableCommitInfo.getTableId();
+                Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
+                for (Long partitionId : partitionCommitInfoMap.keySet()) {
+                    if (!publishVersionDataMap.containsKey(partitionId)) {
+                        publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
+                    }
+                    PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
+                    publishVersionData.addTransaction(state);
                 }
-                PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
-                publishVersionData.addTransaction(state);
             }
         }
-        LOG.info("start publish lake batch db:{} table:{} txns:{}", dbId, tableId,
+        LOG.info("start publish lake batch db:{} tables:{} txns:{}", dbId,
+                StringUtils.join(txnStateBatch.getTableIdList(), ","),
                 StringUtils.join(states.stream().map(TransactionState::getTransactionId).toArray(), ","));
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -952,7 +1002,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-                boolean success = publishPartitionBatch(db, tableId, publishVersionData, txnStateBatch);
+                boolean success = publishPartitionBatch(db, publishVersionData.getTableId(),
+                        publishVersionData, txnStateBatch);
                 long versionTime = success ? System.currentTimeMillis() : -System.currentTimeMillis();
                 for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
                     commitInfo.setVersionTime(versionTime);
@@ -1047,11 +1098,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
         long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
-        long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
         ComputeResource computeResource = txnState.getComputeResource();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
+        List<Tablet> carryForwardTablets = null;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1072,12 +1123,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+            // A shadow-rewrite txn allocates no partition version (txnVersion is the sentinel -1),
+            // so the visibleVersion+1 adjacency guard does not apply; it only converts shadow logs.
+            if (!txnState.isShadowRewrite() &&
+                    txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                     partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
             baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
+            Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameByMetaId(index.getMetaId()), txnId);
@@ -1089,7 +1144,24 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } else {
                     normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
                     normalTablets.addAll(index.getTablets());
+                    // Key by metaId (not physical index id) so a reshard'd index is still recognized
+                    // as touched -- see collectFileBundlingCarryForwardTablets and the sibling site above.
+                    publishedNormalIndexMetaIds.add(index.getMetaId());
                 }
+            }
+            // File bundling stores the metadata of ALL tablets of a partition version in a single bundle
+            // file (meta/0_<version>.meta). The index set above comes from the transaction's point-in-time
+            // view (for lake compaction it is snapshotted at txn begin). If a materialized-view/rollup
+            // index became visible after this transaction began, that stale view omits it, so publishing
+            // the new version would write a bundle WITHOUT the rollup index's tablets, dropping them from
+            // this version and permanently wedging the partition's publish queue (a later publish reading
+            // those tablets at this version gets a 404). Carry forward every currently-visible NORMAL index
+            // this transaction did not touch, so the new bundle remains a complete whole-partition snapshot.
+            // Only needed for file bundling; without it each tablet keeps its own per-version metadata file.
+            if (useAggregatePublish) {
+                carryForwardTablets = collectFileBundlingCarryForwardTablets(
+                        partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
+                        publishedNormalIndexMetaIds);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1098,22 +1170,35 @@ public class PublishVersionDaemon extends LeaderDaemon {
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         long rpcStartMs = System.currentTimeMillis();
         try {
+            if (txnState.isShadowRewrite()) {
+                // Conversion-only no-op: the rewrite txn commits its op_write at shadowRewriteWatershedTxnId
+                // without advancing any partition version. The flip publish later anchors that op_write as
+                // op_schema_change@W via the TXN_SHADOW_REWRITE publish txn; nothing to publish here.
+                return true;
+            }
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                // Used to collect statistics when the partition is first imported
-                Map<Long, Long> tabletRowNums = new HashMap<>();
+                // Per-tablet stats from the publish response: first-load row counts for statistics
+                // collection, and range-distribution tablet sizes for real-time reshard triggering.
+                Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletRowNums, useAggregatePublish, vectorIndexBuildInfos);
+                if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
+                    aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
+                            baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
+                            vectorIndexBuildInfos);
+                } else {
+                    Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                            computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
+                }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
-                if (!tabletRowNums.isEmpty()) {
-                    partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().putAll(tabletRowNums);
+                if (!tabletStats.isEmpty()) {
+                    partitionCommitInfo.getTabletStats().putAll(tabletStats);
                 }
             }
             return true;
@@ -1133,6 +1218,68 @@ public class PublishVersionDaemon extends LeaderDaemon {
             maybeLogSlowPublishPartition(txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
                     submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, System.currentTimeMillis());
         }
+    }
+
+    // For file bundling only: from the partition's currently-visible indexes, return the tablets of every
+    // NORMAL index that this transaction did not touch (i.e. whose index metaId is not in publishedNormalIndexMetaIds).
+    // These must be carried forward (empty version bump) into the new version's bundle so it stays a complete
+    // whole-partition snapshot; otherwise a transaction with a stale index view (notably lake compaction
+    // whose loaded-index set is snapshotted at txn begin, before a rollup/MV index became visible) would
+    // publish a bundle missing that index and permanently wedge the partition. Returns null when nothing
+    // needs carrying forward (e.g. a normal load already covers every visible index). Caller must hold the
+    // table read lock while obtaining visibleIndexes.
+    static List<Tablet> collectFileBundlingCarryForwardTablets(List<MaterializedIndex> visibleIndexes,
+                                                               Set<Long> publishedNormalIndexMetaIds) {
+        List<Tablet> carryForwardTablets = null;
+        for (MaterializedIndex index : visibleIndexes) {
+            if (index.getState() == MaterializedIndex.IndexState.SHADOW
+                    || publishedNormalIndexMetaIds.contains(index.getMetaId())) {
+                continue;
+            }
+            carryForwardTablets = (carryForwardTablets == null) ? Lists.newArrayList() : carryForwardTablets;
+            carryForwardTablets.addAll(index.getTablets());
+        }
+        return carryForwardTablets;
+    }
+
+    // File bundling only. Publish the touched tablets (this publish's real transactions) together with the
+    // carry-forward tablets (untouched but currently-visible indexes) in ONE aggregate request, so the whole
+    // partition's metadata for the new version lands in a single bundle file (meta/0_<newVersion>.meta). Two
+    // separate aggregate publishes would each truncate-write that same bundle and lose one of the two sets.
+    //
+    // The carry-forward tablets have no txn log for these transactions, so for every real transaction we emit a
+    // matching no-op empty transaction (no_op_publish=true): the BE bypasses log loading and advances the tablet
+    // version without any data change. The count must match the real transactions because the BE requires
+    // new_version == base_version + txns.size() for a multi-transaction batch (a batch of pre-rollup compactions
+    // can span several versions).
+    static void aggregatePublishWithCarryForward(List<Tablet> touchedTablets, List<TxnInfoPB> txnInfos,
+                                                 List<Tablet> carryForwardTablets, long baseVersion,
+                                                 long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
+                                                 ComputeResource computeResource,
+                                                 Map<Long, Double> compactionScores,
+                                                 Map<Long, TabletStatPB> tabletStats,
+                                                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+            throws NoAliveBackendException, RpcException {
+        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
+        Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
+                nodeToTablets, computeResource, request);
+
+        List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
+        for (TxnInfoPB txnInfo : txnInfos) {
+            TxnInfoPB emptyTxnInfo = new TxnInfoPB();
+            emptyTxnInfo.txnId = -1L;
+            emptyTxnInfo.combinedTxnLog = false;
+            emptyTxnInfo.commitTime = txnInfo.commitTime;
+            emptyTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
+            emptyTxnInfo.gtid = txnInfo.gtid;
+            emptyTxnInfo.noOpPublish = true;
+            carryForwardTxnInfos.add(emptyTxnInfo);
+        }
+        // The carry-forward tablets have no txn log to delete on success, so do not thread nodeToTablets here.
+        Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
+                null, computeResource, request);
+        Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
+                tabletStats, vectorIndexBuildInfos);
     }
 
     // Per-partition publishPartition phase breakdown for slow outliers.

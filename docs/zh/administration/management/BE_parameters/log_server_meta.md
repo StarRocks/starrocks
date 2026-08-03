@@ -192,7 +192,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 引入版本：v4.2.0
 - 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
-  - 公开探针 / 可观测性：`/api/health`、`/metrics`、`/metrics/memory`。
   - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
   - Stream Load 及 transaction 接口，由 handler 内基于 load label + 表级授权识别身份：`/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
 
@@ -375,7 +374,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 GlobalEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
+- 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 RuntimeEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
 - 引入版本：v3.2.12
 
 ### enable_jvm_metrics
@@ -485,6 +484,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
 - 引入版本：-
 
+### process_force_exit_after_crash_handler_hang_second
+
+- 默认值：0
+- 类型：Int
+- 单位：秒
+- 是否动态：否
+- 描述：当致命信号（崩溃）处理函数发生挂起时（例如在生成 core dump 前释放资源时发生 jemalloc 死锁），在该秒数之后强制进程退出，以便编排系统重启该进程。崩溃标记仍会先被设置，因此在该宽限期内 FE 会持续收到 `SHUTDOWN` 心跳；此配置仅限制崩溃进程存活的最长时间。默认禁用（`0`），以便升级后保持原有的崩溃与 core dump 行为不变；如需启用，请根据自身环境设置一个正值并重启节点。该值仅在启动时读取一次，且只有为正值时才会启动看门狗线程；取值小于等于 `0` 时保持该看门狗禁用。
+- 引入版本：v4.0.15, v4.1.5
+
 ### rpc_compress_ratio_threshold
 
 - 默认值：1.1
@@ -502,6 +510,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制序列化的 chunk 大小超过压缩 codec 允许的最大输入大小时的行为。设置为 `true`（默认）时，StarRocks 记录一条警告日志并跳过压缩，以未压缩形式发送数据。设置为 `false` 时，StarRocks 返回 `InternalError` 并中止 RPC。
 - 引入版本：-
+
+### enable_threadpool_catch_task_exception
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：ThreadPool 的工作线程是否吞掉任务抛出的异常并继续执行下一个任务。设置为 `false`（默认）时，任务体外层没有 catch 语句，任务抛出的异常找不到处理者，会在抛出点终止 BE 进程。设置为 `true` 时，异常以 ERROR 级别记入日志，进程级指标 [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) 加一，工作线程继续执行下一个任务，进程得以存活。注意工作线程存活并不意味着任务是异常安全的：如果任务通过 `DeferOp` 或析构函数发出完成信号，而记录结果的语句被跳过，等待方会把该任务读作成功，因为未赋值的 `Status` 读出来就是 OK。此时故障不会报错，而是产生错误的结果。仅在需要缓解崩溃循环时将该项设置为 `true`，并预期相关故障会变为静默。
+- 引入版本：v4.2.0
 
 ### ssl_private_key_path
 

@@ -34,11 +34,11 @@
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/aggregate_type.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
+#include "storage_primitive/aggregate_type.h"
 
 namespace starrocks {
 

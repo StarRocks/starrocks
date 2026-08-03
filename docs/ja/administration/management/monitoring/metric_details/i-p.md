@@ -4,6 +4,8 @@ hide_table_of_contents: true
 description: "Alphabetical i - p"
 ---
 
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
 # メトリクス iからpまで
 
 :::note
@@ -16,6 +18,8 @@ description: "Alphabetical i - p"
 StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
 
 :::
+
+<MetricsIP />
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -82,6 +86,42 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
   - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
   - `delete_type` (`position` または `metadata`)
 - 説明: Icebergテーブルをターゲットとする`DELETE`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`delete_type`は、2つの削除方法を区別します: `position` (位置削除ファイルを生成する) と `metadata` (メタデータレベルの削除)。
+
+## `iceberg_merge_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクによって書き込まれた総バイト数を、ファイル種別ごとに集計します。`data` は新規データファイル（更新された行と挿入された行）のサイズを表し、`position_delete` は命中した旧行をマークする position delete ファイルのサイズを表します。
+
+## `iceberg_merge_duration_ms_total`
+
+- 単位: ミリ秒
+- タイプ: 累積
+- 説明: Iceberg `MERGE INTO` タスクの総実行時間（ミリ秒）。各タスクの実行時間は、タスク終了後に加算されます。
+
+## `iceberg_merge_files`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクによって書き込まれたファイルの総数を、ファイル種別ごとに集計します。`data` は新規データファイルの件数を、`position_delete` は position delete ファイルの件数を数えます。
+
+## `iceberg_merge_rows`
+
+- 単位: 行
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクが処理した行の総数を、ファイル種別ごとに集計します。`position_delete` は UPDATE または DELETE によって命中したターゲット行（position delete として追加される）をカウントし、`data` は書き込まれたデータ行（更新された行と挿入された行）をカウントします。
+
+## `iceberg_merge_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+- 説明: Iceberg テーブルを対象とする `MERGE INTO` タスクの総数。このメトリクスは、各タスクが成功・失敗にかかわらず終了するたびに 1 ずつ加算されます。Iceberg MERGE INTO は V2 Merge-On-Read モデルを採用しており、単一のスナップショットでデータファイルと position delete ファイルを原子的に書き込みます。
 
 ## `iceberg_metadata_table_query_total`
 
@@ -235,6 +275,37 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `lake_compaction_failed`
+
+- 単位: 件数
+- 説明: 失敗したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_partial_success`
+
+- 単位: 件数
+- 説明: 部分的に成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_running`
+
+- 単位: 件数
+- 説明: 現在実行中のストレージ・コンピュート分離（lake）コンパクションジョブの数。
+
+## `lake_compaction_running_tasks`
+
+- 単位: 件数
+- 説明: 実行中のすべてのストレージ・コンピュート分離（lake）コンパクションジョブにわたって、現在コンパクション中の tablet 数。これはスケジューラが `lake_compaction_max_tasks` 設定で上限を設ける際に用いる単位と同じで、コンパクションジョブ（パーティションごとに 1 つ）を数える `lake_compaction_running` よりも細かい粒度です。1 つのジョブは tablet ごとに 1 つの tablet 単位タスクに分割されます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_score_at_trigger`
+
+- 単位: スコア
+- タイプ: Gauge
+- 説明: 直近にストレージ・コンピュート分離（lake）コンパクションジョブを起動したパーティションのコンパクションスコア（整数に丸めた値）。値はそのパーティション内タブレットの *最大* スコア（`Quantiles.getMax()`）で、スケジューラがコンパクション対象パーティションを選ぶ判定基準と一致します。トリガごとに各パーティションで 1 回更新され、Gauge は最新の更新値を保持します。この Gauge は減衰しません。Leader FE では、コンパクションが実行されていないときは直近のトリガ値を保持します（0 にリセットされません）。この値はプロセスローカル（Leader 上のインメモリカウンターで、永続化されません）であるため、FE Leader のフェイルオーバー後、新しく昇格した Leader は 0 から開始し、最初のコンパクショントリガまで 0 を報告します——前の Leader の値は引き継ぎません。この指標を単独で参照するのではなく、`lake_compaction_running > 0` と組み合わせてアラートを設定してください。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` を返し値は 0 になるため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_success`
+
+- 単位: 件数
+- 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 単位: 件数（バッチあたりファイル数）
@@ -273,6 +344,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 説明: RPCスレッドプールの現在のサイズ。これは、ルーチンロードとテーブル関数を介したロードの処理に使用されます。デフォルト値は10で、最大値は1000です。この値は、スレッドプールの使用状況に基づいて動的に調整されます。
 
 ## `local_column_pool_bytes (Deprecated)`
+
+## `low_cardinality_dict_cache_bytes`
+
+- 単位: バイト
+- タイプ: Gauge
+- 説明: この FE 上の低基数グローバル辞書キャッシュ（`CacheDictManager`）にキャッシュされている辞書データの合計バイト数。キャッシュによって正確に追跡され（サンプリングではありません）、シリアライズされた辞書データを数え、実際のヒープ使用量の下限となります。このキャッシュは `low_cardinality_dict_cache_max_bytes` 設定によってこのサイズで上限が設定されます。
 
 ## `max_disk_io_util_percent`
 

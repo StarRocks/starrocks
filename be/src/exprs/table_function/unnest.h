@@ -82,6 +82,8 @@ public:
         }
     }
 
+    bool is_exception_safe() const override { return true; }
+
     class UnnestState : public TableFunctionState {
         /**
          * Unnest does not need to customize the State,

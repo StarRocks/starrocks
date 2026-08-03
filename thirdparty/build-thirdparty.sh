@@ -270,6 +270,7 @@ check_prerequest "automake --version" "automake"
 check_prerequest "libtoolize --version" "libtool"
 
 BUILD_SYSTEM=${BUILD_SYSTEM:-make}
+export CMAKE_POLICY_VERSION_MINIMUM="${CMAKE_POLICY_VERSION_MINIMUM:-3.5}"
 
 # sudo apt-get install binutils-dev
 # sudo yum install binutils-devel
@@ -882,7 +883,7 @@ build_brotli() {
     cd $TP_SOURCE_DIR/$BROTLI_SOURCE
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
@@ -894,7 +895,7 @@ build_brotli() {
 
 # arrow
 build_arrow() {
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
+    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}"
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
     export CPPFLAGS=$CXXFLAGS
 
@@ -930,7 +931,7 @@ build_arrow() {
     # so disable jemalloc here and use SystemAllocator.
     #
     # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
@@ -963,7 +964,8 @@ build_arrow() {
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ \
-    -Dthrift_SOURCE=SYSTEM \
+    -DARROW_THRIFT_USE_SHARED=OFF \
+    -DThrift_SOURCE=SYSTEM \
     -Dxsimd_SOURCE=SYSTEM \
     -Dxsimd_DIR=$TP_INSTALL_DIR/share/cmake/xsimd ..
 
@@ -1288,10 +1290,12 @@ build_aws_cpp_sdk() {
 build_vpack() {
     check_if_source_exist $VPACK_SOURCE
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    rm -rf build
     mkdir -p build
     cd build
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
@@ -1725,9 +1729,12 @@ build_benchgen() {
     cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
     perl -0pi -e 's/brotlicommon snappy zstd\)/brotlicommon lz4 snappy zstd)/' \
         cmake_modules/BenchmarkArrow.cmake
+    perl -0pi -e 's/set\(CMAKE_CXX_STANDARD 17\)/set(CMAKE_CXX_STANDARD 20)/' CMakeLists.txt
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
     ${CMAKE_CMD} --install build

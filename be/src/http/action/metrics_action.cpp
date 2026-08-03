@@ -30,9 +30,9 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/tracer.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -319,6 +319,10 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     default:
         break;
     }
+}
+
+bool MetricsAction::need_auth() const {
+    return true;
 }
 
 void MetricsAction::handle(HttpRequest* req) {

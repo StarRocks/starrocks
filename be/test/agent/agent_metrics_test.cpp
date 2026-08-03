@@ -108,7 +108,7 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
-    metrics.register_thread_pool_metrics("clone", threadpool.get());
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
     registry.trigger_hook();
 
     assert_metric_value(&registry, "clone_threadpool_size", "3");
@@ -125,7 +125,7 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
-    metrics.register_thread_pool_metrics("clone", threadpool.get());
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

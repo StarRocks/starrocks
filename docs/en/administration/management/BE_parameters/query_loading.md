@@ -109,7 +109,7 @@ This topic introduces the following types of BE configurations:
 
 ### enable_json_flat
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
@@ -132,6 +132,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
+- Introduced in: -
+
+### enable_spill_sort_events
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enables the pipeline event scheduler for the spilling sort operators instead of poll-spinning.
 - Introduced in: -
 
 ### enable_string_prefix_zonemap
@@ -310,8 +319,8 @@ This topic introduces the following types of BE configurations:
 - Default: 10
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
+- Is mutable: Yes
+- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values `> 0` and `< 1000` enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
 ### max_hdfs_file_handle
@@ -377,6 +386,15 @@ This topic introduces the following types of BE configurations:
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
+### object_storage_client_cache_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of object storage clients (S3-compatible and Azure Blob) cached per client factory. The value is read on each client creation, so lowering it takes effect gradually as cached clients are evicted during subsequent creations. Values below `1` are treated as `1`.
+- Introduced in: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - Default: -1
@@ -391,7 +409,7 @@ This topic introduces the following types of BE configurations:
 - Default: -1
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
@@ -400,7 +418,7 @@ This topic introduces the following types of BE configurations:
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
 
@@ -631,11 +649,11 @@ This topic introduces the following types of BE configurations:
 
 ### jvm_call_thread_pool_size
 
-- Default: 1
+- Default: 4
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as HDFS/libhdfs close and stat operations and JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM work does not compete with Java UDF execution.
 - Introduced in: -
 
 ### udf_thread_pool_size
@@ -644,7 +662,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the UDF call PriorityThreadPool created in ExecEnv (used for executing user-defined functions / UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent UDF executions; keep small to avoid excessive CPU and memory contention.
+- Description: Sets the size of the Java UDF call PriorityThreadPool owned by JavaEnv (used for executing Java UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent Java UDF executions; keep small to avoid excessive CPU and memory contention.
 - Introduced in: v3.2.0
 
 ### update_memory_limit_percent
@@ -653,8 +671,44 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: No
-- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
+- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
+
+### enable_vector_index_block_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to cache IVFPQ indexes by inverted-list block. When enabled, StarRocks loads and caches only the IVFPQ blocks needed by a query. When disabled, it caches the whole IVFPQ index file. This configuration does not change HNSW caching.
+- Introduced in: -
+
+### config_vector_index_build_concurrency
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Number of OpenMP threads used by each vector index build. StarRocks clamps the effective value to at least `1`. Together with `vector_index_build_max_cpu_ratio`, this item also determines the size of the asynchronous vector index build thread pool.
+- Introduced in: -
+
+### config_vector_index_default_build_threshold
+
+- Default: 10000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Default minimum number of rows in a Segment required to build a vector index. The index property `index_build_threshold` overrides this value. For IVFPQ, the effective threshold is at least `nlist` so that the index has enough rows for training.
+- Introduced in: -
+
+### vector_index_build_max_cpu_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Target fraction of BE/CN CPU cores available to asynchronous vector index builds. The build CPU budget is `max(2, floor(cpu_cores * value))`, and the build pool size is derived from this budget and `config_vector_index_build_concurrency`. Because the minimum budget is `2`, small machines or small ratios can exceed the configured fraction.
+- Introduced in: -
 
 ### enable_vector_adaptive_search
 
@@ -698,6 +752,24 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_index_brute_selectivity_threshold
+
+- Default: 0.01
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Selectivity threshold for routing a vector query with residual scalar filters to exact scoring instead of a filtered HNSW traversal. If the matched rows are no more than this fraction of the Segment, StarRocks scores the filtered candidates directly. Set to `0` to disable this ratio check. The separate short circuit for a candidate count no greater than the query `k` remains enabled.
+- Introduced in: -
+
+### vector_index_build_flush_threshold_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Maximum rows held in each vector index builder's staging buffer before the rows are added to the in-memory index. This bounds the staging-buffer memory used when building HNSW Flat indexes, but does not limit the trained index itself. Set to `0` to disable intermediate flushing and buffer the whole Segment.
 - Introduced in: -
 
 ### vector_chunk_size

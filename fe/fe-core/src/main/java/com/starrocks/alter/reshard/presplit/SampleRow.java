@@ -22,29 +22,46 @@ import java.util.Objects;
 /**
  * One row of a data-tier sample. Carries the sort-key tuple
  * {@link BoundaryPlanner} consumes, plus an optional partition-source tuple a
- * downstream multi-partition grouper consumes. The partition-source tuple is
- * empty when the target is unpartitioned (the executor projects only the sort
- * key and the request's {@code partitionSourceColumns} is empty), and is
- * non-empty when the request supplied partition-source columns.
+ * downstream multi-partition grouper consumes, plus zero or more secondary-
+ * index tuples a downstream multi-index grouper consumes. The
+ * partition-source tuple is empty when the target is unpartitioned (the
+ * executor projects only the sort key and the request's
+ * {@code partitionSourceColumns} is empty), and is non-empty when the request
+ * supplied partition-source columns. {@code secondaryIndexTuples} is empty
+ * when the request carried no {@link SecondaryIndexSpec}s, and otherwise
+ * carries one {@link IndexTuple} per spec, in the request's declared order.
  *
- * <p>Existing single-tuple callers use {@link #ofSortKey}; the record's full
- * constructor is reserved for callers that already know both tuples (the
- * partitioned-target data-tier executor).
+ * <p>Existing single-tuple callers use {@link #ofSortKey}; the two-tuple
+ * constructor is reserved for callers that already know both the sort-key and
+ * partition-source tuples but not secondary-index tuples (defaults them to
+ * empty); the canonical three-tuple constructor is for the multi-index
+ * data-tier executor.
  */
-public record SampleRow(List<Variant> sortKeyTuple, List<Variant> partitionSourceTuple) {
+public record SampleRow(
+        List<Variant> sortKeyTuple, List<Variant> partitionSourceTuple, List<IndexTuple> secondaryIndexTuples) {
 
     public SampleRow {
         Objects.requireNonNull(sortKeyTuple, "sortKeyTuple");
         Objects.requireNonNull(partitionSourceTuple, "partitionSourceTuple");
+        Objects.requireNonNull(secondaryIndexTuples, "secondaryIndexTuples");
+    }
+
+    /**
+     * Backwards-compatible constructor for callers that know the sort-key and
+     * partition-source tuples but not secondary-index tuples; defaults
+     * {@code secondaryIndexTuples} to an empty list.
+     */
+    public SampleRow(List<Variant> sortKeyTuple, List<Variant> partitionSourceTuple) {
+        this(sortKeyTuple, partitionSourceTuple, List.of());
     }
 
     /**
      * Backwards-compatible factory for callers that only have a sort-key tuple;
-     * defaults {@code partitionSourceTuple} to an empty list. Used by the
-     * unpartitioned-target executor path and by test fixtures that pre-date
-     * partition-source projection.
+     * defaults {@code partitionSourceTuple} and {@code secondaryIndexTuples} to
+     * empty lists. Used by the unpartitioned-target executor path and by test
+     * fixtures that pre-date partition-source / secondary-index projection.
      */
     public static SampleRow ofSortKey(List<Variant> sortKeyTuple) {
-        return new SampleRow(sortKeyTuple, List.of());
+        return new SampleRow(sortKeyTuple, List.of(), List.of());
     }
 }

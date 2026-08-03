@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/column_predicate.h"
-#include "storage/conjunctive_predicates.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/conjunctive_predicates.h"
 
 namespace starrocks {
 

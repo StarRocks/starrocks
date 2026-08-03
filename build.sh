@@ -118,10 +118,17 @@ Usage: $0 <options>
                         build Backend without the benchgen-backed benchmark connector
      --without-connector-elasticsearch
                         build Backend without the Elasticsearch connector
+     --without-connector-jdbc
+                        build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
+     --with-glibc-compat
+                        build Backend with the glibc compatibility shim, so the binary also
+                        runs on hosts whose glibc is older than the build image's, and check
+                        the produced artifacts against that floor (default without).
+                        Floors: GLIBC_ABI_MAX (default 2.35), GLIBCXX_ABI_MAX (default 3.4.30)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --with-thin-archive
                         build Backend with thin static archives to avoid large-archive ranlib failures
@@ -177,10 +184,12 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
+  -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
+  -l 'with-glibc-compat' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'with-thin-archive' \
@@ -217,8 +226,10 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
 WITH_CLANG_TIDY=OFF
+WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
 THIN_ARCHIVE=OFF
 if starrocks_is_darwin; then
@@ -342,10 +353,12 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+            --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
+            --with-glibc-compat) WITH_GLIBC_COMPAT=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
@@ -408,8 +421,10 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CONNECTOR_BENCHMARK    -- $WITH_CONNECTOR_BENCHMARK
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
+    WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
@@ -559,9 +574,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+                  -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
+                  -DWITH_GLIBC_COMPAT=${WITH_GLIBC_COMPAT}              \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
@@ -791,6 +808,15 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
         popd &>/dev/null
     fi
+
+    # The dev-env image's glibc decides which symbol versions the linker stamps onto our
+    # references, so building in a newer image silently yields binaries that cannot even
+    # load on an older host. be/src/common/glibc_compat.c removes those references; this
+    # verifies it actually did, on the stripped artifacts that ship.
+    if [ "${WITH_GLIBC_COMPAT}" == "ON" ]; then
+        echo "Checking the ABI floor of the Backend artifacts"
+        ${STARROCKS_HOME}/build-support/check_glibc_abi.sh ${STARROCKS_OUTPUT}/be
+    fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
@@ -817,6 +843,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/fluss-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/fluss-reader/target/starrocks-fluss-reader.jar ${STARROCKS_OUTPUT}/be/lib/fluss-reader-lib
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib

@@ -8,6 +8,8 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
+import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
+import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
@@ -84,6 +86,14 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 :::
 
+##### 通过 Catalog PROPERTIES 透传 HDFS 客户端配置
+
+除了将 **hdfs-site.xml** 拷贝到 FE/BE/CN 的 **conf** 目录之外，您还可以直接在 `CREATE EXTERNAL CATALOG` 的 `PROPERTIES` 中声明 HDFS 客户端配置（例如 HA 相关的 `dfs.nameservices`、`dfs.ha.namenodes.<ns>`、`dfs.namenode.rpc-address.<ns>.<nn>`、`dfs.client.failover.proxy.provider.<ns>`、`fs.defaultFS` 等）。FE 和 BE/CN 都会接收并应用这些配置。
+
+该方式的主要优势是支持**在同一个 StarRocks 集群中通过多个 Iceberg Catalog 同时访问多个独立的 HDFS HA 集群**。由于 FE/BE/CN 的 **conf** 目录中只能放置一份 **hdfs-site.xml**，多个 HDFS HA 集群的 nameservice 配置无法共存；而通过 Catalog PROPERTIES 透传时，每个 Catalog 可以独立携带各自集群的 HA 配置，互不干扰。
+
+完整的 HA 配置示例请参见下方 [示例 - HDFS](#示例) 一节。
+
 ---
 
 #### Kerberos 身份验证
@@ -103,18 +113,7 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 ### 语法
 
-```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
-[COMMENT <comment>]
-PROPERTIES
-(
-    "type" = "iceberg",
-    [SecurityParams],
-    MetastoreParams,
-    StorageCredentialParams,
-    MetadataRelatedParams
-)
-```
+<EditionSpecificIcebergCatalogSyntax />
 
 ---
 
@@ -473,6 +472,14 @@ SHOW DATABASES FROM r2;
 
 描述：是否在 `iceberg.catalog.uri` 指定的数据库中创建用于存储元数据的表 `iceberg_namespace_properties` 和 `iceberg_tables`，默认值为`false`。当`iceberg.catalog.uri` 指定的数据库中尚未创建上述两张表时需要指定为`true`。
 
+##### iceberg.catalog.jdbc.catalog-name
+
+必需：否
+
+描述：显式指定 Iceberg JDBC 底层元数据表（`iceberg_tables` 和 `iceberg_namespace_properties`）中 `catalog_name` 字段的值。未设置时，默认使用 StarRocks 侧的 Catalog 名（即 `CREATE EXTERNAL CATALOG` 后的 `<catalog_name>`），保持向后兼容。
+
+当您需要在 StarRocks 中接入由其他引擎（例如 Spark、Flink）已经建立的 Iceberg JDBC Catalog、并复用同一份元数据时，需要将该参数设置为对方使用的 catalog name，否则底层查询 SQL `WHERE catalog_name = ?` 将无法命中已有元数据，导致 StarRocks 侧看不到任何库表。
+
 以下示例创建了一个名为 `iceberg_jdbc` 的 Iceberg catalog，并使用 JDBC 作为元存储：
 
 ```SQL
@@ -490,7 +497,27 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
-若使用MySQL或其他自定义的JDBC驱动程序，需要将相应的JAR包放置于 `fe/lib` 和 `be/lib/jni-packages` 目录下。
+
+若使用 MySQL 或其他自定义的 JDBC 驱动程序，需要将相应的 JAR 包放置于 `fe/lib` 和 `be/lib/jni-packages` 目录下。
+
+以下示例演示了如何接入由其他引擎（例如 Spark）已经建立、底层 `catalog_name = "spark_ice"` 的 Iceberg JDBC Catalog。此时 StarRocks 侧 Catalog 名 `sr_side_view` 可以与底层 `catalog_name` 不同，只需通过 `iceberg.catalog.jdbc.catalog-name` 显式指定即可：
+
+```SQL
+CREATE EXTERNAL CATALOG sr_side_view
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password",
+    "iceberg.catalog.jdbc.catalog-name" = "spark_ice",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 </TabItem>
 
@@ -797,6 +824,10 @@ Microsoft Azure 的 `StorageCredentialParams`：
 
 - 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
 
+  :::note
+  使用 Vended Credential 时，StarRocks 会直接使用 REST Catalog 下发的 Token 访问 GCS。此时 Catalog 上配置的 `gcp.gcs.impersonation_service_account` 将被忽略。
+  :::
+
 Google GCS 的 `StorageCredentialParams`：
 
 ###### gcp.gcs.service_account_email
@@ -838,7 +869,7 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
@@ -849,6 +880,8 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                       | **默认值**             | **描述**                       |
 | :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
+
+<EditionSpecificIcebergCatalogParam />
 
 ### 示例
 
@@ -997,6 +1030,75 @@ PROPERTIES
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
+);
+```
+
+##### 访问启用了 HA 的 HDFS 集群
+
+如果目标 HDFS 集群启用了 HA，可以将 HA 配置直接写在 `PROPERTIES` 中：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA 配置
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### 同时访问多个 HDFS HA 集群
+
+如果您需要在同一个 StarRocks 集群上同时查询位于多个独立 HDFS HA 集群的 Iceberg 表，可以为每个 HDFS 集群分别创建一个 Catalog，并各自携带独立的 `dfs.nameservices` 等 HA 参数。各 Catalog 之间互不影响。
+
+```SQL
+-- Catalog A：访问 HDFS HA 集群 cluster_a
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B：访问另一个 HDFS HA 集群 cluster_b
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
 );
 ```
 
@@ -1415,13 +1517,13 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- 单位：秒  
+- 单位：秒
 - 默认值：`86500`
 - 描述：从上次访问开始，内存中缓存条目过期的时间。
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- 单位：秒  
+- 单位：秒
 - 默认值：`604800`，相当于一周
 - 描述：从上次访问开始，磁盘上缓存条目过期的时间。
 

@@ -142,7 +142,7 @@ This topic introduces the following types of BE configurations:
 
 ### sys_log_verbose_modules
 
-- Default: 
+- Default: Empty string
 - Type: Strings
 - Unit: -
 - Is mutable: No
@@ -204,7 +204,6 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Introduced in: v4.2.0
 - Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
-  - Public probes / observability: `/api/health`, `/metrics`, `/metrics/memory`.
   - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.
   - Stream Load and transaction endpoints that authenticate inside the handler using the load label + table grants: `/api/{db}/{table}/_stream_load`, `/api/transaction/{txn_op}`, `/api/transaction/load`.
 
@@ -355,7 +354,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the GlobalEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
+- Description: When this item is set to `true`, the BE starts a background thread (jemalloc_tracker_daemon) that polls jemalloc statistics (once per second) and updates the RuntimeEnv jemalloc metadata MemTracker with the jemalloc "stats.metadata" value. This ensures jemalloc metadata consumption is included in StarRocks process memory accounting and prevents under‑reporting of memory used by jemalloc internals. The tracker is only compiled/started on non‑macOS builds (#ifndef __APPLE__) and runs as a daemon thread named "jemalloc_tracker_daemon". Because this setting affects startup behaviour and threads that maintain MemTracker state, changing it requires a restart. Disable only if jemalloc is not used or when jemalloc tracking is intentionally managed differently; otherwise keep enabled to maintain accurate memory accounting and allocation safeguards.
 - Introduced in: v3.2.12
 
 ### enable_jvm_metrics
@@ -475,6 +474,15 @@ This topic introduces the following types of BE configurations:
 - Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
 
+### process_force_exit_after_crash_handler_hang_second
+
+- Default: 0
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: If the fatal-signal (crash) handler hangs, for example a jemalloc deadlock while releasing resources before the core dump, the BE/CN forces the process to exit after this many seconds so that an orchestrator can restart it. The crash flag is still set first, so the FE keeps seeing `SHUTDOWN` heartbeats during the grace window; this only bounds how long a crashing process can linger while alive. Disabled by default (`0`) so that an upgrade keeps the existing crash and core dump behavior unchanged; set a positive value (and restart the node) to opt in, choosing a timeout suited to your environment. The value is read once at startup, and the watchdog thread is only launched when it is positive; a value of `0` or less keeps the watchdog disabled.
+- Introduced in: v4.0.15, v4.1.5
+
 ### rpc_compress_ratio_threshold
 
 - Default: 1.1
@@ -492,6 +500,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Controls the behavior when the serialized chunk size exceeds the compression codec's maximum allowed input size. When set to `true` (default), StarRocks logs a warning and skips compression, sending the data uncompressed instead. When set to `false`, StarRocks returns an `InternalError` and aborts the RPC.
 - Introduced in: -
+
+### enable_threadpool_catch_task_exception
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a ThreadPool worker swallows an exception thrown by a task and continues with the next task. When set to `false` (default), there is no catch clause enclosing the task body, so an exception that escapes the task finds no handler and terminates the BE process at the throw point. When set to `true`, the exception is logged at the ERROR level, the process-wide metric [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) is incremented, and the worker proceeds to the next task, which keeps the process alive. Note that keeping the worker alive does not make the task exception-safe: if a task signals its completion from a `DeferOp` or from its destructor while the statements that record its result are skipped, the waiter reads the task as successful, because an unset `Status` reads as OK. The failure then produces wrong results instead of an error. Set this item to `true` only to mitigate a crash loop, and expect the affected failures to become silent.
+- Introduced in: v4.2.0
 
 ### ssl_private_key_path
 
@@ -594,7 +611,7 @@ This topic introduces the following types of BE configurations:
 
 ### ssl_certificate_path
 
-- Default: 
+- Default: Empty string
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -636,7 +653,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: Yes
-- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent &gt; 0; set it &lt;= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
+- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when `metadata_cache_memory_limit_percent > 0`; set it to `<= 0` to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
 - Introduced in: v3.2.10
 
 ### retry_apply_interval_second

@@ -25,7 +25,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -134,7 +134,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_tiny.dat");
         segment_meta->set_size(100);
     }
-    builder.add_rowset(rs_tiny, {}, {}, {});
+    builder.add_rowset(rs_tiny, {}, {}, {}, {}, {});
 
     RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
     rs_large.set_num_rows(10000);
@@ -146,7 +146,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_large.dat");
         segment_meta->set_size(50000);
     }
-    builder.add_rowset(rs_large, {}, {}, {});
+    builder.add_rowset(rs_large, {}, {}, {}, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
 
@@ -375,7 +375,7 @@ TEST_F(MetaFileTest, test_dcg) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -565,7 +565,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -585,7 +585,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         delfile.set_name("bbb2.del");
         rowset_metadata.add_del_files()->CopyFrom(delfile);
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -627,7 +627,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -866,6 +866,134 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(7, written.del_files(0).op_offset());
     EXPECT_EQ(7, written.del_files(1).op_offset());
     EXPECT_EQ(118, metadata->next_rowset_id());
+}
+
+// apply_opwrite path: op_write.del_num_rows (parallel to dels_meta) is recorded into
+// DelfileWithRowsetId.num_rows; del files without a recorded count leave num_rows unset.
+TEST_F(MetaFileTest, test_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write.add_dels_meta()->set_name("d1.del");
+    op_write.add_dels_meta()->set_name("d2.del");
+    op_write.add_dels_meta()->set_name("d3.del");
+    // del_num_rows is parallel to dels_meta; the third is left unrecorded on purpose.
+    op_write.add_del_num_rows(40);
+    op_write.add_del_num_rows(60);
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(3, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        total += rowset.del_files(i).num_rows(); // absent reads as 0
+    }
+    EXPECT_EQ(100, total); // 40 + 60 + 0
+    EXPECT_TRUE(rowset.del_files(0).has_num_rows());
+    EXPECT_FALSE(rowset.del_files(2).has_num_rows());
+}
+
+// batch path: op_write.del_num_rows is carried through batch_apply_opwrite/set_final_rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
+    const int64_t tablet_id = 31011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_del_num_rows(70);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s2.dat");
+    op_write2.add_dels_meta()->set_name("d2.del");
+    op_write2.add_del_num_rows(30);
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.del_files_size());
+    int64_t total = 0;
+    for (int i = 0; i < rowset.del_files_size(); ++i) {
+        ASSERT_TRUE(rowset.del_files(i).has_num_rows());
+        total += rowset.del_files(i).num_rows();
+    }
+    EXPECT_EQ(100, total); // 70 + 30
+}
+
+// The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
+// FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
+// carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
+TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
+    const int64_t tablet_id = 31003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    {
+        // Replaced by a rewrite that recorded an owner: refreshed to the FileInfo's value.
+        auto* replaced = rowset->add_segment_metas();
+        replaced->set_filename("partial0.dat");
+        replaced->add_vector_index_ids(100);
+        // Replaced by a rewrite without vector indexes: the stale pre-set owner must be cleared.
+        auto* stale_owner = rowset->add_segment_metas();
+        stale_owner->set_filename("partial1.dat");
+        stale_owner->add_vector_index_ids(100);
+        stale_owner->set_segment_vector_index_uid(7777);
+        // Not replaced: carried verbatim.
+        auto* untouched = rowset->add_segment_metas();
+        untouched->set_filename("untouched.dat");
+        untouched->add_vector_index_ids(100);
+        untouched->set_segment_vector_index_uid(9999);
+    }
+
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite0;
+    rewrite0.path = "rewrite0.dat";
+    rewrite0.size = 1024;
+    rewrite0.vector_index_ids.push_back(100);
+    rewrite0.segment_vector_index_uid = tablet_id;
+    replace_segments[0] = rewrite0;
+    SegmentFileInfo rewrite1; // no ids, no owner
+    rewrite1.path = "rewrite1.dat";
+    rewrite1.size = 2048;
+    replace_segments[1] = rewrite1;
+
+    builder.apply_opwrite(op_write, replace_segments, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& written = metadata->rowsets(0);
+    ASSERT_EQ(3, written.segment_metas_size());
+    EXPECT_EQ("rewrite0.dat", written.segment_metas(0).filename());
+    ASSERT_TRUE(written.segment_metas(0).has_segment_vector_index_uid());
+    EXPECT_EQ(tablet_id, written.segment_metas(0).segment_vector_index_uid());
+    EXPECT_EQ("rewrite1.dat", written.segment_metas(1).filename());
+    EXPECT_EQ(0, written.segment_metas(1).vector_index_ids_size());
+    EXPECT_FALSE(written.segment_metas(1).has_segment_vector_index_uid());
+    ASSERT_TRUE(written.segment_metas(2).has_segment_vector_index_uid());
+    EXPECT_EQ(9999, written.segment_metas(2).segment_vector_index_uid());
 }
 
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
@@ -1862,8 +1990,8 @@ TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
     }
 
     // Partial update: segment 0 is rewritten into a new private file.
-    std::map<int, FileInfo> replace_segments;
-    FileInfo rewrite_info;
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite_info;
     rewrite_info.path = "rewrite0.dat";
     rewrite_info.size = 1500;
     replace_segments[0] = rewrite_info;
@@ -1905,8 +2033,8 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
         sm1->set_shared(true);
     }
 
-    std::map<int, FileInfo> replace_segments;
-    FileInfo rewrite_info;
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite_info;
     rewrite_info.path = "rewrite0.dat";
     rewrite_info.size = 1500;
     replace_segments[0] = rewrite_info;
@@ -2067,6 +2195,116 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
     EXPECT_EQ(12, v.entries(1).version());
     EXPECT_EQ(11, v.entries(2).version());
     EXPECT_EQ(10, v.entries(3).version());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_empty_op_is_pure_noop) {
+    // The rollup no-op shape: FE sends an empty index set for a materialized
+    // index whose schema lacks the indexed column(s); do_process writes a txn
+    // log whose op_add_index carries only alter_version. Applying it must leave
+    // the tablet metadata untouched (the version advance itself happens in the
+    // generic publish machinery): no idg_meta materialized, schema id/content
+    // unchanged, no historical archiving, no rowset pins.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20031);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20031);
+    metadata->set_version(7);
+    metadata->mutable_schema()->set_id(300);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(7);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(metadata->has_idg_meta());
+    EXPECT_EQ(300, metadata->schema().id());
+    EXPECT_EQ(0, metadata->schema().table_indices_size());
+    EXPECT_TRUE(metadata->historical_schemas().empty());
+    EXPECT_TRUE(metadata->rowset_to_schema().empty());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_stamps_new_schema_id) {
+    // When FE allocates a new schema id/version (durability fix), apply_add_index
+    // must stamp it onto metadata->schema() so every by-id schema cache misses and
+    // picks up the indexed schema. On a fresh table (empty rowset_to_schema) no
+    // historical archiving is needed — existing rowsets resolve via schema().
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20021);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20021);
+    metadata->set_version(5);
+    metadata->mutable_schema()->set_id(100);
+    metadata->mutable_schema()->set_schema_version(5);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "s0.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+    op.set_new_schema_id(200);
+    op.set_new_schema_version(6);
+
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(200, metadata->schema().id());
+    EXPECT_EQ(6, metadata->schema().schema_version());
+    // Empty rowset_to_schema: no pins, no historical archiving.
+    EXPECT_TRUE(metadata->rowset_to_schema().empty());
+    EXPECT_EQ(0u, metadata->historical_schemas().count(200));
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
+    // Fast-evolved table (non-empty rowset_to_schema): existing rowsets are pinned
+    // to a historical schema, so both the read path and compaction resolve through
+    // historical_schemas — bumping metadata->schema() alone is bypassed. The fix
+    // must archive the indexed schema under the new id AND repoint the pins that
+    // referenced the pre-index current schema (100) to it, while leaving pins to an
+    // OLDER schema (50) untouched. rowset.cpp CHECKs that a pinned schema id exists
+    // in historical_schemas, so the archive and the repoint must happen together.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20022);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20022);
+    metadata->set_version(5);
+    metadata->mutable_schema()->set_id(100); // pre-index current schema
+    metadata->mutable_schema()->set_schema_version(5);
+    // rowsets 1,2 pinned to the current schema (100); rowset 3 to an older one (50).
+    (*metadata->mutable_rowset_to_schema())[1] = 100;
+    (*metadata->mutable_rowset_to_schema())[2] = 100;
+    (*metadata->mutable_rowset_to_schema())[3] = 50;
+    (*metadata->mutable_historical_schemas())[100].set_id(100);
+    (*metadata->mutable_historical_schemas())[50].set_id(50);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "s0.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+    op.set_new_schema_id(200);
+    op.set_new_schema_version(6);
+
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(200, metadata->schema().id());
+    // Indexed schema archived under the new id (pins to it must resolve).
+    ASSERT_EQ(1u, metadata->historical_schemas().count(200));
+    EXPECT_EQ(200, metadata->historical_schemas().at(200).id());
+    // Pins on the pre-index current schema (100) repointed to the indexed id.
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(2));
+    // Pin to an OLDER (fewer-column) schema is untouched.
+    EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
+
+    // Idempotent replay: re-applying the same op is a no-op (guarded on
+    // historical_schemas already containing the new id).
+    builder.apply_add_index(op);
+    EXPECT_EQ(200, metadata->schema().id());
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
+    EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
+    EXPECT_EQ(1u, metadata->historical_schemas().count(200));
 }
 
 TEST_F(MetaFileTest, test_apply_drop_index_populates_tombstone) {

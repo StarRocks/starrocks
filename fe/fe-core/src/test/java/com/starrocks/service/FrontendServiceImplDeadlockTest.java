@@ -302,7 +302,6 @@ public class FrontendServiceImplDeadlockTest {
         final int threadCount = 5;
         final CountDownLatch startLatch = new CountDownLatch(1);
         final CountDownLatch completeLatch = new CountDownLatch(threadCount);
-        final AtomicBoolean hasDeadlock = new AtomicBoolean(false);
 
         for (int i = 0; i < threadCount; i++) {
             final int threadIndex = i;

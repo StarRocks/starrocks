@@ -24,6 +24,7 @@
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
+#include "exec/exec_env.h"
 #include "formats/column_evaluator.h"
 #include "formats/io/async_flush_output_stream.h"
 #include "formats/orc/orc_chunk_reader.h"
@@ -32,7 +33,6 @@
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
 
@@ -99,8 +99,7 @@ protected:
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
-        *tuple_desc = row_desc->tuple_descriptors()[0];
+        *tuple_desc = tbl->get_tuple_descriptor(row_tuples[0]);
         return;
     }
 

@@ -42,16 +42,16 @@
 #include "common/status.h"      // for Status
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
-#include "storage/primitive/flat_json_config.h"
+#include "storage_primitive/flat_json_config.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
 #include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

@@ -48,6 +48,9 @@ public:
                         std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
                         int order) override;
 
+    // tenann HNSW/IVF accept an IdFilter (faiss IDSelector), so filtered search is efficient.
+    bool supports_efficient_filtered_search() const override { return true; }
+
 private:
     std::shared_ptr<tenann::AnnSearcher> _searcher;
     // Pins the cache entry for the reader's lifetime.

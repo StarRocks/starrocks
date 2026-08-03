@@ -106,7 +106,6 @@ public class AdminStmtAnalyzer {
                 AdminShowReplicaDistributionStmt adminShowReplicaDistributionStmt,
                 ConnectContext session) {
             String dbName = adminShowReplicaDistributionStmt.getDbName();
-            String tblName = adminShowReplicaDistributionStmt.getTblName();
             NodePosition pos = adminShowReplicaDistributionStmt.getPos();
             if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
                 throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);

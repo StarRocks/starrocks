@@ -175,11 +175,14 @@ public class ExecutionFragment {
 
     public ColocatedBackendSelector.Assignment getOrCreateColocatedAssignment(ScanNode scanNode)
             throws StarRocksException {
+        // Validate THIS scan node's bucketing on every call, not only when first creating the
+        // assignment. A range-colocate join has one scan node per table and alignment is per-table, so
+        // a transiently-unaligned peer table must also fail closed here (getBucketNums() throws) rather
+        // than silently pairing by a position-based bucketSeq. The first node's count sizes the
+        // assignment; later calls validate their own node and reuse it.
+        int bucketNum = scanNode.getBucketNums();
         if (colocatedAssignment == null) {
-            final int numScanNodes = scanNodes.size();
-
-            int bucketNum = scanNode.getBucketNums();
-            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes,
+            colocatedAssignment = new ColocatedBackendSelector.Assignment(bucketNum, scanNodes.size(),
                     scanNode.getBucketProperties());
         }
         return colocatedAssignment;

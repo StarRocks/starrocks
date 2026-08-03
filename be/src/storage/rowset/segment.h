@@ -39,6 +39,7 @@
 #include <string>
 
 #include "base/concurrency/once.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -48,7 +49,6 @@
 #include "storage/delta_column_group.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/options.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/tablet_schema.h"
 
@@ -108,6 +108,9 @@ public:
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
+    StatusOr<ChunkIteratorPtr> new_reusable_iterator(const Schema& iterator_schema, const Schema& output_schema,
+                                                     const SegmentReadOptions& read_options,
+                                                     ChunkIteratorPtr* reusable_slot);
 
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema);
@@ -302,6 +305,7 @@ private:
                                               std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
+    Status _prune_by_segment_zone_map(const SegmentReadOptions& read_options);
 
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 

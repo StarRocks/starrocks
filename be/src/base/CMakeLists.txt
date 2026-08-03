@@ -35,6 +35,7 @@ ADD_BE_LIB(Base
   debug/trace.cpp
   debug/trace_metrics.cpp
   coding.cpp
+  base64.cpp
   gc/gc_helper.cpp
   memory/jemalloc_allocator.cpp
   memory/malloc_allocator.cpp
@@ -54,12 +55,15 @@ ADD_BE_LIB(Base
   types/int256.cpp
   types/int96.cpp
   json/easy_json.cc
+  json/json_util.cpp
   path/file_util.cpp
   path/path_builder.cpp
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/filter.cpp
   simd/rle_simd.cpp
+  simd/delta_decode.cpp
   stats/ndv_estimator.cpp
   metrics.cpp
   string/base85.cpp
@@ -69,6 +73,7 @@ ADD_BE_LIB(Base
   string/string_parser.cpp
   string/url_parser.cpp
   string/slice.cpp
+  string/utf8.cpp
   string/utf8_check.cpp
   system/errno.cpp
   time/date_func.cpp

@@ -21,10 +21,10 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/file_scanner/file_scanner.h"
+#include "compute_env/scanner_counter.h"
 #include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "runtime/exec_env.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -135,11 +135,8 @@ public:
 
 private:
     std::shared_ptr<RuntimeState> create_runtime_state() {
-        TQueryOptions query_options;
-        TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        std::shared_ptr<RuntimeState> state =
-                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        std::shared_ptr<RuntimeState> state = std::make_shared<RuntimeState>(query_globals);
         TUniqueId id;
         state->init_mem_trackers(id);
         state->set_timezone("UTC");

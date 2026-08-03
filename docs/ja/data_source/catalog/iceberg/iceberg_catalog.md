@@ -8,6 +8,8 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
+import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
+import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
@@ -84,6 +86,14 @@ Iceberg クラスターがストレージとして AWS S3 を使用している�
 
 :::
 
+##### Catalog PROPERTIES で HDFS クライアント設定をパススルーさせる
+
+**hdfs-site.xml** を FE/BE/CN の **conf** ディレクトリに配置する代わりに、`CREATE EXTERNAL CATALOG` の `PROPERTIES` に HDFS クライアント設定（HA 関連の `dfs.nameservices`、`dfs.ha.namenodes.<ns>`、`dfs.namenode.rpc-address.<ns>.<nn>`、`dfs.client.failover.proxy.provider.<ns>`、`fs.defaultFS` など）を直接記述できます。FE と BE/CN の両方がこれらの設定を受け取り、HDFS クライアントに適用します。
+
+この方法の主な利点は、**1 つの StarRocks クラスターから複数の独立した HDFS HA クラスターに同時にアクセスできる**ことです。各 FE/BE/CN の **conf** ディレクトリに配置できる **hdfs-site.xml** は 1 つだけなので、複数の HDFS HA クラスターの nameservice 設定を同一ファイル内で共存させることはできません。Catalog PROPERTIES でパススルーさせれば、各 Catalog がそれぞれ独立した HA 設定を保持でき、Catalog 間で干渉しません。
+
+完全な HA 設定例は下記の [例 - HDFS](#examples) を参照してください。
+
 ---
 
 #### Kerberos 認証
@@ -103,18 +113,7 @@ HDFS クラスターまたは Hive metastore に Kerberos 認証が有効にな�
 
 ### 構文
 
-```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
-[COMMENT <comment>]
-PROPERTIES
-(
-    "type" = "iceberg",
-    [SecurityParams],
-    MetastoreParams,
-    StorageCredentialParams,
-    MetadataRelatedParams
-)
-```
+<EditionSpecificIcebergCatalogSyntax />
 
 ---
 
@@ -433,6 +432,11 @@ SHOW DATABASES FROM r2;
   - 必須：いいえ
   - 説明：`iceberg.catalog.uri` で指定されたデータベースにメタデータを格納するためのテーブル `iceberg_namespace_properties` および `iceberg_tables` を作成するかどうか。デフォルト値は `false` です。`iceberg.catalog.uri` で指定されたデータベースにこれらの 2 つのテーブルがまだ作成されていない場合は `true` を指定してください。
 
+- `iceberg.catalog.jdbc.catalog-name`
+  - 必須：いいえ
+  - 説明：Iceberg JDBC のメタデータテーブル（`iceberg_tables` および `iceberg_namespace_properties`）の `catalog_name` 列の値を明示的に指定します。未設定の場合は、StarRocks 側のカタログ名（`CREATE EXTERNAL CATALOG` の後に指定した `<catalog_name>`）が使用され、後方互換性が維持されます。
+  - StarRocks を、他のエンジン（例：Spark、Flink）で既に作成された Iceberg JDBC Catalog に接続し、同じメタデータを共有したい場合には、このパラメーターに相手側で使用しているカタログ名を設定する必要があります。設定しない場合、内部で発行される `WHERE catalog_name = ?` クエリが既存のメタデータにマッチせず、StarRocks 側から一切のデータベースやテーブルが見えなくなります。
+
 次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
 
 ```SQL
@@ -452,6 +456,25 @@ PROPERTIES
 ```
 
 MySQL やその他のカスタム JDBC ドライバを使用する場合、対応する JAR ファイルを `fe/lib` ディレクトリおよび `be/lib/jni-packages` ディレクトリに配置する必要があります。
+
+次の例は、他のエンジン（例：Spark）で既に作成され、内部の `catalog_name` が `"spark_ice"` になっている Iceberg JDBC Catalog に StarRocks を接続する方法を示しています。この場合、StarRocks 側のカタログ名 `sr_side_view` は内部の `catalog_name` と異なっていても構いません。`iceberg.catalog.jdbc.catalog-name` を明示的に指定するだけで接続できます。
+
+```SQL
+CREATE EXTERNAL CATALOG sr_side_view
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password",
+    "iceberg.catalog.jdbc.catalog-name" = "spark_ice",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 </TabItem>
 
@@ -757,6 +780,10 @@ Iceberg クラスターのストレージとして Google GCS を選択した場
 
 - REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
 
+  :::note
+  Vended Credential を使用する場合、StarRocks は REST カタログから払い出されたトークンで GCS に直接アクセスします。このとき、カタログに設定された `gcp.gcs.impersonation_service_account` は無視されます。
+  :::
+
 Google GCS 用の `StorageCredentialParams`:
 
 ###### gcp.gcs.service_account_email
@@ -798,7 +825,7 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | **パラメーター**                                 | **デフォルト**           | **説明**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Iceberg 関連のメタデータ（Table Cache、Partition Name Cache、Manifest 内の Data File Cache および Delete Data File Cache を含む）をキャッシュするかどうか。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 列の統計をキャッシュするかどうか。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 列の統計をキャッシュするかどうか。有効にすると、ファイルレベルの min/max プルーニングが有効な列（パーティションソース列、ソートキー列、identifier 列）の統計のみをキャッシュし、幅広いテーブルでの Manifest キャッシュのメモリ使用量を抑えます。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
@@ -809,6 +836,8 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
 | **パラメーター**                                 | **デフォルト**           | **説明**                                                   |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | Iceberg メタデータから統計情報を取得するかどうか。この項目を `true` に設定すると、セッション変数 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) を通じて、収集する統計情報の種類をさらに制御できます。  |
+
+<EditionSpecificIcebergCatalogParam />
 
 ### 例
 
@@ -959,6 +988,77 @@ PROPERTIES
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
+
+##### HA が有効な HDFS クラスターへのアクセス
+
+対象の HDFS クラスターで HA が有効になっている場合、HA 設定をそのまま `PROPERTIES` に記述できます：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA 設定
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### 複数の HDFS HA クラスターへの同時アクセス
+
+同一の StarRocks クラスターから、複数の独立した HDFS HA クラスター上にある Iceberg テーブルをクエリしたい場合、HDFS クラスターごとに個別の Catalog を作成し、それぞれに独立した `dfs.nameservices` と HA 関連パラメーターを持たせるだけで構いません。各 Catalog は互いに干渉しません。
+
+```SQL
+-- Catalog A：HDFS HA クラスター cluster_a にアクセス
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+    "username" = "hdfs",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B：もう一つの HDFS HA クラスター cluster_b にアクセス
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
+);
+```
+
 
 </TabItem>
 
@@ -1208,7 +1308,7 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
-  
+
   - REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
 
   ```SQL
@@ -1229,7 +1329,7 @@ PROPERTIES
 
 </Tabs>
  
- ---
+---
 
 ## カタログの使用
 
@@ -1267,7 +1367,7 @@ Iceberg catalog とそのデータベースに切り替えるには、次のい�
   ```SQL
   USE <catalog_name>.<db_name>
   ```
- 
+
 ---
 
 ### Iceberg catalog の削除
@@ -1375,13 +1475,13 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- 単位: 秒  
+- 単位: 秒
 - デフォルト値: `86500`
 - 説明: メモリ内のキャッシュエントリが最後にアクセスされてから期限切れになるまでの時間。
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- 単位: 秒  
+- 単位: 秒
 - デフォルト値: `604800`、1 週間に相当
 - 説明: ディスク上のキャッシュエントリが最後にアクセスされてから期限切れになるまでの時間。
 

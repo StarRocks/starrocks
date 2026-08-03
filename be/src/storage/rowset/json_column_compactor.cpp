@@ -21,14 +21,18 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/flat_json/json_flat_path.h"
+#include "column/flat_json/json_flattener.h"
+#include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "exprs/hyper_json_transformer.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/json_path_deriver.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {

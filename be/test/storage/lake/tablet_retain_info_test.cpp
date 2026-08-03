@@ -16,178 +16,60 @@
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
-#include "json2pb/json_to_pb.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/metacache.h"
-#include "storage/lake/tablet_metadata.h"
-#include "test_util.h"
-
 namespace starrocks::lake {
 
-class LakeTabletRetainInfoTest : public TestBase {
-public:
-    LakeTabletRetainInfoTest() : TestBase(kTestDir) {}
+// A data file created at |create| and removed at |remove| is retained iff some retained version V
+// satisfies create <= V < remove (i.e. the file was live at V).
+TEST(LakeTabletRetainInfoTest, retained_by_version_interval) {
+    TabletRetainInfo info;
+    info.init(/*retain_versions=*/{5});
 
-    void SetUp() override { clear_and_init_test_dir(); }
+    EXPECT_TRUE(info.retained_by_version(/*create=*/5, /*remove=*/6));   // create == V, V < remove
+    EXPECT_TRUE(info.retained_by_version(/*create=*/3, /*remove=*/6));   // create < V < remove
+    EXPECT_TRUE(info.retained_by_version(/*create=*/5, /*remove=*/100)); // wide live interval
 
-    void TearDown() override {
-        remove_test_dir_ignore_error();
-        _tablet_mgr->prune_metacache();
-    }
+    EXPECT_FALSE(info.retained_by_version(/*create=*/6, /*remove=*/10)); // created after V
+    EXPECT_FALSE(info.retained_by_version(/*create=*/3, /*remove=*/5));  // removed at V (V not < remove)
+    EXPECT_FALSE(info.retained_by_version(/*create=*/3, /*remove=*/4));  // interval entirely below V
+}
 
-protected:
-    constexpr static const char* const kTestDir = "./lake_tablet_retain_info_test";
+// An unset/0 creation version means "unknown, assume earliest": retained whenever some pinned
+// version is below the removal version (safe conservative retain, never a false delete).
+TEST(LakeTabletRetainInfoTest, retained_by_version_unknown_create_version) {
+    TabletRetainInfo info;
+    info.init({5});
 
-    void create_data_file(const std::string& name) {
-        auto full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
-        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(full_path));
-        ASSERT_OK(f->append("aaaa"));
-        ASSERT_OK(f->close());
-    }
+    EXPECT_TRUE(info.retained_by_version(/*create=*/0, /*remove=*/6));  // some pinned V (5) < remove
+    EXPECT_FALSE(info.retained_by_version(/*create=*/0, /*remove=*/5)); // no pinned V < remove(==5)
+    EXPECT_FALSE(info.retained_by_version(/*create=*/0, /*remove=*/4)); // no pinned V < remove
+}
 
-    template <class ProtobufMessage>
-    std::shared_ptr<ProtobufMessage> json_to_pb(const std::string& json) {
-        auto message = std::make_shared<ProtobufMessage>();
-        std::string error;
-        CHECK(json2pb::JsonToProtoMessage(json, message.get(), &error)) << error;
-        return message;
-    }
-};
+TEST(LakeTabletRetainInfoTest, retained_by_version_multiple_versions) {
+    TabletRetainInfo info;
+    info.init({5, 20});
 
-// NOLINTNEXTLINE
-TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
-    create_data_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec");
-    create_data_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat");
-    create_data_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat");
-    create_data_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst");
-    create_data_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat");
+    EXPECT_TRUE(info.retained_by_version(0, 6));   // covers V=5
+    EXPECT_TRUE(info.retained_by_version(10, 21)); // covers V=20
+    EXPECT_TRUE(info.retained_by_version(0, 100)); // covers both
+    EXPECT_FALSE(info.retained_by_version(6, 20)); // between: 5<6, and 20 is not < 20
+}
 
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-        "id": 666,
-        "version": 1
-        }
-        )DEL")));
+TEST(LakeTabletRetainInfoTest, retained_by_version_empty_retain_set) {
+    TabletRetainInfo info;
+    info.init({});
 
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-            "id": 666,
-            "version": 2,
-            "rowsets": [
-                {
-                    "id": 100,
-                    "data_size": 200,
-                    "segment_metas": [
-                        {
-                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
-                            "size": 100
-                        },
-                        {
-                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat",
-                            "size": 100
-                        }
-                    ]
-                }
-            ],
-            "delvec_meta": {
-                "version_to_file": [
-                    {
-                        "key": 2,
-                        "value": {
-                            "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
-                            "size": 23
-                        }
-                    }
-                ],
-                "delvecs": [
-                    {
-                        "key": 10,
-                        "value": {
-                            "version": 4,
-                            "offset": 0,
-                            "size": 23
-                        }
-                    }
-                ]
-            },
-            "sstable_meta": {
-                "sstables": [
-                    {
-                        "filename": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"
-                    }
-                ]
-            },
-            "prev_garbage_version": 0,
-            "commit_time": 2
-        }
-        )DEL")));
+    EXPECT_FALSE(info.retained_by_version(0, 1000));
+    EXPECT_FALSE(info.retained_by_version(1, 2));
+}
 
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-            "id": 666,
-            "version": 3,
-            "rowsets": [
-                {
-                    "id": 101,
-                    "data_size": 100,
-                    "segment_metas": [
-                        {
-                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat",
-                            "size": 100
-                        }
-                    ]
-                }
-            ],
-            "compaction_inputs": [
-                {
-                    "data_size": 200,
-                    "segment_metas": [
-                        {
-                            "filename": "00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat",
-                            "size": 100
-                        },
-                        {
-                            "filename": "00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat",
-                            "size": 100
-                        }
-                    ]
-                }
-            ],
-            "orphan_files": [
-                {
-                    "name": "00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec",
-                    "size": 23
-                },
-                {
-                    "name": "0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst",
-                    "size": 24
-                }
-            ],
-            "prev_garbage_version": 0,
-            "commit_time": 3
-        }
-        )DEL")));
+TEST(LakeTabletRetainInfoTest, contains_version) {
+    TabletRetainInfo info;
+    info.init({2, 5});
 
-    TabletRetainInfo tablet_retain_info = TabletRetainInfo();
-    std::unordered_set<int64_t> set;
-    set.insert(2);
-    tablet_retain_info.init(666, set, _tablet_mgr.get());
-
-    EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
-    EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));
-    EXPECT_TRUE(tablet_retain_info.contains_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60da.delvec"));
-    EXPECT_TRUE(tablet_retain_info.contains_file("0000000000011111_9ae981b3-7d4b-49e9-9723-d7f752686155.sst"));
-    EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b583.dat"));
-
-    EXPECT_FALSE(tablet_retain_info.contains_version(1));
-    EXPECT_TRUE(tablet_retain_info.contains_version(2));
-    EXPECT_FALSE(tablet_retain_info.contains_version(3));
-
-    EXPECT_TRUE(tablet_retain_info.contains_rowset(100));
-    EXPECT_FALSE(tablet_retain_info.contains_rowset(101));
-
-    EXPECT_TRUE(tablet_retain_info.tablet_id() == 666);
+    EXPECT_TRUE(info.contains_version(2));
+    EXPECT_TRUE(info.contains_version(5));
+    EXPECT_FALSE(info.contains_version(1));
+    EXPECT_FALSE(info.contains_version(3));
 }
 
 } // namespace starrocks::lake

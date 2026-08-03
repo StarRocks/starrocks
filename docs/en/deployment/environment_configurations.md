@@ -89,6 +89,37 @@ All IP addresses in the file **/etc/hosts** must be unique.
 
 ## JDK configuration
 
+StarRocks runs its Java-based components on a JDK. The Java-based components are:
+
+- The FE
+- The Java UDF, connector, and Java Extensions features on the BE and CN
+
+Install the JDK version required by your StarRocks version before deployment, and then point `JAVA_HOME` to it.
+
+### JDK version by StarRocks version
+
+The minimum and recommended JDK versions depend on your StarRocks version:
+
+| StarRocks version | Minimum JDK | Recommended JDK |
+| --- | --- | --- |
+| v2.5, v3.0, v3.1, v3.2 | JDK 8 | JDK 11 |
+| v3.3, v3.4 | JDK 11 | JDK 11 |
+| v3.5, v4.0, v4.1 | JDK 17 | JDK 17 |
+| v4.2 and later | JDK 17 | JDK 21 |
+
+Additional notes:
+
+- For v2.5, v3.0, v3.1, and v3.2, deployments on Ubuntu 22.04 require JDK 11.
+- The FE compile target was raised from Java 11 to Java 17 in v3.5.0, which is why v3.5 and later require JDK 17 or later at runtime.
+- As of v3.5.0, StarRocks no longer ships JVM presets for specific JDK versions; all JDK versions share a single `JAVA_OPTS`. When upgrading to v3.5 or later from v3.4 or earlier, remove any `JAVA_OPTS` options in **fe.conf** that are incompatible with JDK 17 (for example, CMS-related options), and use the default `JAVA_OPTS` shipped with v3.5 and later.
+- Starting with v4.2, JDK 21 is recommended. The minimum runtime version remains JDK 17 (the FE compile target is Java 17), and JDK 21 is backward-compatible with the JDK 17 runtime target.
+
+:::note
+StarRocks does not support JRE. You must install a full JDK.
+:::
+
+### Set JAVA_HOME
+
 StarRocks relies on the environment variable `JAVA_HOME` to locate the Java dependency on the instance.
 
 Run the following command to check the environment variable `JAVA_HOME`:

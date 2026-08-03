@@ -204,7 +204,7 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: The number of threads used for checking the consistency of tablets.
 - Introduced in: -
 
@@ -253,6 +253,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum memory size allowed for each Compaction thread.
 - Introduced in: -
 
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- Default: -1
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: Controls when compaction releases retained internal chunk capacity. Currently, this parameter takes effect only for Primary Key table compaction in shared-nothing clusters. When the current compaction task memory tracker consumption exceeds `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100`, StarRocks releases retained chunk capacity while resetting internal chunks. A negative value disables this behavior.
+- Introduced in: -
+
 ### compaction_trace_threshold
 
 - Default: 60
@@ -298,6 +307,15 @@ This topic introduces the following types of BE configurations:
 - Description: Target uncompressed page size (in bytes) used when building column data and index pages. This value is copied into ColumnWriterOptions.data_page_size and IndexedColumnWriterOptions.index_page_size and is consulted by page builders (e.g., BinaryPlainPageBuilder::is_page_full and buffer reservation logic) to decide when to finish a page and how much memory to reserve. A value of 0 disables the page-size limit in builders. Changing this value affects page count, metadata overhead, memory reservation and I/O/compression trade-offs (smaller pages → more pages and metadata; larger pages → fewer pages, potentially better compression but larger memory spikes).
 - Introduced in: v3.2.4
 
+### enable_binary_plain_delta_offset
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether high-cardinality string/varchar columns that fall back to plain (non-dictionary) encoding store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so do not enable this until the whole cluster is upgraded, and note that segments written with it are not readable after downgrading to a version without support.
+- Introduced in: v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - Default: 1024
@@ -331,7 +349,7 @@ This topic introduces the following types of BE configurations:
 - Type: double
 - Unit: -
 - Is mutable: No
-- Description: Ratio threshold used to decide whether to use dictionary encoding for non-string columns (numeric, date/time, decimal types). When enabled (value &gt; 0.0001) the writer computes max_card = row_count * dictionary_encoding_ratio_for_non_string_column and, for samples with row_count &gt; `dictionary_min_rowcount`, chooses DICT_ENCODING only if distinct_count ≤ max_card; otherwise it falls back to BIT_SHUFFLE. A value of `0` (default) disables non-string dictionary encoding. This parameter is analogous to `dictionary_encoding_ratio` but applies to non-string columns. Use values in (0,1] — smaller values restrict dictionary encoding to lower-cardinality columns and reduce dictionary memory/IO overhead.
+- Description: Ratio threshold used to decide whether to use dictionary encoding for non-string columns (numeric, date/time, decimal types). When enabled (value > 0.0001) the writer computes max_card = row_count * dictionary_encoding_ratio_for_non_string_column and, for samples with row_count > `dictionary_min_rowcount`, chooses DICT_ENCODING only if distinct_count ≤ max_card; otherwise it falls back to BIT_SHUFFLE. A value of `0` (default) disables non-string dictionary encoding. This parameter is analogous to `dictionary_encoding_ratio` but applies to non-string columns. Use values in (0,1] — smaller values restrict dictionary encoding to lower-cardinality columns and reduce dictionary memory/IO overhead.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ### dictionary_page_size
@@ -442,21 +460,12 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
 - Introduced in: -
 
-### enable_pk_index_eager_build
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to eagerly build Primary Key index files during data import and compaction phases. When enabled, the system generates persistent PK index files immediately during data writes, improving subsequent query performance.
-- Introduced in: -
-
 ### enable_pk_size_tiered_compaction_strategy
 
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
 - Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
@@ -624,7 +633,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_cumulative_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -687,7 +696,7 @@ This topic introduces the following types of BE configurations:
 
 ### max_update_compaction_num_singleton_deltas
 
-- Default: 1000
+- Default: 500
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -849,7 +858,7 @@ This topic introduces the following types of BE configurations:
 
 ### pk_index_memtable_flush_threadpool_size
 
-- Default: 1048576
+- Default: 2048
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -997,7 +1006,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: When `enable_pk_index_eager_build` is set to true, the system will eagerly build PK index files only if the data generated during import or compaction exceeds this threshold. Default is 100MB.
+- Description: The minimum size of data generated during import or compaction for the system to eagerly build PK index files. Default is 100MB.
 - Introduced in: -
 
 ### primary_key_limit_size
@@ -1114,7 +1123,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Threshold (in bytes) used by BinaryPlainPageDecoder to decide whether to eagerly parse a dictionary (binary/plain) page. If a page's encoded size is &lt; `small_dictionary_page_size`, the decoder pre-parses all string entries into an in-memory vector (`_parsed_datas`) to accelerate random access and batch reads. Raising this value causes more pages to be pre-parsed (which can reduce per-access decoding overhead and may increase effective compression for larger dictionaries) but increases memory usage and CPU spent parsing; excessively large values can degrade overall performance. Tune only after measuring memory and access-latency trade-offs.
+- Description: Threshold (in bytes) used by BinaryPlainPageDecoder to decide whether to eagerly parse a dictionary (binary/plain) page. If a page's encoded size is < `small_dictionary_page_size`, the decoder pre-parses all string entries into an in-memory vector (`_parsed_datas`) to accelerate random access and batch reads. Raising this value causes more pages to be pre-parsed (which can reduce per-access decoding overhead and may increase effective compression for larger dictionaries) but increases memory usage and CPU spent parsing; excessively large values can degrade overall performance. Tune only after measuring memory and access-latency trade-offs.
 - Introduced in: v3.4.1, v3.5.0
 
 ### snapshot_expire_time_sec
@@ -1134,6 +1143,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: When a sender job's memory usage is high, memtables that have not been updated for longer than `stale_memtable_flush_time_sec` seconds will be flushed to reduce memory pressure. This behavior is only considered when memory limits are approaching (`limit_exceeded_by_ratio(70)` or higher). In `LocalTabletsChannel`, an additional path at very high memory usage (`limit_exceeded_by_ratio(95)`) may flush memtables whose size exceeds `write_buffer_size / 4`. A value of `0` disables this age-based stale-memtable flushing (immutable-partition memtables still flush immediately when idle or on high memory).
 - Introduced in: v3.2.0
+
+### storage_cleanup_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads used to clean up storage files. `0` indicates half of the CPU cores in the node.
+- Introduced in: -
 
 ### storage_flood_stage_left_capacity_bytes
 

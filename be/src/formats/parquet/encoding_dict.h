@@ -16,6 +16,7 @@
 
 #include <map>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "base/bit/rle_encoding.h"
@@ -504,7 +505,11 @@ private:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         // resize data
-        auto* binary_column = ColumnHelper::get_binary_column(dst);
+        auto* data_column = ColumnHelper::get_data_column(dst);
+        if (UNLIKELY(!data_column->is_binary())) {
+            return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
         size_t read_count = count - null_cnt;
 
         if (read_count == 0) {
@@ -521,7 +526,6 @@ private:
             if (UNLIKELY(indices_out_of_bounds(_indexes.data(), read_count, _dict.size()))) {
                 return Status::InternalError("Index not in dictionary bounds");
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
             size_t cnt = 0;
             for (int i = 0; i < count; ++i) {
                 if (filter[i] && !is_nulls[i]) {
@@ -547,20 +551,28 @@ private:
             uint32_t* lengths = _temp_lengths.data();
             char** datas = _temp_datas.data();
 
+            uint64_t total_length = 0;
             for (size_t i = 0; i < read_count; ++i) {
                 datas[i] = _slices[i].data;
                 lengths[i] = _slices[i].size;
+                total_length += lengths[i];
             }
 
             // relocate offsets
             auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
-            size_t cnt = 0;
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
-            for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : lengths[cnt++];
-                offsets[prev_offsets + i] = offset;
-            }
+            const uint64_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, offset, is_nulls, lengths_ptr](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* __restrict dst_offsets = offsets_buf.data() + prev_offsets;
+                size_t cnt = 0;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
 
             if (read_count == 0) {
                 return Status::OK();
@@ -585,7 +597,11 @@ private:
             if (dst->is_nullable()) {
                 down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            auto* data_column = ColumnHelper::get_data_column(dst);
+            if (UNLIKELY(!data_column->is_binary())) {
+                return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+            }
+            auto* binary_column = down_cast<BinaryColumn*>(data_column);
             for (int i = 0; i < count; ++i) {
                 if (filter[i]) {
                     binary_column->append(_dict[_indexes[i]]);

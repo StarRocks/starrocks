@@ -20,8 +20,8 @@
 #include <thread>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/logging.h"
 #include "base/metrics.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

@@ -407,10 +407,10 @@ The data type mapping between the Avro data fields you want to load and the Star
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| record         | STRUCT, or load the entire RECORD or its subfields into StarRocks as JSON. |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | MAP or JSON                                                  |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
 
@@ -418,6 +418,99 @@ The data type mapping between the Avro data fields you want to load and the Star
 
 - Currently, StarRocks does not support schema evolution.
 - Each Kafka message must only contain a single Avro data record.
+
+### Access source message metadata
+
+When loading JSON- or Avro-format data, you can populate destination columns from a message's Kafka/Pulsar metadata — topic, partition, offset, timestamp, key, and headers — instead of from the message payload. You declare the metadata in an `INCLUDE METADATA (...)` clause that binds each metadata key to an alias; the alias is an ordinary source column you reference from `COLUMNS`.
+
+This is useful for auditing (which topic/partition/offset a row came from), event-time processing (using the message timestamp), and routing on a header value.
+
+#### Syntax
+
+```SQL
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
+```
+
+`INCLUDE METADATA` is a load property; place it among the other load properties (such as `COLUMNS` and `WHERE`), in any order, before the `PROPERTIES` and `FROM` clauses. `AS <alias>` is optional. If it is omitted, the alias defaults to `<metadata_key>`. The alias must be unique within the clause, and it must not collide with a payload field, a destination-table column, or a reserved column name.
+
+#### Metadata keys
+
+The supported keys depend on the data source.
+
+| Source | Key | Type | Description |
+| --- | --- | --- | --- |
+| KAFKA | `TOPIC` | VARCHAR | Topic name. |
+| KAFKA | `PARTITION` | INT | Partition number. |
+| KAFKA | `OFFSET` | BIGINT | Message offset within the partition. |
+| KAFKA | `TIMESTAMP_MS` | BIGINT | Record timestamp in milliseconds since epoch. `NULL` when the broker reports no timestamp. |
+| KAFKA | `KEY` | VARCHAR | Message key as raw bytes. `NULL` when the message has no key. |
+| KAFKA | `HEADERS` | MAP\<VARCHAR, VARCHAR> | All headers as a map. On duplicate keys, the last value wins. |
+| PULSAR | `TOPIC` | VARCHAR | The logical topic the job consumes (a partitioned topic's `-partition-N` suffix is not included). |
+| PULSAR | `PARTITION` | INT | Partition index, parsed from the per-message topic name. `NULL` for a non-partitioned topic. |
+| PULSAR | `KEY` | VARCHAR | Partition key. `NULL` when the message has no key. |
+| PULSAR | `MESSAGE_ID` | VARCHAR | Message ID. |
+| PULSAR | `PUBLISH_TIME_MS` | BIGINT | Publish time in milliseconds since epoch. |
+| PULSAR | `EVENT_TIME_MS` | BIGINT | Event time in milliseconds since epoch. `NULL` when the producer did not set it. |
+| PULSAR | `PROPERTIES` | MAP\<VARCHAR, VARCHAR> | All properties as a map. On duplicate keys, the last value wins. |
+
+To read a single header/property value, use `element_at(<headers_alias>, '<name>')` over the `HEADERS`/`PROPERTIES` map: the last value wins on a duplicate key, and the result is `NULL` when the key is absent. Header/property values are raw bytes placed into VARCHAR as-is (no UTF-8 validation).
+
+#### Usage notes
+
+- `INCLUDE METADATA` is available for `format = json` (Kafka and Pulsar) and `format = avro` (Kafka only; Pulsar Routine Load does not support Avro). It is not supported for CSV, where one message can expand into many rows and per-message metadata would be ambiguous.
+- A metadata alias is an ordinary source column: reference it anywhere in the `COLUMNS` expressions. If a payload field has the same name as a metadata key, specify a different alias with `AS <alias>` to avoid ambiguity.
+- `OFFSET` is Kafka-only and `MESSAGE_ID` is Pulsar-only; using a key unsupported by the source raises an error that lists the keys supported for that source.
+- `HEADERS`/`PROPERTIES` is a `MAP\<VARCHAR, VARCHAR>`. The source headers/properties are an ordered list that may repeat a key; duplicates collapse into the map with the last value winning (an `element_at(map, 'name')` lookup is likewise last-wins, and returns `NULL` when the key is absent). Values are raw bytes stored in VARCHAR as-is — there is no UTF-8 validation or decoding.
+
+#### Example
+
+Load the order payload field `order_id` together with the source topic, partition, offset, the message timestamp converted to a `DATETIME`, and a `trace-id` header:
+
+```SQL
+CREATE TABLE example_db.orders_with_meta (
+    order_id      BIGINT,
+    src_topic     VARCHAR(256),
+    src_partition INT,
+    src_offset    BIGINT,
+    msg_time      DATETIME,
+    trace_id      VARCHAR(128)
+)
+ENGINE = OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id);
+
+CREATE ROUTINE LOAD example_db.orders_with_meta_job ON orders_with_meta
+INCLUDE METADATA
+(
+    TOPIC        AS m_topic,
+    PARTITION    AS m_partition,
+    OFFSET       AS m_offset,
+    TIMESTAMP_MS AS m_timestamp,
+    HEADERS      AS m_headers
+),
+COLUMNS
+(
+    order_id,
+    src_topic     = m_topic,
+    src_partition = m_partition,
+    src_offset    = m_offset,
+    msg_time      = from_unixtime(m_timestamp / 1000),
+    trace_id      = element_at(m_headers, 'trace-id')
+)
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.order_id\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "kafka_topic" = "topic_orders",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+A metadata alias may be used inside an expression (as with `from_unixtime(m_timestamp / 1000)` above); only payload columns are listed in `jsonpaths`.
 
 ## Check a load job and task
 

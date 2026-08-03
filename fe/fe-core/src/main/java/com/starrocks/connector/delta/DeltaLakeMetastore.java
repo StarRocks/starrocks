@@ -28,7 +28,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.memory.estimate.Estimator;
-import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.Table;
@@ -89,7 +88,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                     @NotNull
                     @Override
                     public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
+                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.first.getSize(),
+                                pair.first.getModificationTime(), pair.second, hdfsConfiguration);
                     }
                 });
 
@@ -145,15 +145,13 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
             Table deltaTable = Table.forPath(deltaLakeEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
         } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}, {}. caused by : {}", catalogName, dbName, tableName,
-                    e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to find Delta table for %s.%s.%s, %s. caused by : %s", catalogName,
-                    dbName, tableName, e.getMessage(), e.getCause());
+            LOG.error("Failed to find Delta table for {}.{}.{}", catalogName, dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to find Delta table %s.%s.%s", catalogName, dbName, tableName), e);
         } catch (Exception e) {
-            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}. caused by : {}", catalogName, dbName,
-                    tableName, e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to get latest snapshot for %s.%s.%s, %s. caused by : %s",
-                    catalogName, dbName, tableName, e.getMessage(), e.getCause());
+            LOG.error("Failed to get latest snapshot for {}.{}.{}", catalogName, dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get latest snapshot for %s.%s.%s", catalogName, dbName, tableName), e);
         }
         return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);
     }
@@ -176,7 +174,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         Engine deltaEngine = deltaLakeTable.getDeltaEngine();
         List<String> partitionColumnNames = deltaLakeTable.getPartitionColumnNames();
 
-        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder(deltaEngine);
+        ScanBuilder scanBuilder = deltaLakeTable.getDeltaSnapshot().getScanBuilder();
         Scan scan = scanBuilder.build();
         try (CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches = scan.getScanFiles(deltaEngine)) {
             while (scanFilesAsBatches.hasNext()) {

@@ -16,6 +16,7 @@
         <module>udf-examples</module>
         <module>hudi-reader</module>
         <module>paimon-reader</module>
+        <module>fluss-reader</module>
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
@@ -42,15 +43,15 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.135.Final</io.netty.version>
+        <io.netty.version>4.1.136.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <arrow.version>17.0.0</arrow.version>
-        <jackson.version>2.21.1</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.1 version released -->
+        <arrow.version>18.0.0</arrow.version>
+        <jackson.version>2.21.4</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
@@ -65,7 +66,7 @@
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
         <bouncycastle.version>1.84</bouncycastle.version>
-        <thrift.version>0.23.0</thrift.version>
+        <thrift.version>0.24.0</thrift.version>
     </properties>
 
     <profiles>
@@ -279,6 +280,17 @@
                         <groupId>org.wildfly.openssl</groupId>
                         <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
+                    <!-- CVE-2026-10050 (jetty-security) / CVE-2026-2332 (jetty-http):
+                         both are only reachable via Hadoop's embedded HttpServer2,
+                         which the JNI readers never instantiate (FS client use only). -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-http</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -318,6 +330,13 @@
                 <artifactId>hadoop-mapreduce-client-core</artifactId>
                 <version>${hadoop.version}</version>
                 <exclusions>
+                    <!-- CVE-2026-10050: vulnerable DigestAuthentication lives in
+                         jetty-client, pulled via hadoop-yarn-client -> websocket-client.
+                         The YARN websocket timeline client is unused by the readers. -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
@@ -325,6 +344,10 @@
                     <exclusion>
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.jline</groupId>
+                        <artifactId>jline</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -355,6 +378,12 @@
                     <exclusion>
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                    <!-- json-simple 1.1.1 leaks junit 4.10 as a compile dependency
+                         (CVE-2020-15250); it must not ship in the runtime lib -->
+                    <exclusion>
+                        <groupId>junit</groupId>
+                        <artifactId>junit</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -511,6 +540,30 @@
                 <artifactId>jackson-core</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
+            <!-- 3.18.0 fixes CVE-2025-48924; udf-extensions bundles this into its
+                 jar-with-dependencies shipped under be/lib/jni-packages -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
+            <!-- hadoop-yarn-common drags in 2.12.7 copies of these; keep them
+                 aligned with the managed jackson version -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.jaxrs</groupId>
+                <artifactId>jackson-jaxrs-base</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.jaxrs</groupId>
+                <artifactId>jackson-jaxrs-json-provider</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.module</groupId>
+                <artifactId>jackson-module-jaxb-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
             <!-- jackson -->
 
             <!-- apache arrow -->
@@ -529,6 +582,12 @@
             <dependency>
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-compression</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-c-data</artifactId>
                 <version>${arrow.version}</version>
             </dependency>
             <!-- apache arrow -->
@@ -644,6 +703,51 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-vulnerable-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <!-- superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs -->
+                                        <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+                                        <!-- junit must never leak into runtime libs (CVE-2020-15250);
+                                             test scope stays allowed -->
+                                        <exclude>junit:junit:*:jar:compile</exclude>
+                                        <exclude>junit:junit:*:jar:runtime</exclude>
+                                        <!-- keep jackson-jaxrs aligned with the managed jackson version -->
+                                        <exclude>com.fasterxml.jackson.jaxrs:*:[,2.15.0)</exclude>
+                                        <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
+                                        <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
+                                        <!-- ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's
+                                             unused tether feature references it -->
+                                        <exclude>org.apache.avro:avro-ipc</exclude>
+                                        <exclude>org.apache.avro:avro-ipc-jetty</exclude>
+                                        <!-- CVE-2026-10050 (jetty-client, jetty-security) and
+                                             CVE-2026-2332 (jetty-http): excluded from the managed
+                                             hadoop-common / hadoop-mapreduce-client-core edges above.
+                                             That pruning depends on hadoop-common staying the nearest
+                                             jetty-server path (hadoop-lib also pulls hadoop-hdfs-httpfs
+                                             and hadoop-hdfs-nfs, which declare jetty-server directly),
+                                             so ban the jars outright: no reader needs them at any scope. -->
+                                        <exclude>org.eclipse.jetty:jetty-client</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${compiler-plugin.version}</version>
                 <configuration>
@@ -710,7 +814,7 @@
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
+                        <version>10.21.1</version>
                     </dependency>
                 </dependencies>
                 <configuration>

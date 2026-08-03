@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -53,10 +54,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class MetaUtils {
 
@@ -182,6 +185,10 @@ public class MetaUtils {
         return "update_" + DebugUtil.printId(executionId);
     }
 
+    public static String genMergeLabel(TUniqueId executionId) {
+        return "merge_" + DebugUtil.printId(executionId);
+    }
+
     public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
@@ -290,6 +297,18 @@ public class MetaUtils {
      *         rollup).
      */
     public static List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId) {
+        return getRangeDistributionColumns(olapTable, indexMetaId, null);
+    }
+
+    /**
+     * Variant that applies a keyness override when computing the sort-key columns. Used to compute
+     * the hypothetical sort key after a keyness flip without mutating the schema.
+     *
+     * @param keynessOverride a column-name → isKey map applied when {@code sortKeyIdxes} is absent;
+     *                        null or empty means no override (identical to the 2-arg overload)
+     */
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId,
+                                                            Map<String, Boolean> keynessOverride) {
         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
         if (indexMeta == null) {
             throw new IllegalArgumentException(String.format(
@@ -304,7 +323,16 @@ public class MetaUtils {
             }
         } else {
             for (Column column : schema) {
-                if (column.isKey()) {
+                boolean isKey = column.isKey();
+                if (keynessOverride != null) {
+                    for (Map.Entry<String, Boolean> e : keynessOverride.entrySet()) {
+                        if (e.getKey().equalsIgnoreCase(column.getName())) {
+                            isKey = e.getValue();
+                            break;
+                        }
+                    }
+                }
+                if (isKey) {
                     sortKeyColumns.add(column);
                 }
             }
@@ -442,5 +470,42 @@ public class MetaUtils {
         } else {
             return "`" + column.getName() + "`";
         }
+    }
+
+    /**
+     * Resolve the effective sort-key columns of {@code schema}, following the same precedence BE
+     * applies when loading a {@code TabletSchemaPB} (see {@code tablet_schema.cpp}'s sort-key
+     * resolution): a non-empty {@code sortKeyUniqueIds} locates sort-key columns by unique id;
+     * otherwise a non-empty {@code sortKeyIdxes} locates them by schema position; otherwise the sort
+     * key is the leading run of key columns ({@link Column#isKey()}). Both {@code null} and empty
+     * lists fall through to the next precedence level. This differs from {@link
+     * #getRangeDistributionColumns(OlapTable, long)}, which treats a non-null (but possibly
+     * empty) {@code sortKeyIdxes} as an explicit sort key and never falls back to key columns.
+     */
+    public static List<Column> resolveEffectiveSortKeyColumns(List<Column> schema,
+                                                              @Nullable List<Integer> sortKeyUniqueIds,
+                                                              @Nullable List<Integer> sortKeyIdxes) {
+        if (sortKeyUniqueIds != null && !sortKeyUniqueIds.isEmpty()) {
+            Map<Integer, Column> uniqueIdToColumn = new HashMap<>();
+            for (Column column : schema) {
+                uniqueIdToColumn.put(column.getUniqueId(), column);
+            }
+            List<Column> sortKeyColumns = new ArrayList<>(sortKeyUniqueIds.size());
+            for (Integer uniqueId : sortKeyUniqueIds) {
+                Column column = uniqueIdToColumn.get(uniqueId);
+                Preconditions.checkArgument(column != null, "no column with unique id %s in schema", uniqueId);
+                sortKeyColumns.add(column);
+            }
+            return sortKeyColumns;
+        }
+        if (sortKeyIdxes != null && !sortKeyIdxes.isEmpty()) {
+            List<Column> sortKeyColumns = new ArrayList<>(sortKeyIdxes.size());
+            for (Integer idx : sortKeyIdxes) {
+                sortKeyColumns.add(schema.get(idx));
+            }
+            return sortKeyColumns;
+        }
+        long keyColumnCount = schema.stream().filter(Column::isKey).count();
+        return new ArrayList<>(schema.subList(0, (int) keyColumnCount));
     }
 }

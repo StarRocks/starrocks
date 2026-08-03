@@ -52,6 +52,11 @@ description: "Alphabetical s"
 - Labels: `storage_type`
 - Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
 
+## `spill_parked_with_uncovered_reason_total`
+
+- Unit: Count
+- Description: Number of times a pipeline driver was parked on a spill wait whose declared reason is not covered by any wakeup subscription. Always 0 in a healthy system; a non-zero value means a parked driver had nobody to wake it (a wakeup-table bug; the query may stall until it is cancelled) and is worth alerting on. Each occurrence also emits a rate-limited WARNING in the BE log.
+
 ## `snmp`
 
 - Unit: -
@@ -285,6 +290,23 @@ description: "Alphabetical s"
 - Type: Instantaneous
 - Description: Shared-data only. Number of shards currently assigned to this BE's StarOSWorker (size of the worker's local shard table). Updated synchronously inside `StarOSWorker::add_shard` and `StarOSWorker::remove_shard` (push-on-mutation), so the value reflects the last shard table mutation rather than being recomputed at scrape time. The gauge is not reset on BE shutdown and will retain its last value until the next mutation. Use it to observe shard distribution balance across BEs and to detect drift from the FE-side placement.
 
+## `starrocks_fe_alter_duration_ms`
+
+- Unit: ms
+- Type: Summary
+- Labels: `execution_mode` (`fse`, `legacy_fse`, or `rewrite`), `is_leader`
+- Description: Time in milliseconds to apply an ALTER TABLE change, per statement. Reported only by the Leader FE (`is_leader="true"`). Includes the 0.75/0.95/0.98/0.99/0.999 quantiles plus `_sum` and `_count`. The `execution_mode` label indicates how the change was applied:
+  - `fse`: the current Fast Schema Evolution (FSE), applied immediately while the statement runs.
+  - `legacy_fse`: the legacy FSE path, which runs in the background and is usually far slower. Occurs only in shared-data clusters with `cloud_native_fast_schema_evolution_v2` disabled (enabled by default, which uses `fse`).
+  - `rewrite`: the change had to physically rewrite the table data, which also runs in the background.
+
+## `starrocks_fe_alter_operation_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`add_column`, `drop_column`, or `modify_column`), `is_leader`
+- Description: Number of ALTER TABLE column operations, by type. A single statement can contain several operations — for example, `ADD COLUMN a, DROP COLUMN b` — and each is counted separately under its type. Renames, reorders, and comment-only changes are not counted. Reported only by the Leader FE (`is_leader="true"`).
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -459,6 +481,55 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_sync_stats_load_budget_exhausted_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: None
+- Description: Total number of scoped synchronous statistics waits that could not continue because the per-query stats wait budget was exhausted, or because a scoped wait reached its remaining budget timeout. Per-call waits that run without a per-query budget scope are not counted.
+
+## `starrocks_fe_statistics_cache_entries`
+
+- Unit: Count
+- Type: Gauge
+- Labels: `cache` — the statistics cache: `table_stats`, `column_stats`, `partition_stats`, `connector_table_stats`, `histogram_stats`, `connector_histogram_stats`, or `multi_column_stats`.
+- Description: Approximate number of entries currently held in the given statistics cache (backed by Caffeine). The maximum per cache is controlled by the FE config `statistic_cache_columns`. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of entries evicted from the given statistics cache (due to size or expiration). A consistently rising value relative to the cache size suggests raising `statistic_cache_columns`. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were served from the cache. Together with `starrocks_fe_statistics_cache_miss_count` this yields the cache hit ratio. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache loads that failed because the Caffeine loader completed exceptionally. Missing statistics rows are cached as empty results and count as successful loads, not failures. A non-zero, growing value points to errors reading from the statistics tables. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache loads that completed successfully. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_entries` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were not found in the cache and triggered a load. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - Unit: Count
@@ -521,13 +592,13 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Histogram
-- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on both production paths — the INSERT-from-FILES hook (called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and the Broker Load hook (called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`) — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on all production load kinds — INSERT-from-FILES and INSERT-from-table (both via `InsertPreSplitHook`, called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and Broker Load (via `BrokerLoadPreSplitHook`, called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`), all sync-awaiting through the shared `PreSplitFlow` — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - Unit: Count
 - Type: Cumulative
-- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on the INSERT-from-FILES production path on timeout (the INSERT then proceeds without abort against the currently visible tablet layout — still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait. `tablet_pre_split_load_abort` is NOT incremented because the INSERT itself is not aborted) and on the `runPreSplit` synchronous-await wrapper. The Broker Load production path does not await and so does not update this counter.
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on every production load kind on timeout — INSERT-from-FILES, INSERT-from-table, and Broker Load (all sync-await through the shared `PreSplitFlow`) — as well as the `runPreSplit` synchronous-await wrapper. The load then proceeds without abort against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); `tablet_pre_split_load_abort` is NOT incremented because the load itself is not aborted.
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
@@ -546,6 +617,12 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Instantaneous
 - Description: Indicates the number of tablets on each BE node.
+
+## `starrocks_fe_txn_max_committed_pending_publish_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: The longest time, in milliseconds, that a transaction is currently sitting in the `COMMITTED` status pending publish to `VISIBLE`, that is, the age of the oldest committed-but-not-yet-published transaction. Unlike `starrocks_fe_txn_publish_*` metrics, which are summaries recorded after a transaction finishes, this is a live gauge of the worst-case in-flight wait. The value is reported per database via the `db` label and only by the Leader FE node (`is_leader="true"`). It returns `0` when no committed transaction is pending publish. A high or continuously growing value indicates that version publishing is stuck or lagging behind commits.
 
 ## `starrocks_fe_txn_publish_ack_latency_ms`
 
@@ -663,4 +740,3 @@ All transaction metrics share the following labels:
 - Description: Total number of Stream Load requests.
 
 ##### SPLIT
-

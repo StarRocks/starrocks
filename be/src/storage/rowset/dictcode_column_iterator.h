@@ -24,9 +24,9 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 // DictCodeColumnIterator is a wrapper/proxy on another column iterator that will

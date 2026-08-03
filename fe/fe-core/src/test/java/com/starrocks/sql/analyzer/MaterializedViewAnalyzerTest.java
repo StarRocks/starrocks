@@ -28,6 +28,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
@@ -127,6 +128,22 @@ public class MaterializedViewAnalyzerTest {
             Assertions.assertTrue(e.getMessage().
                     contains("Do not support create materialized view when base iceberg table partition transform "));
         }
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithVariantColumnRejected() throws Exception {
+        starRocksAssert.useDatabase("test");
+        // A materialized view is stored as a native OLAP table, so a VARIANT value column projected
+        // from an external (Iceberg) base table must be rejected at analysis: the generated MV column
+        // path does not go through ColumnDefAnalyzer, and a native VARIANT column would abort the BE
+        // on refresh (storage LogicalType dispatch LOG(FATAL)). A native VARIANT base column can no
+        // longer be created, so an external catalog is the only way to reach this path.
+        analyzeFail("CREATE MATERIALIZED VIEW test.mv_variant\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                        "AS SELECT id, v FROM iceberg0.unpartitioned_db.variant_t0;",
+                "VARIANT is not supported as a column type for materialized views");
     }
 
     @Test
@@ -560,10 +577,12 @@ public class MaterializedViewAnalyzerTest {
                 starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
             }
 
-            // 3. Set Config to true: should be range distribution even if session variable is false
+            // 3. Set Config to true: the config-driven default only takes effect in shared-data mode
+            // (range distribution is shared-data only), so the outcome tracks the current run mode.
             Config.enable_range_distribution = true;
             CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+            Assertions.assertEquals(RunMode.isSharedDataMode(),
+                    stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
 
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;

@@ -582,7 +582,7 @@ public class AnalyzeExprTest {
     @Test
     public void testArraySortLambdaDispatch() {
         // Verify that array_sort with lambda is correctly dispatched to array_sort_lambda function
-        QueryStatement stmt = (QueryStatement) analyzeSuccess(
+        analyzeSuccess(
                 "select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
 
     }

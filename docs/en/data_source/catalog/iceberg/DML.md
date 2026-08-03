@@ -328,6 +328,131 @@ Each UPDATE statement against an Iceberg table emits the following FE-side metri
 | `iceberg_update_bytes`             | Bytes       | `file_type` (`data`, `position_delete`) | Total bytes written by Iceberg UPDATE, split between new data files and position-delete files. |
 | `iceberg_update_files`             | Count       | `file_type` (`data`, `position_delete`) | Total number of files written by Iceberg UPDATE, split between new data files and position-delete files. |
 
+## MERGE INTO
+
+You can use the MERGE INTO statement to conditionally update, delete, and insert rows of an Iceberg table in a single atomic statement, based on whether each row of a source relation matches the target table. This feature is supported from v4.2 and later.
+
+MERGE INTO reuses the same Iceberg V2 **Merge-On-Read** commit path as UPDATE: matched rows that are updated or deleted produce position-delete files, while updated rows and newly inserted rows produce new data files, and all of them are committed together in a single Iceberg snapshot. Readers always observe either the pre-MERGE or post-MERGE state, never an intermediate one, and the resulting table remains interoperable with Spark and other Iceberg-aware engines.
+
+### Syntax
+
+```SQL
+MERGE INTO <target_table> [ [AS] <target_alias> ]
+USING <source_relation> [ [AS] <source_alias> ]
+ON <merge_condition>
+[ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
+[ ... ]
+[ WHEN NOT MATCHED [ AND <condition> ] THEN { INSERT (<column_name> [, ...]) VALUES (<expression> [, ...]) | INSERT * } ]
+[ ... ]
+```
+
+### Parameters
+
+- `target_table`: The Iceberg table to modify. You can use:
+  - Fully qualified name: `catalog_name.database_name.table_name`
+  - Database-qualified name (after setting catalog): `database_name.table_name`
+  - Table name only (after setting catalog and database): `table_name`
+
+- `source_relation`: The data source that drives the merge. It can be a table, a view, or a parenthesized sub-query. Give it an alias when the `ON` condition or the `WHEN` clauses reference its columns.
+
+- `merge_condition`: The `ON` predicate that decides whether a target row and a source row match. It typically joins the target and source on a key column.
+
+- `WHEN MATCHED [AND <condition>] THEN ...`: Applies to target rows that match a source row. The action is either `UPDATE SET` (rewrite the listed columns) or `DELETE` (remove the matched row). You can write multiple `WHEN MATCHED` clauses, each with an optional additional `AND <condition>`; for a given row, the first clause whose condition holds is applied.
+
+- `WHEN NOT MATCHED [AND <condition>] THEN ...`: Applies to source rows that match no target row. The action inserts a new row, either with an explicit column and value list (`INSERT (...) VALUES (...)`) or with `INSERT *`, which maps every target column from the source column of the same name.
+
+### Usage notes
+
+- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1 and V3 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
+- At least one `WHEN` clause is required.
+- Each target row must be matched by **at most one** source row. If a target row matches more than one source row, the statement fails at runtime rather than applying an ambiguous change. Deduplicate or aggregate the source in advance when necessary.
+- Partition columns cannot be updated in a `WHEN MATCHED ... THEN UPDATE` clause.
+- The hidden metadata columns `_file` and `_pos` cannot be assigned in `UPDATE SET` or targeted by `INSERT`.
+- `DEFAULT` values are not supported, because Iceberg V2 has no column-default semantics.
+- In `INSERT (...) VALUES (...)`, the number of values must match the number of listed columns, and a column may not be listed more than once.
+- An unconditional `WHEN MATCHED` clause must be the last of the `WHEN MATCHED` clauses, and an unconditional `WHEN NOT MATCHED` clause must be the last of the `WHEN NOT MATCHED` clauses.
+- `INSERT *` requires the source to be referenceable by a name: either an explicit alias, or a bare table (in which case the table name is used). When the source is a sub-query, an explicit alias is required.
+- Only Parquet-formatted Iceberg tables are supported, matching the existing Iceberg sink.
+
+### Examples
+
+The following examples target the Iceberg table `iceberg_catalog.db.t_merge`, which has columns `id`, `name`, `age`, and `salary`.
+
+#### Upsert (UPDATE matched rows, INSERT new rows)
+
+The most common MERGE pattern updates rows that already exist and inserts rows that do not:
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_updates AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### UPDATE matched rows only
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 3 AS id, 'UPDATED' AS name, 75000 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, salary = s.salary;
+```
+
+#### DELETE matched rows
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 2 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+```
+
+#### INSERT rows that have no match
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 10 AS id, 'Frank' AS name, 40 AS age, 80000 AS salary) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### Conditional clauses
+
+Add `AND <condition>` to a `WHEN` clause to choose an action per row. A common use case is applying a change stream (CDC): the source `t_changes` carries an `op` column that marks each row as an update, delete, or insert, and one MERGE statement dispatches all three:
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING iceberg_catalog.db.t_changes AS s
+ON t.id = s.id
+WHEN MATCHED AND s.op = 'DELETE' THEN DELETE
+WHEN MATCHED AND s.op = 'UPDATE' THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED AND s.op <> 'DELETE' THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### INSERT *
+
+When the source exposes columns with the same names as the target, `INSERT *` inserts all target columns without listing them. The source must be referenceable by a name; a sub-query source must be aliased:
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_new_rows AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT *;
+```
+
+### Monitoring
+
+A MERGE INTO statement that writes to the Iceberg table emits the following FE-side metrics after its commit. A no-op MERGE that produces no files — for example, an empty source, or every matched/not-matched row filtered out so that no action applies — is skipped without a commit and does not increment these counters. They share the `iceberg_*` namespace with the existing `iceberg_write_*`, `iceberg_delete_*`, and `iceberg_update_*` metrics, and can be scraped via the standard FE metrics endpoint. See [Metrics](../../../administration/management/monitoring/metric_details/i-p.md) for full per-metric documentation.
+
+| Metric                            | Unit        | Labels | Description |
+| --------------------------------- | ----------- | ------ | ----------- |
+| `iceberg_merge_total`             | Count       | `status` (`success`, `failed`), `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`) | Total number of Iceberg MERGE INTO tasks, incremented by 1 after each task ends. |
+| `iceberg_merge_duration_ms_total` | Millisecond | — | Total execution time of Iceberg MERGE INTO tasks. |
+| `iceberg_merge_rows`              | Rows        | `file_type` (`data`, `position_delete`) | Total number of rows processed by Iceberg MERGE INTO, split by file type. `position_delete` counts target rows hit by UPDATE or DELETE (added as position deletes); `data` counts data rows written (updated rows plus inserts). |
+| `iceberg_merge_bytes`             | Bytes       | `file_type` (`data`, `position_delete`) | Total bytes written by Iceberg MERGE INTO, split between new data files and position-delete files. |
+| `iceberg_merge_files`             | Count       | `file_type` (`data`, `position_delete`) | Total number of files written by Iceberg MERGE INTO, split between new data files and position-delete files. |
+
 ## TRUNCATE
 
 You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.

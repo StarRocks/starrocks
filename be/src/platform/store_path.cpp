@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/path/path_util.h"
@@ -63,6 +64,27 @@ static std::string to_upper(const std::string& str) {
     std::string out = str;
     std::transform(out.begin(), out.end(), out.begin(), ::toupper);
     return out;
+}
+
+static bool is_same_store_paths(const std::vector<StorePath>& lhs, const std::vector<StorePath>& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        if (lhs[i].path != rhs[i].path || lhs[i].storage_medium != rhs[i].storage_medium) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::vector<std::string> make_store_path_roots(const std::vector<StorePath>& store_paths) {
+    std::vector<std::string> roots;
+    roots.reserve(store_paths.size());
+    for (const auto& store_path : store_paths) {
+        roots.emplace_back(store_path.path);
+    }
+    return roots;
 }
 
 // format: /data,medium:ssd
@@ -161,6 +183,26 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
         return Status::InvalidArgument(fmt::format("Fail to parse {}", configvar_name));
     }
     return Status::OK();
+}
+
+Status StorePathRegistry::init(std::vector<StorePath> store_paths) {
+    if (store_paths.empty()) {
+        return Status::OK();
+    }
+    if (!_store_paths.empty()) {
+        if (is_same_store_paths(_store_paths, store_paths)) {
+            return Status::OK();
+        }
+        return Status::InternalError("Store paths have been initialized");
+    }
+    _store_paths = std::move(store_paths);
+    _store_path_roots = make_store_path_roots(_store_paths);
+    return Status::OK();
+}
+
+void StorePathRegistry::reset_for_test() {
+    _store_paths.clear();
+    _store_path_roots.clear();
 }
 
 } // end namespace starrocks

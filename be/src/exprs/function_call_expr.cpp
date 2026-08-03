@@ -149,8 +149,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-        FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_fragment_thread_local_call_failed);
-        RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
     return Status::OK();
@@ -161,8 +159,6 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
     // _fn_context_index >= 0 means this function call has call opened
     if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
-
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
@@ -230,6 +226,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                                                     const NgramBloomFilterReaderOptions& reader_options) const {
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning. This check must precede the cached NgramBloomFilterState because
+    // one ExprContext can scan rowsets with different index metadata.
+    if (reader_options.index_gram_num == 0) {
+        return true;
+    }
+
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
@@ -245,15 +248,25 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
         const auto& needle_column = fn_ctx->get_constant_column(1);
         std::string needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).to_string();
 
-        // for case_insensitive, we need to convert needle to lower case
-        if (!reader_options.index_case_sensitive) {
-            std::transform(needle.begin(), needle.end(), needle.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
-        }
-
         if (!simdjson::validate_utf8(needle.data(), needle.size())) {
             index_useful = false;
-        } else if (_fn_desc->name == "LIKE") {
+            ngram_state->initialized = true;
+            ngram_state->index_useful = index_useful;
+            return true;
+        }
+
+        // for case_insensitive, we need to convert needle to lower case
+        if (!reader_options.index_case_sensitive) {
+            std::string lower_needle;
+            if (validate_ascii_fast(needle.data(), needle.size())) {
+                Slice(needle).tolower(lower_needle);
+            } else {
+                utf8_tolower(needle, lower_needle);
+            }
+            needle = std::move(lower_needle);
+        }
+
+        if (_fn_desc->name == "LIKE") {
             index_useful = split_like_string_to_ngram(needle, reader_options, ngram_set);
         } else {
             index_useful = split_normal_string_to_ngram(needle, fn_ctx, reader_options, ngram_set, _fn_desc->name);

@@ -15,19 +15,28 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "common/status.h"
 #include "common/util/thrift_client_cache.h"
+#include "platform/store_path.h"
 
 namespace starrocks {
 
+class BrokerMgr;
 class BrpcStubCache;
 class BthreadTimer;
 class HttpBrpcStubCache;
 class MetricRegistry;
+class SmallFileMgr;
 #ifndef __APPLE__
 class LakeServiceBrpcStubCache;
 #endif
+
+struct PlatformEnvOptions {
+    MetricRegistry* metrics = nullptr;
+    std::vector<StorePath> store_paths;
+};
 
 class PlatformEnv {
 public:
@@ -42,13 +51,17 @@ public:
     PlatformEnv(const PlatformEnv&) = delete;
     PlatformEnv& operator=(const PlatformEnv&) = delete;
 
-    Status init(MetricRegistry* metrics);
+    Status init(PlatformEnvOptions options);
     void destroy();
 
     BackendServiceClientCache* backend_client_cache() const { return _backend_client_cache.get(); }
     FrontendServiceClientCache* frontend_client_cache() const { return _frontend_client_cache.get(); }
     BrokerServiceClientCache* broker_client_cache() const { return _broker_client_cache.get(); }
+    BrokerMgr* broker_mgr() const { return _broker_mgr.get(); }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache.get(); }
+    SmallFileMgr* small_file_mgr() const { return _small_file_mgr.get(); }
+    const StorePathRegistry* store_path_registry() const { return &_store_path_registry; }
+    void reset_store_paths_for_test();
     HttpBrpcStubCache* http_brpc_stub_cache() const;
 #ifndef __APPLE__
     LakeServiceBrpcStubCache* lake_service_brpc_stub_cache() const;
@@ -58,8 +71,11 @@ private:
     std::unique_ptr<BackendServiceClientCache> _backend_client_cache;
     std::unique_ptr<FrontendServiceClientCache> _frontend_client_cache;
     std::unique_ptr<BrokerServiceClientCache> _broker_client_cache;
+    std::unique_ptr<BrokerMgr> _broker_mgr;
     std::unique_ptr<BthreadTimer> _rpc_timer;
     std::unique_ptr<BrpcStubCache> _brpc_stub_cache;
+    std::unique_ptr<SmallFileMgr> _small_file_mgr;
+    StorePathRegistry _store_path_registry;
 };
 
 } // namespace starrocks

@@ -143,7 +143,6 @@ public class NormalizePredicateBench {
         List<ScalarOperator> disjuntiveList = Lists.newArrayList();
         int conjunctSize = 3;
         for (int i = 0; i < predicateSize / conjunctSize; i++) {
-            ScalarOperator conjunct;
             List<ScalarOperator> conjuncts = Lists.newArrayList();
             for (int j = 0; j < conjunctSize; j++) {
                 ColumnRefOperator ref = randomColumn(factory);
@@ -159,13 +158,13 @@ public class NormalizePredicateBench {
 
     @Benchmark
     public void bench_NormalizePredicate_Random() {
-        ScalarOperator res = MvUtils.canonizePredicateForRewrite(null, randomPredicate);
+        MvUtils.canonizePredicateForRewrite(null, randomPredicate);
     }
 
     @Benchmark
     public void bench_NormalizePredicate_Random_Non_MV() {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        ScalarOperator res = scalarRewriter.rewrite(randomPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        scalarRewriter.rewrite(randomPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
     }
 
     /**
@@ -176,13 +175,12 @@ public class NormalizePredicateBench {
      */
     @Benchmark
     public void bench_NormalizePredicate_Disjunctive() {
-        ScalarOperator res =
-                MvUtils.canonizePredicateForRewrite(null, disjunctive);
+        MvUtils.canonizePredicateForRewrite(null, disjunctive);
     }
 
     @Benchmark
     public void bench_NormalizePredicate_Disjunctive_Non_MV() {
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        ScalarOperator res = scalarRewriter.rewrite(disjunctive, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        scalarRewriter.rewrite(disjunctive, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
     }
 }

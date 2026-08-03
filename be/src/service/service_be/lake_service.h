@@ -24,6 +24,7 @@
 namespace starrocks {
 
 class ExecEnv;
+class LoadChannelMgr;
 
 namespace lake {
 class TabletManager;
@@ -31,7 +32,7 @@ class TabletManager;
 
 class LakeServiceImpl : public ::starrocks::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr);
+    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr);
 
     ~LakeServiceImpl() override;
 
@@ -139,6 +140,7 @@ private:
 
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
+    LoadChannelMgr* _load_channel_mgr;
 
     // Tablets currently being built by this CN. Used to dedup repeated
     // build_vector_index RPCs for the same tablet (e.g. after FE re-enqueue).

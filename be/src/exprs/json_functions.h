@@ -14,11 +14,7 @@
 
 #pragma once
 
-#include <re2/re2.h>
-#include <simdjson.h>
 #include <velocypack/vpack.h>
-
-#include <utility>
 
 #include "common/status.h"
 #include "exprs/function_context.h"
@@ -29,38 +25,6 @@ namespace starrocks {
 
 // Forward declarations
 struct JsonPath;
-
-extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
-
-struct SimpleJsonPath {
-    std::string key; // key of a json object
-    int idx;         // array index of a json array, -1 means not set, -2 means *
-    bool is_valid;   // true if the path is successfully parsed
-
-    SimpleJsonPath(std::string key_, int idx_, bool is_valid_) : key(std::move(key_)), idx(idx_), is_valid(is_valid_) {}
-
-    std::string to_string() const {
-        std::stringstream ss;
-        if (!is_valid) {
-            return "INVALID";
-        }
-        if (!key.empty()) {
-            ss << key;
-        }
-        if (idx == -2) {
-            ss << "[*]";
-        } else if (idx > -1) {
-            ss << "[" << idx << "]";
-        }
-        return ss.str();
-    }
-
-    std::string debug_string() const {
-        std::stringstream ss;
-        ss << "key: " << key << ", idx: " << idx << ", valid: " << is_valid;
-        return ss.str();
-    }
-};
 
 class JsonFunctions {
 public:
@@ -197,25 +161,6 @@ public:
     static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-    // extract_from_object extracts value from object according to the json path.
-    // Now, we do not support complete functions of json path.
-    static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
-                                      simdjson::ondemand::value* value) noexcept;
-
-    static Status parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
-
-    // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
-    static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
-
-    template <typename ValueType>
-    static std::string_view to_json_string(ValueType&& val, size_t limit) {
-        std::string_view sv = simdjson::to_json_string(std::forward<ValueType>(val));
-        if (sv.size() > limit) {
-            return sv.substr(0, limit);
-        }
-        return sv;
-    }
-
 private:
     template <LogicalType ResultType>
     static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
@@ -261,9 +206,6 @@ private:
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: JsonColumn
      */
-
-    static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
-                                    std::vector<SimpleJsonPath>* parsed_paths);
 
     // Helper function to check if target JSON contains candidate JSON
     static bool json_value_contains(JsonValue* target, JsonValue* candidate);

@@ -1,0 +1,50 @@
+-- name: test_cte_consume_decoded_column
+
+set cbo_enable_low_cardinality_optimize = true;
+set low_cardinality_optimize_v2 = true;
+
+CREATE TABLE `cte_decoded_t` (
+  `id` bigint NOT NULL,
+  `c_user` varchar(128) NULL,
+  `c_dept` varchar(128) NULL,
+  `c_par` varchar(128) NULL,
+  `ts` datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into cte_decoded_t
+select
+    generate_series,
+    concat('U', generate_series % 2),
+    concat('D', generate_series % 2),
+    concat('P', generate_series % 2),
+    seconds_add('2026-01-01 00:00:00', generate_series)
+from TABLE(generate_series(0, 299));
+
+[UC] analyze full table cte_decoded_t;
+
+function: wait_global_dict_ready('c_user', 'cte_decoded_t')
+function: wait_global_dict_ready('c_dept', 'cte_decoded_t')
+function: wait_global_dict_ready('c_par', 'cte_decoded_t')
+
+-- `c_par` is a passthrough low-card column that stays dict across the materialized CTE
+-- (so the CTE-consume is visited by DecodeRewriter); `c_user` is in the global dict map
+-- but is decoded inside the producer by lead(...,'NONE'). Before the fix,
+-- DecodeRewriter.visitPhysicalCTEConsume rewrote the c_user CTE-output entry to the
+-- producer dict slot the producer no longer emits, so BE failed with "slot_id not found".
+[ORDER]
+WITH CTE AS (
+  SELECT c_par, c_user, c_dept,
+         lead(c_user, 1, 'NONE') over (partition by c_dept order by c_user) nx
+  FROM cte_decoded_t
+) [materialized]
+SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+  c_par, c_user, count(*) cnt
+FROM CTE
+WHERE nx != 'ZZZ'
+GROUP BY c_par, c_user
+ORDER BY c_par, c_user;

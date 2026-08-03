@@ -16,9 +16,9 @@
 
 #include "compute_env/global_dict/parser.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
+#include "storage/query/olap_morsel_queue.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {

@@ -52,9 +52,14 @@ public:
 
     Status init(const DataCacheInitOptions& options);
     void attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache);
+    Status enable_metrics_update_hook(MetricRegistry* registry, bool use_same_starcache_instance = false);
+    void disable_metrics_update_hook();
+    void update_metrics();
+    void set_mem_trackers(MemTracker* datacache_mem_tracker, MemTracker* pagecache_mem_tracker);
+    void update_mem_trackers();
     void destroy();
 
-    void try_release_resource_before_core_dump();
+    void release_memory_before_core_dump();
 
     void set_local_disk_cache(std::shared_ptr<LocalDiskCacheEngine> local_disk_cache) {
         _local_disk_cache = std::move(local_disk_cache);
@@ -102,6 +107,11 @@ private:
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::shared_ptr<MemSpaceMonitor> _mem_space_monitor;
+
+    MetricRegistry* _metrics_registry = nullptr;
+    bool _use_same_starcache_instance = false;
+    MemTracker* _datacache_mem_tracker = nullptr;
+    MemTracker* _pagecache_mem_tracker = nullptr;
 };
 
 } // namespace starrocks

@@ -1287,7 +1287,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
             Assertions.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
             Assertions.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
-            Assertions.assertEquals(Map.of("tbl1", "(k1 >= '2022-03-01') AND (k1 < '2022-04-01')"),
+            Assertions.assertEquals(Map.of("test.tbl1", "(k1 >= '2022-03-01') AND (k1 < '2022-04-01')"),
                     extraMessage.getPlanBuilderMessage());
 
             Config.enable_materialized_view_spill = true;
@@ -2895,7 +2895,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     taskRunContext.setProperties(props);
                     taskRunContext.setTaskType(Constants.TaskType.MANUAL);
 
-                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
                     MVTaskRunProcessor mvTaskRunProcessor = new MVTaskRunProcessor();
                     mvTaskRunProcessor.prepare(taskRunContext);
                     MVPCTRefreshProcessor processor =
@@ -2944,7 +2943,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     processor.prepare(taskRunContext);
                     MVPCTRefreshProcessor mvRefreshProcessor =
                             (MVPCTRefreshProcessor) processor.getMVRefreshProcessor();
-                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
                     Set<String> result = new MVPCTRefreshSynchronizer(mvRefreshProcessor)
                             .getPCTMVToRefreshedPartitions(false, false).getPartitionNames();
                     Assertions.assertFalse(result.isEmpty());

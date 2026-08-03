@@ -304,7 +304,6 @@ public class DropPartitionTest {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
 
         Partition partition = table.getPartition("p20210203");
-        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
         table.dropPartitionWithRetention(db.getId(), "p20210203", 100);
         partition = table.getPartition("p20210203");
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/dictionary_cache_manager.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 
 #include <fmt/format.h>
 #include <gmock/gmock.h>
@@ -22,13 +22,19 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
-#include "exec/tablet_info.h"
-#include "exprs/dictionary_get_expr.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/dictionary_cache/chunk_util.h"
+#include "exec/exec_env.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "exprs_ext/dict/dictionary_get_expr.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/tablet_info.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -106,7 +112,7 @@ public:
         }
 
         std::unique_ptr<ChunkPB> pchunk = std::make_unique<ChunkPB>();
-        DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
+        DictionaryCacheChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
 
         TOlapTableSchemaParam tschema;
         tschema.db_id = 1;
@@ -245,9 +251,70 @@ public:
         return e;
     }
 
-    starrocks::DictionaryCacheManager* dictionary_cache_manager = StorageEngine::instance()->dictionary_cache_manager();
+    static std::unique_ptr<DictionaryGetExpr> new_dictionary_get_expr(int64_t dict_id, int64_t txn_id,
+                                                                      ColumnPtr key_column, ObjectPool& objpool) {
+        TypeDescriptor type;
+        type.type = LogicalType::TYPE_STRUCT;
+        type.field_names.emplace_back("k2");
+        type.field_names.emplace_back("k3");
+        type.children.emplace_back();
+        type.children.back().type = LogicalType::TYPE_BIGINT;
+        type.children.emplace_back();
+        type.children.back().type = LogicalType::TYPE_BIGINT;
+
+        TDictionaryGetExpr t_dictionary_get_expr;
+        t_dictionary_get_expr.__set_dict_id(dict_id);
+        t_dictionary_get_expr.__set_txn_id(txn_id);
+        t_dictionary_get_expr.__set_key_size(1);
+
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::DICTIONARY_GET_EXPR);
+        node.__set_is_nullable(false);
+        node.__set_type(type.to_thrift());
+        node.__set_num_children(0);
+        node.__set_dictionary_get_expr(t_dictionary_get_expr);
+
+        auto dictionary_get_expr = std::make_unique<DictionaryGetExpr>(node);
+
+        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
+        type_varchar.len = 100;
+        std::string dictionary_name("dictionary_name");
+        Slice slice(dictionary_name);
+        dictionary_get_expr->add_child(
+                new_mock_expr(ColumnTestHelper::build_column<Slice>({slice}), type_varchar, objpool));
+
+        dictionary_get_expr->add_child(new_mock_expr(std::move(key_column), LogicalType::TYPE_BIGINT, objpool));
+        return dictionary_get_expr;
+    }
+
+    starrocks::DictionaryCacheManager* dictionary_cache_manager =
+            ExecEnv::GetInstance()->compute_env()->dictionary_cache_manager();
     TabletSharedPtr test_tablet = nullptr;
 };
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, precheck_value_encode_resets_non_normal_flags_for_zero_byte) {
+    Fields fields;
+    fields.emplace_back(new Field(0, "v", TYPE_VARCHAR, false));
+    auto schema = std::make_shared<Schema>(std::move(fields));
+    auto chunk = ChunkFactory::new_chunk(*schema, 4);
+
+    auto* column = down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(0));
+    const std::string with_zero("a\0b", 3);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string("plain");
+
+    std::vector<uint8_t> value_encode_flags = {PRIMARY_KEY_DECODE_FAST, PRIMARY_KEY_DECODE_SKIP,
+                                               PRIMARY_KEY_DECODE_NORMAL, PRIMARY_KEY_DECODE_SKIP};
+    DictionaryCacheUtil::precheck_value_encode(chunk.get(), value_encode_flags);
+
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[0]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[1]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[2]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_SKIP, value_encode_flags[3]);
+}
 
 // NOLINTNEXTLINE
 TEST_F(DictionaryCacheManagerTest, concurrent_refresh_and_read) {
@@ -292,44 +359,14 @@ TEST_F(DictionaryCacheManagerTest, large_column_refresh_and_read) {
 
 // NOLINTNEXTLINE
 TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
-    auto test_tablet = create_tablet(9145, 6545);
+    test_tablet = create_tablet(9145, 6545);
     create_new_dictionary_cache(dictionary_cache_manager, 400, 1, test_tablet);
     ObjectPool objpool;
 
-    TypeDescriptor type;
-    type.type = LogicalType::TYPE_STRUCT;
-    type.field_names.emplace_back("k2");
-    type.field_names.emplace_back("k3");
-    type.children.emplace_back();
-    type.children.back().type = LogicalType::TYPE_BIGINT;
-    type.children.emplace_back();
-    type.children.back().type = LogicalType::TYPE_BIGINT;
+    auto dictionary_get_expr = new_dictionary_get_expr(400, 1, ColumnTestHelper::build_column<int64_t>({0}), objpool);
 
-    TDictionaryGetExpr t_dictionary_get_expr;
-    t_dictionary_get_expr.__set_dict_id(400);
-    t_dictionary_get_expr.__set_txn_id(1);
-    t_dictionary_get_expr.__set_key_size(1);
-
-    TExprNode node;
-    node.__set_node_type(TExprNodeType::DICTIONARY_GET_EXPR);
-    node.__set_is_nullable(false);
-    node.__set_type(type.to_thrift());
-    node.__set_num_children(0);
-    node.__set_dictionary_get_expr(t_dictionary_get_expr);
-
-    auto dictionary_get_expr = std::make_unique<DictionaryGetExpr>(node);
-
-    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-    type_varchar.len = 100;
-    std::string dictionary_name("dictionary_name");
-    Slice slice(dictionary_name);
-    dictionary_get_expr->add_child(
-            new_mock_expr(ColumnTestHelper::build_column<Slice>({slice}), type_varchar, objpool));
-
-    dictionary_get_expr->add_child(
-            new_mock_expr(ColumnTestHelper::build_column<int64_t>({0}), LogicalType::TYPE_BIGINT, objpool));
-
-    ASSERT_TRUE(dictionary_get_expr->prepare(nullptr, nullptr).ok());
+    RuntimeState runtime_state(ExecEnv::GetInstance());
+    ASSERT_TRUE(dictionary_get_expr->prepare(&runtime_state, nullptr).ok());
     auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
     ASSERT_TRUE(res.ok());
 
@@ -338,6 +375,50 @@ TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
     auto struct_column =
             down_cast<const StructColumn*>(down_cast<const NullableColumn*>(res_column.get())->data_column().get());
     ASSERT_TRUE(struct_column->fields().size() == 2);
+}
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_accepts_all_zero_null_bitmap) {
+    test_tablet = create_tablet(9146, 6546);
+    create_new_dictionary_cache(dictionary_cache_manager, 401, 1, test_tablet);
+    ObjectPool objpool;
+
+    auto key_column = NullableColumn::create(ColumnTestHelper::build_column<int64_t>({0}), NullColumn::create(1, 0));
+    key_column->set_has_null(true);
+    ASSERT_TRUE(key_column->has_null());
+    ASSERT_EQ(0, ColumnHelper::count_nulls(key_column));
+
+    auto dictionary_get_expr = new_dictionary_get_expr(401, 1, std::move(key_column), objpool);
+
+    RuntimeState runtime_state(ExecEnv::GetInstance());
+    ASSERT_TRUE(dictionary_get_expr->prepare(&runtime_state, nullptr).ok());
+    auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_TRUE(res.ok()) << res.status().message();
+
+    auto res_column = std::move(res.value());
+    ASSERT_EQ(1, res_column->size());
+    auto struct_column =
+            down_cast<const StructColumn*>(down_cast<const NullableColumn*>(res_column.get())->data_column().get());
+    ASSERT_EQ(2, struct_column->fields().size());
+}
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_rejects_real_null) {
+    test_tablet = create_tablet(9147, 6547);
+    create_new_dictionary_cache(dictionary_cache_manager, 402, 1, test_tablet);
+    ObjectPool objpool;
+
+    auto key_column = NullableColumn::create(ColumnTestHelper::build_column<int64_t>({0}), NullColumn::create(1, 1));
+    ASSERT_TRUE(key_column->has_null());
+    ASSERT_EQ(1, ColumnHelper::count_nulls(key_column));
+
+    auto dictionary_get_expr = new_dictionary_get_expr(402, 1, std::move(key_column), objpool);
+
+    RuntimeState runtime_state(ExecEnv::GetInstance());
+    ASSERT_TRUE(dictionary_get_expr->prepare(&runtime_state, nullptr).ok());
+    auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ("invalid parameter for dictionary_get function: get NULL paramenter", res.status().message());
 }
 
 } // namespace starrocks

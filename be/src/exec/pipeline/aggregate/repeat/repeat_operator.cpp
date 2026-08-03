@@ -15,7 +15,7 @@
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
 
 #include "column/chunk.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "exprs/expr_executor.h"
 #include "runtime/descriptors.h"
 

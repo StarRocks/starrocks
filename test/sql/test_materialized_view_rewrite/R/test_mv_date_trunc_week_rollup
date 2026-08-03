@@ -1,0 +1,54 @@
+-- name: test_mv_date_trunc_week_rollup
+CREATE DATABASE IF NOT EXISTS test_mv_date_trunc_week_rollup_db;
+-- result:
+-- !result
+USE test_mv_date_trunc_week_rollup_db;
+-- result:
+-- !result
+CREATE TABLE wkt (
+  dt DATE,
+  v INT
+) DUPLICATE KEY(dt)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO wkt VALUES ('2024-12-30', 1), ('2024-12-31', 1), ('2025-01-01', 1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_week
+REFRESH MANUAL
+AS SELECT date_trunc('week', dt) AS wk, sum(v) AS s FROM wkt GROUP BY date_trunc('week', dt);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_week WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT date_trunc('month', dt) mo, sum(v) s FROM wkt GROUP BY date_trunc('month', dt) ORDER BY mo;
+-- result:
+2024-12-01	2
+2025-01-01	1
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT date_trunc('month', dt) mo, sum(v) s FROM wkt GROUP BY date_trunc('month', dt) ORDER BY mo;
+-- result:
+2024-12-01	2
+2025-01-01	1
+-- !result
+SELECT date_trunc('quarter', dt) q, sum(v) s FROM wkt GROUP BY date_trunc('quarter', dt) ORDER BY q;
+-- result:
+2024-10-01	2
+2025-01-01	1
+-- !result
+SELECT date_trunc('year', dt) y, sum(v) s FROM wkt GROUP BY date_trunc('year', dt) ORDER BY y;
+-- result:
+2024-01-01	2
+2025-01-01	1
+-- !result
+SELECT date_trunc('week', dt) wk, sum(v) s FROM wkt GROUP BY date_trunc('week', dt) ORDER BY wk;
+-- result:
+2024-12-30	3
+-- !result

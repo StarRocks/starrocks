@@ -50,6 +50,23 @@ cd test && python3 run.py -v
 - Bug-fix PRs intended for branch backports must set the version checkboxes that drive auto-backporting.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
 
+## Codex PR Review Context
+
+When performing a PR review (including `@codex review`), first inspect the PR
+comments for one beginning with `<!-- module-risk-briefing -->`.
+
+If a current briefing exists, treat it as review focus, not a finding list:
+- check the listed modules/files first;
+- validate every risk against the actual diff before reporting;
+- do not report a finding solely because the briefing cites a historical risk;
+- if the embedded `<!-- module-risk-head-sha: X -->` differs from the PR's
+  current head commit, the briefing predates the latest push: use it only as
+  historical reference, NOT as the primary review focus for the current diff,
+  and flag this in the review summary;
+- if the briefing is stale or absent, say so briefly — never silently drop the
+  historical risks, and never report one as a current finding without checking
+  the diff.
+
 ## Nested Guides
 
 - [`handbook/index.md`](./handbook/index.md)

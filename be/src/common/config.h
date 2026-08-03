@@ -114,6 +114,17 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
+// process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
+// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
+// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
+// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
+CONF_String(jemalloc_conf,
+            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
+            "background_thread:true,prof:true,prof_active:false");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
@@ -126,6 +137,9 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 CONF_mInt32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
 CONF_mInt32(drop_tablet_worker_count, "0");
+// The count of thread to clean up storage files.
+// 0 means storage cleanup worker count is equal to half of cpu core count.
+CONF_mInt32(storage_cleanup_worker_count, "0");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -159,7 +173,7 @@ CONF_mInt32(alter_tablet_worker_count, "3");
 // thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
 // the DROP INDEX fast path remain single-threaded and are unaffected.
 //
-// The dedicated _thread_pool_lake_schema_change capacity is auto-derived as:
+// The dedicated storage-owned lake_schema_change thread-pool capacity is auto-derived as:
 //     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
 // so the outer alter pool and inner segment pool stay physically isolated and
 // never deadlock against each other.
@@ -263,7 +277,7 @@ CONF_Bool(sys_log_timezone, "false");
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
-// The maximum number of bytes to display on the debug webserver's log page.
+// The maximum number of bytes to display on the debug HTTP service's log page.
 CONF_Int64(web_log_bytes, "1048576");
 // The number of threads available to serve backend execution requests.
 CONF_Int32(be_service_threads, "64");
@@ -302,7 +316,7 @@ CONF_mInt32(scanner_thread_pool_thread_num, "48");
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
 // Number of threads for internal JVM calls that must run on pthreads.
-CONF_Int32(jvm_call_thread_pool_size, "1");
+CONF_Int32(jvm_call_thread_pool_size, "4");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
 // Default thrift client connect timeout(in seconds).
@@ -313,6 +327,12 @@ CONF_Int32(broker_write_timeout_seconds, "30");
 CONF_mInt64(thrift_client_retry_interval_ms, "100");
 // Single read execute fragment row size.
 CONF_mInt32(scanner_row_num, "16384");
+// Shared scan only: number of consecutive chunks the round-robin chunk buffer routes to the
+// same output (consumer driver) before advancing to the next one. Larger values coarsen the
+// distribution granularity so a consumer drains a small run per wakeup instead of one chunk at
+// a time, reducing pipeline scheduling churn; 1 restores strict per-chunk round-robin. Read
+// once when the chunk buffer is created (i.e. per query fragment).
+CONF_mInt32(shared_scan_output_chunk_batch_size, "8");
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
 // Number of max scan keys.
@@ -369,6 +389,16 @@ CONF_Int32(min_file_descriptor_number, "60000");
 
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
+
+// When true, high-cardinality string columns that fall back to plain encoding are written with
+// the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
+// deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
+// strings and compress far better than monotonically increasing absolute offsets, while the
+// uncompressed trailer keeps the same size. The format is identified by the column encoding
+// recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
+// encoding fails to open the segment instead of misreading it. Only the write side is gated by
+// this config; default false.
+CONF_mBool(enable_binary_plain_delta_offset, "false");
 
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
@@ -469,8 +499,6 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable eager build of PK index files during import and compaction.
-CONF_mBool(enable_pk_index_eager_build, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
@@ -746,6 +774,14 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
@@ -849,6 +885,10 @@ CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+// Release retained chunk capacity in compaction when the current tracker consumption exceeds this percentage.
+// Currently only used by PK compaction in shared-nothing mode.
+// Set it to a negative value to disable this behavior.
+CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
@@ -886,6 +926,18 @@ CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
 // The increased frequency of priority for remaining tasks in BlockingPriorityQueue.
 CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
+
+// Whether ThreadPool swallows an exception thrown by a task and keeps the worker running.
+//
+// false (default): the task body has no enclosing catch clause, so an escaping exception
+// finds no handler and terminates the process at the throw point. Loud, and no task can
+// report success without having produced a result.
+//
+// true: the exception is logged and the worker moves on to the next task. This keeps the
+// process alive but does NOT make the task exception safe -- a task whose result write is
+// skipped while its completion signal still fires is reported to its waiter as success.
+// Only turn this on to mitigate a crash loop, and expect the failure to become silent.
+CONF_mBool(enable_threadpool_catch_task_exception, "false");
 
 // Sync tablet_meta when modifing meta.
 CONF_mBool(sync_tablet_meta, "false");
@@ -1181,6 +1233,10 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on:
+// min(tablet_internal_parallel_max_splitted_scan_rows, this) cuts big tablets into finer prepared-split
+// morsels, never coarser. Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
 
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
@@ -1233,6 +1289,12 @@ CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 // DefaultRetryStrategy
 CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
+
+// Maximum number of object storage clients (S3 and Azure Blob) cached per client factory.
+// Mutable at runtime: the value is snapshotted on each client creation, so a lowered value
+// takes effect as cached clients are evicted on subsequent creations. Values below 1 are
+// treated as 1.
+CONF_mInt64(object_storage_client_cache_size, "8");
 
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
@@ -1428,6 +1490,16 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
+// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
+// the legacy path is used and no incompatible on-disk state is written.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
@@ -1437,11 +1509,29 @@ CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
+// tablet from cumulative selection (the size-tiered small-file merge, which favors small
+// freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
+// deleted rows first) to drop deleted rows and shrink their delete vectors:
+//   1. lake_pk_compaction_base_delete_ratio_threshold: the tablet's aggregate delete ratio
+//      (sum(num_dels)/sum(num_rows) across rowsets) reaches this fraction.
+//   2. lake_pk_compaction_base_delete_rows_threshold: the tablet's absolute delete-row count
+//      (sum(num_dels)) reaches this many rows. This matters because on hot update/delete tables
+//      the deletes bloat the delete vectors and waste space (delvec bytes ~= num_dels * 0.23)
+//      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
+// Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
+// deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
+CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
 // below). Enabled by default: low-value sparse mid-tier picks are skipped per the
 // thresholds below. Set to false to turn off the entire gate in one step — every picked
@@ -1504,6 +1594,14 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// When true, shared-data (lake) tablet metadata and txn log files are written with an
+// Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
+// corruption can be detected on read. Readers always auto-detect and verify the checksum when
+// a file has it, regardless of this flag; the flag only controls the write format. Defaults to
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
@@ -1587,6 +1685,9 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// Route the spillable sort (ORDER BY / TOP-N) operator onto the pipeline event scheduler instead of the busy-poller.
+CONF_mBool(enable_spill_sort_events, "false");
 
 // The max number of threads for exec_state_report thread pool.
 CONF_mInt32(exec_state_report_max_threads, "2");
@@ -1779,7 +1880,14 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 // 2, print exceptions' stack whose prefix is not in the black list
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
-CONF_String(exception_stack_white_list, "std::");
+// `starrocks::BadStatusOrAccess` comes from an unguarded StatusOr::value() and is caught nowhere,
+// so every occurrence is a bug. The stack recorded at the throw site is the only way to locate it:
+// by the time a catch handler runs the throwing frames are already unwound, so a stack taken there
+// only shows the catch site.
+// Keep it an exact type rather than a bare `starrocks::` prefix, which would also match
+// starrocks::RuntimeException. That one exists specifically to opt out of this stack printing (see
+// be/src/runtime/exception.h) because it is thrown per row on hot paths such as cast failures.
+CONF_String(exception_stack_white_list, "std::,starrocks::BadStatusOrAccess");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 // PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
@@ -1881,7 +1989,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
@@ -1994,9 +2102,23 @@ CONF_Strings(python_envs, "");
 CONF_Bool(report_python_worker_error, "true");
 CONF_Bool(python_worker_reuse, "true");
 CONF_Int32(python_worker_expire_time_sec, "300");
+// Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
+// Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
+// the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above
+// the longest expected UDF query. 0 (default) disables the timeout (wait indefinitely).
+CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor
@@ -2043,6 +2165,13 @@ CONF_mBool(enable_vector_adaptive_search, "true");
 CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
 CONF_mDouble(vector_adaptive_ef_cap, "8.0");
 CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// PRE short-circuit: when the residual pre-filter bitmap holds at most this fraction of the segment's
+// rows, skip the filtered ANN search and score the candidates exactly (a sparse bitmap makes the HNSW
+// traversal slow and likely to under-return, paying the exact rescan on top of the wasted search).
+// Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
+// ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
+CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

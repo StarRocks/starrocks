@@ -22,6 +22,7 @@ namespace starrocks {
 using FileConverterCreatorFunc =
         std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name, uint64_t file_size)>;
 
+class RemoteSnapshotClient;
 class TabletSchemaPB;
 class ReplicationUtils {
 public:
@@ -29,10 +30,12 @@ public:
                                        TSchemaHash schema_hash, TVersion version, int32_t timeout_s,
                                        const std::vector<Version>* missed_versions,
                                        const std::vector<int64_t>* missing_version_ranges,
-                                       std::string* remote_snapshot_path);
+                                       std::string* remote_snapshot_path,
+                                       RemoteSnapshotClient* snapshot_client = nullptr);
 
     static Status release_remote_snapshot(const std::string& host, int32_t be_port,
-                                          const std::string& remote_snapshot_path);
+                                          const std::string& remote_snapshot_path,
+                                          RemoteSnapshotClient* snapshot_client = nullptr);
 
     static Status download_remote_snapshot(const std::string& host, int32_t http_port, const std::string& remote_token,
                                            const std::string& remote_snapshot_path, TTabletId remote_tablet_id,

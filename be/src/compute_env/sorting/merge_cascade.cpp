@@ -19,11 +19,11 @@
 #include "base/string/array_view.hpp"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "column/sorting/sort_helper.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sort_helper.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 
 namespace starrocks {
 

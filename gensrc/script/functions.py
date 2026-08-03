@@ -189,6 +189,7 @@ vectorized_functions = [
     [10323, "hex", True, False, "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10318, "blake3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::blake3"],
     [10316, "hex_decode_binary", True, False, "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
     [10317, "hex_decode_string", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
@@ -487,6 +488,11 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. BE-only.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
 
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
@@ -847,7 +853,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', False, False, 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array'],
     [90600, 'bitmap_max', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max'],
     [90700, 'bitmap_min', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min'],
-    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap'],
+    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap',
+     'BitmapFunctions::base64_to_bitmap_prepare', 'BitmapFunctions::base64_to_bitmap_close'],
     [90801, 'bitmap_to_base64', False, True, 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64'],
     [90900, 'array_to_bitmap', False, False, 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap'],
     [91000, 'sub_bitmap', False, False, 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap'],

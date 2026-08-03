@@ -378,14 +378,19 @@ public class MaterializedViewAnalyzer {
                     queryStatement = result.queryStatement();
                     // re-analyze again
                     Analyzer.analyze(queryStatement, context);
-                    statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
                     // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
                     statement.setKeysType(KeysType.PRIMARY_KEYS);
                     statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
-                    // if not ivm, set query statement directly
+                    // AUTO mode swallows the IVM SemanticException and falls back to PCT, but the trial may
+                    // have prepended __ROW_ID__ to the query in place before bailing. Re-parse the pre-trial
+                    // SQL so the PCT MV is built from the original query, not the half-rewritten one.
+                    queryStatement = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
+                            context.getSessionVariable()).get(0);
+                    Analyzer.analyze(queryStatement, context);
+                    statement.setQueryStatement(queryStatement);
                     statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
                 }
             } else {
@@ -599,8 +604,17 @@ public class MaterializedViewAnalyzer {
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }
-                for (ColWithComment colWithComment : colWithComments) {
-                    FeNameFormat.checkColumnName(colWithComment.getColName());
+                for (int i = 0; i < colWithComments.size(); ++i) {
+                    String colName = colWithComments.get(i).getColName();
+                    // An IVM MV's re-parsed DDL lists the internal columns this analyzer generated
+                    // (__ROW_ID__, __AGG_STATE_*), whose names may hold characters a user-typed name
+                    // may not -- e.g. __AGG_STATE_count(*). Exempt only a name identical to the one
+                    // generated for that position, so a user-authored name is still checked.
+                    if (rowIdStrategy != null && IvmOpUtils.isIvmInternalColumn(colName)
+                            && colName.equals(columnNames.get(i))) {
+                        continue;
+                    }
+                    FeNameFormat.checkColumnName(colName);
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
@@ -610,6 +624,16 @@ public class MaterializedViewAnalyzer {
                 boolean colNullable = relationFields.get(i).isNullable();
                 if (colWithComments != null) {
                     colName = colWithComments.get(i).getColName();
+                }
+                // A materialized view is stored as a native OLAP table. VARIANT (and complex types that
+                // nest it) has no native storage write path, so a generated MV column carrying VARIANT
+                // would abort the BE on refresh (the storage LogicalType dispatch hits its default
+                // LOG(FATAL) for TYPE_VARIANT) -- exactly the case ColumnDefAnalyzer rejects for CREATE
+                // TABLE. The MV column path does not go through ColumnDefAnalyzer, so reject it here too.
+                if (type.containsVariant()) {
+                    throw new SemanticException(
+                            "VARIANT is not supported as a column type for materialized views: column '" +
+                                    colName + "'");
                 }
                 Column column = new Column(colName, type, colNullable);
                 if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
@@ -1107,7 +1131,6 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column", partitionRefTableExpr.getPos());
                 }
                 Column refPartitionCol = refPartitionColOpt.get();
-                Type partitionExprType = refPartitionCol.getType();
                 // To olap table, determine mv's partition by its ref base table's partition column type:
                 // - if the partition column is string type && no use `str2date`, use list partition.
                 // - otherwise use range partition as before.
@@ -1335,32 +1358,35 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            boolean enableRangeDistribution = Config.enable_range_distribution;
-            if (connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution()) {
-                enableRangeDistribution = true;
-            }
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
 
-            if (enableRangeDistribution) {
+            if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                // Primary key MVs must be normalized first, regardless of the range-distribution default:
+                // an incremental MV is forced to hash distribution on all key columns (its row-id/merge
+                // semantics depend on it), while for a non-incremental primary key MV this is a no-op that
+                // returns the given (or absent) distribution.
+                distributionDesc = checkDistributionForPrimaryKey(statement);
+                if (distributionDesc == null && enableRangeDistribution) {
+                    // No distribution specified and range distribution is enabled: use it as the default.
+                    distributionDesc = new RangeDistributionDesc();
+                    statement.setDistributionDesc(distributionDesc);
+                }
+            } else if (enableRangeDistribution) {
                 if (distributionDesc == null) {
                     // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
             } else {
-                // If the key type is primary key, the distribution must be hash distribution.
-                if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                    distributionDesc = checkDistributionForPrimaryKey(statement);
-                } else {
-                    // for non primary key tables, if user not specify distribution, we use hash distribution
-                    if (distributionDesc == null) {
-                        if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
-                            distributionDesc = new HashDistributionDesc(0,
-                                    Lists.newArrayList(mvColumnItems.get(0).getName()));
-                        } else {
-                            distributionDesc = new RandomDistributionDesc();
-                        }
-                        statement.setDistributionDesc(distributionDesc);
+                // for non primary key tables, if user not specify distribution, we use hash distribution
+                if (distributionDesc == null) {
+                    if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
+                        distributionDesc = new HashDistributionDesc(0,
+                                Lists.newArrayList(mvColumnItems.get(0).getName()));
+                    } else {
+                        distributionDesc = new RandomDistributionDesc();
                     }
+                    statement.setDistributionDesc(distributionDesc);
                 }
             }
 
@@ -1616,13 +1642,11 @@ public class MaterializedViewAnalyzer {
 
     private static @NotNull Column getPartitionColumn(List<Column> columns, SlotRef slotRef) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             throw new SemanticException("Materialized view partition exp column:"
@@ -1762,13 +1786,11 @@ public class MaterializedViewAnalyzer {
      */
     public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");

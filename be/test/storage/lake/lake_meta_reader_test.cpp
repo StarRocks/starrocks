@@ -18,11 +18,14 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -222,6 +225,29 @@ TEST_F(LakeMetaReaderTest, test_get_segments_rowset_ids) {
     // Verify rowset ids are different for different rowsets
     EXPECT_NE(options_list[0].pk_rowsetid, options_list[1].pk_rowsetid)
             << "Expected different rowset ids for different rowsets";
+}
+
+// experimental_lake_ignore_lost_segment: _init_seg_meta_collecters must skip a lost segment (the
+// nullptr placeholder from load_segments) instead of building a SegmentMetaCollecter for it, so a
+// metadata scan over a tablet with a physically-missing segment file does not crash.
+TEST_F(LakeMetaReaderTest, test_init_seg_meta_collecters_ignore_lost_segment) {
+    ASSIGN_OR_ABORT(auto tablet_id, create_tablet_with_data(PRIMARY_KEYS, 1, 1));
+
+    ASSIGN_OR_ABORT(auto meta, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    ASSERT_GT(meta->rowsets_size(), 0);
+    ASSERT_GT(meta->rowsets(0).segment_metas_size(), 0);
+    auto seg_name = meta->rowsets(0).segment_metas(0).filename();
+    _tablet_mgr->metacache()->prune();
+    ASSERT_OK(FileSystem::Default()->delete_file(_tablet_mgr->segment_location(tablet_id, seg_name)));
+
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp reset([] { config::experimental_lake_ignore_lost_segment = false; });
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+    LakeMetaReader reader;
+    LakeMetaReaderParams params;
+    // The sole segment is lost, so the collector loop must skip the null slot without crashing.
+    ASSERT_OK(reader.TEST_init_seg_meta_collecters(tablet, params));
 }
 
 } // namespace starrocks::lake

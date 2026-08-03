@@ -104,7 +104,9 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-.claude
+# Ignore local Claude Code state, but track shared project skills
+.claude/*
+!.claude/skills/
 !docs/.claude/
 !docs/.claude/**
 docs/.claude/settings.local.json
@@ -120,3 +122,7 @@ test/.venv
 
 .lycheecache
 memory/
+!be/src/runtime/memory/
+!be/src/runtime/memory/**
+!be/test/runtime/memory/
+!be/test/runtime/memory/**

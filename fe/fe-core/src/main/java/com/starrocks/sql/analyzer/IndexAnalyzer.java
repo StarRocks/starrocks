@@ -77,6 +77,7 @@ public class IndexAnalyzer {
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -194,6 +195,7 @@ public class IndexAnalyzer {
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexNgram(properties);
+        checkInvertedIndexLowerCase(properties);
 
         // add default properties
         addDefaultProperties(properties);
@@ -242,13 +244,27 @@ public class IndexAnalyzer {
         }
     }
 
-    // VectorIndexUtil methods
-    public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (!Config.enable_experimental_vector) {
-            throw new SemanticException(
-                    "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
+    public static void checkInvertedIndexLowerCase(Map<String, String> properties) {
+        String lowerCase = properties == null ? null : properties.get(INVERTED_INDEX_LOWER_CASE_KEY);
+        if (lowerCase == null) {
+            return;
         }
 
+        // lower_case is only meaningful for the builtin english analyzer.
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        String parser = getInvertedIndexParser(properties);
+        if (!BUILTIN.name().equalsIgnoreCase(impValue) || !INVERTED_INDEX_PARSER_ENGLISH.equalsIgnoreCase(parser)) {
+            throw new SemanticException(
+                    "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.");
+        }
+
+        if (!"true".equalsIgnoreCase(lowerCase) && !"false".equalsIgnoreCase(lowerCase)) {
+            throw new SemanticException("INVERTED index lower_case should be true or false.");
+        }
+    }
+
+    // VectorIndexUtil methods
+    public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
         if (column.isAllowNull()) {
             throw new SemanticException("The vector index can only build on non-nullable column");
         }
@@ -348,6 +364,27 @@ public class IndexAnalyzer {
             int dimValue = Integer.parseInt(dim);
             if (dimValue % mValue != 0) {
                 throw new SemanticException("`DIM` should be a multiple of `M_IVFPQ` for IVFPQ index");
+            }
+
+            // IVFPQ k-means training needs at least `nlist` vectors, so a build
+            // threshold below nlist would start building with too few training
+            // points and fail every INSERT inside faiss ('nx >= k'). Fail fast at
+            // DDL time instead; BE re-floors the threshold at nlist as a second
+            // line of defense.
+            String threshold = getPropertyIgnoreCase(properties, CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name());
+            if (threshold != null) {
+                // threshold is a valid integer, guaranteed by checkParams.
+                int thresholdValue = Integer.parseInt(threshold);
+                String nlist = getPropertyIgnoreCase(properties, IndexParamsKey.NLIST.name());
+                // The NLIST default is only materialized at the end of this method,
+                // so fall back to the registered default when it is not set yet.
+                int nlistValue = Integer.parseInt(nlist != null ? nlist
+                        : IndexParams.getInstance().getParam(IndexParamsKey.NLIST.name()).getDefaultValue());
+                if (thresholdValue < nlistValue) {
+                    throw new SemanticException(String.format(
+                            "`index_build_threshold` (%d) must be >= `nlist` (%d) for IVFPQ index",
+                            thresholdValue, nlistValue));
+                }
             }
         }
 

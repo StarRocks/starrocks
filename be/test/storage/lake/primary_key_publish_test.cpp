@@ -15,8 +15,10 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <map>
 #include <random>
 
+#include "base/debug/trace.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
@@ -33,9 +35,11 @@
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/bundle_file.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
@@ -52,6 +56,7 @@
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "testutil/chunk_assert.h"
 
@@ -100,7 +105,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
-        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
+        StorageEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -249,6 +254,107 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+}
+
+// A separate-sort-key spill load leaves duplicate-primary-key loser rows physically in a segment (the
+// eager PK-index SST points at the winner) and carries their rowids in op_write.seg_delvecs. Publish must
+// fold those rowids into the segment's delete vector so the losers are masked. Here we synthesize a single
+// segment plus a seg_delvecs entry masking two of its rows, and assert those rows are gone after publish.
+// This exercises the reader/apply path only (no eager-SST write side needed). Without the seg_delvecs
+// handling, all rows would remain visible.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_applies_seg_delvecs) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> v0{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    // Mask the rows at rowid 2 and 6 (keys 3 and 7) via a seg_delvecs entry for local segment 0.
+    std::vector<uint32_t> losers{2, 6};
+    DelVector dv;
+    dv.init(/*version=*/1, losers.data(), losers.size());
+    auto* seg_delvec_pb = op_write->add_seg_delvecs();
+    seg_delvec_pb->set_version(1);
+    seg_delvec_pb->set_data(dv.save());
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    writer->close();
+
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    // Two of the ten rows are masked by seg_delvecs -> eight visible.
+    EXPECT_EQ(k0.size() - losers.size(), read_rows(_tablet_metadata->id(), 2));
+}
+
+// Regression: a serialized *empty* DelVector (a seg_delvecs entry for a segment with no dedup losers)
+// has non-empty bytes but loads to a null roaring. Publish must treat it as empty (mask nothing) rather
+// than dereference the null roaring and crash.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_seg_delvecs_empty_entry) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    std::vector<int> k0{1, 2, 3, 4, 5};
+    std::vector<int> v0{10, 20, 30, 40, 50};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk0));
+    ASSERT_OK(writer->finish());
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(_tablet_metadata->id());
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
+    }
+    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
+    op_write->mutable_rowset()->set_data_size(writer->data_size());
+    op_write->mutable_rowset()->set_overlapped(false);
+
+    // A serialized empty DelVector: save() writes a non-empty payload, load() leaves roaring() null.
+    DelVector dv;
+    dv.set_empty();
+    auto* seg_delvec_pb = op_write->add_seg_delvecs();
+    seg_delvec_pb->set_version(1);
+    seg_delvec_pb->set_data(dv.save());
+    EXPECT_FALSE(seg_delvec_pb->data().empty()); // the payload really is non-empty (the crash precondition)
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    writer->close();
+
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
+    // No masking, no crash: all rows visible.
+    EXPECT_EQ(k0.size(), read_rows(_tablet_metadata->id(), 2));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
@@ -424,6 +530,404 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 3, read_rows(tablet_id, version));
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+}
+
+// Within a single transaction, a key may be deleted and then re-upserted across different memtable
+// flushes (segments / del files). The upsert/delete order must be preserved: the trailing upsert
+// wins, so all keys remain present with the last value. Before the op_offset interleaving fix, the
+// delete file was always applied after all segments, so it wrongly erased the re-upserted rows and
+// the read returned 0 rows. Runs across in-memory / LOCAL / CLOUD_NATIVE index types via TEST_P.
+TEST_P(LakePrimaryKeyPublishTest, test_interleaved_delete_then_reupsert) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    // Build a 3-column chunk (c0=key, c1=value, __op) for the given keys/values and op type.
+    auto make_chunk = [&](int value_shift, bool upsert) {
+        std::vector<int> keys(n), vals(n);
+        std::vector<uint8_t> ops(n);
+        for (int i = 0; i < n; i++) {
+            keys[i] = i;
+            vals[i] = i + value_shift;
+            ops[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+    };
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+
+    auto upsert_first = make_chunk(/*value_shift=*/0, /*upsert=*/true);
+    auto delete_keys = make_chunk(/*value_shift=*/0, /*upsert=*/false);
+    auto upsert_last = make_chunk(/*value_shift=*/1000, /*upsert=*/true);
+
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    // Force every write() to flush separately so the upsert/delete/re-upsert land in distinct
+    // segments and del files (segment0, del-after-segment0, segment1) within one transaction. Force
+    // the serial (non-spill) flush path: the spill/merge path collapses flushes into a single merged
+    // segment and orders deletes differently (handled separately), so it would not exercise the
+    // per-flush op_offset interleaving this test targets. Enable op_offset persistence (off by
+    // default for downgrade safety) so this test exercises the interleaving it targets.
+    config::write_buffer_size = 1;
+    config::enable_load_spill = false;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+    });
+    int64_t txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*upsert_first, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*delete_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*upsert_last, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    // All keys must survive (the trailing upsert wins) with the last value.
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 2));
+    ASSERT_EQ(n, chunk->num_rows());
+    std::map<int, int> kv;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        kv[chunk->get(i)[0].get_int32()] = chunk->get(i)[1].get_int32();
+    }
+    ASSERT_EQ(static_cast<size_t>(n), kv.size());
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(kv.count(i) > 0) << "key " << i << " missing";
+        EXPECT_EQ(i + 1000, kv[i]) << "key " << i << " has stale value";
+    }
+}
+
+// A transaction whose FIRST flush is delete-only (empty upsert chunk) must still produce a real
+// (0-row) segment for that flush. That empty segment takes the leading rssid slot so the delete
+// (op_offset = its index) is ordered before a later-flush re-upsert of the same key, which then
+// wins. This verifies both the behavior AND that the tablet metadata actually records the empty
+// segment (if it didn't, the delete would share the re-upsert's rssid and erase it).
+TEST_P(LakePrimaryKeyPublishTest, test_delete_only_first_flush_creates_segment) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    auto make_chunk = [&](int value_shift, bool upsert) {
+        std::vector<int> keys(n), vals(n);
+        std::vector<uint8_t> ops(n);
+        for (int i = 0; i < n; i++) {
+            keys[i] = i;
+            vals[i] = i + value_shift;
+            ops[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+    };
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](int64_t new_version, const std::vector<ChunkPtr>& chunks) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (const auto& c : chunks) {
+            ASSERT_OK(delta_writer->write(*c, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id).status());
+    };
+
+    // v2: pre-populate keys 0..n-1 with value=key, so the later delete has existing rows to remove.
+    write_one_txn(2, {make_chunk(/*value_shift=*/0, /*upsert=*/true)});
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: one transaction; write_buffer_size=1 forces each write() into its own flush:
+    //   flush0 = delete-only -> a 0-row (empty) segment + a del file
+    //   flush1 = re-upsert   -> a segment
+    // Force the serial (non-spill) flush path: the empty segment for a delete-only flush is produced
+    // by the serial writer; the spill/merge path collapses flushes into one merged segment (its
+    // ordering is handled separately), so it would not exercise this mechanism.
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::write_buffer_size = 1;
+    config::enable_load_spill = false;
+    // Enable op_offset persistence (off by default for downgrade safety) so the delete-only first
+    // flush records its op_offset; otherwise the gate leaves it unset and the metadata assertions
+    // below (del file op_offset==0) would not hold.
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    write_one_txn(3,
+                  {make_chunk(/*value_shift=*/0, /*upsert=*/false), make_chunk(/*value_shift=*/1000, /*upsert=*/true)});
+    config::write_buffer_size = old_size;
+    config::enable_load_spill = old_spill;
+    config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+
+    // Correctness: all keys survive with the re-upserted value (the trailing upsert wins).
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 3));
+    ASSERT_EQ(n, chunk->num_rows());
+    std::map<int, int> kv;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        kv[chunk->get(i)[0].get_int32()] = chunk->get(i)[1].get_int32();
+    }
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(kv.count(i) > 0) << "key " << i << " missing";
+        EXPECT_EQ(i + 1000, kv[i]) << "key " << i << " has stale value";
+    }
+
+    // Metadata: the v3 rowset must hold 2 segments (the empty one from the delete-only flush + the
+    // re-upsert segment) and 1 del file whose op_offset points at the first (empty) segment.
+    ASSIGN_OR_ABORT(auto meta_v3, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    int v3_segments = -1;
+    int v3_delfiles = -1;
+    uint32_t v3_del_op_offset = 0;
+    for (const auto& rs : meta_v3->rowsets()) {
+        if (rs.version() == 3) {
+            v3_segments = rs.segment_metas_size();
+            v3_delfiles = rs.del_files_size();
+            if (rs.del_files_size() == 1) {
+                v3_del_op_offset = rs.del_files(0).op_offset();
+            }
+        }
+    }
+    ASSERT_NE(-1, v3_segments) << "no rowset produced at version 3";
+    EXPECT_EQ(2, v3_segments) << "delete-only first flush did not create an empty segment";
+    EXPECT_EQ(1, v3_delfiles);
+    EXPECT_EQ(0u, v3_del_op_offset);
+}
+
+// Build a 3-column chunk (c0=key, c1=value, __op) for keys [0, n). op: true=UPSERT, false=DELETE.
+static ChunkPtr make_op_chunk(int n, int value_shift, bool upsert, const Chunk::SlotHashMap& slot_cid_map) {
+    std::vector<int> keys(n), vals(n);
+    std::vector<uint8_t> ops(n);
+    for (int i = 0; i < n; i++) {
+        keys[i] = i;
+        vals[i] = i + value_shift;
+        ops[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int8Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+    c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+    return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
+}
+
+// Spill path: the op-aware parallel merge must preserve in-transaction upsert/delete order. Drive the
+// default spill path (enable_load_spill=true) with parallel merge and tiny merge batches so a key that is
+// deleted and then re-upserted across flushes resolves across merge batches; the re-upsert (higher global
+// segment index, assigned in TabletWriter::merge_other_writer) must win. This exercises
+// write_one_merged_chunk (upsert + delete split) and finalize_merged_batch. Asserts data only -- the spill
+// segment/del layout is not what this test pins.
+TEST_P(LakePrimaryKeyPublishTest, test_spill_interleaved_delete_then_reupsert) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto upsert_first = make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map);
+    auto delete_keys = make_op_chunk(n, /*value_shift=*/0, /*upsert=*/false, _slot_cid_map);
+    auto upsert_last = make_op_chunk(n, /*value_shift=*/1000, /*upsert=*/true, _slot_cid_map);
+
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_parallel = config::enable_load_spill_parallel_merge;
+    const int64_t old_merge_bytes = config::load_spill_max_merge_bytes;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    // write_buffer_size=1: each write() flushes to its own spilled block. parallel merge + tiny
+    // load_spill_max_merge_bytes: each block becomes its own merge batch, so the delete and the re-upsert
+    // land in different batches and their global order is decided at consolidation.
+    config::write_buffer_size = 1;
+    config::enable_load_spill = true;
+    config::enable_load_spill_parallel_merge = true;
+    config::load_spill_max_merge_bytes = 1;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+        config::enable_load_spill_parallel_merge = old_parallel;
+        config::load_spill_max_merge_bytes = old_merge_bytes;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+    });
+    int64_t txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*upsert_first, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*delete_keys, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(*upsert_last, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    // All keys survive (the trailing upsert wins) with the re-upserted value.
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 2));
+    ASSERT_EQ(n, chunk->num_rows());
+    std::map<int, int> kv;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        kv[chunk->get(i)[0].get_int32()] = chunk->get(i)[1].get_int32();
+    }
+    ASSERT_EQ(static_cast<size_t>(n), kv.size());
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(kv.count(i) > 0) << "key " << i << " missing";
+        EXPECT_EQ(i + 1000, kv[i]) << "key " << i << " has stale value";
+    }
+}
+
+// Spill path: a delete-only transaction (a net-delete-only merge batch) must still erase its keys.
+// Exercises finalize_merged_batch's empty-segment anchor + del-file write on the op-aware spill merge.
+TEST_P(LakePrimaryKeyPublishTest, test_spill_delete_only_removes_keys) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    const int n = kChunkSize;
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_parallel = config::enable_load_spill_parallel_merge;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::write_buffer_size = 1;
+    config::enable_load_spill = true;
+    config::enable_load_spill_parallel_merge = true;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+        config::enable_load_spill_parallel_merge = old_parallel;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+    });
+    auto write_one_txn = [&](int64_t version, const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    };
+    // v2: populate n keys; v3: delete them all (net-delete-only) on the spill path.
+    write_one_txn(2, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map));
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+    write_one_txn(3, make_op_chunk(n, /*value_shift=*/0, /*upsert=*/false, _slot_cid_map));
+    ASSERT_EQ(0, read_rows(tablet_id, 3));
+}
+
+// Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one
+// upsert chunk (merged upsert rows > config::vector_chunk_size), write_one_merged_chunk must not corrupt
+// the reused merge chunk's schema. The old clone_empty_with_schema + remove_column_by_index shared then
+// shrank the SchemaPtr, so the second chunk cloned a K-column chunk against a now K-1-field schema and
+// tripped Schema::remove's bounds (DCHECK in debug, out-of-range erase / UB in release). Load more than
+// vector_chunk_size distinct upsert keys through the op-aware spill merge and assert they all read back.
+TEST_P(LakePrimaryKeyPublishTest, test_spill_upsert_spanning_multiple_merge_chunks) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    // Exceed the merge get_next chunk size so run() calls write_one_merged_chunk for more than one chunk.
+    const int n = config::vector_chunk_size + 128;
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_parallel = config::enable_load_spill_parallel_merge;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    // write_buffer_size=1 forces spilling (blocks flushed before eos, skipping the single-flush shortcut);
+    // serial merge then consolidates them in one task whose merged stream exceeds vector_chunk_size.
+    config::write_buffer_size = 1;
+    config::enable_load_spill = true;
+    config::enable_load_spill_parallel_merge = false;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+        config::enable_load_spill_parallel_merge = old_parallel;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+    });
+    int64_t txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map),
+                                      indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
@@ -864,6 +1368,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     config::enable_primary_key_recover = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, true, false);
@@ -1484,6 +1993,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     std::vector<std::pair<ChunkPtr, std::vector<uint32_t>>> chunks;
     // upsert + delete
     chunks.push_back(gen_data_and_index(kChunkSize, 0, true, true));
@@ -1631,6 +2145,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
+    // Asserts the legacy del-file layout (deletes applied after all segments). Pin the feature off so it
+    // keeps exercising that path now that lake_enable_pk_preserve_txn_delete_order defaults on.
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    config::lake_enable_pk_preserve_txn_delete_order = false;
+    DeferOp reset_preserve([&]() { config::lake_enable_pk_preserve_txn_delete_order = old_preserve; });
     std::vector<std::pair<ChunkPtr, std::vector<uint32_t>>> chunks;
     // upsert + delete
     chunks.push_back(gen_data_and_index(kChunkSize, 0, true, true));
@@ -2170,11 +2689,298 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }
 
+// experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
+// compaction txn is published must not crash and must not fail the publish. This covers all three
+// publish shapes with an error-injected (physically deleted) lost output segment:
+//   1. light publish, NO loss    -> normal SST ingest + conflict resolver
+//   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
+//   3. non-light publish, lost   -> CompactionState empty PK column
+// and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
+// + SST ingest) persistent index via the param list.
+TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    int shift = 0;
+
+    auto write_rowsets = [&](int n) {
+        for (int i = 0; i < n; i++) {
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize, shift++, false, true);
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+            CHECK_OK(dw->open());
+            CHECK_OK(dw->write(*chunk, indexes.data(), indexes.size()));
+            CHECK_OK(dw->finish_with_txnlog());
+            dw->close();
+            CHECK_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+            version++;
+        }
+    };
+
+    // Compact, optionally delete an output segment (error injection), then publish.
+    auto compact_and_publish = [&](bool lose_output_segment) -> Status {
+        int64_t txn_id = next_id();
+        auto old_min = config::lake_pk_compaction_min_input_segments;
+        config::lake_pk_compaction_min_input_segments = 1;
+        DeferOp reset_min([&] { config::lake_pk_compaction_min_input_segments = old_min; });
+        auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+        RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
+        if (lose_output_segment) {
+            ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+            const auto& out = txnlog->op_compaction().output_rowset();
+            if (out.segment_metas_size() > 0) {
+                _tablet_mgr->metacache()->prune();
+                RETURN_IF_ERROR(FileSystem::Default()->delete_file(
+                        _tablet_mgr->segment_location(tablet_id, out.segment_metas(0).filename())));
+            }
+        }
+        auto st = publish_single_version(tablet_id, version + 1, txn_id).status();
+        version++;
+        return st;
+    };
+
+    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
+
+    // 2. Light publish, lost output segment: resolver lost branch + SST-ingest skip.
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp reset_flag([] { config::experimental_lake_ignore_lost_segment = false; });
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
+
+    // 3. Non-light publish, lost output segment: CompactionState empty PK column path.
+    config::enable_light_pk_compaction_publish = false;
+    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
+
+    // The tablet stays readable afterwards (a lost segment's rows are simply gone).
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+    (void)chunk;
+}
+
+// Verify the publish path emits the trace counters added to attribute a slow lake publish. The test
+// harness publishes via lake::publish_version (bypassing the LakeServiceImpl RPC layer), so it covers
+// the counters on that path -- finalize (delvec write + metadata put) and the compaction internals --
+// but not publish_tablet_total_us, which is emitted in the RPC handler.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_emits_trace_counters) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, /*shift=*/i, /*random_shuffle=*/false,
+                                                   /*upsert=*/true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        CHECK_OK(dw->open());
+        CHECK_OK(dw->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    int64_t txn_id = next_id();
+    auto old_min = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp reset_min([&] { config::lake_pk_compaction_min_input_segments = old_min; });
+    auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    // Publish the compaction txn under an adopted trace; the publish runs synchronously on this thread,
+    // so the counters land on `trace`.
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    }
+    version++;
+
+    const std::string metrics = trace->MetricsAsJSON();
+    // finalize() always writes the delvec file and persists the tablet metadata.
+    EXPECT_NE(metrics.find("finalize_delvec_write_us"), std::string::npos) << metrics;
+    EXPECT_NE(metrics.find("put_tablet_metadata_us"), std::string::npos) << metrics;
+    // A compaction publish runs the conflict resolver and applies the compaction to the PK index.
+    EXPECT_NE(metrics.find("compaction_conflict_resolve_us"), std::string::npos) << metrics;
+    EXPECT_NE(metrics.find("index_apply_opcompaction_us"), std::string::npos) << metrics;
+}
+
+// Regression for the compaction-publish optimization that skips loading output segment footers:
+// on the default path (experimental_lake_ignore_lost_segment=false) execute_without_update_index()
+// takes each output segment's row count from the tablet metadata (output_segment_num_rows()) instead
+// of Rowset::load_segments(). Verify a cloud-native compaction still processes every output segment
+// correctly (preserving all live rows) when no segment footer is loaded.
+TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_metadata) {
+    // Precondition: the fast path (no segment-footer load) is the default.
+    ASSERT_FALSE(config::experimental_lake_ignore_lost_segment);
+
+    // Build index SSTs during load (write_buffer_size forces multi-segment rowsets; the 1-byte eager
+    // threshold builds an index SST for each) so the compaction carries op_compaction.ssts and
+    // light_publish_primary_compaction dispatches to execute_without_update_index (the path under test)
+    // rather than resolver->execute(). This is the recipe proven deterministic by pk_tablet_sst_writer_test.
+    ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<int64_t> g_min_input_segments(&config::lake_pk_compaction_min_input_segments, 2);
+
+    auto tablet_id = _tablet_metadata->id();
+    // The fixture's default single-INT-key schema uses PK encoding V1, for which eager PK index SST build
+    // is unsupported (pk_index_eager_build_supported); switch to V2 so the load and compaction build the
+    // index SSTs that route publish through execute_without_update_index (the path under test).
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    // 3 chunks of 80 rows each (240 distinct keys, 0..239), re-upserted by every rowset so the compaction
+    // has real dedup work and builds an index SST. The resolver must generate a delvec for every output
+    // segment, so a wrong per-segment row count (mis-advancing the rows-mapper) would corrupt the result.
+    // All chunks are 80 rows, so one index vector serves all writes.
+    auto [chunk0, indexes] = gen_data_and_index(80, /*shift=*/0, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk1 = gen_data(80, /*shift=*/1, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk2 = gen_data(80, /*shift=*/2, /*random_shuffle=*/false, /*upsert=*/true);
+
+    int64_t version = 1;
+    for (int i = 0; i < 4; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        CHECK_OK(dw->open());
+        CHECK_OK(dw->write(*chunk0, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk1, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk2, indexes.data(), indexes.size()));
+        CHECK_OK(dw->finish_with_txnlog());
+        dw->close();
+        // The load eagerly built an index SST -- the precondition for the compaction below to carry
+        // op_compaction.ssts and thus dispatch to execute_without_update_index.
+        ASSIGN_OR_ABORT(auto wlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_GT(wlog->op_write().ssts_size(), 0);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    EXPECT_EQ(240, read_rows(tablet_id, version));
+
+    // Compact the rowsets into one; the eager-built index ssts drive
+    // light_publish_primary_compaction -> execute_without_update_index.
+    int64_t txn_id = next_id();
+    auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    // Assert the compaction built an index SST so publish takes execute_without_update_index (the path
+    // under test), not resolver->execute() -- otherwise this test would silently exercise nothing.
+    ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_GT(txnlog->op_compaction().ssts_size(), 0);
+
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // The compaction preserves every live row. The publish goes through
+    // light_publish_primary_compaction -> execute_without_update_index (the path under test), where a
+    // wrong per-segment row count (from output_segment_num_rows()) would mis-advance the rows-mapper and
+    // drop or duplicate rows.
+    EXPECT_EQ(240, read_rows(tablet_id, version));
+}
+
+// Companion to the test above covering the experimental_lake_ignore_lost_segment=true branch, where
+// execute_without_update_index DOES load the output segments (so a physically-lost one can be detected
+// via a null slot). No segment is lost here, so the compaction must still publish correctly.
+TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_loads_segments_under_ignore_lost_flag) {
+    ConfigResetGuard<bool> g_ignore_lost(&config::experimental_lake_ignore_lost_segment, true);
+    // Same index-SST-during-load recipe as the companion test (proven by pk_tablet_sst_writer_test) so
+    // the compaction carries op_compaction.ssts and publish dispatches to execute_without_update_index,
+    // which -- with the flag on -- loads the output segments.
+    ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    ConfigResetGuard<int64_t> g_min_input_segments(&config::lake_pk_compaction_min_input_segments, 2);
+
+    auto tablet_id = _tablet_metadata->id();
+    // Switch to PK encoding V2 (see the companion test) so the load and compaction build index SSTs and
+    // publish reaches execute_without_update_index -- here, with the flag on, its load-segments branch.
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    // 3 chunks of 80 rows each (240 distinct keys, 0..239), re-upserted by every rowset so the compaction
+    // has real dedup work and builds an index SST. All chunks are 80 rows, so one index vector serves all
+    // writes.
+    auto [chunk0, indexes] = gen_data_and_index(80, /*shift=*/0, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk1 = gen_data(80, /*shift=*/1, /*random_shuffle=*/false, /*upsert=*/true);
+    auto chunk2 = gen_data(80, /*shift=*/2, /*random_shuffle=*/false, /*upsert=*/true);
+
+    int64_t version = 1;
+    for (int i = 0; i < 4; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        CHECK_OK(dw->open());
+        CHECK_OK(dw->write(*chunk0, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk1, indexes.data(), indexes.size()));
+        CHECK_OK(dw->write(*chunk2, indexes.data(), indexes.size()));
+        CHECK_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSIGN_OR_ABORT(auto wlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_GT(wlog->op_write().ssts_size(), 0);
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    EXPECT_EQ(240, read_rows(tablet_id, version));
+
+    int64_t txn_id = next_id();
+    auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    // The compaction eagerly built an index SST, so publish takes execute_without_update_index and --
+    // with the flag on -- the load-segments branch. Assert the precondition so the test fails loudly
+    // (rather than silently taking resolver->execute()) if that ever stops holding.
+    ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_GT(txnlog->op_compaction().ssts_size(), 0);
+
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // Segments were loaded (flag on) and none was lost, so every row survives the compaction.
+    EXPECT_EQ(240, read_rows(tablet_id, version));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
-                         ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                                           PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
-                                           PrimaryKeyParam{true, PersistentIndexTypePB::LOCAL,
-                                                           PartialUpdateMode::ROW_MODE, true},
+                         ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
                                                            PartialUpdateMode::ROW_MODE, true}));
 

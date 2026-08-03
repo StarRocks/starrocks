@@ -335,6 +335,15 @@ select lower(MAX(upper(a1[1]))) from s1 group by a2[1] order by a2[1] limit 2;
 
 select lower(x1), upper(MIN(HEX(x2))) from (select a1[1] x1, array_max(a2) x2 from s1) y group by x1 order by x1 limit 2;
 
+select array_contains(a1, 'Hunan'), array_contains_all(a1, ['Henan', 'Tibet']), array_contains_seq(a1, ['Ningxia', 'Tibet']), array_intersect(a1, ['Henan', 'Yunnan']),
+       array_position(a1, 'Chongqing'), array_remove(a1, 'Henan') from s1 order by v1 limit 2;
+
+with cte as (select array_slice(array_agg(a1[1] order by v1, v2), 1, 3)  as arr from s1)
+select array_contains(arr, 'Hunan'), array_contains_all(arr, ['Henan', 'Tibet']), array_contains_seq(arr, ['Henan', 'Hunan']), array_intersect(arr, ['Henan', 'Yunnan']),
+       array_position(arr, 'Macao'), array_remove(arr, 'Henan') from cte;
+
+select  array_contains(a1, NULL), array_contains_all(a1, array_slice(a1, 1, 2)), array_contains_seq(a1, array_slice(a1, 1, 2)) from s1 order by v1 limit 2;
+
 -- name: test_low_array_with_dict_predicate
 
 CREATE TABLE `s3` (

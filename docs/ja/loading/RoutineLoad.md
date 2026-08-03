@@ -407,10 +407,10 @@ FROM KAFKA
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | RECORD 全体またはそのサブフィールドを JSON として StarRocks にロードします。 |
+| record         | STRUCT、または RECORD 全体やそのサブフィールドを JSON として StarRocks にロードします。 |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | MAP または JSON                                                         |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
 
@@ -418,6 +418,99 @@ FROM KAFKA
 
 - 現在、StarRocks はスキーマの進化をサポートしていません。
 - 各 Kafka メッセージには単一の Avro データレコードのみを含める必要があります。
+
+### ソースメッセージのメタデータにアクセスする
+
+JSON または Avro 形式のデータをロードする際、メッセージのペイロードの代わりに、メッセージの Kafka/Pulsar メタデータ（topic、partition、offset、timestamp、key、headers）からターゲットカラムを設定できます。`INCLUDE METADATA (...)` 句で各メタデータキーをエイリアスにバインドして宣言します。エイリアスは通常のソースカラムとして `COLUMNS` から参照できます。
+
+これは監査（行がどの topic/partition/offset から来たか）、イベント時刻処理（メッセージのタイムスタンプを使用）、header 値によるルーティングに役立ちます。
+
+#### 構文
+
+```SQL
+INCLUDE METADATA ( <metadata_key> [AS <alias>] [, <metadata_key> [AS <alias>] ...] )
+```
+
+`INCLUDE METADATA` はロードプロパティです。`COLUMNS` や `WHERE` などの他のロードプロパティと一緒に（順序は任意で）、`PROPERTIES` および `FROM` 句の前に配置します。`AS <alias>` は任意です。省略した場合、エイリアスは `<metadata_key>` になります。エイリアスは句内で一意であり、ペイロードフィールド、ターゲットテーブルのカラム、予約カラム名と衝突してはいけません。
+
+#### メタデータキー
+
+サポートされるキーはデータソースによって異なります。
+
+| ソース | キー | 型 | 説明 |
+| --- | --- | --- | --- |
+| KAFKA | `TOPIC` | VARCHAR | Topic 名。 |
+| KAFKA | `PARTITION` | INT | Partition 番号。 |
+| KAFKA | `OFFSET` | BIGINT | Partition 内のメッセージ offset。 |
+| KAFKA | `TIMESTAMP_MS` | BIGINT | レコードのタイムスタンプ（エポックからのミリ秒）。broker がタイムスタンプを報告しない場合は `NULL`。 |
+| KAFKA | `KEY` | VARCHAR | メッセージ key の生バイト。メッセージに key がない場合は `NULL`。 |
+| KAFKA | `HEADERS` | MAP\<VARCHAR, VARCHAR> | すべての header の map。キーが重複する場合は最後の値が有効。 |
+| PULSAR | `TOPIC` | VARCHAR | ジョブが消費する論理 topic（パーティション topic の `-partition-N` サフィックスは含まれない）。 |
+| PULSAR | `PARTITION` | INT | メッセージごとの topic 名から解析される partition インデックス。非パーティション topic の場合は `NULL`。 |
+| PULSAR | `KEY` | VARCHAR | パーティション key。メッセージに key がない場合は `NULL`。 |
+| PULSAR | `MESSAGE_ID` | VARCHAR | Message ID。 |
+| PULSAR | `PUBLISH_TIME_MS` | BIGINT | 公開時刻（エポックからのミリ秒）。 |
+| PULSAR | `EVENT_TIME_MS` | BIGINT | イベント時刻（エポックからのミリ秒）。producer が設定していない場合は `NULL`。 |
+| PULSAR | `PROPERTIES` | MAP\<VARCHAR, VARCHAR> | すべての property の map。キーが重複する場合は最後の値が有効。 |
+
+単一の header/property 値を読み取るには、`HEADERS`/`PROPERTIES` map に対して `element_at(<headers_alias>, '<name>')` を使用します。キーが重複する場合は最後の値が有効で、キーが存在しない場合は結果が `NULL` になります。header/property 値は生バイトとしてそのまま VARCHAR に格納されます（UTF-8 検証なし）。
+
+#### 使用上の注意
+
+- `INCLUDE METADATA` は `format = json`（Kafka および Pulsar）と `format = avro`（Kafka のみ。Pulsar Routine Load は Avro 非対応）で使用できます。1 つのメッセージが複数行に展開される場合があり、メッセージごとのメタデータが曖昧になるため、CSV ではサポートされません。
+- メタデータのエイリアスは通常のソースカラムです。`COLUMNS` 式の任意の場所で参照できます。ペイロードフィールドがメタデータキーと同じ名前の場合は、曖昧さを避けるために `AS <alias>` で別のエイリアスを指定してください。
+- `OFFSET` は Kafka 専用、`MESSAGE_ID` は Pulsar 専用です。ソースがサポートしないキーを使用すると、そのソースがサポートするキーを列挙したエラーが発生します。
+- `HEADERS`/`PROPERTIES` の型は `MAP\<VARCHAR, VARCHAR>` です。ソースの header/property は順序付きリストでキーが重複する場合があり、重複はマップに折りたたまれて最後の値が有効になります（`element_at(map, 'name')` ルックアップも同様に最後の値が有効で、キーが存在しない場合は `NULL` を返します）。値は生バイトとしてそのまま VARCHAR に格納され、UTF-8 の検証やデコードは行われません。
+
+#### 例
+
+注文ペイロードフィールド `order_id` を、ソース topic、partition、offset、`DATETIME` に変換したメッセージタイムスタンプ、`trace-id` header と一緒にロードします:
+
+```SQL
+CREATE TABLE example_db.orders_with_meta (
+    order_id      BIGINT,
+    src_topic     VARCHAR(256),
+    src_partition INT,
+    src_offset    BIGINT,
+    msg_time      DATETIME,
+    trace_id      VARCHAR(128)
+)
+ENGINE = OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id);
+
+CREATE ROUTINE LOAD example_db.orders_with_meta_job ON orders_with_meta
+INCLUDE METADATA
+(
+    TOPIC        AS m_topic,
+    PARTITION    AS m_partition,
+    OFFSET       AS m_offset,
+    TIMESTAMP_MS AS m_timestamp,
+    HEADERS      AS m_headers
+),
+COLUMNS
+(
+    order_id,
+    src_topic     = m_topic,
+    src_partition = m_partition,
+    src_offset    = m_offset,
+    msg_time      = from_unixtime(m_timestamp / 1000),
+    trace_id      = element_at(m_headers, 'trace-id')
+)
+PROPERTIES
+(
+    "format" = "json",
+    "jsonpaths" = "[\"$.order_id\"]"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,...",
+    "kafka_topic" = "topic_orders",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+メタデータのエイリアスは式の中で使用できます（上記の `from_unixtime(m_timestamp / 1000)` のように）。`jsonpaths` にはペイロードカラムのみを列挙します。
 
 ## ロードジョブとタスクを確認する
 

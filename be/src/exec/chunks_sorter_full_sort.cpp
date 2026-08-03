@@ -16,11 +16,11 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "common/runtime_profile.h"
 #include "compute_env/sorting/data_segment.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"

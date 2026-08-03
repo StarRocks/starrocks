@@ -29,10 +29,13 @@
 #include "base/testutil/assert.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
@@ -174,6 +177,56 @@ TEST_F(VectorIndexCacheTest, LookupAndHitCounters_TrackedAcrossPaths) {
     EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/missing.vi"), &h));
     EXPECT_EQ(2u, cache_->lookup_count());
     EXPECT_EQ(1u, cache_->hit_count());
+}
+
+TEST_F(VectorIndexCacheTest, Metrics_UpdatedFromCacheOperations) {
+    MetricRegistry registry("test_registry");
+    VectorIndexCacheMetrics metrics(&registry);
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get(), &metrics);
+    registry.trigger_hook();
+
+    EXPECT_EQ(16 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_usage.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_hit_count.value());
+
+    auto loader = [&]() -> tenann::IndexRef { return make_dummy_ref(2048); };
+    tenann::IndexCacheHandle h;
+    EXPECT_TRUE(cache->GetOrCreate(tenann::CacheKey("/metrics.vi"), loader, &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(16 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(2048, metrics.vector_index_cache_usage.value());
+    EXPECT_DOUBLE_EQ(2048.0 / (16 * 1024), metrics.vector_index_cache_usage_ratio.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_hit_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_hit_count.value());
+
+    EXPECT_TRUE(cache->GetOrCreate(tenann::CacheKey("/metrics.vi"), loader, &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(2, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_hit_count.value());
+    EXPECT_DOUBLE_EQ(0.5, metrics.vector_index_cache_hit_ratio.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_dynamic_hit_count.value());
+    EXPECT_DOUBLE_EQ(1.0, metrics.vector_index_cache_dynamic_hit_ratio.value());
+
+    EXPECT_TRUE(cache->Lookup(tenann::CacheKey("/metrics.vi"), &h));
+    registry.trigger_hook();
+
+    EXPECT_EQ(2, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(1, metrics.vector_index_cache_hit_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_lookup_count.value());
+    EXPECT_EQ(0, metrics.vector_index_cache_dynamic_hit_count.value());
+
+    cache->SetCapacity(8 * 1024);
+    registry.trigger_hook();
+
+    EXPECT_EQ(8 * 1024, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(2048, metrics.vector_index_cache_usage.value());
+    EXPECT_DOUBLE_EQ(0.25, metrics.vector_index_cache_usage_ratio.value());
 }
 
 TEST_F(VectorIndexCacheTest, GetOrCreate_ConcurrentCallers_SingleFlight) {
@@ -349,6 +402,35 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     c.reset();
 }
 
+// Regression guard for the process-tracker double-count. A heap-resident HNSW index
+// is charged to the process tracker once by the allocator hook during load
+// (count #1); VectorIndexCache must NOT charge it a second time. The cache is built
+// with exclude_root so its DynamicCache labels the vector_index tracker WITHOUT
+// re-propagating to process. Reverting VectorIndexCache to a plain set_mem_tracker
+// (additive consume) makes process carry BOTH copies and fails the process assert
+// below -- that is the bug this test exists to catch.
+//
+// The mem_hook -> MemTracker wiring is stubbed in BE_TEST (mem_hook.cpp routes to
+// g_mem_usage, not the tracker tree), so count #1 is modeled with an explicit
+// consume on the process tracker; its net effect on the process counter is identical
+// to the allocator hook's.
+TEST(VectorIndexCacheDoubleCountTest, InsertDoesNotDoubleCountProcessTracker) {
+    MemTracker process(-1, "process", nullptr);
+    MemTracker vector_index(-1, "vector_index", &process);
+    VectorIndexCache cache(/*capacity=*/64 * 1024, &vector_index);
+
+    constexpr int64_t kHookBytes = 8192;  // allocator hook charge during load (count #1)
+    constexpr int64_t kIndexBytes = 4096; // tenann index memory_usage() (count #2)
+
+    process.consume(kHookBytes); // count #1 (allocator hook, modeled)
+
+    tenann::IndexCacheHandle h;
+    cache.Insert(tenann::CacheKey("/idx.vi"), make_dummy_ref(kIndexBytes), &h); // count #2 via cache
+
+    EXPECT_EQ(kIndexBytes, vector_index.consumption()); // vector_index labels the index size
+    EXPECT_EQ(kHookBytes, process.consumption());       // process counted ONCE (not 8192 + 4096)
+}
+
 // === Sibling helpers under storage/index/vector ===
 
 TEST(TenannErrorToStatusTest, NotFoundVariantsMapToNotFound) {
@@ -441,6 +523,69 @@ TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
 
     tenann::SetGlobalIndexCache(saved);
+}
+
+// A FileSystem that records which mem tracker is active when the index file is
+// opened. VectorIndexFileReader::open() (-> fs->new_random_access_file) runs inside
+// TenANNReader's loader, under the loader's SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER,
+// so the captured tracker is exactly the one the allocator hook would charge
+// index-load allocations to in production.
+namespace {
+class TrackerProbeFileSystem : public MemoryFileSystem {
+public:
+    using MemoryFileSystem::new_random_access_file;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& fname) override {
+        captured = CurrentThread::mem_tracker();
+        return MemoryFileSystem::new_random_access_file(opts, fname);
+    }
+    MemTracker* captured = nullptr;
+};
+} // namespace
+
+// Covers the tenann_index_reader.cpp change that the DynamicCache-level tests can't:
+// index-load allocations must be charged to the PROCESS tracker, not vector_index
+// and not the originating query's tracker. The allocator hook is stubbed in BE_TEST
+// (mem_hook.cpp -> g_mem_usage), so instead of observing a real allocation we capture
+// CurrentThread::mem_tracker() during the load -- that IS the tracker the hook keys
+// off, so verifying it pins the accounting target.
+//
+// Reverting the loader to vector_index_mem_tracker() -> captured == vi -> fails.
+// Dropping the scoped setter entirely -> captured == the ambient query tracker -> fails.
+TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
+    auto* process = RuntimeEnv::GetInstance()->process_mem_tracker();
+    auto* vi = RuntimeEnv::GetInstance()->vector_index_mem_tracker();
+    ASSERT_NE(nullptr, process);
+    ASSERT_NE(nullptr, vi);
+
+    // Missing path on purpose: open() still calls new_random_access_file (where the
+    // probe captures the active tracker) but then fails NotFound, so the loader bails
+    // before ReadIndexFile -- we never feed garbage to faiss, which can SIGSEGV on
+    // malformed input. The tracker we want to assert on is already captured by then.
+    TrackerProbeFileSystem fs;
+
+    MemTracker cache_tracker(-1, "vi_cache_probe");
+    VectorIndexCache cache(/*capacity=*/1024, &cache_tracker);
+    auto* saved = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(&cache);
+
+    // Simulate the load being triggered while running under a query's mem tracker
+    // (distinct from both process and vector_index). The loader must redirect the
+    // load to process regardless.
+    MemTracker fake_query(-1, "fake_query_ambient");
+    {
+        CurrentThreadMemTrackerSetter ambient(&fake_query);
+        TenANNReader r;
+        auto meta = make_minimal_meta();
+        // Load runs the probe fs, then fails NotFound (return ignored).
+        (void)r.init_searcher(meta, "/no/such/probe.vi", &fs);
+    }
+    tenann::SetGlobalIndexCache(saved);
+
+    ASSERT_NE(nullptr, fs.captured) << "loader never opened the index file via fs";
+    EXPECT_EQ(process, fs.captured) << "index load charged to '" << fs.captured->label() << "', expected 'process'";
+    EXPECT_NE(vi, fs.captured);
+    EXPECT_NE(&fake_query, fs.captured);
 }
 
 TEST(VectorIndexCacheEntryTest, StreamingOperatorPrintsTag) {

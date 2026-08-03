@@ -50,6 +50,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -312,6 +313,12 @@ public class EditLog {
                 case OperationType.OP_ERASE_PARTITION_V2: {
                     ErasePartitionLog erasePartitionLog = (ErasePartitionLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
+                    break;
+                }
+                case OperationType.OP_ERASE_MATERIALIZED_INDEX: {
+                    EraseMaterializedIndexLog log = (EraseMaterializedIndexLog) journal.data();
+                    globalStateMgr.getRecycleBin().replayEraseMaterializedIndex(new RecycleMaterializedIndexInfo(
+                            log.getDbId(), log.getTableId(), log.getPhysicalPartitionId(), log.getIndexId()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {
@@ -985,14 +992,11 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should refresh cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector stats cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns(), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
@@ -1000,24 +1004,18 @@ public class EditLog {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns());
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector histogram cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1025,10 +1023,7 @@ public class EditLog {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1647,6 +1642,11 @@ public class EditLog {
 
     public void logErasePartition(long partitionId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
+    }
+
+    public void logEraseMaterializedIndex(RecycleMaterializedIndexInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_MATERIALIZED_INDEX, new EraseMaterializedIndexLog(
+                info.getDbId(), info.getTableId(), info.getPhysicalPartitionId(), info.getIndexId()), walApplier);
     }
 
     public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {

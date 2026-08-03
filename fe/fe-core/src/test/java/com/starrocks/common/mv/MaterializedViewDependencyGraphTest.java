@@ -305,15 +305,11 @@ public class MaterializedViewDependencyGraphTest {
         // mv2's dependency on non-existent mv999 is ignored
         // So mv2 should be treated as having no dependencies
         int idx1 = -1;
-        int idx2 = -1;
         int idx3 = -1;
         for (int i = 0; i < result.size(); i++) {
             long id = result.get(i).getId();
             if (id == 1L) {
                 idx1 = i;
-            }
-            if (id == 2L) {
-                idx2 = i;
             }
             if (id == 3L) {
                 idx3 = i;

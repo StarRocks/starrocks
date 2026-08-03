@@ -136,10 +136,32 @@ public abstract class MVRefreshProcessor {
      * @param state      the state of the task run
      * @param execPlan   the execution plan for the task run
      * @param insertStmt the insert statement for the task run
+     * @param skipReason why no plan was produced; {@code null} unless the state is SKIPPED
      */
     public record ProcessExecPlan(Constants.TaskRunState state,
                                   ExecPlan execPlan,
-                                  InsertStmt insertStmt) {
+                                  InsertStmt insertStmt,
+                                  SkipReason skipReason) {
+
+        /**
+         * Why a task run produced no exec plan. SKIPPED alone cannot be reported as "up to date": only
+         * MV_UP_TO_DATE and SCOPE_UP_TO_DATE mean the data was checked and found fresh.
+         */
+        public enum SkipReason {
+            MV_UP_TO_DATE,
+            // The partitions the user asked for are fresh; others may still be stale.
+            SCOPE_UP_TO_DATE,
+            // Another refresh job owns the pinning, so this batch's partitions are left unrefreshed.
+            STALE_PINNED_BATCH
+        }
+
+        public static ProcessExecPlan success(ExecPlan execPlan, InsertStmt insertStmt) {
+            return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, execPlan, insertStmt, null);
+        }
+
+        public static ProcessExecPlan skipped(SkipReason skipReason) {
+            return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null, skipReason);
+        }
     }
 
     public MVRefreshProcessor(Database db, MaterializedView mv,
@@ -202,8 +224,9 @@ public abstract class MVRefreshProcessor {
 
     /**
      * Generate the next task run to be processed and set it to the nextTaskRun field.
+     * Returns true iff this call enqueued a successor task run, false otherwise.
      */
-    public abstract void generateNextTaskRunIfNeeded();
+    public abstract boolean generateNextTaskRunIfNeeded();
 
     /**
      * Whether this refresh will spawn another batch task run after the current one.
@@ -339,7 +362,10 @@ public abstract class MVRefreshProcessor {
                 continue;
             }
             final TvrVersionRange pinned = TvrTableSnapshot.of(tvr.end());
-            pinnedMap.put(bti.getTableIdentifier(), pinned);
+            // Key by getUUID() — cross-db-unique and identical at every consumer
+            // (MVPCTRefreshPlanBuilder, PartitionDiffer#pinnedRangeFor). A bare table
+            // name would collide across databases.
+            pinnedMap.put(info.getBaseTable().getUUID(), pinned);
 
             if (info instanceof PCTTableSnapshotInfo) {
                 ((PCTTableSnapshotInfo) info).setPinnedRange(pinned);

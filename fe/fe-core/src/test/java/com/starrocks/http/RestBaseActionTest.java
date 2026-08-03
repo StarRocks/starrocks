@@ -333,14 +333,16 @@ public class RestBaseActionTest {
 
     @Test
     public void testAlwaysAnonymousRestActionsBypassBasicAuth() {
+        // These endpoints can never require Basic auth, even when the operator opts into
+        // `enable_http_auth`:
+        //  - GetSmallFile is internal token-protected.
+        //  - The OAuth2 callback is itself the auth handshake.
+        //  - /api/bootstrap is polled by the FE-to-FE heartbeat (HeartbeatMgr) using the
+        //    cluster token rather than HTTP Basic; gating it would break peer-FE heartbeats.
         Config.enable_http_auth = true;
-        Assertions.assertFalse(new BootstrapFinishAction(null).needAuth());
-        Assertions.assertFalse(new FeatureAction(null).needAuth());
-        Assertions.assertFalse(new HealthAction(null).needAuth());
         Assertions.assertFalse(new GetSmallFileAction(null).needAuth());
         Assertions.assertFalse(new OAuth2Action(null).needAuth());
-        Assertions.assertFalse(new IdleAction(null).needAuth());
-        Assertions.assertFalse(new MetricsAction(null).needAuth());
+        Assertions.assertFalse(new BootstrapFinishAction(null).needAuth());
     }
 
     @Test
@@ -362,6 +364,36 @@ public class RestBaseActionTest {
         Assertions.assertTrue(new QueryProgressAction(null).needAuth());
         Assertions.assertTrue(new ShowMetaInfoAction(null).needAuth());
         Assertions.assertTrue(new ShowRuntimeInfoAction(null).needAuth());
+    }
+
+    @Test
+    public void testPublicProbeActionsAreAuthNOnlyGatedByHttpAuthFlag() {
+        // Health / observability probes were historically anonymous. They are now brought
+        // into the `enable_http_auth` scope at AuthN-only level: Basic identity required
+        // when the flag is on, anonymous (backward compatible) when off. None of them
+        // declare a privilege requirement, so identity alone is sufficient.
+        Config.enable_http_auth = false;
+        Assertions.assertFalse(new HealthAction(null).needAuth());
+        Assertions.assertFalse(new IdleAction(null).needAuth());
+        Assertions.assertFalse(new FeatureAction(null).needAuth());
+        Assertions.assertFalse(new MetricsAction(null).needAuth());
+
+        Config.enable_http_auth = true;
+        Assertions.assertTrue(new HealthAction(null).needAuth());
+        Assertions.assertTrue(new IdleAction(null).needAuth());
+        Assertions.assertTrue(new FeatureAction(null).needAuth());
+        Assertions.assertTrue(new MetricsAction(null).needAuth());
+    }
+
+    @Test
+    public void testOAuth2ActionNeverRequiresBasicAuth() {
+        // Guard: the OAuth2 callback must never be pulled into `enable_http_auth`, since
+        // the callback itself is the authentication handshake. It stays anonymous
+        // regardless of the flag.
+        Config.enable_http_auth = false;
+        Assertions.assertFalse(new OAuth2Action(null).needAuth());
+        Config.enable_http_auth = true;
+        Assertions.assertFalse(new OAuth2Action(null).needAuth());
     }
 
     @Test

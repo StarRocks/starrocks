@@ -40,17 +40,17 @@
 #include <string>
 #include <vector>
 
+#include "base/logging.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/logging.h"
 
 using namespace std;
 using namespace starrocks;

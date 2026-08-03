@@ -17,6 +17,7 @@ package com.starrocks.lake.snapshot;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
@@ -44,6 +45,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -364,17 +366,34 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return true;
         }
 
-        boolean safe = true;
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        long safeDeletionTimeMs = getSafeDeletionTimeMs();
+
+        Map<Long, AlterJobV2> alterJobs =
+                new HashMap<>(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2());
         alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
-        for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
-            AlterJobV2 alterJob = entry.getValue();
+        for (AlterJobV2 alterJob : alterJobs.values()) {
             if (alterJob.getTableId() == tableId) {
-                safe = (alterJob.getFinishedTimeMs() < getSafeDeletionTimeMs());
+                if (alterJob.getFinishedTimeMs() >= safeDeletionTimeMs) {
+                    return false;
+                }
                 break;
             }
         }
-        return safe;
+
+        // A tablet reshard (split/merge) replaces a table's tablets and leaves the pre-reshard
+        // parent/source tablets referenced only by an already-captured snapshot. Keep the table's
+        // tablets until every covering automated snapshot has expired, mirroring the ALTER-job
+        // handling above. An aborted reshard removes no tablets (an abort can only happen before the
+        // old tablets are dropped), so it is not snapshot-relevant and must not pin the table.
+        for (TabletReshardJob reshardJob :
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().values()) {
+            if (reshardJob.getTableId() == tableId && !reshardJob.isAborted()
+                    && (!reshardJob.isDone() || reshardJob.getFinishedTimeMs() >= safeDeletionTimeMs)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public boolean isDeletionSafeToExecute(long deletionCreatedTimeMs) {

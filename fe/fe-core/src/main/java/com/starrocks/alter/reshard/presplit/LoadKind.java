@@ -24,6 +24,7 @@ package com.starrocks.alter.reshard.presplit;
  */
 public enum LoadKind {
     INSERT_FROM_FILES("INSERT-from-FILES"),
+    INSERT_FROM_TABLE("INSERT-from-table"),
     BROKER_LOAD("Broker Load");
 
     private final String displayName;

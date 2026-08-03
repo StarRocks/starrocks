@@ -17,9 +17,14 @@
 #include <atomic>
 #include <memory>
 
+#include "base/metrics.h"
 #include "common/statusor.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+
+class MetricRegistry;
+
+namespace pipeline {
 
 class DriverLimiter {
 public:
@@ -42,7 +47,9 @@ public:
     using TokenPtr = std::unique_ptr<Token>;
 
     explicit DriverLimiter(int max_num_drivers) : _max_num_drivers(max_num_drivers) {}
-    ~DriverLimiter() = default;
+    ~DriverLimiter();
+
+    void init(MetricRegistry* metrics);
 
     // Return non-ok status, if it cannot acquire `num_drivers` drivers from the limiter.
     // Otherwise, return the token, the destructor of which will release the acquired
@@ -54,6 +61,9 @@ public:
 private:
     const int _max_num_drivers;
     std::atomic<int> _num_total_drivers{0};
+    MetricRegistry* _metrics = nullptr;
+    METRIC_DEFINE_INT_GAUGE(_pipe_drivers, MetricUnit::NOUNIT);
 };
 
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

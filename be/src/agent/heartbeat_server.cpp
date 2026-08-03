@@ -55,8 +55,8 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
-#include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
+#include "runtime/runtime_env.h"
 #include "storage/storage_engine.h"
 
 using std::fstream;
@@ -149,7 +149,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
-        heartbeat_result.backend_info.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
+        heartbeat_result.backend_info.__set_mem_limit_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->limit());
         if (reboot_time == 0) {
             std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);
@@ -288,7 +288,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     }
 
     if (master_info.__isset.heartbeat_flags) {
-        HeartbeatFlags* heartbeat_flags = ExecEnv::GetInstance()->heartbeat_flags();
+        HeartbeatFlags* heartbeat_flags = RuntimeEnv::GetInstance()->heartbeat_flags();
         heartbeat_flags->update(master_info.heartbeat_flags);
     }
 

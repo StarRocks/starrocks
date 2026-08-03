@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -587,15 +588,18 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 if (idx == -1) {
                     throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
+                // Sort key columns are encoded on the BE via an order-preserving KeyCoder; reject
+                // types without one (JSON/complex/floating-point/metric/variant/TIME) so ALTER ...
+                // ORDER BY fails cleanly instead of crashing the BE short-key encoder on rewrite.
+                if (!columnDefs.get(idx).getType().canDistributedBy()) {
+                    throw new SemanticException("Sort key column[" + column + "] type not supported: "
+                            + columnDefs.get(idx).getType().toSql());
+                }
                 sortKeyIdxes.add(idx);
             }
         }
-        boolean hasReplace = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
-            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
-                hasReplace = true;
-            }
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
@@ -1095,6 +1099,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
             Column afterColumn = table.getColumn(colPos.getLastCol());
+            if (afterColumn == null) {
+                throw new SemanticException("Column[" + colPos.getLastCol() + "] does not exist");
+            }
             if (afterColumn.isGeneratedColumn()) {
                 throw new SemanticException("Can not modify column after Generated Column");
             }
@@ -1251,6 +1258,74 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, col);
             }
         }
+        List<String> sortKeys = clause.getSortKeys();
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            if (!(table instanceof OlapTable
+                    && ((OlapTable) table).isRangeDistribution()
+                    && table.isCloudNativeTable())) {
+                throw new SemanticException(
+                        "ORDER BY on ADD ROLLUP is only supported for shared-data range-distribution tables");
+            }
+            Set<String> rollupColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            rollupColSet.addAll(columnNames);
+            Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String sk : sortKeys) {
+                if (!rollupColSet.contains(sk)) {
+                    throw new SemanticException("ORDER BY column '" + sk + "' is not in the rollup column list");
+                }
+                if (!seen.add(sk)) {
+                    throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
+                }
+                // A range rollup's ORDER BY columns become its range sort-key (tablet-boundary) columns, so
+                // they must be encodable as a key on the BE -- reject JSON/complex/floating-point/metric/
+                // variant and TIME (all excluded by canDistributedBy()), mirroring base-table and rollup
+                // key validation (createRangeRollupJob re-derives key flags from these columns).
+                Column sortKeyColumn = table.getColumn(sk);
+                if (sortKeyColumn != null && !sortKeyColumn.getType().canDistributedBy()) {
+                    throw new SemanticException("ORDER BY column '" + sk + "' has non-sortable type '"
+                            + sortKeyColumn.getType() + "' and cannot be a range rollup sort key");
+                }
+            }
+        }
+        // For a shared-data range-distribution rollup, the online rewrite writes only the rollup's own
+        // columns and cannot supply a value for base columns the rollup omits. Reject the two shapes it
+        // cannot build correctly, mirroring the DROP-key-column guards (a partition column cannot be
+        // dropped; a generated column's dependency cannot be dropped -- see visitDropColumnClause):
+        //   (a) a rollup omitting a partition column (for an automatic/expression partition column, the
+        //       expression's source columns, from which the hidden partition column is recomputed);
+        //   (b) a rollup generated column whose referenced columns are not all included -- else it would be
+        //       recomputed from unavailable (NULL) inputs and silently persist a wrong value.
+        if (table instanceof OlapTable && MaterializedViewHandler.isRangeRollupRoutable((OlapTable) table)) {
+            OlapTable olapTable = (OlapTable) table;
+            Set<String> rollupColumnNames = columnNames.stream()
+                    .map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+            for (Column partitionColumn : olapTable.getPartitionColumns()) {
+                if (partitionColumn.isGeneratedColumn()) {
+                    for (SlotRef ref : partitionColumn.getGeneratedColumnRef(olapTable.getIdToColumn())) {
+                        if (!rollupColumnNames.contains(ref.getColumnName().toLowerCase(Locale.ROOT))) {
+                            throw new SemanticException("Range-distribution rollup must contain partition column "
+                                    + "source '" + ref.getColumnName() + "'");
+                        }
+                    }
+                } else if (!rollupColumnNames.contains(partitionColumn.getName().toLowerCase(Locale.ROOT))) {
+                    throw new SemanticException("Range-distribution rollup must contain partition column '"
+                            + partitionColumn.getName() + "'");
+                }
+            }
+            for (String columnName : columnNames) {
+                Column column = olapTable.getColumn(columnName);
+                if (column != null && column.isGeneratedColumn()) {
+                    for (SlotRef ref : column.getGeneratedColumnRef(olapTable.getIdToColumn())) {
+                        if (!rollupColumnNames.contains(ref.getColumnName().toLowerCase(Locale.ROOT))) {
+                            throw new SemanticException("Range-distribution rollup generated column '"
+                                    + column.getName() + "' references '" + ref.getColumnName()
+                                    + "' which must also be in the rollup");
+                        }
+                    }
+                }
+            }
+        }
+
         clause.setBaseRollupName(Strings.emptyToNull(clause.getBaseRollupName()));
         return null;
     }

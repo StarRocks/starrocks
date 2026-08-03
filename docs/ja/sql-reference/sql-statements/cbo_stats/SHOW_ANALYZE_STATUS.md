@@ -34,7 +34,7 @@ SHOW ANALYZE STATUS [WHERE]
 | Status        | タスクのステータス。                                         |
 | StartTime     | タスクが実行を開始した時間。                                 |
 | EndTime       | タスクの実行が終了した時間。                                 |
-| Properties    | カスタムパラメータ。                                         |
+| Properties    | カスタムパラメータ。外部テーブル（Iceberg、Hive、Paimon など）の収集タスクの場合、`table_format`、`partition_count`、`column_count`、および Iceberg テーブル固有の `snapshot_id`、`total_files`、`total_rows` などの収集メタデータも含まれます。 |
 | Reason        | タスクが失敗した理由。実行が成功した場合は NULL が返されます。 |
 
 ## 参考文献

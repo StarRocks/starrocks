@@ -77,6 +77,101 @@ public:
 };
 
 /**
+ * Like ProduceNullUnaryFunction driven by an input check, but the throwing CHECK_OP is never run on
+ * a null row of a nullable input. This matters when CHECK_OP may throw (e.g. the overflow check used
+ * by strict-mode cast): the data stored at a null row is undefined, so feeding it to CHECK_OP could
+ * raise a spurious exception.
+ *
+ * For a nullable input the hot loop stays branchless to match the throughput of the old
+ * ProduceNullUnaryFunction path (a per-row `if (null) continue` would introduce a data-dependent
+ * branch that mispredicts badly at mixed null ratios):
+ *   - OP runs on every row (the result of a null row is masked out by the null column anyway);
+ *   - the NON-throwing NULL_SAFE_CHECK runs on every row, but its result is AND-ed with the
+ *     not-null mask and OR-accumulated, so a null row's garbage can never set the accumulator;
+ *   - only if a genuine non-null row overflowed do we enter a cold path that re-runs the throwing
+ *     CHECK_OP on the non-null rows to raise the exception (with its detailed message). This path
+ *     terminates the query anyway, so its cost is irrelevant.
+ *
+ * Unlike ProduceNullUnaryFunction it handles const/nullable unwrapping itself, because the null
+ * column must stay available at the point where the check runs (an outer
+ * DealNullableColumnUnaryFunction would strip it before the check).
+ *
+ * @param OP             the value conversion.
+ * @param CHECK_OP       the throwing overflow check; used only on non-null rows / on the cold path.
+ * @param NULL_SAFE_CHECK the non-throwing overflow predicate (returns bool); safe to run on a null
+ *                       row's undefined data, used for branchless detection in the hot loop.
+ */
+template <typename OP, typename CHECK_OP, typename NULL_SAFE_CHECK = CHECK_OP>
+class NullAwareInputCheckUnaryFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1) {
+        if (v1->only_null()) {
+            return v1;
+        }
+        if (v1->is_constant()) {
+            auto data = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
+            ColumnPtr result = evaluate<Type, ResultType>(data);
+            return ConstColumn::create(std::move(result), v1->size());
+        }
+
+        const int size = v1->size();
+        auto result = RunTimeColumnType<ResultType>::create();
+        result->resize(size);
+        auto* r3 = result->get_data().data();
+
+        // The throwing check plus the conversion for a single value. Used on paths where every row
+        // holds valid data (no nulls), so the throw is a predictable, never-taken branch.
+        auto apply_checked = [&](RunTimeCppType<Type> v, int i) {
+            (void)CHECK_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(v);
+            r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(v);
+        };
+
+        if (v1->is_nullable()) {
+            auto* col = ColumnHelper::as_raw_column<NullableColumn>(v1);
+            const auto* r1 = ColumnHelper::cast_to_raw<Type>(col->data_column())->get_data().data();
+            if (col->has_null()) {
+                const auto& null_data = col->null_column()->get_data();
+                // Branchless hot loop: convert every row, and detect overflow on non-null rows only
+                // by masking the non-throwing check with the not-null flag and OR-accumulating it.
+                uint8_t overflow = 0;
+                for (int i = 0; i < size; ++i) {
+                    r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+                    overflow |=
+                            static_cast<uint8_t>(
+                                    NULL_SAFE_CHECK::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(
+                                            r1[i])) &
+                            static_cast<uint8_t>(null_data[i] == 0);
+                }
+                // Cold path: a non-null row overflowed. Re-run the throwing check on non-null rows to
+                // raise the exception with its detailed message. This terminates the query.
+                if (overflow) {
+                    for (int i = 0; i < size; ++i) {
+                        if (null_data[i] == 0) {
+                            (void)CHECK_OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
+                        }
+                    }
+                }
+            } else {
+                // no nulls present: every row holds valid data, run the checked conversion directly
+                for (int i = 0; i < size; ++i) {
+                    apply_checked(r1[i], i);
+                }
+            }
+            auto nul = NullColumn::create();
+            nul->append(*col->null_column(), 0, col->null_column()->size());
+            return NullableColumn::create(std::move(result), std::move(nul));
+        }
+
+        const auto* r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data().data();
+        for (int i = 0; i < size; ++i) {
+            apply_checked(r1[i], i);
+        }
+        return result;
+    }
+};
+
+/**
  * Execute operator function
  * @param OP: the operations impl, like NullMerge
  */

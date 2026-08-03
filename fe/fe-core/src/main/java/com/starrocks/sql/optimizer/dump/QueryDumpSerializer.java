@@ -15,12 +15,19 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
@@ -30,8 +37,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -43,6 +56,7 @@ import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -113,6 +127,47 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
+        // External-catalog (iceberg/hive/...) tables: record each table's real catalog explicitly, keyed like
+        // table_meta (db.table). This lets replay recreate the external catalog directly by name, independent
+        // of the legacy "resource" concept. Older dumps omit this section; replay then infers the catalog from
+        // the SQL, so this stays backward compatible.
+        JsonObject externalCatalogData = new JsonObject();
+        for (Pair<String, Table> entry : tableMetaPairs) {
+            String catalogName = entry.second.getCatalogName();
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                externalCatalogData.addProperty(entry.first + "." + entry.second.getName(), catalogName);
+            }
+        }
+        if (externalCatalogData.size() > 0) {
+            dumpJson.add("external_table_catalog", externalCatalogData);
+        }
+        // External-catalog table total row counts (keyed db.table). Iceberg has no hms scanRowCount to carry
+        // it, and without it replay would fall back to a tiny default that clamps NDV/cardinality.
+        if (!dumpInfo.getExternalTableRowCountMap().isEmpty()) {
+            JsonObject externalRowCountData = new JsonObject();
+            for (Map.Entry<String, Long> entry : dumpInfo.getExternalTableRowCountMap().entrySet()) {
+                externalRowCountData.addProperty(entry.getKey(), entry.getValue());
+            }
+            dumpJson.add("external_table_row_count", externalRowCountData);
+        }
+        // Iceberg partition spec (transforms) + partition names, so replay can rebuild a real PartitionSpec
+        // and reproduce partition pruning. Keyed db.table. Only present for partitioned iceberg tables.
+        if (!dumpInfo.getExternalTablePartitionNameMap().isEmpty()) {
+            JsonObject specData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionSpecMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                specData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_spec", specData);
+            JsonObject namesData = new JsonObject();
+            for (Map.Entry<String, List<String>> entry : dumpInfo.getExternalTablePartitionNameMap().entrySet()) {
+                JsonArray arr = new JsonArray();
+                entry.getValue().forEach(arr::add);
+                namesData.add(entry.getKey(), arr);
+            }
+            dumpJson.add("external_table_partition_names", namesData);
+        }
         // hive meta store table info
         if (!dumpInfo.getHmsTableMap().isEmpty()) {
             JsonObject externalTableInfoData = new JsonObject();
@@ -147,6 +202,10 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableRowCount.add(entry.getKey(), partitionRowCount);
         }
         dumpJson.add("table_row_count", tableRowCount);
+        // automatic/expression partition values: CREATE TABLE (table_meta) omits partition definitions for these
+        // tables, so capture one representative value per concrete partition to let replay recreate the
+        // partitions and match the per-partition row counts above. Keyed like table_meta (db.table).
+        addPartitionValuesSection(dumpJson, tableMetaPairs, entry -> entry.first + "." + entry.second.getName());
         // view meta
         if (!dumpInfo.getViewMap().isEmpty()) {
             JsonObject viewMetaData = new JsonObject();
@@ -167,10 +226,151 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        // column histogram: the full histogram (buckets + mcv) round-trips here, keyed the same way as
+        // column_statistics, because column_statistics only keeps the truncated MCV preview from toString().
+        // Only emitted when a column actually carries a histogram, so older/histogram-free dumps are unaffected.
+        // Intentionally not emitted on the desensitized path: raw bucket bounds and MCV values would leak data.
+        JsonObject tableColumnHistogram = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
+            JsonObject columnHistograms = new JsonObject();
+            for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                Histogram histogram = columnEntry.getValue().getHistogram();
+                if (histogram != null) {
+                    columnHistograms.addProperty(columnEntry.getKey(), HistogramUtils.serializeHistogram(histogram));
+                }
+            }
+            if (columnHistograms.size() > 0) {
+                tableColumnHistogram.add(entry.getKey(), columnHistograms);
+            }
+        }
+        if (tableColumnHistogram.size() > 0) {
+            dumpJson.add("column_histogram", tableColumnHistogram);
+        }
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- the dict
+        // strings are raw column data, exactly like the histogram exclusion above.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
+            }
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
+            }
+        }
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
+        }
+        // column min/max: captured so replay reproduces the meta-scan / group-by-compressed-key rewrites, which
+        // are otherwise lost offline (production ColumnMinMaxMgr has no BE -> no min/max). Keyed like
+        // column_statistics (db.table -> column). Not emitted on the desensitized path -- min/max are raw
+        // column data, like the global dict and histogram exclusions above.
+        JsonObject tableColumnMinMax = new JsonObject();
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                dumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            JsonObject columnMinMaxes = new JsonObject();
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                JsonObject minMax = new JsonObject();
+                minMax.addProperty("min", columnEntry.getValue().minValue());
+                minMax.addProperty("max", columnEntry.getValue().maxValue());
+                columnMinMaxes.add(columnEntry.getKey(), minMax);
+            }
+            if (columnMinMaxes.size() > 0) {
+                tableColumnMinMax.add(entry.getKey(), columnMinMaxes);
+            }
+        }
+        if (tableColumnMinMax.size() > 0) {
+            dumpJson.add("column_min_max", tableColumnMinMax);
+        }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         }
         return dumpJson;
+    }
+
+    // Emits the "partition_values" section (shared by the normal and desensitized paths): for every table that
+    // needs it, one representative value per concrete partition, under a table key produced by tableKeyFn.
+    private static void addPartitionValuesSection(JsonObject dumpJson, List<Pair<String, Table>> tableMetaPairs,
+                                                  Function<Pair<String, Table>, String> tableKeyFn) {
+        JsonObject tablePartitionValues = new JsonObject();
+        for (Pair<String, Table> entry : tableMetaPairs) {
+            List<List<String>> partitionValues = collectAutomaticPartitionValues(entry.second);
+            if (!partitionValues.isEmpty()) {
+                tablePartitionValues.add(tableKeyFn.apply(entry), partitionValuesToJson(partitionValues));
+            }
+        }
+        if (tablePartitionValues.size() > 0) {
+            dumpJson.add("partition_values", tablePartitionValues);
+        }
+    }
+
+    // Returns one representative value tuple per concrete partition, but only for tables whose CREATE TABLE
+    // omits partition definitions: automatic (expression) range partitioning and automatic list partitioning.
+    // These are exactly the types AnalyzerUtils.getAddPartitionClauseFromPartitionValues can recreate on
+    // replay. Returns empty for tables whose partitions the CREATE TABLE already reproduces (explicit
+    // range/list, single/unpartitioned) or for non-OLAP tables.
+    private static List<List<String>> collectAutomaticPartitionValues(Table table) {
+        if (!(table instanceof OlapTable)) {
+            return Lists.newArrayList();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        List<List<String>> partitionValues = Lists.newArrayList();
+        // Automatic range partitioning is modeled as ExpressionRangePartitionInfo (EXPR_RANGE). Its V2 subclass
+        // is used for non-automatic "partition by range expr" and is not a subclass of this type, so it is
+        // correctly excluded here (its partitions are already listed in the CREATE TABLE).
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo rangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            for (Map.Entry<Long, Range<PartitionKey>> entry : rangePartitionInfo.getIdToRange(false).entrySet()) {
+                if (isShadowPartition(olapTable, entry.getKey())) {
+                    continue;
+                }
+                List<LiteralExpr> keys = entry.getValue().lowerEndpoint().getKeys();
+                // automatic range partitioning is single-column; the lower bound recreates the same partition.
+                if (keys.size() == 1) {
+                    partitionValues.add(Lists.newArrayList(keys.get(0).getStringValue()));
+                }
+            }
+        } else if (partitionInfo instanceof ListPartitionInfo
+                && ((ListPartitionInfo) partitionInfo).isAutomaticPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+            for (Map.Entry<Long, List<String>> entry : listPartitionInfo.getIdToValues().entrySet()) {
+                if (isShadowPartition(olapTable, entry.getKey())) {
+                    continue;
+                }
+                for (String value : entry.getValue()) {
+                    partitionValues.add(Lists.newArrayList(value));
+                }
+            }
+            for (Map.Entry<Long, List<List<String>>> entry : listPartitionInfo.getIdToMultiValues().entrySet()) {
+                if (isShadowPartition(olapTable, entry.getKey())) {
+                    continue;
+                }
+                partitionValues.addAll(entry.getValue());
+            }
+        }
+        return partitionValues;
+    }
+
+    // Automatic-partition tables carry a hidden shadow partition (name prefixed with "$") that is not a real
+    // data partition and whose bound value does not round-trip through the partition-creation path.
+    private static boolean isShadowPartition(OlapTable olapTable, long partitionId) {
+        Partition partition = olapTable.getPartition(partitionId);
+        return partition == null
+                || partition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX);
+    }
+
+    private static JsonArray partitionValuesToJson(List<List<String>> partitionValues) {
+        JsonArray valuesArray = new JsonArray();
+        for (List<String> tuple : partitionValues) {
+            JsonArray tupleArray = new JsonArray();
+            tuple.forEach(tupleArray::add);
+            valuesArray.add(tupleArray);
+        }
+        return valuesArray;
     }
 
     private void desensitizeContent(QueryDumpInfo dumpInfo, JsonObject dumpJson) {
@@ -244,6 +444,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableRowCount.add(tableName, partitionRowCount);
         }
         dumpJson.add("table_row_count", tableRowCount);
+        // automatic/expression partition values, keyed by the desensitized table name. The values are the
+        // partition boundary values, which carry the same information as the (undesensitized) partition names
+        // already kept in table_row_count above, so replay can rebuild the same partitions and match them.
+        addPartitionValuesSection(dumpJson, tableMetaPairs, entry ->
+                DesensitizedSQLBuilder.desensitizeDbName(entry.first, dict) + "."
+                        + DesensitizedSQLBuilder.desensitizeTblName(entry.second.getName(), dict));
         // view meta
         if (!dumpInfo.getViewMap().isEmpty()) {
             JsonObject viewMetaData = new JsonObject();
@@ -262,9 +468,12 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
+                // Strip the histogram before rendering: ColumnStatistic.toString() would otherwise emit
+                // histogram.getMcvString(), leaking the raw top-MCV column values into the desensitized dump.
+                // The histogram is intentionally not serialized at all on the desensitized path.
                 columnStatistics.addProperty(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        columnEntry.getValue().toString()
+                        stripHistogram(columnEntry.getValue()).toString()
                 );
             }
             String[] splits = entry.getKey().split("\\.");
@@ -278,6 +487,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
         }
 
+    }
+
+    // Returns the statistic without its histogram, so ColumnStatistic.toString() renders the base stat only.
+    // Used on the desensitized path so histogram MCV values (raw column data) never reach the dump.
+    private static ColumnStatistic stripHistogram(ColumnStatistic columnStatistic) {
+        if (columnStatistic.getHistogram() == null) {
+            return columnStatistic;
+        }
+        return ColumnStatistic.buildFrom(columnStatistic).setHistogram(null).build();
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {

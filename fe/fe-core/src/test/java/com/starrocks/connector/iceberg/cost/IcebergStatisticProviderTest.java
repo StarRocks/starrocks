@@ -125,6 +125,144 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         Assertions.assertEquals(1.0, statistics.getOutputRowCount(), 0.001);
     }
 
+    // --- NDV fallback estimation tests (改动 C) ---
+
+    @Test
+    public void testNdvFallback_noPuffinNoStats_usesTypeFraction() {
+        // IcebergFileStats with only recordCount: no type mapping, no min/max, no column sizes.
+        // Expects type-fraction fallback: max(2, 10000 * 0.3) = 3000
+        IcebergFileStats fileStats = new IcebergFileStats(10000);
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+
+        Assertions.assertTrue(k1Stat.getDistinctValuesCount() > 1.0,
+                "NDV must be > 1 even without Puffin or column stats");
+        Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+        // type-fraction for INT: max(1, min(10000, 10000 * 0.3)) = 3000
+        Assertions.assertEquals(3000.0, k1Stat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testNdvFallback_singleRowTable_ndvNotExceedsRowCount() {
+        // rowCount=1: type-fraction gives max(1, min(1, 1*0.3))=1, not 2 (the old Math.max(2.0,...) bug)
+        IcebergFileStats fileStats = new IcebergFileStats(1);
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+
+        Assertions.assertTrue(k1Stat.getDistinctValuesCount() <= 1.0,
+                "NDV must not exceed rowCount=1");
+    }
+
+    @Test
+    public void testNdvFallback_rangeBased_integerSmallRange() {
+        // k1 (fieldId=1, INT): min=1, max=100 → range=100; columnSizes huge → sizeNdv >> 100.
+        // Expects range-based NDV = min(rowCount=10000, range=100) = 100.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = getIdToTypeMappingB();
+        List<Types.NestedField> nonPartitionCols = getNonPartitionColumnsB();
+
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartitionCols,
+                10000, 100000,
+                ImmutableMap.of(1, 1, 2, 0),
+                ImmutableMap.of(1, 100, 2, 999),
+                ImmutableMap.of(1, 0L, 2, 0L),
+                ImmutableMap.of(1, 10000000L, 2, 10000000L));
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+
+        // rangeNdv = min(10000, 100)=100; sizeNdv = min(10000, 10000000/4)=10000; result = min(100,10000) = 100
+        Assertions.assertEquals(100.0, k1Stat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+    }
+
+    @Test
+    public void testNdvFallback_sizeBasedWinsWhenRangeLarge() {
+        // k1 (fieldId=1, INT): min=1, max=1000000 (large range > rowCount); columnSizes small.
+        // rangeNdv = min(10000, 1000000)=10000; sizeNdv = min(10000, 2000/4)=500 → size wins.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = getIdToTypeMappingB();
+        List<Types.NestedField> nonPartitionCols = getNonPartitionColumnsB();
+
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartitionCols,
+                10000, 100000,
+                ImmutableMap.of(1, 1, 2, 0),
+                ImmutableMap.of(1, 1000000, 2, 999),
+                ImmutableMap.of(1, 0L, 2, 0L),
+                ImmutableMap.of(1, 2000L, 2, 2000L));
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+
+        // sizeNdv = 2000/4 = 500 < rangeNdv=10000 → result = 500
+        Assertions.assertEquals(500.0, k1Stat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+    }
+
     @Test
     public void testDoubleValue() {
         Assertions.assertEquals(1.0, convertObjectToOptionalDouble(Types.BooleanType.get(), true).get(), 0.001);
@@ -490,6 +628,156 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         //     averageRowSize = max(25000/500, 4) = max(50.0, 4) = 50.0
         ColumnStatistic k2Stat = statistics.getColumnStatistic(k2Ref);
         Assertions.assertEquals(50.0, k2Stat.getAverageRowSize(), 0.001);
+    }
+
+    // Helper: build an IcebergTable using mockedNativeTableB and register fileStats for it.
+    private Statistics getStatsForK1(IcebergFileStats fileStats) {
+        return getStatsForK1(fileStats, com.starrocks.type.IntegerType.INT);
+    }
+
+    private Statistics getStatsForK1(IcebergFileStats fileStats, com.starrocks.type.Type k1StarRocksType) {
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(mockedNativeTableB.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(version).build();
+        statisticProvider.putIcebergFileStats(
+                PredicateSearchKey.of(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params),
+                fileStats);
+        Map<ColumnRefOperator, Column> colMap = new HashMap<>();
+        // "k1" matches fieldId=1 in SCHEMA_B — getColFieldId resolves correctly
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, k1StarRocksType, "k1", true);
+        colMap.put(k1Ref, new Column("k1", k1StarRocksType));
+        return statisticProvider.getTableStatistics(icebergTable, colMap, null, params);
+    }
+
+    @Test
+    public void testNdvFallback_typeWidthHint_longTypeUses8Bytes() {
+        // Override fieldId=1 to LongType (8 bytes). No min/max → Tier2.
+        // sizeNdv = min(1000, 8000/8) = 1000.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.LongType.get());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.LongType.get()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                1000, 10000,
+                new HashMap<>(), new HashMap<>(),
+                ImmutableMap.of(1, 0L),
+                ImmutableMap.of(1, 8000L));
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.IntegerType.BIGINT)
+                .getColumnStatistics().values().iterator().next();
+
+        // sizeNdv = min(1000, 8000/8) = 1000
+        Assertions.assertEquals(1000.0, k1Stat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+    }
+
+    @Test
+    public void testNdvFallback_typeWidthHint_booleanTypeUses1Byte() {
+        // Override fieldId=1 to BooleanType (1 byte). No min/max → Tier2.
+        // sizeNdv = min(10000, 100/1) = 100.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.BooleanType.get());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.BooleanType.get()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                10000, 100000,
+                new HashMap<>(), new HashMap<>(),
+                ImmutableMap.of(1, 0L),
+                ImmutableMap.of(1, 100L));
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.BooleanType.BOOLEAN)
+                .getColumnStatistics().values().iterator().next();
+
+        // BOOLEAN isRangeEstimable=true but min/max are NaN → skip Tier1.
+        // Tier2: sizeNdv = min(10000, 100/1) = 100
+        Assertions.assertEquals(100.0, k1Stat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(ColumnStatistic.StatisticType.ESTIMATE, k1Stat.getType());
+    }
+
+    @Test
+    public void testNdvFallback_toTypeCategory_floatUsesTypeFraction() {
+        // Override fieldId=1 to FloatType → FLOAT_LIKE. No min/max, no colSizes → Tier3.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.FloatType.get());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.FloatType.get()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                100, 1000, new HashMap<>(), new HashMap<>(), new HashMap<>(), null);
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.FloatType.FLOAT)
+                .getColumnStatistics().values().iterator().next();
+
+        // FLOAT_LIKE → Tier3: 0.3 * 100 = 30
+        Assertions.assertEquals(30.0, k1Stat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testNdvFallback_toTypeCategory_stringUsesTypeFractionAndWidthZero() {
+        // Override fieldId=1 to StringType → STRING_LIKE, typeWidthHint=0 (line 375).
+        // No colSizes → Tier3: 0.5 * 100 = 50.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.StringType.get());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.StringType.get()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                100, 1000, new HashMap<>(), new HashMap<>(), new HashMap<>(), null);
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.VarcharType.VARCHAR)
+                .getColumnStatistics().values().iterator().next();
+
+        // STRING_LIKE → Tier3: 0.5 * 100 = 50
+        Assertions.assertEquals(50.0, k1Stat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testNdvFallback_toTypeCategory_dateRangeBased() {
+        // Override fieldId=1 to DateType → DATE_IN_EPOCH_SECONDS.
+        // IcebergFileStats expects Integer epoch-days for Date bounds; it converts to epoch-seconds internally.
+        // 18262 = 2020-01-01, 18627 = 2021-01-01 → 365 days in 2020 (leap: 366 distinct days).
+        int minEpochDays = 18262; // 2020-01-01
+        int maxEpochDays = 18627; // 2021-01-01  (366 days later)
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.DateType.get());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.DateType.get()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                10000, 100000,
+                ImmutableMap.of(1, minEpochDays),
+                ImmutableMap.of(1, maxEpochDays),
+                ImmutableMap.of(1, 0L),
+                null);
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.DateType.DATE)
+                .getColumnStatistics().values().iterator().next();
+
+        // DATE_IN_EPOCH_SECONDS: diff = (18627-18262)*86400s; diffInNativeUnits ÷86400 = 365 days → NDV = 366
+        Assertions.assertEquals(366.0, k1Stat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testNdvFallback_toTypeCategory_timestampRangeBased() {
+        // Override fieldId=1 to TimestampType → TIMESTAMP_IN_EPOCH_MICROS.
+        // IcebergFileStats stores epoch-seconds (converted from epoch-µs ÷1_000_000).
+        // 3600 seconds range (1 hour) → diff * 1_000_000 = 3600_000_000 distinct µs, capped at rowCount=100.
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = ImmutableMap.of(
+                1, Types.TimestampType.withoutZone());
+        List<Types.NestedField> nonPartCols = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.TimestampType.withoutZone()));
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, nonPartCols,
+                100, 1000,
+                ImmutableMap.of(1, 1000000L),    // epoch-seconds min
+                ImmutableMap.of(1, 1003600L),    // epoch-seconds max (3600s later)
+                ImmutableMap.of(1, 0L),
+                null);
+
+        ColumnStatistic k1Stat = getStatsForK1(fileStats, com.starrocks.type.DateType.DATETIME)
+                .getColumnStatistics().values().iterator().next();
+
+        // Tier1: diff=3600s * 1_000_000 µs = 3.6B >> rowCount=100 → capped at 100
+        Assertions.assertEquals(100.0, k1Stat.getDistinctValuesCount(), 0.001);
     }
 
 }

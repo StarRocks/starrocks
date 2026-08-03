@@ -1,0 +1,40 @@
+-- name: test_iceberg_eq_delete_string_date_partition
+-- description: MOR equality-delete read on a table whose STRING date partition column is compared with a temporal
+-- value. The predicate coerces to CAST(c2 AS DATETIME) <op> <ts>; getDeleteFiles must not push that cast to
+-- Iceberg's string-domain filter (it would prune the equality-delete file whose 'yyyy-MM-dd' partition value
+-- never equals the rendered '...00:00:00' string, so the delete would not be applied and a deleted row would
+-- leak back). See #76068 (scan) / #76107 (cardinality) for the same root cause on other paths.
+--
+-- Only Flink can write Iceberg equality-delete files, so the fixture below is created in advance (upsert mode
+-- keyed by (id, c2) produces one equality delete for id=1 in partition c2=2020-06-14). Create it once with:
+--
+--   CREATE DATABASE IF NOT EXISTS ice.iceberg_ci_db;
+--   CREATE TABLE ice.iceberg_ci_db.eq_del_str_date_part (
+--       id INT, c2 STRING, v INT,
+--       PRIMARY KEY (id, c2) NOT ENFORCED
+--   ) PARTITIONED BY (c2)
+--   WITH ('format-version'='2', 'write.upsert.enabled'='true');
+--   INSERT INTO ice.iceberg_ci_db.eq_del_str_date_part VALUES (1, '2020-06-14', 100);
+--   INSERT INTO ice.iceberg_ci_db.eq_del_str_date_part VALUES (1, '2020-06-14', 200);  -- upsert -> eq-delete of (1,100)
+--   INSERT INTO ice.iceberg_ci_db.eq_del_str_date_part VALUES (2, '2020-06-22', 300);
+--
+-- Logical content after the upserts: (1, 2020-06-14, 200) and (2, 2020-06-22, 300); the old (1, ..., 100) is
+-- removed by an equality delete in partition 2020-06-14.
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+set new_planner_optimize_timeout = 30000;
+
+-- baseline: equality delete is applied (no cast predicate) -> old value gone.
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part order by id, v;
+
+-- cast/interval form hitting the eq-deleted partition: must NOT leak the deleted v=100.
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = cast('2020-06-15' as date) - interval 1 day order by id, v;
+
+-- date_sub builtin form of the same value.
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = date_sub(cast('2020-06-15' as date), interval 1 day) order by id, v;
+
+-- control: bare 'yyyy-MM-dd' literal (no cast, always worked) must agree.
+select id, c2, v from iceberg_sql_test_${uuid0}.iceberg_ci_db.eq_del_str_date_part where c2 = '2020-06-14' order by id, v;
+
+drop catalog iceberg_sql_test_${uuid0};

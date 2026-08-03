@@ -37,11 +37,13 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.backup.AbstractJob;
@@ -84,6 +86,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -104,6 +109,8 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -160,6 +167,22 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_REWRITE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             "total SPM rewrite attempts by result"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_QUERY_REWRITE =
+            new MetricWithLabelGroup<>("state",
+                    () -> new LongCounterMetric("mv_global_query_rewrite_queries_total", MetricUnit.REQUESTS,
+                            "queries by materialized view rewrite outcome (HIT/NO_HIT/DISABLED)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_jobs_total", MetricUnit.REQUESTS,
+                            "total materialized view refresh jobs across all materialized views by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_SUCCESS_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_success_jobs_total", MetricUnit.REQUESTS,
+                            "total successful materialized view refresh jobs by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_FAILED_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_failed_jobs_total", MetricUnit.REQUESTS,
+                            "total failed materialized view refresh jobs by warehouse"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -261,6 +284,10 @@ public final class MetricRepo {
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
 
+    public static final LongCounterMetric SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL =
+            new LongCounterMetric("sync_stats_load_budget_exhausted_total", Metric.MetricUnit.OPERATIONS,
+                    "Times we have exhausted the budget");
+
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
      * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
@@ -305,6 +332,11 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -381,6 +413,16 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
     public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
+    public static LeaderAwareGaugeMetricLong GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER;
+
+    // Compaction score (rounded to the nearest integer) of the most recent compaction trigger.
+    // Updated by CompactionScheduler when a new job lands in runningCompactions; exposed
+    // read-only via the gauge above.
+    private static final AtomicLong LATEST_COMPACTION_SCORE_AT_TRIGGER = new AtomicLong(0);
+
+    public static void recordCompactionScoreAtTrigger(long score) {
+        LATEST_COMPACTION_SCORE_AT_TRIGGER.set(score);
+    }
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -424,6 +466,8 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
+
+    public static GaugeMetric<Long> GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES;
 
     public static List<LeaderAwareGaugeMetric<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
@@ -725,6 +769,20 @@ public final class MetricRepo {
         GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
 
+        // Per-FE dict cache size, so not leader-aware.
+        GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES = new GaugeMetric<Long>("low_cardinality_dict_cache_bytes", MetricUnit.BYTES,
+                "total bytes of cached dictionary data in the low-cardinality global dictionary cache") {
+            @Override
+            public Long getValue() {
+                IDictManager dictManager = IDictManager.getInstance();
+                if (dictManager instanceof CacheDictManager) {
+                    return ((CacheDictManager) dictManager).getCacheWeightedBytes();
+                }
+                return 0L;
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
         GAUGE_QUERY_LATENCY_MEAN.addLabel(new MetricLabel("type", "mean"));
@@ -919,6 +977,38 @@ public final class MetricRepo {
         COUNTER_TXN_FAILED =
                 new LeaderAwareCounterMetricLong("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_FAILED);
+        COUNTER_LAKE_COMPACTION_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_success", MetricUnit.REQUESTS,
+                        "counter of successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_SUCCESS);
+        COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_partial_success", MetricUnit.REQUESTS,
+                        "counter of partially successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS);
+        COUNTER_LAKE_COMPACTION_FAILED =
+                new LeaderAwareCounterMetricLong("lake_compaction_failed", MetricUnit.REQUESTS,
+                        "counter of failed lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_FAILED);
+        GAUGE_LAKE_COMPACTION_RUNNING = new LeaderAwareGaugeMetricLong("lake_compaction_running", MetricUnit.NOUNIT,
+                "number of currently running lake compaction jobs") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
+        // Distinct from lake_compaction_running (which counts jobs, one per partition): this
+        // counts the running tablet-level compaction tasks summed across all running jobs — the
+        // same unit bounded by Config.lake_compaction_max_tasks.
+        GAUGE_LAKE_COMPACTION_RUNNING_TASKS = new LeaderAwareGaugeMetricLong(
+                "lake_compaction_running_tasks", MetricUnit.NOUNIT,
+                "number of running lake compaction tablet-level tasks across all running jobs") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionTaskCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
@@ -1040,6 +1130,21 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        // Compaction score (rounded to the nearest integer) of the most recent partition that
+        // triggered a lake compaction. The trigger picks partitions by *max* tablet score, so we
+        // expose the max (not the average) — keeps the metric aligned with the scheduler's
+        // selection criterion. Sub-integer precision is not needed for this metric.
+        GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER = new LeaderAwareGaugeMetricLong(
+                "lake_compaction_score_at_trigger", MetricUnit.NOUNIT,
+                "compaction score of the most recent compaction trigger; max score across the partition's tablets") {
+            @Override
+            public Long getValueLeader() {
+                return LATEST_COMPACTION_SCORE_AT_TRIGGER.get();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_SCORE_AT_TRIGGER);
+
+        STARROCKS_METRIC_REGISTER.addMetric(SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL);
 
         // init system metrics
         initSystemMetrics();
@@ -1047,12 +1152,73 @@ public final class MetricRepo {
         // init clone metrics
         initCloneMetrics();
 
+        // init statistics cache metrics
+        if (Config.enable_statistic_cache_metrics) {
+            initStatisticsCacheMetrics();
+        }
+
         updateMetrics();
         hasInit = true;
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private static void initStatisticsCacheMetrics() {
+        final var storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
+        if (storage instanceof CachedStatisticStorage cachedStatisticStorage) {
+            for (var nameCachePair : cachedStatisticStorage.getNamedCacheMap().entrySet()) {
+                final var cacheName = nameCachePair.getKey();
+                final var cache = nameCachePair.getValue();
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_hit_count",
+                        "Cumulative number of statistics cache hits", c -> c.stats().hitCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_miss_count",
+                        "Cumulative number of statistics cache misses", c -> c.stats().missCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_eviction_count",
+                        "Cumulative number of statistics cache evictions", c -> c.stats().evictionCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_success_count",
+                        "Cumulative number of successful statistics cache loads",
+                        c -> c.stats().loadSuccessCount());
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_failure_count",
+                        "Cumulative number of failed statistics cache loads",
+                        c -> c.stats().loadFailureCount());
+                // Current cache occupancy — a point-in-time value, so it stays a GAUGE.
+                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_entries",
+                        "Number of entries currently held in the statistics cache",
+                        LoadingCache::estimatedSize);
+            }
+        }
+
+    }
+
+    private static void addStatisticsCacheGauge(String cacheName, LoadingCache<?, ?> cache, String metricName, String description,
+                                                Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
+        final var gauge = new GaugeMetric<>(metricName, MetricUnit.NOUNIT, description) {
+            @Override
+            public Long getValue() {
+                return cache == null ? 0L : cacheMetricFun.apply(cache);
+            }
+        };
+        gauge.addLabel(new MetricLabel("cache", cacheName));
+        STARROCKS_METRIC_REGISTER.addMetric(gauge);
+    }
+
+    private static void addStatisticsCacheCounter(String cacheName, LoadingCache<?, ?> cache, String metricName,
+                                                  String description, Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
+        final var counter = new CounterMetric<Long>(metricName, MetricUnit.NOUNIT, description) {
+            @Override
+            public void increase(Long delta) {
+                // No-op: the value is pulled on demand from Caffeine's cumulative stats
+            }
+
+            @Override
+            public Long getValue() {
+                return cache == null ? 0L : cacheMetricFun.apply(cache);
+            }
+        };
+        counter.addLabel(new MetricLabel("cache", cacheName));
+        STARROCKS_METRIC_REGISTER.addMetric(counter);
     }
 
     private static void initSystemMetrics() {
@@ -1428,6 +1594,13 @@ public final class MetricRepo {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
 
+        // global MV count: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalMvCount(visitor);
+        // global MV refresh gauges: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalGauges(visitor);
+        // global MV refresh duration histogram: low-cardinality, always emitted (not gated like per-MV histograms)
+        MaterializedViewMetricsRegistry.collectGlobalDurationHistograms(visitor);
+
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
         for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
@@ -1456,7 +1629,6 @@ public final class MetricRepo {
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
-
         // collect connection metrics
         collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());
 
@@ -1473,6 +1645,8 @@ public final class MetricRepo {
         MergeCommitMetricRegistry.getInstance().visit(visitor);
 
         TransactionMetricRegistry.getInstance().report(visitor);
+
+        AlterMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -1664,6 +1838,18 @@ public final class MetricRepo {
             };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(txnNum);
+
+            LeaderAwareGaugeMetric<Long> maxCommittedPendingPublish = new LeaderAwareGaugeMetricLong(
+                    "txn_max_committed_pending_publish_ms", MetricUnit.MILLISECONDS,
+                    "max time in milliseconds that a transaction has been sitting in committed status "
+                            + "pending publish to visible") {
+                @Override
+                public Long getValueLeader() {
+                    return mgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis());
+                }
+            };
+            maxCommittedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
+            visitor.visit(maxCommittedPendingPublish);
         }
     }
 

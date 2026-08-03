@@ -19,18 +19,18 @@
 #include "base/uid_util.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec_primitive/pipeline/primitives/driver_observer.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -95,8 +95,8 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _query_ctx->query_runtime_state().extend_delivery_lifetime();
     _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
-    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     auto fragment_ctx = std::make_shared<FragmentContext>();
     _fragment_ctx = fragment_ctx.get();
@@ -113,11 +113,11 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;
-    RowDescriptor row_desc;
+    RecordDescriptor record_desc;
 
     MockEmptyOperatorFactory factory1(1, "mock_op_factory", 2);
     EXPECT_TRUE(factory1.prepare(_runtime_state).ok());
-    MemoryScratchSinkOperatorFactory factory2(2, row_desc, t_output_expr, _fragment_ctx);
+    MemoryScratchSinkOperatorFactory factory2(2, record_desc, t_output_expr, _fragment_ctx);
     EXPECT_TRUE(factory2.prepare(_runtime_state).ok());
 
     Status result_st;

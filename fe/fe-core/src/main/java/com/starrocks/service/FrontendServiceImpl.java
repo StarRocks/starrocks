@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
@@ -79,6 +80,7 @@ import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -118,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
 import com.starrocks.journal.CheckpointException;
@@ -144,6 +147,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.JsonMetricVisitor;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.SlotDescriptor;
@@ -174,6 +178,7 @@ import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlProxyQueryManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlResultDescriptor;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -236,6 +241,7 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
+import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishCheckpointRequest;
@@ -308,6 +314,7 @@ import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListConnectionRequest;
 import com.starrocks.thrift.TListConnectionResponse;
+import com.starrocks.thrift.TListMaterializedViewRefreshJobsResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -604,13 +611,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(TGetTasksParams params) throws TException {
+        ConnectContext context = new ConnectContext();
+        return MaterializedViewRefreshJobsSystemTable.query(params, context);
+    }
+
+    @Override
     public TListPipesResult listPipes(TListPipesParams params) throws TException {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
-
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -647,10 +658,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
         for (PipeFileRecord record : files) {
@@ -702,6 +711,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
+    }
+
+    // information_schema.fe_metrics: return this FE's metrics as the JSON payload that the
+    // HTTP `/metrics?type=json` endpoint produces. Serving it over this Thrift RPC (instead of
+    // the BE scanner scraping the HTTP endpoint) keeps fe_metrics working regardless of
+    // `enable_http_auth` — the internal RPC needs no HTTP Basic credentials. FE process metrics
+    // have no per-object RBAC, so the RPC takes no arguments and there is nothing to authorize
+    // here.
+    @Override
+    public TFeMetricsResult getFeMetrics() throws TException {
+        TFeMetricsResult result = new TFeMetricsResult();
+        try {
+            JsonMetricVisitor visitor = new JsonMetricVisitor("starrocks_fe");
+            String json = MetricRepo.getMetric(visitor,
+                    new MetricsAction.RequestParams(false, false, false, false, false));
+            result.setJson_metrics(json);
+            result.setStatus(new TStatus(TStatusCode.OK));
+        } catch (Exception e) {
+            LOG.warn("get fe metrics failed", e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+        }
+        return result;
     }
 
     @Override
@@ -1749,18 +1782,80 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         try {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(context, db, (OlapTable) table, streamLoadInfo);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
-            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                    getSyncSteamLoadTaskByTxnId(request.getTxnId());
-            if (streamLoadTask == null) {
-                throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+            TExecPlanFragmentParams plan;
+            Coordinator coord;
+            StreamLoadTask streamLoadTask;
+            // Only take the pipeline path when the requesting BE id is known, so the scan can be
+            // pinned to the BE that owns the StreamLoadPipe. Otherwise fall back to the legacy path.
+            if (Config.enable_pipeline_stream_load && request.isSetBackend_id()) {
+                // The pipeline LoadPlanner needs the task's id + label, so look it up before planning.
+                streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                        .getSyncSteamLoadTaskByTxnId(request.getTxnId());
+                if (streamLoadTask == null) {
+                    throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+                }
+                // Resource-group resolution on the pipeline path reads ctx.getQualifiedUser();
+                // set it here (pipeline path only, so the legacy path is unchanged).
+                context.setQualifiedUser(request.getUser());
+                // The LoadPlanner/JobSpec path derives query_globals.time_zone from the context
+                // session variable, not from streamLoadInfo; set it so the load honors its timezone.
+                context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
+                // Run the classic synchronous stream load on the pipeline engine. Reuse LoadPlanner
+                // (the pipeline-correct planner used by the transaction stream load) so the FILE_STREAM
+                // scan range is assigned as a pipeline morsel, then materialize a single BE-local
+                // TExecPlanFragmentParams WITHOUT an RPC deploy; the receiving BE runs it in-process
+                // (params.is_pipeline routes it to the pipeline engine in StreamLoadOrchestrator).
+                LoadPlanner loadPlanner = new LoadPlanner(streamLoadTask.getId(), streamLoadInfo.getId(),
+                        request.getTxnId(), db.getId(), dbName, (OlapTable) table, streamLoadInfo.isStrictMode(),
+                        streamLoadInfo.getTimezone(), streamLoadInfo.isPartialUpdate(), context, null,
+                        streamLoadInfo.getLoadMemLimit(), streamLoadInfo.getExecMemLimit(), streamLoadInfo.getNegative(),
+                        1, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, streamLoadTask.getLabel(),
+                        streamLoadInfo.getTimeout());
+                loadPlanner.setSyncStreamLoad(true);
+                loadPlanner.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+                // Pin the scan to the BE that received the HTTP body and owns the pipe
+                // (backend_id is guaranteed set by the branch condition above).
+                loadPlanner.setSyncStreamLoadBackendId(request.getBackend_id());
+                loadPlanner.plan();
+                DefaultCoordinator streamLoadCoord =
+                        (DefaultCoordinator) getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
+                plan = streamLoadCoord.buildLocalStreamLoadParams();
+                // Carry over load-specific query options the LoadPlanner/JobSpec path does not set
+                // (it reads them from a session-variable map we do not pass), matching legacy StreamLoadPlanner.
+                plan.query_options.setLoad_transmission_compression_type(
+                        streamLoadInfo.getTransmisionCompressionType());
+                plan.query_options.setLog_rejected_record_num(streamLoadInfo.getLogRejectedRecordNum());
+                // Honor table-level / session load-profile collection (matching legacy StreamLoadPlanner),
+                // with the same collect-interval throttle. The pipeline engine reports the profile to the
+                // coordinator, which StreamLoadTask surfaces to ProfileManager on commit.
+                boolean enableLoadProfile = ((OlapTable) table).enableLoadProfile()
+                        || context.getSessionVariable().isEnableLoadProfile();
+                if (Config.load_profile_collect_interval_second > 0
+                        && System.currentTimeMillis() - ((OlapTable) table).getLastCollectProfileTime()
+                                < Config.load_profile_collect_interval_second * 1000) {
+                    enableLoadProfile = false;
+                }
+                if (enableLoadProfile) {
+                    plan.query_options.setEnable_profile(true);
+                    plan.query_options.setLoad_profile_collect_second(
+                            Config.stream_load_profile_collect_threshold_second);
+                    ((OlapTable) table).updateLastCollectProfileTime();
+                }
+                coord = streamLoadCoord;
+            } else {
+                // Legacy path: plan first so a column-map / analysis error surfaces before the task
+                // lookup (relied on by FrontendServiceImplTest.testStreamLoadPutColumnMapException).
+                StreamLoadPlanner planner = new StreamLoadPlanner(context, db, (OlapTable) table, streamLoadInfo);
+                plan = planner.plan(streamLoadInfo.getId());
+                coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
+                streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                        .getSyncSteamLoadTaskByTxnId(request.getTxnId());
+                if (streamLoadTask == null) {
+                    throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+                }
             }
-
             streamLoadTask.setTUniqueId(request.getLoadId());
-
-            Coordinator coord = getCoordinatorFactory().createSyncStreamLoadScheduler(planner, getClientAddr());
             streamLoadTask.setCoordinator(coord);
             try {
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
@@ -2760,8 +2855,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                LOG.info("cancel schema change for automatic create partition txn_id={}", txnId);
-                cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.COLUMN, errMsg);
+                if (Config.enable_concurrent_add_partition_during_alter
+                        && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())) {
+                    LOG.info("skip cancelling alter job for automatic partition creation, jobs tolerate "
+                            + "concurrent partition creation. txn_id={} table={}", txnId, olapTable.getName());
+                } else {
+                    LOG.info("cancel schema change for automatic create partition txn_id={}", txnId);
+                    cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.COLUMN, errMsg);
+                }
             }
         } catch (Exception e) {
             LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -3371,12 +3472,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TGetDictQueryParamResponse response = new TGetDictQueryParamResponse();
-        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
+        response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor, null));
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
                     db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
-                    dictTable.getAutomaticBucketSize(), allPartitions, null);
+                    dictTable.getAutomaticBucketSize(), allPartitions, null, null);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, partitionParam, dictTable.enableReplicatedStorage(), null));

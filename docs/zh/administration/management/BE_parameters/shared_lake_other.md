@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：行
 - 是否动态：是
-- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。此行数包含 Segment 行数以及 del 文件中记录的 tombstone（删除）行数，因此产生少量大型 del 文件的删除密集型负载也会计入该阈值；旧版本写入、未记录行数的 del 文件按 0 计。
 - 引入版本：-
 
 ### download_buffer_size
@@ -83,6 +83,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### lake_enable_pk_preserve_txn_delete_order
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）。
+- 引入版本：v4.1.4
+
+### lake_enable_protobuf_file_checksum
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
+- 引入版本：v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -91,6 +109,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`、或手动执行 `ALTER TABLE ... COMPACT` 强制 Base Compaction 时触发。将两个阈值都调至足够大可关闭自动触发。
+- 引入版本：v4.2
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- 默认值：10000000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 引入版本：v4.2
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -146,6 +182,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### enable_lake_prepared_split_pre_refinement
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：prepared-physical-split lake 扫描（对应会话变量 `enable_lake_prepared_physical_split_scan`）在 seed 逐页裁剪尚未完成时，是否额外下发一个覆盖未裁剪 segment 范围的 coarse-range morsel，让原本空闲的 driver 先忙起来，直到裁剪后的 refined 范围就绪。关闭它不会丢失数据（coarse 范围始终是 refined 范围从中相减的超集），只是用提前并行换取更少的冗余 coarse 扫描。
+- 引入版本：v4.2
+
+### lake_prepared_split_max_splitted_scan_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：仅在开启 prepared physical split scan（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 split morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 split morsel 拆得更细（把大 Tablet 切成更多子范围 morsel 以填充原本空闲的 driver），不会更粗。仅在存算分离集群中生效。
+- 引入版本：v4.2
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - 默认值：-1
@@ -170,6 +224,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
+
+### lake_vacuum_min_batch_delete_size
+
+- 默认值：200
+- 类型：Int64
+- 单位：文件数
+- 是否动态：是
+- 描述：存算分离集群下，Vacuum 单次 `DeleteObjects` 请求批量合并的过期文件数量。批量越大，单次调用摊销的 HTTP/认证/签名等固定开销越多，且对对象存储 prefix 级别的请求频次压力越小；代价是单次调用 latency 升高、出现瞬时错误需要 retry 时回放成本增大。AWS S3 用户可以进一步将该值调到协议上限 `1000`，因为 AWS S3 单 `DeleteObjects` 服务端耗时几乎与 batch size 无关。
 
 ### loop_count_wait_fragments_finish
 

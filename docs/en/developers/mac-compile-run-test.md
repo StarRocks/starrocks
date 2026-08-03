@@ -387,13 +387,13 @@ The macOS compilation implementation follows these principles:
 
 **Q: Getting "protobuf version mismatch" error during compilation**
 
-A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (version 3.14.0) instead of system or Homebrew's protobuf:
+A: Make sure the BE CMake build is using `thirdparty/installed/bin/protoc` (version 3.16.1) instead of system or Homebrew's protobuf:
 
 ```bash
 # Check protobuf version
 /Users/kks/git/starrocks/thirdparty/installed/bin/protoc --version
 
-# Should output: libprotoc 3.14.0
+# Should output: libprotoc 3.16.1
 ```
 
 **Q: Out of memory during compilation**

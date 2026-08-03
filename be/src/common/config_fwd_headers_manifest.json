@@ -32,6 +32,7 @@
       "path": "be/src/common/config_storage_fwd.h",
       "configs": [
         "cluster_id",
+        "storage_cleanup_worker_count",
         "check_consistency_worker_count",
         "compact_threads",
         "replication_max_speed_limit_kbps",
@@ -173,6 +174,7 @@
         "spill_max_dir_bytes_ratio",
         "spill_read_buffer_min_bytes",
         "mem_limited_chunk_queue_block_size",
+        "enable_spill_sort_events",
         "exec_state_report_max_threads",
         "priority_exec_state_report_max_threads",
         "report_exec_rpc_request_retry_num",
@@ -281,7 +283,8 @@
     {
       "path": "be/src/common/config_thread_fwd.h",
       "configs": [
-        "priority_queue_remaining_tasks_increased_frequency"
+        "priority_queue_remaining_tasks_increased_frequency",
+        "enable_threadpool_catch_task_exception"
       ]
     },
     {
@@ -355,6 +358,7 @@
         "vector_adaptive_ef_alpha",
         "vector_adaptive_ef_cap",
         "vector_adaptive_ef_baseline_rows",
+        "vector_index_brute_selectivity_threshold",
         "vector_index_build_flush_threshold_rows"
       ]
     },
@@ -382,7 +386,8 @@
         "create_child_worker_timeout_ms",
         "report_python_worker_error",
         "python_worker_reuse",
-        "python_worker_expire_time_sec"
+        "python_worker_expire_time_sec",
+        "python_udf_rpc_timeout_ms"
       ]
     },
     {
@@ -493,8 +498,10 @@
         "metric_late_materialization_ratio",
         "pre_aggregate_factor",
         "use_default_dop_when_shared_scan",
+        "shared_scan_output_chunk_batch_size",
         "tablet_internal_parallel_min_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_rows",
+        "lake_prepared_split_max_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_bytes",
         "tablet_internal_parallel_min_scan_dop",
         "max_hdfs_file_handle",
@@ -592,6 +599,7 @@
         "object_storage_rename_file_request_timeout_ms",
         "object_storage_max_retries",
         "object_storage_retry_scale_factor",
+        "object_storage_client_cache_size",
         "fallback_to_hadoop_fs_list",
         "s3_compatible_fs_list",
         "s3_use_list_objects_v1",
@@ -702,6 +710,7 @@
         "size_tiered_level_num",
         "chaos_test_enable_random_compaction_strategy",
         "compaction_memory_limit_per_worker",
+        "compaction_chunk_reset_memory_tracker_threshold_percent",
         "flush_thread_num_per_store",
         "max_segment_file_size",
         "meta_threshold_to_manual_compact",
@@ -712,6 +721,8 @@
         "lake_enable_compaction_async_write",
         "lake_pk_compaction_max_input_rowsets",
         "lake_pk_compaction_min_input_segments",
+        "lake_pk_compaction_base_delete_ratio_threshold",
+        "lake_pk_compaction_base_delete_rows_threshold",
         "enable_lake_pk_compaction_score_gate",
         "lake_pk_compaction_min_level_score",
         "lake_pk_compaction_min_benefit_cost_ratio",
@@ -734,7 +745,6 @@
         "transaction_apply_worker_idle_time_ms",
         "update_compaction_per_tablet_min_interval_seconds",
         "partial_update_memory_limit_per_worker",
-        "enable_pk_index_eager_build",
         "pk_index_eager_build_threshold_bytes",
         "pk_index_parallel_compaction_threadpool_max_threads",
         "pk_index_parallel_compaction_threadpool_size",
@@ -799,7 +809,8 @@
         "enable_pk_strict_memcheck",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
-        "column_mode_partial_update_insert_batch_size"
+        "column_mode_partial_update_insert_batch_size",
+        "lake_enable_pk_preserve_txn_delete_order"
       ]
     },
     {
@@ -816,6 +827,7 @@
         "string_prefix_zonemap_prefix_len",
         "max_row_source_mask_memory_bytes",
         "dictionary_encoding_ratio",
+        "enable_binary_plain_delta_offset",
         "dictionary_page_size",
         "small_dictionary_page_size",
         "dictionary_encoding_ratio_for_non_string_column",
@@ -841,6 +853,7 @@
         "lake_replication_max_file_copy_retry",
         "lake_replication_parallel_copy_min_file_count",
         "enable_lake_segment_metadata_filter",
+        "enable_lake_prepared_split_pre_refinement",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",
@@ -850,9 +863,11 @@
         "lake_vacuum_retry_pattern",
         "lake_vacuum_retry_max_attempts",
         "lake_vacuum_retry_min_delay_ms",
+        "lake_vacuum_enable_task_timeout",
         "lake_max_garbage_version_distance",
         "enable_strict_delvec_crc_check",
         "lake_clear_corrupted_cache_meta",
+        "lake_enable_protobuf_file_checksum",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
         "lake_local_pk_index_unused_threshold_seconds",
@@ -944,6 +959,7 @@
         "pipeline_gcore_timeout_threshold_sec",
         "pipeline_gcore_output_dir",
         "enable_core_file_size_optimization",
+        "process_force_exit_after_crash_handler_hang_second",
         "try_release_resource_before_core_dump",
         "sys_mlock_modules",
         "exception_stack_black_list",

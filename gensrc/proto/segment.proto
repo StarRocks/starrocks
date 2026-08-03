@@ -55,6 +55,11 @@ enum EncodingTypePB {
     DICT_ENCODING = 5;
     BIT_SHUFFLE = 6;
     FOR_ENCODING = 7; // Frame-Of-Reference
+    // Like PLAIN_ENCODING for string/varchar, but the page's offset trailer stores per-value
+    // deltas (string lengths) instead of absolute offsets. Recorded as a distinct column
+    // encoding so that a BE which does not understand it fails to open the segment (via
+    // EncodingInfo::get) rather than silently misreading the offsets.
+    PLAIN_ENCODING_DELTA_OFFSET = 8;
 }
 
 enum PageTypePB {

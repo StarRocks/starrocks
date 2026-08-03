@@ -15,11 +15,19 @@
 package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 public class TabletReshardUtils {
+    private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
 
     // Reshard size invariants — DO NOT change individually.
     //
@@ -156,5 +164,32 @@ public class TabletReshardUtils {
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
         return parallelismFloor(computeNodeCount(computeResource), Config.tablet_reshard_max_split_count);
+    }
+
+    // Parallelism floor for merge eligibility; returns 0 (ungated) when warehouse state is unavailable.
+    // computeParallelismFloor resolves warehouse compute-node count via StarMgr, so call it off hot,
+    // lock-held paths (e.g. the periodic scan), not per-publish.
+    public static int safeComputeParallelismFloor(long tableId) {
+        try {
+            return computeParallelismFloor(tableId);
+        } catch (RuntimeException e) {
+            LOG.warn("Parallelism floor unavailable for table {}; auto-merge will not be floor-gated.", tableId, e);
+            return 0;
+        }
+    }
+
+    // Min async vector-index build watermark over a reshard op's source tablets, so a reshard
+    // child/merged tablet inherits the build frontier of its inputs (split: the single parent;
+    // merge: the min across sources; identical: carried over) instead of resetting to 0. This
+    // mirrors the BE merge_tablet reconciliation and keeps the async build scheduler from a
+    // redundant full re-scan. Harmless (0) for non-vector-index tables.
+    public static long minVectorIndexBuiltVersion(MaterializedIndex oldIndex, List<Long> oldTabletIds) {
+        long min = Long.MAX_VALUE;
+        for (long oldTabletId : oldTabletIds) {
+            Tablet tablet = oldIndex.getTablet(oldTabletId);
+            long v = (tablet instanceof LakeTablet) ? ((LakeTablet) tablet).getVectorIndexBuiltVersion() : 0L;
+            min = Math.min(min, v);
+        }
+        return min == Long.MAX_VALUE ? 0L : min;
     }
 }

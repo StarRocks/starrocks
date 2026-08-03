@@ -16,7 +16,7 @@
 
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"

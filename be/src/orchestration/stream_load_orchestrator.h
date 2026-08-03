@@ -1,0 +1,45 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "common/status.h"
+
+namespace starrocks {
+
+class ExecEnv;
+class StreamLoadContext;
+
+namespace orchestration {
+
+class FragmentMgr;
+
+class StreamLoadOrchestrator {
+public:
+    StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr);
+
+    Status execute_plan_fragment(StreamLoadContext* ctx);
+
+private:
+    // Legacy (non-pipeline) BE-local execution via FragmentMgr + PlanFragmentExecutor.
+    Status _execute_plan_fragment_by_legacy(StreamLoadContext* ctx);
+    // Pipeline-engine BE-local execution (gated by FE Config.enable_pipeline_stream_load).
+    Status _execute_plan_fragment_by_pipeline(StreamLoadContext* ctx);
+
+    ExecEnv* _exec_env;
+    [[maybe_unused]] FragmentMgr* _fragment_mgr;
+};
+
+} // namespace orchestration
+} // namespace starrocks

@@ -177,7 +177,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 導入時期: v4.2.0
 - 説明: true の場合、ほとんどの外部 BE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は Thrift `checkAuth` RPC で FE Leader に転送されて検証され、ユーザー名/パスワードは FE 側の認証システム（LDAP / security integration を含む）を正としています。次のエンドポイントは常に除外されます：
-  - 公開プローブ / 可観測性: `/api/health`、`/metrics`、`/metrics/memory`。
   - トークン認証の内部転送（FE/BE 間の tablet clone と load エラーファイル取得に使用）: `/api/_tablet/_download`、`/api/_download_load`。これらは各自の token チェックで保護されており、`enable_http_auth=true` を有効にしても `enable_token_check=false` の影響を補うことはできません。
   - ハンドラ内でロードラベル + テーブル権限から認証する Stream Load / transaction エンドポイント: `/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
 
@@ -279,7 +278,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
-- 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で GlobalEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
+- 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で RuntimeEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
 - 導入バージョン: v3.2.12
 
 ### enable_jvm_metrics
@@ -381,6 +380,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
+### process_force_exit_after_crash_handler_hang_second
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: 致命的シグナル (クラッシュ) ハンドラーがハングした場合 (例: コアダンプ前のリソース解放中に発生する jemalloc デッドロック)、この秒数が経過するとプロセスを強制終了し、オーケストレーターが再起動できるようにします。クラッシュフラグは先に設定されるため、この猶予期間中も FE は `SHUTDOWN` ハートビートを受け取り続けます。この設定はクラッシュ中のプロセスが生存し続ける時間の上限のみを制限します。デフォルトでは無効 (`0`) であり、アップグレード後も既存のクラッシュおよびコアダンプの動作を変更しません。有効にするには、環境に応じた正の値を設定してノードを再起動してください。この値は起動時に一度だけ読み込まれ、正の値の場合にのみウォッチドッグスレッドが起動されます。`0` 以下の値ではこのウォッチドッグは無効のままになります。
+- 導入バージョン: v4.0.15, v4.1.5
+
 ### enable_rpc_compress_overflow_skip
 
 - デフォルト: true
@@ -389,6 +397,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: シリアライズされた chunk のサイズが圧縮コーデックの最大入力サイズを超えた場合の動作を制御します。`true`（デフォルト）に設定すると、StarRocks は警告ログを記録して圧縮をスキップし、非圧縮のままデータを送信します。`false` に設定すると、StarRocks は `InternalError` を返して RPC を中断します。
 - 導入バージョン: -
+
+### enable_threadpool_catch_task_exception
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 動的に変更可能: はい
+- 説明: ThreadPool のワーカースレッドが、タスクがスローした例外を飲み込んで次のタスクの実行を続けるかどうかを指定します。`false`（デフォルト）に設定すると、タスク本体を囲む catch 句が存在しないため、タスクからエスケープした例外はハンドラーを見つけられず、スローされた地点で BE プロセスを終了させます。`true` に設定すると、例外は ERROR レベルでログに記録され、プロセス全体のメトリクス [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) が加算され、ワーカースレッドは次のタスクに進むため、プロセスは存続します。ただし、ワーカースレッドが存続することはタスクが例外安全であることを意味しません。タスクが `DeferOp` またはデストラクターから完了を通知し、結果を記録する文がスキップされた場合、未設定の `Status` は OK として読み取られるため、待機側はそのタスクを成功と見なします。この場合、障害はエラーではなく誤った結果を生成します。クラッシュループを緩和する必要がある場合にのみ `true` に設定し、該当する障害がサイレントになることを想定してください。
+- 導入バージョン: v4.2.0
 
 ### ssl_private_key_path
 

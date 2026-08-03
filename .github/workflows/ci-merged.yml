@@ -96,6 +96,11 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
 
+      - name: update image - rocky9
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
+
       - name: Clean ENV
         if: always()
         run: |
@@ -184,7 +189,7 @@ jobs:
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
-          gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${LABEL}"
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${ORI_PR}/labels" -f "labels[]=${LABEL}"
 
       - name: prepare version label
         id: prepare_version_label
@@ -204,7 +209,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
-          gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
 
   update_version_label_for_main_feature:
     runs-on: [self-hosted, quick]
@@ -235,7 +240,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
-          gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+          gh api --method POST "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" -f "labels[]=${VERSION_LABEL}"
 
   update_feature_issue:
     runs-on: [self-hosted, quick]

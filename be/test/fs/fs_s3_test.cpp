@@ -619,6 +619,61 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
 }
 
+TEST_F(S3FileSystemTest, test_s3_client_factory_close_idempotent_and_reusable) {
+    close_s3_clients();
+
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.endpointOverride = "s3-client-factory-close-test";
+    config.region = "us-east-1";
+    config.maxConnections = 1;
+
+    auto client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    close_s3_clients();
+    close_s3_clients();
+    ASSERT_FALSE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    auto recreated_client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, recreated_client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+}
+
+TEST_F(S3FileSystemTest, test_s3_client_factory_cache_size_runtime_mutable) {
+    close_s3_clients();
+    int64_t old_cache_size = config::object_storage_client_cache_size;
+    // Lower the cache capacity at runtime so it holds at most 2 clients.
+    config::object_storage_client_cache_size = 2;
+
+    auto make_config = [](const std::string& endpoint) {
+        Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+        config.endpointOverride = endpoint;
+        config.region = "us-east-1";
+        return config;
+    };
+
+    auto c1 = make_config("s3-cache-size-ep-1");
+    auto c2 = make_config("s3-cache-size-ep-2");
+    auto c3 = make_config("s3-cache-size-ep-3");
+
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c1, FSOptions()));
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c2, FSOptions()));
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c3, FSOptions()));
+
+    int present = 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c1) ? 1 : 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c2) ? 1 : 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c3) ? 1 : 0;
+    // Capacity was lowered to 2 at runtime, so only 2 of the 3 distinct clients remain cached.
+    ASSERT_EQ(2, present);
+    // The most recently created client is always retained after eviction.
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c3));
+
+    config::object_storage_client_cache_size = old_cache_size;
+    close_s3_clients();
+}
+
 // Helper function to get object content type via HeadObject
 static std::string get_object_content_type(const std::string& uri) {
     S3URI s3_uri;

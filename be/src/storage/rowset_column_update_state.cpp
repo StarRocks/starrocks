@@ -19,6 +19,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -28,10 +29,8 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
@@ -41,6 +40,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -402,6 +402,10 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // Deliberately no segment_file_mark: a mark would make standalone (CLucene) inverted
+    // indexes collide with the base segment's (same rowset id + segment id), so the
+    // SegmentWriter skips them for .cols files. Footer-inlined (builtin) inverted indexes
+    // are still written and served to readers through the DCG segment.
     auto segment_writer =
             std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema, writer_options);
     RETURN_IF_ERROR(segment_writer->init(false));
@@ -497,6 +501,10 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segme
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
+    // These are full-row segments appended to the rowset, so give the writer a real file
+    // mark: standalone (CLucene) inverted indexes land at the path readers derive from
+    // (rowset path, rowset id, segment id). Mirrors RowsetUpdateState's segment rewrite.
+    writer_options.segment_file_mark = {rowset->rowset_path(), rowset->rowset_id().to_string()};
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, tablet_schema, writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     return std::move(segment_writer);

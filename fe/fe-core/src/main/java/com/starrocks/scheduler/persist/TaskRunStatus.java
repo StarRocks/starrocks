@@ -424,25 +424,12 @@ public class TaskRunStatus implements Writable {
             if (!state.equals(Constants.TaskRunState.SUCCESS)) {
                 return true;
             }
-            // if state is success, we should check if the mvTaskRunExtraMessage is empty
-            return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+            // if state is success, we should check if the mvTaskRunExtraMessage is empty (a run rehydrated from
+            // archived history can have a null extra message, which means no pending partitions, i.e. finished)
+            return mvTaskRunExtraMessage == null
+                    || (Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
                     Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
-                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
-        }
-    }
-
-    public long calculateRefreshProcessDuration() {
-        if (finishTime > processStartTime) {
-            // NOTE:
-            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
-            // In this case to avoid return a weird duration we choose the createTime as startTime
-            if (processStartTime > 0) {
-                return finishTime - processStartTime;
-            } else {
-                return finishTime - createTime;
-            }
-        } else {
-            return 0L;
+                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues()));
         }
     }
 

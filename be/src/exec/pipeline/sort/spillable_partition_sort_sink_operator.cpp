@@ -37,6 +37,12 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    // Subscribe this sink driver to the spiller's sink list so flush/channel completions wake the OUTPUT_FULL
+    // sleeper directly. Unconditional: the gate for the poller mode lives inside subscribe_sink (no-op when
+    // the event scheduler is disabled). observer() is valid here (assigned before prepare).
+    _chunks_sorter->spiller()->observable().subscribe_sink(state, observer());
+
     return Status::OK();
 }
 
@@ -133,7 +139,7 @@ OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<SpillablePartitionSortSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, sort_context.get(), _runtime_filter_hub);
+            _materialized_record_desc, sort_context.get(), _runtime_filter_hub);
 
     return ope;
 }

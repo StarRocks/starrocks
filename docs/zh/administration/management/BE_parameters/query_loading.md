@@ -131,6 +131,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
 - 引入版本：-
 
+### enable_spill_sort_events
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：为发生落盘的排序算子启用 pipeline 事件调度器，替代轮询自旋（poll-spinning）。
+- 引入版本：-
+
 ### enable_string_prefix_zonemap
 
 - 默认值：true
@@ -364,6 +373,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：BE 进程中文件描述符的最小数量。
 - 引入版本：-
+
+### object_storage_client_cache_size
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个客户端工厂缓存的对象存储客户端（S3 兼容及 Azure Blob）的最大数量。该值在每次创建客户端时读取，因此调低该值不会立即生效，而是随着后续创建过程中缓存客户端被逐出而逐步生效。小于 `1` 的值按 `1` 处理。
+- 引入版本：v4.1.4, v4.0.14
 
 ### object_storage_connect_timeout_ms
 
@@ -628,11 +646,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### jvm_call_thread_pool_size
 
-- 默认值：1
+- 默认值：4
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
-- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 清理任务与 Java UDF 执行竞争。
+- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 HDFS/libhdfs close 和 stat 操作以及 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 工作与 Java UDF 执行竞争。
 - 引入版本：-
 
 ### udf_thread_pool_size
@@ -641,7 +659,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
-- 描述：设置在 ExecEnv 中创建的 UDF 调用 PriorityThreadPool 的大小（用于执行用户自定义函数/UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 UDF 执行；保持较小可避免过度的 CPU 和内存争用。
+- 描述：设置 JavaEnv 持有的 Java UDF 调用 PriorityThreadPool 的大小（用于执行 Java UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 Java UDF 执行；保持较小可避免过度的 CPU 和内存争用。
 - 引入版本：v3.2.0
 
 ### update_memory_limit_percent
@@ -650,8 +668,44 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Percent
 - 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
+
+### enable_vector_index_block_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否按倒排列表 Block 缓存 IVFPQ 索引。开启后，StarRocks 仅加载并缓存查询需要的 IVFPQ Block；关闭后缓存整个 IVFPQ 索引文件。该配置不改变 HNSW 的缓存方式。
+- 引入版本：-
+
+### config_vector_index_build_concurrency
+
+- 默认值：8
+- 类型：Int
+- 单位：线程
+- 是否动态：是
+- 描述：每个向量索引构建任务使用的 OpenMP 线程数。StarRocks 会将实际值限制为至少 `1`。该配置还会与 `vector_index_build_max_cpu_ratio` 一起决定异步向量索引构建线程池的大小。
+- 引入版本：-
+
+### config_vector_index_default_build_threshold
+
+- 默认值：10000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：构建向量索引所需的默认 Segment 最小行数。索引属性 `index_build_threshold` 可以覆盖该值。对于 IVFPQ，有效阈值至少为 `nlist`，以确保索引训练有足够的数据。
+- 引入版本：-
+
+### vector_index_build_max_cpu_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：比例
+- 是否动态：是
+- 描述：异步向量索引构建可使用的 BE/CN CPU 核数目标比例。构建 CPU 预算为 `max(2, floor(cpu_cores * value))`，构建线程池大小由该预算和 `config_vector_index_build_concurrency` 共同决定。由于最小预算为 `2`，小规格机器或较小的比例可能使实际值超过配置比例。
+- 引入版本：-
 
 ### enable_vector_adaptive_search
 
@@ -695,6 +749,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：自适应 `ef_search` 倍率上限。即使 segment 极大也将放大倍率限制在该上限内，避免 CPU 与延迟在极端情况下失控。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_index_brute_selectivity_threshold
+
+- 默认值：0.01
+- 类型：Double
+- 单位：比例
+- 是否动态：是
+- 描述：带残余标量过滤条件的向量查询从过滤式 HNSW 遍历切换为精确计算的选择率阈值。如果匹配行数不超过 Segment 总行数的该比例，StarRocks 会直接对过滤后的候选项计算距离。设置为 `0` 可禁用该比例判断；候选数量不大于查询 `k` 时的独立短路仍然生效。
+- 引入版本：-
+
+### vector_index_build_flush_threshold_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：每个向量索引构建器的暂存 Buffer 在将数据加入内存索引前最多保留的行数。该配置可以限制构建 HNSW Flat 索引时的暂存 Buffer 内存，但不限制训练后索引本身的大小。设置为 `0` 可禁用中间 Flush，并缓存整个 Segment。
 - 引入版本：-
 
 ### vector_chunk_size

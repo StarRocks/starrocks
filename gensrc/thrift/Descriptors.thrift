@@ -213,7 +213,9 @@ enum TSchemaTableType {
 
     SCH_FE_THREADS,
 
-    SCH_BE_TABLET_WRITE_LOG
+    SCH_BE_TABLET_WRITE_LOG,
+
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
 }
 
 enum THdfsCompression {
@@ -365,6 +367,12 @@ struct TOlapTableIndexSchema {
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
     8: optional bool is_shadow
+    // Per-index distribution routing expressions (slot/cast/literal trees), evaluated
+    // at the sink SENDER to pick the destination tablet for this index. Mirrors
+    // TOlapTablePartitionParam.partition_exprs. When unset, the sink falls back to the
+    // partition-level `distributed_columns` routing (default for all existing loads).
+    // An explicitly EMPTY list means "single tablet, do not route" (degenerate K=1).
+    9: optional list<Exprs.TExpr> distributed_exprs
 }
 
 struct TOlapTableSchemaParam {
@@ -681,6 +689,18 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TFlussTable {
+    // Encoded scan-time configuration. FE merges catalog-level options and table properties;
+    // BE forwards this to the Java reader for Fluss connection and lake-source setup.
+    1: optional string runtime_conf
+
+    // timezone
+    2: optional string time_zone
+
+    // StarRocks catalog name, used by BE Java reader to reuse Fluss connections.
+    3: optional string catalog_name
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -755,6 +775,9 @@ struct TTableDescriptor {
 
   // Lance Table
   37: optional TLanceTable lanceTable
+
+  // Fluss Table schema
+  38: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

@@ -42,6 +42,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
 import com.staros.proto.UpdateShardGroupInfo;
+import com.staros.proto.UpdateShardInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
@@ -546,6 +547,35 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Moves a shard between shard groups by applying an add/remove group-id delta through the
+     * StarOS UpdateShard RPC, leaving the shard's other group memberships (e.g. its SPREAD group)
+     * untouched. Used to migrate a range-colocate tablet into its expected PACK shard group after
+     * a split's post-publish range reclassification. A no-op (no RPC) when both deltas are empty.
+     */
+    public void reassignShardGroups(long shardId, List<Long> addGroupIds, List<Long> removeGroupIds)
+            throws DdlException {
+        boolean noAdd = addGroupIds == null || addGroupIds.isEmpty();
+        boolean noRemove = removeGroupIds == null || removeGroupIds.isEmpty();
+        if (noAdd && noRemove) {
+            return;
+        }
+        prepare();
+        UpdateShardInfo.Builder builder = UpdateShardInfo.newBuilder().setShardId(shardId);
+        if (!noAdd) {
+            builder.addAllAddGroupIds(addGroupIds);
+        }
+        if (!noRemove) {
+            builder.addAllRemoveGroupIds(removeGroupIds);
+        }
+        try {
+            client.updateShard(serviceId, List.of(builder.build()));
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to reassign shard " + shardId + " groups (add=" + addGroupIds
+                    + ", remove=" + removeGroupIds + "). error: " + e.getMessage());
+        }
+    }
+
     public List<ShardGroupInfo> listShardGroup() throws DdlException {
         prepare();
         try {
@@ -627,11 +657,16 @@ public class StarOSAgent {
     /**
      * Create shards for a tablet split.
      *
-     * <p>Each new shard joins its own list of group ids (PACK group per colocate range),
-     * while still pinning placement to its old shard via
-     * {@code PlacementRelationship.WITH_SHARD}.
+     * <p>Each new shard joins its own list of group ids (PACK group per colocate range). Unless
+     * {@code spreadNewShards} is set, it also pins placement to its old shard via
+     * {@code PlacementRelationship.WITH_SHARD} so an online split reuses the source worker's warm
+     * cache. Pre-split passes {@code spreadNewShards == true}: the source tablet is empty, so the
+     * WITH_SHARD pin is dropped and StarOS spreads the new shards across workers (via the SPREAD
+     * group), preventing every tablet's delta-writer / flush / spill-merge from funneling onto one
+     * node during the load that follows. The colocate PACK group, when present, is unaffected.
      *
-     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id.
+     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id (used only for
+     * the WITH_SHARD pin; ignored when {@code spreadNewShards} is true).
      * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
      * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
      * have the same key set; the call fails if a new shard has no group assignment.
@@ -641,7 +676,8 @@ public class StarOSAgent {
                                                  FilePathInfo pathInfo,
                                                  FileCacheInfo cacheInfo,
                                                  @NotNull Map<String, String> properties,
-                                                 ComputeResource computeResource) throws DdlException {
+                                                 ComputeResource computeResource,
+                                                 boolean spreadNewShards) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         try {
@@ -661,11 +697,13 @@ public class StarOSAgent {
                 builder.clearPlacementPreferences();
                 builder.clearGroupIds();
                 builder.addAllGroupIds(groupIds);
-                builder.addPlacementPreferences(PlacementPreference.newBuilder()
-                        .setPlacementPolicy(PlacementPolicy.PACK)
-                        .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
-                        .setRelationshipTargetId(oldShardId)
-                        .build());
+                if (!spreadNewShards) {
+                    builder.addPlacementPreferences(PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(oldShardId)
+                            .build());
+                }
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
@@ -1151,6 +1189,22 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = client.getShardInfo(serviceId, shardIds, workerGroupId);
         return shardInfos;
+    }
+
+    /**
+     * Best-effort placement-convergence query for PACK shard groups. Returns, positionally aligned
+     * with {@code shardGroupIds}, whether each PACK shard group has converged onto co-resident workers
+     * in {@code workerGroupId} — every member shard has >=1 replica there and all member shards share
+     * the same replica worker set; an empty PACK group is vacuously stable. Eventually-consistent:
+     * callers must poll rather than treat a single {@code true} as durable. A non-PACK or non-existent
+     * id, or an empty {@code shardGroupIds}, fails the whole RPC with {@link StarClientException}, so
+     * callers must pass only existing PACK shard-group ids and never an empty list.
+     */
+    @NotNull
+    public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId)
+            throws StarClientException {
+        prepare();
+        return client.queryShardGroupStable(serviceId, shardGroupIds, workerGroupId);
     }
 
     public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {

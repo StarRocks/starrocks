@@ -7,6 +7,7 @@ description: "StarRocks provides many system variables that can be set and modif
 # System variables
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
@@ -189,10 +190,17 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ann_params
+
+* **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
+* **Default**: `""`
+* **Data type**: String
+* **Scope**: Session
+
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
-* **Description**: Controls whether the optimizer will consider ARRAY&lt;VARCHAR&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY&lt;VARCHAR&gt;. When disabled, only scalar VARCHAR columns are eligible and ARRAY&lt;VARCHAR&gt; types are ignored by those low-cardinality optimizations.
+* **Description**: Controls whether the optimizer will consider `ARRAY<VARCHAR>` columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or `ARRAY<VARCHAR>`. When disabled, only scalar VARCHAR columns are eligible and `ARRAY<VARCHAR>` types are ignored by those low-cardinality optimizations.
 * **Default**: true
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
@@ -507,6 +515,15 @@ Used to set the default storage format used by the storage engine of the computi
 * **Data Type**: String
 * **Introduced in**: v3.4.2, v3.5.0
 
+### default_view_sql_security
+
+* **Description**: The default SQL SECURITY characteristic applied when a `CREATE VIEW` statement does not specify a `SECURITY` clause. `NONE` (equivalent to an explicit `SECURITY NONE` clause) means querying the view only requires the invoker to have the `SELECT` privilege on the view itself; the tables the view references are not checked against the invoker. `INVOKER` (equivalent to `SECURITY INVOKER`) means the invoker must additionally have the `SELECT` privilege on the tables the view references. An explicit `SECURITY NONE` or `SECURITY INVOKER` clause in the statement always overrides this variable. This variable only affects `CREATE VIEW`; `ALTER VIEW` is unaffected.
+* **Scope**: Session
+* **Default**: `NONE`
+* **Data Type**: String
+* **Valid values**: `NONE`, `INVOKER`
+* **Introduced in**: v4.1.1
+
 ### disable_colocate_join
 
 * **Description**: Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
@@ -719,6 +736,27 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 * **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
+
+### enable_lake_prepared_physical_split_scan
+
+* **Description**: Whether to enable the prepared physical split scan for Cloud-native (lake) tables in a shared-data cluster. When enabled, each segment is pruned once and the resulting prepared read state is shared across the tablet's split children, which can speed up scans of large or skewed tablets. The optimization is decided per scan node and additionally requires a Cloud-native table with Query Cache disabled. Takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **Description**: The skew threshold that lets a single oversized lake tablet be split under the prepared-physical-split scan even when the scan-range count already reaches the pipeline DOP. A tablet is treated as a skewed straggler and split when its row count exceeds this ratio times the per-driver ideal share (total rows divided by the effective DOP). A larger value requires more extreme skew before splitting; a smaller value splits more eagerly. Must be a positive, finite number. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: 1.5
+* **Data type**: Double
+* **Introduced in**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **Description**: Whether to allow the prepared-physical-split scan on a Cloud-native (lake) table that is scanned by two or more scan operators in the same query (for example, a self-join, or a table referenced multiple times). When `false` (default), such duplicated scans fall back to the regular scan, because the prepared read state that the optimization reuses per scan is unsafe to share across sibling scans of the same table. Set it to `true` to opt those scans back into the optimization. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -1112,6 +1150,22 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v4.1.0
 
+### enable_topn_filter_back_pressure
+
+* **Description**: Whether a scan self-enables TopN runtime-filter (RF) back-pressure. When a TopN/stream-build RF (from an `ORDER BY ... LIMIT` query, or an aggregate runtime in-filter) targets a scan, back-pressure clamps the scan's read-ahead to a small number of IO tasks until the RF actually arrives. This prevents a burst of concurrent readers from overshooting the (non-concurrency-aware) row budget and flooding the downstream aggregation before the RF can prune. Applies to both shared-nothing (OLAP) and shared-data (lake/connector) scans. When set to `false`, a scan only back-pressures if the FE `topn_filter_back_pressure_mode` is enabled.
+* **Default**: true
+* **Introduced in**: v4.1
+
+The following variables tune the back-pressure behavior and only take effect when `enable_topn_filter_back_pressure` is `true`:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | Read-ahead IO-task cap applied while the TopN RF is still pending. Set it to `<= 0` to disable the clamp (the scan uses the full `io_tasks_per_scan_operator`). |
+| `topn_back_pressure_num_rows` | 1024 | Number of rows a scan may read in the first throttle round before back-pressure starts throttling. The allowance doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_ms` | 8 | Duration (in milliseconds) of the first throttle window. The window doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | Upper bound (in milliseconds) on the total time back-pressure throttles a scan before giving up and letting it proceed at full read-ahead, even if the RF never arrived. |
+| `topn_back_pressure_max_rounds` | 8 | Maximum number of throttle rounds before back-pressure gives up. |
+
 ### enable_topn_runtime_filter
 
 * **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
@@ -1138,6 +1192,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Scope**: Session
 * **Data Type**: boolean
 * **Introduced in**: v3.2.4
+
+### enable_vector_index_refine
+
+* **Description**: Whether to recompute exact distances from the original vectors and rerank candidates returned by a quantized vector index. This variable applies to IVFPQ and HNSW indexes using the `sq4`, `sq8`, or `pq` quantizer. It has no effect on unquantized HNSW indexes (`quantizer = flat`). Enabling it can improve result accuracy but increases I/O and computation. Use `EXPLAIN` and check `Refine: ON/OFF` to confirm whether refinement is active.
+* **Default**: `false`
+* **Data type**: Boolean
+* **Scope**: Session
 
 ### enable_view_based_mv_rewrite
 
@@ -1275,6 +1336,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
+### k_factor
+
+* **Description**: Multiplies the query `LIMIT` to determine how many vector index candidates each Segment returns. Values greater than `1` can improve recall after candidates from multiple Segments are merged, but increase index, memory, and downstream processing costs. The final candidate count is clamped to at least `1`.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
 
 ### lake_bucket_assign_mode
 
@@ -1440,6 +1508,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 3000
 * **Unit**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **Description**: Controls the single-tablet optimization by tablet size. When a query is pruned to a single tablet, StarRocks can run the aggregation in a single phase and gather the result on a single node, skipping the shuffle. This is efficient for a small tablet, but serializes the whole query on one node when the tablet is large. If the row count of the selected single tablet exceeds this threshold, the optimization is disabled and a normal distributed (shuffled) plan is used instead. Set it to `-1` to disable this gate and always apply the single-tablet optimization regardless of tablet size.
+* **Default**: 10000000
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **Description**: Specifies the maximum time that one materialized view rewrite rule can consume. When the threshold is reached, this rule will not be used for query rewrite.
@@ -1546,6 +1621,13 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
   * `never`: Never cache the data.
 * **Default**: auto
 * **Introduced in**: v3.3.2
+
+### pq_refine_factor
+
+* **Description**: Additional candidate multiplier for a vector range search when `enable_vector_index_refine` is enabled. It is applied after `k_factor`. Increasing it can improve recall before exact-distance reranking, but increases index, I/O, and distance-computation costs.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
 
 ### query_cache_agg_cardinality_limit
 
@@ -1667,6 +1749,22 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
+
+### allow_lake_without_partition_filter
+
+* **Description**: Whether to allow queries on lake tables (Hive, Iceberg, Delta Lake, Paimon, etc.) without a partition filter predicate. When set to `false`, queries that do not contain a valid partition predicate on these tables will be rejected to prevent accidental full-table scans.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Alias**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **Description**: The maximum number of partitions allowed to be scanned for a single lake table (Hive, Iceberg, Delta Lake, Paimon, etc.). When set to `0`, no limit is applied. When exceeded, the query will return an error. Note that for catalog types that enumerate splits incrementally (Iceberg, Delta Lake), the limit check is performed during scan-range dispatch and the query may fail mid-execution rather than being rejected upfront.
+* **Scope**: Session
+* **Default**: `0` (No limit)
+* **Data type**: Int
+* **Alias**: `scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 
@@ -1861,5 +1959,7 @@ The StarRocks version. Cannot be changed.
 * **Default**: 28800 (8 hours).
 * **Unit**: Second
 * **Data type**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

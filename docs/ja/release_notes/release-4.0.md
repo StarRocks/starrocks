@@ -25,6 +25,182 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 
 :::
 
+## 4.0.13
+
+リリース日：2026 年 7 月 16 日
+
+### 動作変更
+
+- 定数オペランドを持つ `LIKE` 述語（FE の定数畳み込みパス）のエスケープ処理が MySQL 8 と一致するようになりました：`SELECT 'a\\b' LIKE 'a\\\\b'` は `1` を、`SELECT 'a\\b' LIKE 'a\\b'` は `0` を返します。従来の非 MySQL エスケープ動作に依存していたクエリは結果が変わります。[#74814](https://github.com/StarRocks/starrocks/pull/74814)
+- `SHOW [FULL] FUNCTIONS` の Properties 列に、UDF の `isolation` プロパティ（`shared` または `isolated`）が常に含まれるようになり、関数を再作成せずに設定状態を確認できるようになりました。[#75255](https://github.com/StarRocks/starrocks/pull/75255)
+- vended credentials を使用する Iceberg REST カタログがテーブルメタデータキャッシュを再び使用するようになりました。これは、すべての `getTable()` が REST カタログへ直接アクセスし AWS Lake Formation の `Rate exceeded` エラーを引き起こしていたキャッシュバイパスを取り消すものです。キャッシュされたテーブルはリフレッシュサイクルごとに資格情報を更新し、REST カタログのテーブルキャッシュ有効期限は 3000 秒が上限になりました。[#75431](https://github.com/StarRocks/starrocks/pull/75431)
+
+### 改善点
+
+- 共有データクラスタの Tablet メタデータとトランザクションログにチェックサム保護を追加しました。[#74924](https://github.com/StarRocks/starrocks/pull/74924)
+- `FRONTEND_STREAMING` ロードで結合トランザクションログ / ファイルバンドリングをサポートしました。[#74460](https://github.com/StarRocks/starrocks/pull/74460)
+- ロック競合を減らすため、共有データクラスタのスキーマ変更ジョブのロック範囲をテーブル単位に狭めました。[#75087](https://github.com/StarRocks/starrocks/pull/75087)
+- Tablet の強制削除を一括マークする際、`TabletInvertedIndex` の書き込みロックを Tablet ごとではなくバッチ全体で一度だけ取得するようにしました。[#75616](https://github.com/StarRocks/starrocks/pull/75616)
+- コミット済みトランザクションの最大 Publish 待ち時間を示す FE メトリクスを追加しました。[#75025](https://github.com/StarRocks/starrocks/pull/75025)
+- ウィンドウ演算子処理での列アップグレードにメモリ制限チェックを追加しました。[#75821](https://github.com/StarRocks/starrocks/pull/75821)
+- 配列列の offsets-only 読み取りパスから不要な行単位シークを削除しました。[#75861](https://github.com/StarRocks/starrocks/pull/75861)
+- Iceberg テーブルのフォアグラウンド行数推定が、全データファイルを列挙せずに manifest メタデータから計算されるようになりました。[#75280](https://github.com/StarRocks/starrocks/pull/75280)
+- セキュリティ脆弱性（CVE）への対応：脆弱性のある `org.jline:jline`（jline-remote-telnet）を Hadoop の推移的依存関係から除外し、jackson-databind を 2.21.4 にアップグレードしました。[#75066](https://github.com/StarRocks/starrocks/pull/75066) [#75373](https://github.com/StarRocks/starrocks/pull/75373)
+
+### バグ修正
+
+以下の問題を修正しました:
+
+- 増分スキャンレンジのスケジューリングが、デプロイ済みのフラグメントインスタンスを再利用する際に異なる per-driver レイアウトを再計算し、一部のスキャンレンジが消費されず行が失われる可能性がある問題（例：Hive からの INSERT）。[#74674](https://github.com/StarRocks/starrocks/pull/74674)
+- `FILES()` または Broker Load で Parquet ファイルを読み取る際、ARRAY/MAP/STRUCT 内にネストされた INT96 タイムスタンプにセッションタイムゾーン変換が適用されず、タイムゾーンオフセット分ずれた値が返る問題（トップレベルの INT96 列は正常）。[#74868](https://github.com/StarRocks/starrocks/pull/74868)
+- 監査ログに `SELECT INTO OUTFILE` のエクスポート行数が記録されない問題。[#74467](https://github.com/StarRocks/starrocks/pull/74467)
+- strict モードの CAST が、無視されるべき NULL 行の内部データからオーバーフローエラーを発生させる可能性がある問題。[#74903](https://github.com/StarRocks/starrocks/pull/74903)
+- `parse_json` が不正な入力の処理時に `ALLOW_THROW_EXCEPTION` 設定を尊重しない問題。[#74976](https://github.com/StarRocks/starrocks/pull/74976)
+- 初回ロード統計収集をグローバルに無効化しつつテーブル単位で有効化できない問題：明示的に設定されたテーブルプロパティがグローバル設定 `enable_statistic_collect_on_first_load` より優先されるようになりました。[#74794](https://github.com/StarRocks/starrocks/pull/74794)
+- 共有データテーブルの部分列更新で、Tablet スキーマとトランザクションスキーマが乖離した場合に BE がクラッシュしたり、静かにデータが破損したりする問題。[#74005](https://github.com/StarRocks/starrocks/pull/74005)
+- BE プロセスが予期せず再起動する問題。[#74424](https://github.com/StarRocks/starrocks/pull/74424)
+- 幅またはバケット数がゼロの場合、Iceberg の `truncate`/`bucket` パーティション変換で BE がクラッシュ（SIGFPE）する問題。[#74998](https://github.com/StarRocks/starrocks/pull/74998)
+- `FragmentContext::set_final_status` で `driver_executor` が null の場合に BE がクラッシュする問題。[#75030](https://github.com/StarRocks/starrocks/pull/75030)
+- トランザクション開始と Autovacuum の競合により、まだ必要なトランザクションログが削除され、パーティションの Publish が永久に停止する問題（"Both txn_log and corresponding tablet_meta missing"）。[#74906](https://github.com/StarRocks/starrocks/pull/74906)
+- `avg(DISTINCT x)` が誤って sum/count のマテリアライズドビューを使うように書き換えられ、誤った結果を返す問題。[#75071](https://github.com/StarRocks/starrocks/pull/75071)
+- TopN RANK ソートの境界条件バグにより誤った結果が生じる可能性がある問題。[#75045](https://github.com/StarRocks/starrocks/pull/75045)
+- 空のデリミタを指定した `split` / `split_part` / `str_to_map` が、不正な UTF-8 入力で範囲外読み取りを行う可能性がある問題。[#75068](https://github.com/StarRocks/starrocks/pull/75068)
+- 存在しない列を指定した `ALTER TABLE ... MODIFY COLUMN ... AFTER` が明確なエラーメッセージを返すようになりました。[#75073](https://github.com/StarRocks/starrocks/pull/75073)
+- `mod()` / `pmod()` で型の最小値を -1 で剰余計算すると BE がクラッシュ（SIGFPE）する問題。[#74980](https://github.com/StarRocks/starrocks/pull/74980)
+- `bar()` が負または巨大な幅でメモリを無制限に消費する問題（DoS の可能性）；このような入力はエラーで拒否されるようになりました。[#75143](https://github.com/StarRocks/starrocks/pull/75143)
+- 複数ステートメントの Stream Load タスク削除時にトランザクション状態コールバックが登録解除されない問題。[#75188](https://github.com/StarRocks/starrocks/pull/75188)
+- スピルパーティションソート中にクエリがキャンセルされるとクラッシュする問題。[#75140](https://github.com/StarRocks/starrocks/pull/75140)
+- テーブル関数の実行中にクエリのメモリ制限が適用されない問題。[#75179](https://github.com/StarRocks/starrocks/pull/75179)
+- `floor` または `ceil` という名前の列を SELECT すると解析時に ClassCastException が発生する問題。[#75241](https://github.com/StarRocks/starrocks/pull/75241)
+- 直前のチャンクが下流で変更された場合に `OrderedPartitionExchanger` で heap-use-after-free が発生する問題。[#75279](https://github.com/StarRocks/starrocks/pull/75279)
+- FE メタデータロックの 3 件の正確性に関する競合問題。[#74968](https://github.com/StarRocks/starrocks/pull/74968)
+- ロードのスピルメトリクス記録時に、存在しないクエリコンテキストを参照する可能性がある問題。[#75236](https://github.com/StarRocks/starrocks/pull/75236)
+- 階層型名前空間（HNS）が無効なストレージアカウントに対する ADLS2 `ListPaths` が CN のクラッシュと Vacuum の失敗を引き起こす問題。[#75166](https://github.com/StarRocks/starrocks/pull/75166)
+- BE/CN の JVM メトリクスが不正な Prometheus `# TYPE` 行を出力する問題。[#75240](https://github.com/StarRocks/starrocks/pull/75240)
+- JIT コード生成が LARGEINT リテラルを 64 ビットに切り詰め、誤った結果を生成する問題。[#75137](https://github.com/StarRocks/starrocks/pull/75137)
+- 外部 Iceberg テーブルへの複合 ALTER TABLE が、キュー済みのアクションを再実行する問題。[#74036](https://github.com/StarRocks/starrocks/pull/74036)
+- Build 側の列の nullability 不一致により Nested-loop Join がクラッシュする問題。[#75343](https://github.com/StarRocks/starrocks/pull/75343)
+- FE のメモリ使用量が過大にならないよう、Iceberg manifest の列統計を選択的にキャッシュするようになりました。[#75395](https://github.com/StarRocks/starrocks/pull/75395)
+- `addPhysicalPartition` が 1 回の呼び出しで 1 つの物理パーティションしか作成できず、ランダム分散テーブルの物理パーティションのバックフィルが極端に遅い問題。[#75430](https://github.com/StarRocks/starrocks/pull/75430)
+- `information_schema.task_runs` の述語検索における SQL インジェクション脆弱性。[#75520](https://github.com/StarRocks/starrocks/pull/75520)
+- 1 つのクエリ内の複数の UNNEST が同じ配列列を参照すると BE がクラッシュ（SIGSEGV）する問題。[#75012](https://github.com/StarRocks/starrocks/pull/75012)
+- ネストされた辞書エンコード式の Exchange ノード間変換が誤っている問題。[#75246](https://github.com/StarRocks/starrocks/pull/75246)
+- オプティマイザが式を複製する際に Join のスキューヒントが失われる問題。[#68964](https://github.com/StarRocks/starrocks/pull/68964)
+- ビューが参照するテーブルの収集時に CTE 参照がスキップされない問題。[#74813](https://github.com/StarRocks/starrocks/pull/74813)
+- Struct のフィールド名が有効な JSON パスでない場合、`CAST(json AS STRUCT<...>)` で BE が異常終了する問題。[#75355](https://github.com/StarRocks/starrocks/pull/75355)
+- Parquet の一時的な辞書コード列が実行プランの上位レイヤーに漏れる可能性がある問題。[#74452](https://github.com/StarRocks/starrocks/pull/74452)
+- ソート列除去の最適化により誤った結果が生じる問題。[#74983](https://github.com/StarRocks/starrocks/pull/74983)
+- UNNEST の結果 Struct 型が入力配列の要素型と一貫して絞り込まれない問題。[#75445](https://github.com/StarRocks/starrocks/pull/75445)
+- FE の EOS キャンセルと BE のステージ 2 デプロイの競合により、正常に完了したクエリがキャンセル扱いになる問題。[#75009](https://github.com/StarRocks/starrocks/pull/75009)
+- Join Reorder のプルーニングが、述語がまだ参照している列を削除する可能性がある問題。[#74791](https://github.com/StarRocks/starrocks/pull/74791)
+- メタデータイメージのダンプが一部のデータベースロック取得に失敗した際にグローバルメタデータロックが解放されず、後続のメタデータ操作がブロックされる問題。[#75488](https://github.com/StarRocks/starrocks/pull/75488)
+- `StringSearch::_pattern` が未初期化のままで、`split_debug_symbol` のログ出力が誤っている問題。[#75614](https://github.com/StarRocks/starrocks/pull/75614)
+- GIN 転置インデックスを持つ列で、`LIKE` の 1 文字ワイルドカード `_` が誤った結果を返す問題。[#75551](https://github.com/StarRocks/starrocks/pull/75551)
+- 共有データクラスタの主キーインデックス再構築中に、セグメントイテレータのベクタの位置がずれる可能性がある問題。[#74887](https://github.com/StarRocks/starrocks/pull/74887)
+- ファイルバンドリング有効時、孤児化したバンドルセグメントが共有としてマークされず、同じパーティションの他の Tablet がまだ参照しているバンドルファイルを Vacuum が削除してしまい、以降の Publish が "Object ... does not exist" で失敗する問題。[#75689](https://github.com/StarRocks/starrocks/pull/75689)
+- バケット数が正でない場合に `histogram()` がクラッシュする問題；エラーを返すようになりました。[#75041](https://github.com/StarRocks/starrocks/pull/75041)
+- Flat JSON 列が NOT NULL から nullable に変わった後、Compaction の読み取りパスがクラッシュ（`JsonMergeIterator` の CHECK 失敗）する問題。[#75680](https://github.com/StarRocks/starrocks/pull/75680)
+- Join Tuning Guide が Join を再構築する際に共通述語演算子が失われる問題。[#75773](https://github.com/StarRocks/starrocks/pull/75773)
+- `OptExpression` の不変な inputs リストにより `ApplyTuningGuideRule` で `UnsupportedOperationException` が発生する問題。[#70785](https://github.com/StarRocks/starrocks/pull/70785)
+- 共有データテーブルの `SHOW PARTITIONS` と `partitions_meta` が、物理パーティションごとのバケット数ではなく論理パーティションのバケット数を表示する問題。[#75734](https://github.com/StarRocks/starrocks/pull/75734)
+- `NLJoinProbeOperator::pull_chunk` でのメモリ割り当て例外が、クエリを失敗させる代わりに BE をクラッシュさせる問題。[#75788](https://github.com/StarRocks/starrocks/pull/75788)
+- `SHOW CREATE ROUTINE LOAD` が最初のロードプロパティ句の前に余分なカンマを出力し、出力された文をそのまま実行できない問題。[#75522](https://github.com/StarRocks/starrocks/pull/75522)
+- CTAS（`CREATE TABLE AS SELECT`）が `ENGINE` 句を受け付けず、Unified カタログへの CTAS が不可能だった問題。[#75771](https://github.com/StarRocks/starrocks/pull/75771)
+- Null-safe 等価（`<=>`）Join 条件上の OR 述語が誤って `UNION ALL` に書き換えられ、誤った結果を返す問題。[#75038](https://github.com/StarRocks/starrocks/pull/75038)
+- サブパーティションを持つテーブルで Query Cache の正規化がクラッシュする問題。[#75789](https://github.com/StarRocks/starrocks/pull/75789)
+- 非 NULL の入力配列がすべて空の場合、`array_map` / `transform` が NULL 行を落とす問題。[#75141](https://github.com/StarRocks/starrocks/pull/75141)
+- 長さゼロのキャプチャグループで `regexp_extract_all` が無限ループに陥る問題。[#75798](https://github.com/StarRocks/starrocks/pull/75798)
+- 名前に `.` を含むキーに対する Flat JSON サブフィールドの読み取りが NULL を返し、述語プッシュダウン時に行が静かに欠落する可能性もある問題。[#75583](https://github.com/StarRocks/starrocks/pull/75583)
+- UNNEST の出力 Struct のサブフィールドが、入力配列のアクセスグループではなく出力自身のアクセスグループでプルーニングされ、必要なサブフィールドまで削除される可能性がある問題。[#76002](https://github.com/StarRocks/starrocks/pull/76002)
+- FE の Iceberg manifest データファイルキャッシュが不完全なファイルセットを提供し、スキャンプランニングからデータファイルが静かに脱落してクエリ結果が少なくなる問題。[#76215](https://github.com/StarRocks/starrocks/pull/76215)
+- INSERT のコミット後に Iceberg テーブルのメタデータキャッシュが無効化されず、後続のクエリが最新スナップショットを読めない可能性がある問題。[#67230](https://github.com/StarRocks/starrocks/pull/67230)
+
+## 4.0.12
+
+リリース日：2026 年 6 月 25 日
+
+### 動作変更
+
+- `isAdjustedToUTC=false`（タイムゾーンなし）で書き込まれた Parquet の INT64 タイムスタンプを読み取る際、`SELECT FROM FILES()` および Broker/Stream Load はセッションタイムゾーンのオフセット分だけ値をシフトしなくなり、Trino、Spark、Impala などと同様に壁時計（wall-clock）値として読み取るようになりました。以前はセッションタイムゾーンが UTC でない場合に値がずれていました。[#73674](https://github.com/StarRocks/starrocks/pull/73674)
+- CTAS（`CREATE TABLE AS SELECT`）は、ソースが明示的なユーザー長（カタログ列参照、`CAST AS VARCHAR(N)`、文字列リテラル）を持つ場合、宣言された `VARCHAR(N)` の長さを `VARCHAR(1048576)` に拡張せず保持するようになりました。これにより長さ制約が引き続き強制され、DDL が dbt のスキーマ契約と一致します。マテリアライズドビューのマテリアライズ列は従来どおり拡張されます。[#73498](https://github.com/StarRocks/starrocks/pull/73498)
+- Paimon コネクタは、スキャンスプリットの計算時にセッション変数 `connector_max_split_size` を常にデフォルト値ではなく尊重するようになり、この変数のチューニングが Paimon のスキャン並列度に反映されるようになりました。[#71756](https://github.com/StarRocks/starrocks/pull/71756)
+
+### 改善点
+
+- 定数入力に対して定数評価時に変換を畳み込むことで、`base64_to_bitmap` を最適化しました。[#74684](https://github.com/StarRocks/starrocks/pull/74684)
+- `ngram_search` が非定数の needle（検索語を定数だけでなく列式で指定可能）をサポートするようになりました。[#74675](https://github.com/StarRocks/starrocks/pull/74675)
+- Arrow-to-JSON コンバータが `LARGE_LIST` および `FIXED_SIZE_LIST` 型をサポートするようになりました。[#73714](https://github.com/StarRocks/starrocks/pull/73714)
+- 統計情報収集時にワイド文字列列を分離するオプトインのオプションを追加し、メモリ負荷を軽減しました。[#73258](https://github.com/StarRocks/starrocks/pull/73258)
+- `information_schema.COLUMNS` が `DATETIME_PRECISION` フィールドを設定するようになりました。[#74623](https://github.com/StarRocks/starrocks/pull/74623)
+- 並行性を向上させるため、`InformationSchemaDataSource` および `FrontendServiceImpl` でデータベース読み取りロックをテーブル単位の intensive ロックに緩和しました。[#73936](https://github.com/StarRocks/starrocks/pull/73936) [#73913](https://github.com/StarRocks/starrocks/pull/73913)
+- shared-nothing クラスタでデータベース書き込みロックをテーブル単位の intensive 書き込みロックに狭め、レプリカ行数更新の範囲をテーブルロックに限定しました。[#74523](https://github.com/StarRocks/starrocks/pull/74523) [#74521](https://github.com/StarRocks/starrocks/pull/74521)
+- ロック競合を減らすため、Routine Load の Broker RPC をジョブ単位の書き込みロックの外へ移動しました。[#73591](https://github.com/StarRocks/starrocks/pull/73591)
+- JDBC カタログのメタデータアクセスを高速化するため、JDBC `REMARKS` の取得を `getTable()` のホットパスの外へ遅延させました。[#73488](https://github.com/StarRocks/starrocks/pull/73488)
+- `information_schema.tables_config` クエリで `table_name` 述語をプッシュダウンしました。[#73210](https://github.com/StarRocks/starrocks/pull/73210)
+- `BackendLoadStatistic` で単一メディアの BE に対するレプリカ単位スキャンをスキップしました。[#73555](https://github.com/StarRocks/starrocks/pull/73555)
+- 接続のスタックを防ぐため、MySQL チャネルの結果送信パスに書き込みタイムアウトを追加しました。[#73646](https://github.com/StarRocks/starrocks/pull/73646)
+- カタログのごみ箱サイズの Gauge メトリクスを追加しました。[#74440](https://github.com/StarRocks/starrocks/pull/74440)
+- Vacuum のバッチサイズおよびリトライ回数のメトリクスを追加し、リトライストームを抑えるため Lake Vacuum のリトライバックオフに非相関ジッターを追加しました。[#74112](https://github.com/StarRocks/starrocks/pull/74112) [#74108](https://github.com/StarRocks/starrocks/pull/74108)
+- セキュリティ脆弱性（CVE）に対応するためサードパーティ依存関係をアップグレードしました: Netty を 4.1.135.Final、Tomcat を 9.0.118、Thrift を 0.23.0 に。[#74668](https://github.com/StarRocks/starrocks/pull/74668) [#73797](https://github.com/StarRocks/starrocks/pull/73797) [#73625](https://github.com/StarRocks/starrocks/pull/73625)
+
+### バグ修正
+
+以下の問題を修正しました:
+
+- 正常にコミットされた複数ステートメントトランザクションの Stream Load が、`information_schema.loads` および `SHOW STREAM LOAD` で永続的に `PREPARING` と表示される問題。[#74386](https://github.com/StarRocks/starrocks/pull/74386)
+- セッションタイムゾーンが Asia/Shanghai と異なるクラスタで、ロード時刻が BE/FE thrift 境界をタイムゾーンなしの壁時計文字列としてやり取りされたため、`information_schema.loads` から行が静かに欠落する問題。[#73365](https://github.com/StarRocks/starrocks/pull/73365)
+- 単位の不一致により、明示的トランザクションの `COMMIT` がデータベース書き込みロックを `query_timeout` 秒ではなくミリ秒しか待たない問題。[#73549](https://github.com/StarRocks/starrocks/pull/73549)
+- `ALTER TABLE ... ADD COLUMN` の後、`current_timestamp` / `now()` 列のデフォルトが固定リテラルとして表示され、FE 再起動や edit-log の再生で失われる可能性がある問題。[#73455](https://github.com/StarRocks/starrocks/pull/73455)
+- `OPERATE ON SYSTEM` 権限なしで `sys.fe_memory_usage` / `sys.fe_locks` をクエリすると、明確なアクセス拒否エラーではなく誤解を招く RPC 失敗メッセージが返る問題。[#73567](https://github.com/StarRocks/starrocks/pull/73567)
+- パーティション数の多い Hive テーブルで、キー単位の自動パーティション統計リフレッシュが Hive Metastore を過負荷にする可能性がある問題。[#73563](https://github.com/StarRocks/starrocks/pull/73563)
+- Schema Change 中に GTID を読み取る際の NULL ポインタの問題。[#74855](https://github.com/StarRocks/starrocks/pull/74855)
+- distinct 集計をプッシュダウンした後、空の分析オペレータが除去されない問題。[#74810](https://github.com/StarRocks/starrocks/pull/74810)
+- 行数ゼロがパーティション統計を破損させる可能性がある問題。[#74801](https://github.com/StarRocks/starrocks/pull/74801)
+- ベクトルインデックスの書き換えが共有テーブルスキーマを汚染する可能性がある問題。[#74785](https://github.com/StarRocks/starrocks/pull/74785)
+- 並列プロファイル収集時の `IllegalStateException`。Tracers を fork 対応にすることで修正。[#74746](https://github.com/StarRocks/starrocks/pull/74746)
+- FE 呼び出し側のタイムアウト経過後も BE の Vacuum タスクが中止されない問題。[#74694](https://github.com/StarRocks/starrocks/pull/74694)
+- `ChunksPartitioner` でパーティションコンシューマのエラーが伝播されず失われる問題。[#74693](https://github.com/StarRocks/starrocks/pull/74693)
+- `blockingAddTabletCtxToScheduler` におけるロックの不一致。[#74596](https://github.com/StarRocks/starrocks/pull/74596)
+- 設定フィールド名 `azure_adls2_oauth2_client_endpoint` のタイプミス。[#74581](https://github.com/StarRocks/starrocks/pull/74581)
+- オペレータ状態の見落とされた遷移時に Pipeline オブザーバーへ通知されない問題。[#74557](https://github.com/StarRocks/starrocks/pull/74557)
+- retain-boundary メタデータが失われた場合に報告される Vacuum ウォーターマークが不正確な問題。[#74429](https://github.com/StarRocks/starrocks/pull/74429)
+- `updateSchemaBackendId` 中の `MaterializedIndexMeta` 上のデータ競合。[#74412](https://github.com/StarRocks/starrocks/pull/74412)
+- 非主キーレプリカが永続的な version hole で停止する可能性があり、現在は自己修復するようになった問題。[#74408](https://github.com/StarRocks/starrocks/pull/74408)
+- JIT コンパイル失敗時の `LLVMContext` の use-after-free。[#74396](https://github.com/StarRocks/starrocks/pull/74396)
+- `ADMIN SHOW REPLICA STATUS` の欠落レプリカ行における列のずれ。[#74393](https://github.com/StarRocks/starrocks/pull/74393)
+- WHEN と結果型が float/int 混在の `CASE WHEN` に対して無効な JIT IR が生成される問題。[#74382](https://github.com/StarRocks/starrocks/pull/74382)
+- クラスタスナップショットが失敗し続けると `CatalogRecycleBin` がフリーズする問題。[#74379](https://github.com/StarRocks/starrocks/pull/74379)
+- 同一の明示的トランザクション内で先に変更されたテーブルを対象とする Partial Update を、明確なエラーで拒否するようになりました。[#74344](https://github.com/StarRocks/starrocks/pull/74344)
+- 不変パーティションの更新がトランザクションの計算リソースを使用しない問題。[#74316](https://github.com/StarRocks/starrocks/pull/74316)
+- パーティション Join による潜在的な範囲外アクセス。[#74315](https://github.com/StarRocks/starrocks/pull/74315)
+- FE フォロワーで、データベースレベルの UDF がリネーム後のターゲット DB に復元されない問題。[#74313](https://github.com/StarRocks/starrocks/pull/74313)
+- 非ルートの複合述語が `NotPushDown` ではなく `EOF` を返す問題。[#74218](https://github.com/StarRocks/starrocks/pull/74218)
+- Routine Load の `origStmt` を永続化する際にテーブル名がバッククォートされない問題。[#74188](https://github.com/StarRocks/starrocks/pull/74188)
+- assert-num-rows におけるアサーション名の検索エラー。[#74178](https://github.com/StarRocks/starrocks/pull/74178)
+- 集計が型の一致しない集計関数を使用する問題。[#74159](https://github.com/StarRocks/starrocks/pull/74159)
+- 強制終了された Task Run がアーカイブされず、セッションプレフィックス付きの Task Run タイムアウトが尊重されない問題。[#74146](https://github.com/StarRocks/starrocks/pull/74146)
+- `RENAME` と `SWAP`（テーブルおよびマテリアライズドビュー）が、並行変更の問題を避けるためデータベース書き込みロックを取得するようになりました。[#74100](https://github.com/StarRocks/starrocks/pull/74100)
+- 主キーテーブルの複数ステートメントトランザクションで op_writes をバッチ処理する際、複合 rowset の統計が合計されない問題。[#74059](https://github.com/StarRocks/starrocks/pull/74059)
+- distinct 集計のソースが終了したときに sink へ通知されない問題。[#74055](https://github.com/StarRocks/starrocks/pull/74055)
+- `_statistics_` が削除されたときに `pipe_file_list` が再作成されない問題。[#73970](https://github.com/StarRocks/starrocks/pull/73970)
+- `TabletInvertedIndex.deleteTablets` のクラッシュ。空入力をファストパスでスキップすることで修正。[#73955](https://github.com/StarRocks/starrocks/pull/73955)
+- Task マネージャが Task Run に対して不正な edit log を書き込む可能性がある問題。[#73882](https://github.com/StarRocks/starrocks/pull/73882)
+- データディレクトリのロードスレッドにおける `set_thread_name` の競合。[#73862](https://github.com/StarRocks/starrocks/pull/73862)
+- `TabletSinkSender::_send_chunk_by_node` における競合状態。[#73820](https://github.com/StarRocks/starrocks/pull/73820)
+- `OlapTableSink` におけるメモリ計上の誤り。[#73807](https://github.com/StarRocks/starrocks/pull/73807)
+- コネクタの読み取りバイト数統計の誤り。[#73799](https://github.com/StarRocks/starrocks/pull/73799)
+- `BACKUP ON (ALL FUNCTION)` / `(ALL EXTERNAL CATALOGS)` の失敗。[#73790](https://github.com/StarRocks/starrocks/pull/73790)
+- すべて NULL の場合に `NullableColumnUnaryFunction` が decimal の scale を失う問題。[#73789](https://github.com/StarRocks/starrocks/pull/73789)
+- サブライターに append が一切ない場合の FlatJSON のクラッシュ。[#73730](https://github.com/StarRocks/starrocks/pull/73730)
+- Broker Load 中に `LargeList` / `FixedSizeList` を JSON 列に変換できない問題。[#73718](https://github.com/StarRocks/starrocks/pull/73718)
+- JSON ロード中のネスト型の部分 append の失敗。[#73715](https://github.com/StarRocks/starrocks/pull/73715)
+- パーティションが並行して削除されたときの `StatisticsCalcUtils` の NPE。[#73711](https://github.com/StarRocks/starrocks/pull/73711)
+- `RuntimeProfileParser` が小数値の単位カウンタを解析しない問題。[#73683](https://github.com/StarRocks/starrocks/pull/73683)
+- ネストされたマテリアライズドビューのリフレッシュ中の NPE。[#73644](https://github.com/StarRocks/starrocks/pull/73644)
+- Lake `publish_log_version` で複数ステートメントトランザクションが正しく処理されない問題。[#73423](https://github.com/StarRocks/starrocks/pull/73423)
+- 空の `ALTER TABLE` 句を拒否するようになり、`OPTIMIZE` の再生を改善しました。[#73352](https://github.com/StarRocks/starrocks/pull/73352)
+- Iceberg メタデータエントリが pin された場合の Disk Cache のオーバーフロー。[#71651](https://github.com/StarRocks/starrocks/pull/71651)
+
 ## 4.0.11
 
 リリース日：2026 年 6 月 5 日

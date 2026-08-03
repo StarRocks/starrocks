@@ -1,0 +1,137 @@
+-- name: test_parquet_lazy_materialization
+
+create external catalog iceberg_lazy_test_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hadoop",
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/warehouse/"
+);
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/warehouse/zya > /dev/null
+
+use iceberg_lazy_test_${uuid0}.zya;
+
+-- ============================================================
+-- Setup: shredded variant table (typed shredded fields)
+-- ============================================================
+CREATE TABLE test_shredding (
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
+) properties(
+  'format-version' = '3',
+  'iceberg.enableVariantShredding' = 'true'
+);
+
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding.parquet oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/shredding.parquet > /dev/null
+alter table test_shredding execute add_files(location='oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/shredding.parquet', file_format='parquet');
+
+-- ============================================================
+-- Setup: no-shredding variant table (fallback path)
+-- ============================================================
+CREATE TABLE test_noshredding (
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
+) properties(
+  'format-version' = '3'
+);
+
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_noshredding.parquet oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/noshredding.parquet > /dev/null
+alter table test_noshredding execute add_files(location='oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/data/noshredding.parquet', file_format='parquet');
+
+-- ============================================================
+-- Test 1: Simple predicate on variant virtual column triggers lazy load.
+-- $.id is a shredded typed field; predicate triggers materialization.
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+
+-- ============================================================
+-- Test 2: BETWEEN predicate on variant field.
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_int(data, '$.age') as vage
+FROM test_shredding
+WHERE get_variant_int(data, '$.age') BETWEEN 20 AND 25
+ORDER BY vid;
+
+-- ============================================================
+-- Test 3: Compound predicate with physical column + nested variant field.
+-- city = physical (active), $.profile.metrics.views = variant virtual (lazy).
+-- Two-column predicate triggers scanner_ctxs evaluation (Phase 2b).
+-- ============================================================
+SELECT city,
+       get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_shredding
+WHERE city IN ('city_1', 'city_2', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 100
+ORDER BY city;
+
+-- ============================================================
+-- Test 4: IS NOT NULL on variant field.
+-- Some rows have NULL for $.score (shredded as a separate typed column).
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid,
+       cast(variant_query(data, '$.score') as int) as score
+FROM test_shredding
+WHERE get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY vid;
+
+-- ============================================================
+-- Test 5: Multiple lazy variant fields in SELECT, predicate only on one.
+-- $.name and $.email stay lazy until backfill phase; $.id triggered by predicate.
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_string(data, '$.name') as vname,
+       get_variant_string(data, '$.email') as vemail
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+
+-- ============================================================
+-- Test 6: Nested array/struct projection through variant.
+-- $.events[0].type and $.groups[0].scores[0] are shredded subfields.
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid,
+       get_variant_string(data, '$.events[0].type') as event_type,
+       get_variant_int(data, '$.groups[0].scores[0]') as group_score
+FROM test_shredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+
+-- ============================================================
+-- Test 7: Profile verification — lazy materialization metrics.
+-- Single-column predicate on 'id' makes id active.  The compound
+-- conjunct 'id > age' goes to scanner_ctxs.  ColumnRef for 'age'
+-- triggers on-demand lazy load → ParquetLazySlotTriggered > 0.
+-- ============================================================
+set enable_profile=true;
+set enable_async_profile=false;
+SELECT id, age
+FROM test_shredding
+WHERE id > 1000 AND id > age
+ORDER BY id;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazySlotTriggered%';
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazyReadCount%';
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%ParquetLazyReadTime%';
+
+-- ============================================================
+-- Test 8: No-shredding variant — same predicate triggers lazy load
+-- through the fallback (non-shredded) path.
+-- ============================================================
+SELECT get_variant_int(data, '$.id') as vid
+FROM test_noshredding
+WHERE get_variant_int(data, '$.id') > 1000
+ORDER BY vid;
+
+-- Cleanup
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_lazy_materialization/${uuid0}/ > /dev/null
+drop table test_shredding force;
+drop table test_noshredding force;
+set catalog default_catalog;
+drop catalog iceberg_lazy_test_${uuid0};

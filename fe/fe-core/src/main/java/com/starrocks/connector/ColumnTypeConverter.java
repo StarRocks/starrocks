@@ -564,7 +564,10 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(TimestampType timestampType) {
-            return DATETIME;
+            // Paimon TIMESTAMP is timezone-naive (NTZ): carry the flag so the BE reader keeps the
+            // wall clock unshifted. The flag rides along on the type (survives clone, ignored by
+            // equals) and is read at slot toThrift. TIMESTAMP_LTZ (below) is a UTC instant -> default.
+            return ScalarType.createDatetimeNtzType();
         }
 
         public Type visit(LocalZonedTimestampType timestampType) {
@@ -678,6 +681,122 @@ public class ColumnTypeConverter {
         }
 
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
+    }
+
+    public static Type fromFlussType(org.apache.fluss.types.DataType type) {
+        return type.accept(FlussTypeToSRTypeVisitor.INSTANCE);
+    }
+
+    private static class FlussTypeToSRTypeVisitor extends org.apache.fluss.types.DataTypeDefaultVisitor<Type> {
+        private static final FlussTypeToSRTypeVisitor INSTANCE = new FlussTypeToSRTypeVisitor();
+
+        @Override
+        public Type visit(org.apache.fluss.types.CharType charType) {
+            return TypeFactory.createCharType(charType.getLength());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.StringType stringType) {
+            return TypeFactory.createDefaultCatalogString();
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BooleanType booleanType) {
+            return TypeFactory.createType(PrimitiveType.BOOLEAN);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BinaryType binaryType) {
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BytesType bytesType) {
+            return TypeFactory.createType(PrimitiveType.VARBINARY);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DecimalType decimalType) {
+            return TypeFactory.createUnifiedDecimalType(decimalType.getPrecision(), decimalType.getScale());
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TinyIntType tinyIntType) {
+            return TypeFactory.createType(PrimitiveType.TINYINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.SmallIntType smallIntType) {
+            return TypeFactory.createType(PrimitiveType.SMALLINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.IntType intType) {
+            return TypeFactory.createType(PrimitiveType.INT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.BigIntType bigIntType) {
+            return TypeFactory.createType(PrimitiveType.BIGINT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.FloatType floatType) {
+            return TypeFactory.createType(PrimitiveType.FLOAT);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DoubleType doubleType) {
+            return TypeFactory.createType(PrimitiveType.DOUBLE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.DateType dateType) {
+            return TypeFactory.createType(PrimitiveType.DATE);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimeType timeType) {
+            // StarRocks TIME does not preserve the fractional-second precision of Fluss TIME(p).
+            return TypeFactory.createType(PrimitiveType.TIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.TimestampType timestampType) {
+            return TypeFactory.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.LocalZonedTimestampType localZonedTimestampType) {
+            return TypeFactory.createType(PrimitiveType.DATETIME);
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.ArrayType arrayType) {
+            return new ArrayType(fromFlussType(arrayType.getElementType()));
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.MapType mapType) {
+            return new MapType(fromFlussType(mapType.getKeyType()), fromFlussType(mapType.getValueType()));
+        }
+
+        @Override
+        public Type visit(org.apache.fluss.types.RowType rowType) {
+            List<org.apache.fluss.types.DataField> fields = rowType.getFields();
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (org.apache.fluss.types.DataField field : fields) {
+                String fieldName = field.getName();
+                Type fieldType = fromFlussType(field.getType());
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            return new StructType(structFields);
+        }
+
+        @Override
+        protected Type defaultMethod(org.apache.fluss.types.DataType dataType) {
+            return UNKNOWN_TYPE;
+        }
     }
 
     public static Type fromKuduType(ColumnSchema columnSchema) {
@@ -870,12 +989,12 @@ public class ColumnTypeConverter {
             }
             int fieldId = -1;
             String fieldPhysicalName = "";
-            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.ColumnMappingMode.ID.value) &&
                     field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
                 fieldId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
             }
 
-            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.ColumnMappingMode.NAME.value) &&
                     field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
                 fieldPhysicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
             }
@@ -1100,4 +1219,3 @@ public class ColumnTypeConverter {
         return true;
     }
 }
-

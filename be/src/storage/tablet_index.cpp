@@ -14,8 +14,8 @@
 
 #include "storage/tablet_index.h"
 
+#include "base/json/json_util.h"
 #include "storage/utils.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 

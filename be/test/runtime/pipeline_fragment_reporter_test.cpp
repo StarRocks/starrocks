@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/pipeline_fragment_reporter.h"
+#include "exec/pipeline/pipeline_fragment_reporter.h"
 
 #include <gtest/gtest.h>
 
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 
 namespace starrocks {
 

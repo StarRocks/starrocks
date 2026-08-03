@@ -71,7 +71,6 @@ public class CandidateWorkerProviderTest {
         warehouseManager.initDefaultWarehouse();
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
 
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         //List<Long> computeNodeIds = Arrays.asList(201L, 202L);
         long updateTime = System.currentTimeMillis();
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;

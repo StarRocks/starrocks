@@ -45,12 +45,12 @@
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
 #include "storage/compaction_utils.h"
-#include "storage/primitive/column_mapping.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage_primitive/column_mapping.h"
 
 namespace butil {
 class IOBuf;

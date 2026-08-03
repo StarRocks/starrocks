@@ -709,15 +709,27 @@ fi
 echo "Finished patching $RAPIDJSON_SOURCE"
 cd -
 
+# patch opentelemetry
+cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.2.0" ]; then
+    # thrift 0.24.0 dropped <boost/numeric/conversion/cast.hpp> from
+    # TTransportException.h, which used to drag in <unistd.h>. The jaeger
+    # exporter calls ::close via THRIFT_CLOSESOCKET, so include it directly.
+    patch -p1 < $TP_PATCH_DIR/opentelemetry-cpp-1.2.0-thrift-0.24-unistd.patch
+    touch $PATCHED_MARK
+fi
+echo "Finished patching $OPENTELEMETRY_SOURCE"
+cd -
+
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-19.0.1" ] ; then
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-libtool-version-check.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-thrift.patch
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
+        # Allow reading parquet files with Hive-style optional MAP keys.
+        # The other arrow-19.0.1 patches are obsolete on 24.0.0: zstd 1.5.7 is
+        # already upstream; thrift is provided via the system build (-DThrift_SOURCE=SYSTEM);
+        # the flight-types reorder and the macOS libtool-version check are fixed upstream.
+        patch -p1 < $TP_PATCH_DIR/arrow-24.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
     fi
     cd -

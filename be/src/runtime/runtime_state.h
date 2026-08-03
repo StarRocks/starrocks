@@ -71,13 +71,13 @@ class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
 class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
+class LoadPathStateHelper;
 class RuntimeStateHelper;
 class RejectedRecordWriter;
 using BroadcastJoinRightOffsprings = std::unordered_set<int32_t>;
@@ -306,7 +306,7 @@ public:
     // JSON Lines for the sync daemon to ship to
     // `_statistics_.rejected_records`. Returns nullptr when the writer has
     // not been created; callers should go through
-    // `RuntimeStateHelper::rejected_record_writer(state)` which handles
+    // `LoadPathStateHelper::rejected_record_writer(state)` which handles
     // lazy construction under lock.
     RejectedRecordWriter* rejected_record_writer_or_null() const { return _rejected_record_writer.get(); }
 
@@ -588,6 +588,12 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    double lake_tablet_internal_parallel_skew_split_ratio() const {
+        return _query_options.__isset.lake_tablet_internal_parallel_skew_split_ratio
+                       ? _query_options.lake_tablet_internal_parallel_skew_split_ratio
+                       : 1.5;
+    }
+
     bool enable_wait_dependent_event() const {
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
@@ -641,6 +647,10 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool ngram_search_support_utf8() const {
+        return _query_options.__isset.ngram_search_support_utf8 && _query_options.ngram_search_support_utf8;
+    }
+
     bool enable_global_late_materialization() const {
         return _query_options.__isset.enable_global_late_materialization &&
                _query_options.enable_global_late_materialization;
@@ -651,6 +661,7 @@ public:
     void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
+    friend class LoadPathStateHelper;
     friend class RuntimeStateHelper;
 
     // Set per-query state.
@@ -675,13 +686,10 @@ private:
     // gone but the mutex keeps the historical name so call sites remain
     // stable across the deletion.
     std::mutex _rejected_record_lock;
-    // Writer. Lazily constructed by RuntimeStateHelper on first
+    // Writer. Lazily constructed by LoadPathStateHelper on first
     // append so enabled-but-never-triggered loads pay no allocation cost.
     // Held via shared_ptr so this header does not need RejectedRecordWriter's
-    // complete type for destruction. Letting unique_ptr destruct here would
-    // force runtime_state.cpp (RuntimeCore layer) to include the writer
-    // header, which lives in the higher Runtime layer and breaks the module
-    // boundary check.
+    // complete type for destruction.
     std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.

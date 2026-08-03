@@ -38,9 +38,6 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
-// Enable eager build of PK index files during import and compaction.
-CONF_mBool(enable_pk_index_eager_build, "true");
-
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
@@ -148,6 +145,17 @@ CONF_Int32(vector_chunk_size, "4096");
 CONF_mInt16(tablet_max_versions, "1000");
 
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
+
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enabled by
+// default; set it to false before rolling back to (or running a mixed cluster with) a pre-fix BE so
+// the legacy path is used and no incompatible on-disk state is written.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 
 CONF_mBool(enable_primary_key_recover, "false");
 
