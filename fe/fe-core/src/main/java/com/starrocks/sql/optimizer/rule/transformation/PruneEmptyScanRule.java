@@ -39,8 +39,13 @@ public class PruneEmptyScanRule extends TransformationRule {
             OperatorType.LOGICAL_PAIMON_SCAN,
             OperatorType.LOGICAL_ODPS_SCAN,
             OperatorType.LOGICAL_KUDU_SCAN,
+<<<<<<< HEAD
             OperatorType.LOGICAL_BENCHMARK_SCAN,
             OperatorType.LOGICAL_STARROCKS_SCAN
+=======
+            OperatorType.LOGICAL_FLUSS_SCAN,
+            OperatorType.LOGICAL_BENCHMARK_SCAN
+>>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
     );
 
     public PruneEmptyScanRule() {

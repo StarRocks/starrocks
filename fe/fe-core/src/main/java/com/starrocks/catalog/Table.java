@@ -138,8 +138,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         PAIMON_VIEW,
         @SerializedName("LANCE")
         LANCE,
+<<<<<<< HEAD
         @SerializedName("STARROCKS")
         STARROCKS;
+=======
+        @SerializedName("FLUSS")
+        FLUSS;
+>>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -400,7 +405,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isExternalTableWithFileSystem() {
-        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable()
+                || isPaimonTable() || isKuduTable() || isFlussTable();
     }
 
     public boolean isHiveTable() {
@@ -428,6 +434,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isFlussTable() {
+        return type == TableType.FLUSS;
     }
 
     public boolean isOdpsTable() {

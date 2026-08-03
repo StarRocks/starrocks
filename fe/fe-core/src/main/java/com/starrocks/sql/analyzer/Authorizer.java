@@ -207,6 +207,7 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case PAIMON_VIEW:
+            case FLUSS:
             case ODPS:
             case KUDU:
             case STARROCKS:

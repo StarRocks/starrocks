@@ -375,8 +375,13 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::KUDU_TABLE:
             desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool, mr);
             break;
+<<<<<<< HEAD
         case TTableType::STARROCKS_TABLE:
             desc = ALLOC_DESC(TableDescriptor, tdesc, mr);
+=======
+        case TTableType::FLUSS_TABLE:
+            desc = ALLOC_DESC(FlussTableDescriptor, tdesc, pool, mr);
+>>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
             break;
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
