@@ -298,5 +298,5 @@ CLEANUP {
 
 SELECT count(*) FROM dup_dp [_CHANGES_${bk0}_${bk1}_];
 -- result:
-[REGEX]E:.*DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet [0-9]+.*
+[REGEX]E:.*CDC-ERROR-1 \(CHANGE_NOT_TRACKABLE\): CDC for DUP_KEYS does not support delete.*
 -- !result

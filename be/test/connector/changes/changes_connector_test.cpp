@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -71,6 +72,14 @@ namespace {
 constexpr const char* kRootLocation = "test_changes_connector";
 constexpr const char* kChangeTypeColumnName = "__CHANGE_TYPE__";
 constexpr const char* kRowVersionColumnName = "__ROW_VERSION__";
+
+void expect_change_not_trackable(const Status& status, std::string_view expected_detail) {
+    ASSERT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_internal_error());
+    const std::string message(status.message());
+    EXPECT_EQ(0, message.find("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): "));
+    EXPECT_NE(std::string::npos, message.find(expected_detail));
+}
 
 // End-to-end test for the public ChangesConnector surface
 // (create_data_source -> open -> get_next -> close). Backed by a real
@@ -920,6 +929,26 @@ protected:
 
 } // namespace
 
+TEST(ChangesErrorTest, FormatsCodeSymbolAndMessage) {
+    Status status = make_cdc_error(TCdcErrorCode::CHANGE_NOT_TRACKABLE, "tablet 42 history is unavailable");
+
+    EXPECT_TRUE(status.is_internal_error());
+    EXPECT_EQ("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): tablet 42 history is unavailable", std::string(status.message()));
+}
+
+TEST(ChangesErrorTest, FormatsUnknownInvalidAndEmptyInputs) {
+    Status unknown = make_cdc_error(TCdcErrorCode::UNKNOWN, "detail");
+    Status invalid = make_cdc_error(static_cast<TCdcErrorCode::type>(9999), "detail");
+    Status empty = make_cdc_error(TCdcErrorCode::CHANGE_NOT_TRACKABLE, "");
+
+    EXPECT_TRUE(unknown.is_internal_error());
+    EXPECT_TRUE(invalid.is_internal_error());
+    EXPECT_TRUE(empty.is_internal_error());
+    EXPECT_EQ("CDC-ERROR-0 (UNKNOWN): detail", std::string(unknown.message()));
+    EXPECT_EQ("CDC-ERROR-9999 (): detail", std::string(invalid.message()));
+    EXPECT_EQ("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): ", std::string(empty.message()));
+}
+
 // ============================================================================
 // Test 1 — Connector + DataSourceProvider + small DataSource accessor shells.
 // ============================================================================
@@ -981,6 +1010,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         ASSERT_FALSE(st.ok());
         EXPECT_TRUE(st.is_internal_error());
         EXPECT_NE(std::string::npos, std::string(st.message()).find("tuple descriptor"));
+        EXPECT_EQ(std::string::npos, std::string(st.message()).find("CDC-ERROR-"));
         ds->close(_runtime_state.get());
     }
 
@@ -998,6 +1028,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         ASSERT_FALSE(st.ok());
         EXPECT_TRUE(st.is_invalid_argument());
         EXPECT_NE(std::string::npos, std::string(st.message()).find("CHANGES version range invalid"));
+        EXPECT_EQ(std::string::npos, std::string(st.message()).find("CDC-ERROR-"));
         ds->close(_runtime_state.get());
     }
 
@@ -1016,9 +1047,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
         ASSERT_OK(ds->open(_runtime_state.get()));
         Status st = drain_until_error(ds.get());
-        ASSERT_FALSE(st.ok());
-        EXPECT_TRUE(st.is_not_supported());
-        EXPECT_NE(std::string::npos, std::string(st.message()).find("DELETE_PREDICATE_FOUND"));
+        expect_change_not_trackable(st, "CDC for DUP_KEYS does not support delete");
         ds->close(_runtime_state.get());
     }
 
@@ -1053,6 +1082,7 @@ TEST_F(ChangesConnectorTest, test_open_error_paths) {
         EXPECT_TRUE(st.is_internal_error());
         EXPECT_NE(std::string::npos, std::string(st.message()).find("invalid field name"));
         EXPECT_NE(std::string::npos, std::string(st.message()).find("missing_col"));
+        EXPECT_EQ(std::string::npos, std::string(st.message()).find("CDC-ERROR-"));
         ds->close(_runtime_state.get());
     }
 }
@@ -1143,9 +1173,7 @@ TEST_F(ChangesConnectorTest, test_full_scan_rejects_delete_predicate) {
     auto ds = provider->create_data_source(make_full_scan_range(tablet_id, /*head=*/2));
     ASSERT_OK(ds->open(_runtime_state.get()));
     Status st = drain_until_error(ds.get());
-    ASSERT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_not_supported());
-    EXPECT_NE(std::string::npos, std::string(st.message()).find("DELETE_PREDICATE_FOUND"));
+    expect_change_not_trackable(st, "CDC for DUP_KEYS does not support delete");
     ds->close(_runtime_state.get());
 }
 
@@ -1705,15 +1733,18 @@ TEST_F(ChangesConnectorTest, test_primary_keys_surviving_rows) {
 }
 
 // ============================================================================
-// Test 8 — Degradation read. A publish marked non-OK under cdc_metadata, or an
-// ancestor chain that cannot reach base, surfaces NotSupported when the lazy
-// traversal reaches that publish during reading, rather than partial changes. An
-// empty (base == head) interval stays OK and surfaces zero rows.
+// Test 8 — Degradation read. A publish marked non-OK under cdc_metadata, a version
+// without CDC enabled, or an ancestor chain that cannot reach base surfaces a CDC
+// error envelope when the lazy traversal reaches that publish during reading,
+// rather than partial changes. A failed persisted capture retains its original
+// diagnostic inside the envelope. An empty (base == head) interval stays OK and
+// surfaces zero rows.
 // ============================================================================
 
 TEST_F(ChangesConnectorTest, test_degradation_read) {
     // Sub-case A: an in-range node carries a non-OK cdc_metadata.capture_status;
-    // the lazy traversal returns that status verbatim when it reaches the node.
+    // the lazy traversal wraps it in the CDC envelope while retaining the original
+    // persisted capture diagnostic.
     {
         auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
         int64_t schema_id = next_id();
@@ -1727,9 +1758,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
         auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
         ASSERT_OK(ds->open(_runtime_state.get()));
         Status st = drain_until_error(ds.get());
-        ASSERT_FALSE(st.ok());
-        EXPECT_TRUE(st.is_not_supported());
-        EXPECT_NE(std::string::npos, std::string(st.message()).find("changes degraded by recover"));
+        expect_change_not_trackable(st, "changes degraded by recover");
         ds->close(_runtime_state.get());
     }
 
@@ -1753,9 +1782,7 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
         auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/3));
         ASSERT_OK(ds->open(_runtime_state.get()));
         Status st = drain_until_error(ds.get());
-        ASSERT_FALSE(st.ok());
-        EXPECT_TRUE(st.is_not_supported());
-        EXPECT_NE(std::string::npos, std::string(st.message()).find("degraded ancestor"));
+        expect_change_not_trackable(st, "degraded ancestor");
         ds->close(_runtime_state.get());
     }
 
@@ -1773,13 +1800,30 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
         auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
         ASSERT_OK(ds->open(_runtime_state.get()));
         Status st = drain_until_error(ds.get());
-        ASSERT_FALSE(st.ok());
-        EXPECT_TRUE(st.is_not_supported());
-        EXPECT_NE(std::string::npos, std::string(st.message()).find("cannot reach base"));
+        expect_change_not_trackable(st, "cannot reach base");
         ds->close(_runtime_state.get());
     }
 
-    // Sub-case D: an empty interval (base == head) returns OK with zero rows
+    // Sub-case D: a primary-key version without CDC enabled cannot be tracked.
+    {
+        _keys_type = PRIMARY_KEYS;
+        auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+        int64_t schema_id = next_id();
+        int64_t tablet_id = next_id();
+        initialize_tablet(tablet_id, schema_id);
+        publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, /*rowsets=*/nullptr, Status::OK(),
+                         [](TabletMetadata* meta) { meta->mutable_cdc_metadata()->set_enable_cdc(false); });
+
+        auto provider = make_provider(tuple_id, schema_id);
+        auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/2));
+        ASSERT_OK(ds->open(_runtime_state.get()));
+        Status st = drain_until_error(ds.get());
+        expect_change_not_trackable(st, "change data capture was not enabled at that version");
+        ds->close(_runtime_state.get());
+        _keys_type = DUP_KEYS;
+    }
+
+    // Sub-case E: an empty interval (base == head) returns OK with zero rows
     // even though that head node carries a non-OK status — the traversal reaches base
     // immediately, so no node is ever checked.
     {
@@ -1796,6 +1840,30 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
         EXPECT_EQ(0, drain(ds.get()));
         ds->close(_runtime_state.get());
     }
+}
+
+TEST_F(ChangesConnectorTest, test_parent_metadata_read_failure_stays_unclassified) {
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    // The head declares v2 as its direct parent, but no v2 metadata object is published.
+    publish_metadata(tablet_id, /*version=*/3, schema_id, /*ancestors=*/{2}, /*rowsets=*/nullptr);
+
+    auto raw_parent_read = _tablet_mgr->get_tablet_metadata(tablet_id, /*version=*/2);
+    ASSERT_FALSE(raw_parent_read.ok());
+    ASSERT_TRUE(raw_parent_read.status().is_not_found());
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(make_scan_range(tablet_id, /*base=*/1, /*head=*/3));
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    Status st = drain_until_error(ds.get());
+    ds->close(_runtime_state.get());
+
+    ASSERT_FALSE(st.ok());
+    EXPECT_EQ(raw_parent_read.status().code(), st.code());
+    EXPECT_EQ(std::string(raw_parent_read.status().message()), std::string(st.message()));
+    EXPECT_EQ(std::string::npos, std::string(st.message()).find("CDC-ERROR-"));
 }
 
 // ============================================================================

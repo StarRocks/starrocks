@@ -273,6 +273,57 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_swb';
 -- result:
 false	1
 -- !result
+-- name: test_ivm_transient_refresh_failure_retryable @cloud
+-- A per-refresh BE memory-limit failure is retryable: it must not carry a CDC envelope or inactivate the MV.
+CREATE TABLE transient_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO transient_base VALUES (1,10);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ivm_transient_retry
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM transient_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+INSERT INTO transient_base VALUES (2,20);
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_ivm_transient_retry SET ("session.query_mem_limit" = "1");
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_ivm_transient_retry SET ("session.query_mem_limit" = "0");
+-- result:
+-- !result
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%query_mem_limit%' AS memory_limited,
+       ERROR_MESSAGE NOT LIKE '%CDC-ERROR-%' AS no_cdc_envelope
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_ivm_transient_retry%'
+           OR DEFINITION LIKE '%mv_ivm_transient_retry%')
+      AND STATE = 'FAILED'
+ORDER BY 1;
+-- result:
+FAILED	1	1
+-- !result
+SELECT IS_ACTIVE
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ivm_transient_retry';
+-- result:
+true
+-- !result
+REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+SELECT k, v FROM mv_ivm_transient_retry ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
 -- name: test_ivm_delete_refresh_rejected @cloud
 CREATE TABLE del_base (k INT, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -310,12 +361,23 @@ SELECT k, v FROM mv_ivm_delete_reject ORDER BY k;
 2	20
 3	30
 -- !result
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS change_not_trackable,
+       ERROR_MESSAGE LIKE '%CDC for DUP_KEYS does not support delete%' AS delete_rejected
 FROM information_schema.task_runs
-WHERE (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%') AND STATE = 'FAILED'
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%')
+      AND STATE = 'FAILED'
 ORDER BY 1;
 -- result:
-FAILED	1
+FAILED	1	1
+-- !result
+SELECT IS_ACTIVE,
+       INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ivm_delete_reject';
+-- result:
+false	1
 -- !result
 -- name: test_ivm_delete_in_added_partition_rejected @cloud
 CREATE TABLE del_ap_base (dt date, k int, v bigint)
@@ -349,10 +411,21 @@ DELETE FROM del_ap_base WHERE dt = '2024-02-06' AND k = 3;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_del_ap WITH SYNC MODE;
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS change_not_trackable,
+       ERROR_MESSAGE LIKE '%CDC for DUP_KEYS does not support delete%' AS delete_rejected
 FROM information_schema.task_runs
-WHERE (EXTRA_MESSAGE LIKE '%mv_del_ap%' OR DEFINITION LIKE '%mv_del_ap%') AND STATE = 'FAILED'
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_del_ap%' OR DEFINITION LIKE '%mv_del_ap%')
+      AND STATE = 'FAILED'
 ORDER BY 1;
 -- result:
-FAILED	1
+FAILED	1	1
+-- !result
+SELECT IS_ACTIVE,
+       INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_del_ap';
+-- result:
+false	1
 -- !result

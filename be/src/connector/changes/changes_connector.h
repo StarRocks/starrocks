@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,6 +33,7 @@
 #include "compute_env/query/scan_conjuncts_manager.h"
 #include "connector_primitive/connector.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_pool.h"
 #include "storage/del_vector.h"
@@ -107,6 +109,8 @@ class TabletManager;
 //     through segment iterators, and appends the two metadata columns.
 
 namespace starrocks::connector {
+
+Status make_cdc_error(TCdcErrorCode::type code, std::string_view message);
 
 // =============================================================================
 // Planning layer: read-plan types and ChangesReadPlanner

@@ -544,6 +544,13 @@ struct TChangeScanSpec {
     3: optional i64 head_version            // inclusive upper bound (rows visible at this version)
 }
 
+// Stable CDC error catalog. Values and names are part of the internal
+// FE/BE message contract and must never be changed or reused.
+enum TCdcErrorCode {
+    UNKNOWN = 0,
+    CHANGE_NOT_TRACKABLE = 1
+}
+
 // CDC: per-tablet scan range for CHANGES query
 struct TChangesScanRange {
     1: optional i64 db_id

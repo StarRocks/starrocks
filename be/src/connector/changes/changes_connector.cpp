@@ -48,6 +48,13 @@
 
 namespace starrocks::connector {
 
+Status make_cdc_error(TCdcErrorCode::type code, std::string_view message) {
+    const auto it = _TCdcErrorCode_VALUES_TO_NAMES.find(code);
+    const std::string_view symbol =
+            it == _TCdcErrorCode_VALUES_TO_NAMES.end() ? std::string_view() : std::string_view(it->second);
+    return Status::InternalError(fmt::format("CDC-ERROR-{} ({}): {}", static_cast<int>(code), symbol, message));
+}
+
 namespace {
 
 lake::TabletManager* lake_tablet_manager() {
@@ -101,8 +108,9 @@ StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan_full_scan(TabletMetadat
         // segments raw and cannot apply it, so those rows would surface as inserts. Reject it, as the
         // version-diff path does, rather than emit deleted rows.
         if (r.has_delete_predicate()) {
-            return Status::NotSupported(fmt::format(
-                    "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}", after.id()));
+            return make_cdc_error(
+                    TCdcErrorCode::CHANGE_NOT_TRACKABLE,
+                    fmt::format("CDC for {} does not support delete", KeysType_Name(after.schema().keys_type())));
         }
         for (int seg = 0; seg < r.segment_metas_size(); ++seg) {
             if (!_is_primary_keys) {
@@ -138,9 +146,9 @@ Status ChangesReadPlanner::_locate_changed_segments(const TabletMetadataPB& befo
         const auto& r = after_meta.rowsets(rs);
         const bool is_added = r.version() > before_version;
         if (is_added && r.has_delete_predicate()) {
-            return Status::NotSupported(
-                    fmt::format("DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet {}",
-                                after_meta.id()));
+            return make_cdc_error(
+                    TCdcErrorCode::CHANGE_NOT_TRACKABLE,
+                    fmt::format("CDC for {} does not support delete", KeysType_Name(after_meta.schema().keys_type())));
         }
         for (int seg = 0; seg < r.segment_metas_size(); ++seg) {
             const uint32_t rssid = lake::get_rssid(r, seg);
@@ -760,7 +768,8 @@ StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
         }
     }
     if (parent_version < 0) {
-        return Status::NotSupported(
+        return make_cdc_error(
+                TCdcErrorCode::CHANGE_NOT_TRACKABLE,
                 fmt::format("CHANGES ancestor chain on tablet {} cannot reach base version {} from version {}",
                             _tablet_id, _base_version, current_version));
     }
@@ -780,15 +789,18 @@ Status ChangesDataSource::_check_degradation(const TabletMetadataPtr& meta) cons
     // enable_cdc gates only primary-key CDC, which needs the recorded change locator. Duplicate-key and
     // aggregate changes are derivable from the base rowset metadata, so their CDC is always available.
     if (_is_primary_key_table() && !cdc.enable_cdc()) {
-        return Status::NotSupported(
-                fmt::format("CHANGES window on tablet {} spans version {} which was not recorded "
-                            "(change data capture was not enabled at that version)",
-                            meta->id(), meta->version()));
+        return make_cdc_error(TCdcErrorCode::CHANGE_NOT_TRACKABLE,
+                              fmt::format("CHANGES window on tablet {} spans version {} which was not recorded "
+                                          "(change data capture was not enabled at that version)",
+                                          meta->id(), meta->version()));
     }
     if (meta->has_cdc_metadata() && cdc.has_capture_status()) {
         Status status(cdc.capture_status());
         if (!status.ok()) {
-            return status;
+            return make_cdc_error(
+                    TCdcErrorCode::CHANGE_NOT_TRACKABLE,
+                    fmt::format("CHANGES window on tablet {} spans version {} whose changes were not captured: {}",
+                                meta->id(), meta->version(), status.to_string(false)));
         }
     }
     return Status::OK();

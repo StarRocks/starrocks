@@ -229,5 +229,5 @@ CLEANUP {
 } END CLEANUP
 
 -- bk0->bk1 routes the added p2 to FULL mode; its delete-predicate rowset makes the read fail with
--- DELETE_PREDICATE_FOUND (the tablet id in the message is dynamic).
+-- CDC-ERROR-1 (CHANGE_NOT_TRACKABLE) (the tablet id in the message is dynamic).
 SELECT count(*) FROM dup_dp [_CHANGES_${bk0}_${bk1}_];

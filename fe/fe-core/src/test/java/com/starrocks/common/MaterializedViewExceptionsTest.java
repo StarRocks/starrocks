@@ -30,16 +30,25 @@ public class MaterializedViewExceptionsTest {
                         + " (DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement).")));
         // BE-detected delete on a cloud-native CHANGES scan (OLAP row-level delete path)
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(
-                "DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations on tablet 10086")));
-        // either marker may be wrapped deeper in the cause chain
+                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete")));
+        // either condition may be wrapped deeper in the cause chain
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(
                 new RuntimeException("refresh failed",
                         new IllegalStateException("... " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " ..."))));
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(
                 new RuntimeException("refresh failed",
-                        new IllegalStateException("query failed: DELETE_PREDICATE_FOUND: on tablet 42"))));
+                        new IllegalStateException(
+                                "query failed: CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): history missing"))));
 
         // transient / unrelated failures must not be treated as breaking
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("DELETE_PREDICATE_FOUND: CHANGES not supported for DELETE operations")));
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("CDC-ERROR-2 (CHANGE_NOT_TRACKABLE): unknown code")));
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("CDC-ERROR-1 (CHANGES_NOT_TRACKABLE): mismatched symbol")));
+        assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
+                new RuntimeException("Not supported: generic CHANGES failure without a CDC envelope")));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(
                 new RuntimeException("get database write lock timeout")));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(

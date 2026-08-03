@@ -137,6 +137,36 @@ SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%base-table swapped%' AS reason_match
 FROM information_schema.materialized_views
 WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_swb';
 
+-- name: test_ivm_transient_refresh_failure_retryable @cloud
+-- A per-refresh BE memory-limit failure is retryable: it must not carry a CDC envelope or inactivate the MV.
+CREATE TABLE transient_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO transient_base VALUES (1,10);
+CREATE MATERIALIZED VIEW mv_ivm_transient_retry
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM transient_base;
+REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+INSERT INTO transient_base VALUES (2,20);
+ALTER MATERIALIZED VIEW mv_ivm_transient_retry SET ("session.query_mem_limit" = "1");
+[UC]REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_ivm_transient_retry SET ("session.query_mem_limit" = "0");
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%query_mem_limit%' AS memory_limited,
+       ERROR_MESSAGE NOT LIKE '%CDC-ERROR-%' AS no_cdc_envelope
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_ivm_transient_retry%'
+           OR DEFINITION LIKE '%mv_ivm_transient_retry%')
+      AND STATE = 'FAILED'
+ORDER BY 1;
+SELECT IS_ACTIVE
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ivm_transient_retry';
+REFRESH MATERIALIZED VIEW mv_ivm_transient_retry WITH SYNC MODE;
+SELECT k, v FROM mv_ivm_transient_retry ORDER BY k;
+
 -- name: test_ivm_delete_refresh_rejected @cloud
 CREATE TABLE del_base (k INT, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -152,16 +182,24 @@ DELETE FROM del_base WHERE k = 1;
 [UC]REFRESH MATERIALIZED VIEW mv_ivm_delete_reject WITH SYNC MODE;
 SELECT k, v FROM del_base ORDER BY k;
 SELECT k, v FROM mv_ivm_delete_reject ORDER BY k;
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS change_not_trackable,
+       ERROR_MESSAGE LIKE '%CDC for DUP_KEYS does not support delete%' AS delete_rejected
 FROM information_schema.task_runs
-WHERE (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%') AND STATE = 'FAILED'
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_ivm_delete_reject%' OR DEFINITION LIKE '%mv_ivm_delete_reject%')
+      AND STATE = 'FAILED'
 ORDER BY 1;
+SELECT IS_ACTIVE,
+       INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ivm_delete_reject';
 
 -- name: test_ivm_delete_in_added_partition_rejected @cloud
 -- The delete rejection on the FULL_SCAN read path (distinct from the VERSION_CHAIN_DIFF one above).
 -- A DELETE lands in a partition ADDED after the bookmark, so that partition is read head-only
 -- (FULL_SCAN). A full scan cannot honor a delete-predicate rowset -- it would surface rows the delete
--- removed -- so BE rejects the refresh with DELETE_PREDICATE_FOUND rather than return a wrong result.
+-- removed -- so BE rejects the refresh with CDC-ERROR-1 (CHANGE_NOT_TRACKABLE) rather than return a wrong result.
 CREATE TABLE del_ap_base (dt date, k int, v bigint)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2024-02-01'))
@@ -179,7 +217,15 @@ ALTER TABLE del_ap_base ADD PARTITION p2 VALUES LESS THAN ('2024-03-01');
 INSERT INTO del_ap_base VALUES ('2024-02-05', 2, 20), ('2024-02-06', 3, 30);
 DELETE FROM del_ap_base WHERE dt = '2024-02-06' AND k = 3;
 [UC]REFRESH MATERIALIZED VIEW mv_del_ap WITH SYNC MODE;
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CHANGES not supported for DELETE operations%' AS delete_rejected
+SELECT DISTINCT STATE,
+       ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS change_not_trackable,
+       ERROR_MESSAGE LIKE '%CDC for DUP_KEYS does not support delete%' AS delete_rejected
 FROM information_schema.task_runs
-WHERE (EXTRA_MESSAGE LIKE '%mv_del_ap%' OR DEFINITION LIKE '%mv_del_ap%') AND STATE = 'FAILED'
+WHERE `DATABASE` = database()
+      AND (EXTRA_MESSAGE LIKE '%mv_del_ap%' OR DEFINITION LIKE '%mv_del_ap%')
+      AND STATE = 'FAILED'
 ORDER BY 1;
+SELECT IS_ACTIVE,
+       INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_del_ap';
