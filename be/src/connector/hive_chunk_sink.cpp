@@ -52,12 +52,23 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
+<<<<<<< HEAD:be/src/connector/hive_chunk_sink.cpp
 StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
+=======
+StatusOr<std::unique_ptr<ConnectorSink>> HiveChunkSinkProvider::create_sink(int32_t driver_id) {
+    auto ctx = _ctx;
+    auto* runtime_state = ctx->runtime_state;
+    if (runtime_state == nullptr) {
+        return Status::InternalError("HiveChunkSinkContext requires runtime_state");
+    }
+    ASSIGN_OR_RETURN(std::shared_ptr<FileSystem> fs,
+                     FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
+>>>>>>> 2154578486 ([BugFix] Check the status before unwrapping a StatusOr (#77052)):be/src/connector/hive/hive_chunk_sink.cpp
     auto data_column_evaluators = ColumnEvaluator::clone(ctx->data_column_evaluators);
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
