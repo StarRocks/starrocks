@@ -419,6 +419,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 保留 `sys_log_dir/proc_profile` 下生成的进程分析文件（CPU 和内存）的天数。ProcProfileCollector 通过将 `proc_profile_file_retained_days` 天数从当前时间（格式为 yyyyMMdd-HHmmss）中减去来计算截止时间，并删除时间戳部分在字典序上早于该截止时间的分析文件（即 `timePart.compareTo(timeToDelete) < 0`）。文件删除还遵循由 `proc_profile_file_retained_size_bytes` 控制的基于大小的截止时间。分析文件使用 `cpu-profile-` 和 `mem-profile-` 前缀，并在收集后进行压缩。
 - 引入版本: v3.2.12
 
+### `proc_profile_cleanup_interval_s`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: `proc-profile-cleaner` 守护进程对 `sys_log_dir/proc_profile` 下进程分析文件执行保留策略的间隔，会应用 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes`。清理由独立的守护进程执行，而不是在一次收集之后执行，因此即使分析收集正在失败或正处于采集过程中，保留策略仍然生效。小于 `1` 的值按 `1` 处理。如果 `sys_log_dir` 空间较小、需要更及时地执行大小上限，可以降低该值。
+- 引入版本: v4.2.0
+
 ### `proc_profile_file_retained_size_bytes`
 
 - 默认值: 2L * 1024 * 1024 * 1024 (2147483648)

@@ -419,6 +419,15 @@ This topic introduces the following types of FE configurations:
 - Description: Number of days to retain process profiling files (CPU and memory) generated under `sys_log_dir/proc_profile`. The ProcProfileCollector computes a cutoff by subtracting `proc_profile_file_retained_days` days from the current time (formatted as yyyyMMdd-HHmmss) and deletes profile files whose timestamp portion is lexicographically earlier than that cutoff (that is, `timePart.compareTo(timeToDelete) < 0`). File deletion also respects the size-based cutoff controlled by `proc_profile_file_retained_size_bytes`. Profile files use the prefixes `cpu-profile-` and `mem-profile-` and are compressed after collection.
 - Introduced in: v3.2.12
 
+### `proc_profile_cleanup_interval_s`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval at which the `proc-profile-cleaner` daemon enforces the retention policy on process profiling files under `sys_log_dir/proc_profile`, applying `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`. Cleanup runs on its own daemon rather than after a collection, so retention still holds while profile collection is failing or is in the middle of a capture. Values below `1` are treated as `1`. Lower this value if `sys_log_dir` is small enough that the size cap must be enforced more promptly.
+- Introduced in: v4.2.0
+
 ### `proc_profile_file_retained_size_bytes`
 
 - Default: 2L * 1024 * 1024 * 1024 (2147483648)
