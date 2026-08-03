@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.Statement;
 
 /**
@@ -49,17 +50,15 @@ public class OlapPartitionScanLimitTest {
                     "('6','a','2024-09-25'),('7','a','2024-09-26')");
             //check default value 0
             stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
-            if (stmt.getResultSet().next()) {
-                int count = stmt.getResultSet().getInt(1);
-                Assertions.assertEquals(count, 5);
-            }
+            ResultSet rs = stmt.getResultSet();
+            Assertions.assertTrue(rs.next(), "count(*) must return exactly one row");
+            Assertions.assertEquals(5, rs.getInt(1));
             //check set value -1
             stmt.execute("set scan_olap_partition_num_limit=-1;");
             stmt.execute("select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';");
-            if (stmt.getResultSet().next()) {
-                int count = stmt.getResultSet().getInt(1);
-                Assertions.assertEquals(count, 5);
-            }
+            rs = stmt.getResultSet();
+            Assertions.assertTrue(rs.next(), "count(*) must return exactly one row");
+            Assertions.assertEquals(5, rs.getInt(1));
             //check set value 3
             stmt.execute("set scan_olap_partition_num_limit=3;");
             try {
