@@ -556,6 +556,36 @@ class RangeDistributionMigrationServiceTest {
         Assertions.assertTrue(alignedJobs.jobs.isEmpty());
     }
 
+    @Test
+    void writeAdmissionRejectsTableRenameRaceBeforeMutation() {
+        AdmissionJobs admissionJobs = new AdmissionJobs();
+        RangeDistributionMigrationService raced = new RangeDistributionMigrationService(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getLocalMetastore(), admissionJobs,
+                () -> true, () -> table.setName(table.getName() + "_renamed"));
+
+        Assertions.assertEquals("RETRYABLE_BUSY",
+                status(raced.reconcile(request("table-rename-race", twoRanges()))));
+        Assertions.assertTrue(admissionJobs.jobs.isEmpty());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    void writeAdmissionRejectsRollupRenameRaceBeforeMutation() {
+        addVisibleRollupToEveryPhysicalPartition();
+        JsonObject complete = decodedCatalogRequest("rollup-rename-race", twoRanges());
+        String rollupName = table.getIndexNameToMetaId().keySet().stream()
+                .filter(name -> !name.equals(table.getName()))
+                .findFirst().orElseThrow();
+        AdmissionJobs admissionJobs = new AdmissionJobs();
+        RangeDistributionMigrationService raced = new RangeDistributionMigrationService(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getLocalMetastore(), admissionJobs,
+                () -> true, () -> table.renameIndexForSchemaChange(rollupName, rollupName + "_renamed"));
+
+        Assertions.assertEquals("RETRYABLE_BUSY", status(raced.reconcile(encode(complete))));
+        Assertions.assertTrue(admissionJobs.jobs.isEmpty());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
     private RangeDistributionMigrationService service() {
         return new RangeDistributionMigrationService(
                 GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getLocalMetastore(),

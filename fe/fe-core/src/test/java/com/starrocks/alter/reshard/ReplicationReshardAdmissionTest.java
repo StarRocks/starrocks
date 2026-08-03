@@ -350,12 +350,13 @@ public class ReplicationReshardAdmissionTest {
         Set<SplitTabletJob.ExternalAdmissionGroup> staleGroups = new HashSet<>(groups);
         staleGroups.remove(touched);
         staleGroups.add(new SplitTabletJob.ExternalAdmissionGroup(
-                touched.physicalPartitionId(), touched.indexMetaId(), touched.currentIndexId() + 1));
+                touched.physicalPartitionId(), touched.indexName(),
+                touched.indexMetaId(), touched.currentIndexId() + 1));
         Map<Long, ReshardingPhysicalPartition> touchedOnly = new HashMap<>();
         touchedOnly.put(touched.physicalPartitionId(), null);
         SplitTabletJob job = new SplitTabletJob(5, db.getId(), table.getId(), touchedOnly);
         job.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
-                db.getId(), table.getId(), staleGroups));
+                db.getId(), db.getFullName(), table.getId(), table.getName(), staleGroups));
 
         Assertions.assertThrows(StarRocksException.class, job::init);
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
@@ -370,12 +371,13 @@ public class ReplicationReshardAdmissionTest {
         Set<SplitTabletJob.ExternalAdmissionGroup> staleGroups = new HashSet<>(groups);
         staleGroups.remove(aligned);
         staleGroups.add(new SplitTabletJob.ExternalAdmissionGroup(
-                aligned.physicalPartitionId(), aligned.indexMetaId(), aligned.currentIndexId() + 1));
+                aligned.physicalPartitionId(), aligned.indexName(),
+                aligned.indexMetaId(), aligned.currentIndexId() + 1));
         Map<Long, ReshardingPhysicalPartition> touchedOnly = new HashMap<>();
         touchedOnly.put(touched.physicalPartitionId(), null);
         SplitTabletJob job = new SplitTabletJob(6, db.getId(), table.getId(), touchedOnly);
         job.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
-                db.getId(), table.getId(), staleGroups));
+                db.getId(), db.getFullName(), table.getId(), table.getName(), staleGroups));
 
         Assertions.assertThrows(StarRocksException.class, job::init);
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
@@ -385,11 +387,40 @@ public class ReplicationReshardAdmissionTest {
     public void testExternalSnapshotAcceptsCompleteFreshGroupSet() throws Exception {
         SplitTabletJob job = new SplitTabletJob(7, db.getId(), table.getId(), Map.of());
         job.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
-                db.getId(), table.getId(), new HashSet<>(currentGroups())));
+                db.getId(), db.getFullName(), table.getId(), table.getName(),
+                new HashSet<>(currentGroups())));
 
         job.init();
         Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
         job.rollbackInit();
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testExternalSnapshotRejectsStaleDatabaseTableAndIndexNamesBeforeMutation() {
+        Set<SplitTabletJob.ExternalAdmissionGroup> groups = new HashSet<>(currentGroups());
+        SplitTabletJob staleDatabase = new SplitTabletJob(10, db.getId(), table.getId(), Map.of());
+        staleDatabase.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
+                db.getId(), db.getFullName() + "_stale", table.getId(), table.getName(), groups));
+        Assertions.assertThrows(StarRocksException.class, staleDatabase::init);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        SplitTabletJob staleTable = new SplitTabletJob(11, db.getId(), table.getId(), Map.of());
+        staleTable.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
+                db.getId(), db.getFullName(), table.getId(), table.getName() + "_stale", groups));
+        Assertions.assertThrows(StarRocksException.class, staleTable::init);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        SplitTabletJob.ExternalAdmissionGroup renamed = groups.iterator().next();
+        Set<SplitTabletJob.ExternalAdmissionGroup> staleGroups = new HashSet<>(groups);
+        staleGroups.remove(renamed);
+        staleGroups.add(new SplitTabletJob.ExternalAdmissionGroup(
+                renamed.physicalPartitionId(), renamed.indexName() + "_stale",
+                renamed.indexMetaId(), renamed.currentIndexId()));
+        SplitTabletJob staleIndex = new SplitTabletJob(12, db.getId(), table.getId(), Map.of());
+        staleIndex.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
+                db.getId(), db.getFullName(), table.getId(), table.getName(), staleGroups));
+        Assertions.assertThrows(StarRocksException.class, staleIndex::init);
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 
@@ -630,7 +661,8 @@ public class ReplicationReshardAdmissionTest {
             for (MaterializedIndex index : physicalPartition
                     .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 groups.add(new SplitTabletJob.ExternalAdmissionGroup(
-                        physicalPartition.getId(), index.getMetaId(), index.getId()));
+                        physicalPartition.getId(), table.getIndexNameByMetaId(index.getMetaId()),
+                        index.getMetaId(), index.getId()));
             }
         }
         return groups;

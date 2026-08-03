@@ -248,7 +248,8 @@ public final class RangeDistributionMigrationService {
             }
             job.setExternalIdentity(request.requestId, finalDigest, plan.stepDigest());
             job.setExternalAdmissionSnapshot(new SplitTabletJob.ExternalAdmissionSnapshot(
-                    request.databaseId, request.tableId, plan.admissionGroups()));
+                    request.databaseId, request.databaseName, request.tableId, request.tableName,
+                    plan.admissionGroups()));
 
             beforeSubmitHook.run();
             if (!leaderAdmissionOpen.getAsBoolean()) {
@@ -341,7 +342,8 @@ public final class RangeDistributionMigrationService {
                             + ": " + e.getMessage());
                 }
                 admissionGroups.add(new SplitTabletJob.ExternalAdmissionGroup(
-                        key.physicalPartitionId(), current.indexMetaId(), current.currentIndexId()));
+                        key.physicalPartitionId(), key.indexName(),
+                        current.indexMetaId(), current.currentIndexId()));
 
                 Map<Long, List<TabletRange>> groupPlan;
                 try {

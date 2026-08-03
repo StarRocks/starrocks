@@ -103,11 +103,13 @@ public class SplitTabletJob extends TabletReshardJob {
 
     private transient ExternalAdmissionSnapshot externalAdmissionSnapshot;
 
-    public record ExternalAdmissionGroup(long physicalPartitionId, long indexMetaId, long currentIndexId) {
+    public record ExternalAdmissionGroup(
+            long physicalPartitionId, String indexName, long indexMetaId, long currentIndexId) {
     }
 
     public record ExternalAdmissionSnapshot(
-            long databaseId, long tableId, Set<ExternalAdmissionGroup> groups) {
+            long databaseId, String databaseName, long tableId, String tableName,
+            Set<ExternalAdmissionGroup> groups) {
         public ExternalAdmissionSnapshot {
             groups = Set.copyOf(groups);
         }
@@ -191,6 +193,20 @@ public class SplitTabletJob extends TabletReshardJob {
         if (externalAdmissionSnapshot.databaseId() != dbId || externalAdmissionSnapshot.tableId() != tableId) {
             throw new TabletReshardException("External admission snapshot table identity is stale");
         }
+        Database databaseById = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        Database databaseByName = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(externalAdmissionSnapshot.databaseName());
+        if (databaseById == null || databaseById != databaseByName
+                || !databaseById.getFullName().equals(externalAdmissionSnapshot.databaseName())) {
+            throw new TabletReshardException("External admission snapshot database name is stale");
+        }
+        Table tableById = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        Table tableByName = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(
+                externalAdmissionSnapshot.databaseName(), externalAdmissionSnapshot.tableName());
+        if (tableById != olapTable || tableByName != olapTable
+                || !olapTable.getName().equals(externalAdmissionSnapshot.tableName())) {
+            throw new TabletReshardException("External admission snapshot table name is stale");
+        }
         if (!olapTable.isCloudNativeTableOrMaterializedView() || !olapTable.isRangeDistribution()) {
             throw new TabletReshardException("External admission requires a shared-data range table");
         }
@@ -208,8 +224,12 @@ public class SplitTabletJob extends TabletReshardJob {
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
             for (MaterializedIndex index :
                     physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                String indexName = olapTable.getIndexNameByMetaId(index.getMetaId());
+                if (indexName == null) {
+                    throw new TabletReshardException("External admission index name is missing");
+                }
                 currentGroups.add(new ExternalAdmissionGroup(
-                        physicalPartition.getId(), index.getMetaId(), index.getId()));
+                        physicalPartition.getId(), indexName, index.getMetaId(), index.getId()));
             }
         }
         if (!currentGroups.equals(externalAdmissionSnapshot.groups())) {
