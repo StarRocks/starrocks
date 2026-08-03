@@ -73,6 +73,7 @@ public class AnalyticEvalNode extends PlanNode {
 
     private final boolean useHashBasedPartition;
     private final boolean isSkewed;
+    private final boolean forceMergeSort;
 
     // Physical tuples used/produced by this analytic node.
     private final TupleDescriptor intermediateTupleDesc;
@@ -90,6 +91,7 @@ public class AnalyticEvalNode extends PlanNode {
             AnalyticWindow analyticWindow,
             boolean useHashBasedPartition,
             boolean isSkewed,
+            boolean forceMergeSort,
             TupleDescriptor intermediateTupleDesc,
             TupleDescriptor outputTupleDesc,
             Expr partitionByEq, Expr orderByEq, TupleDescriptor bufferedTupleDesc) {
@@ -103,6 +105,7 @@ public class AnalyticEvalNode extends PlanNode {
         this.analyticWindow = analyticWindow;
         this.useHashBasedPartition = useHashBasedPartition;
         this.isSkewed = isSkewed;
+        this.forceMergeSort = forceMergeSort;
         this.intermediateTupleDesc = intermediateTupleDesc;
         this.outputTupleDesc = outputTupleDesc;
         this.partitionByEq = partitionByEq;
@@ -148,6 +151,7 @@ public class AnalyticEvalNode extends PlanNode {
                 .add("window", analyticWindow)
                 .add("useHashBasedPartition", useHashBasedPartition)
                 .add("isSkewed", isSkewed)
+                .add("forceMergeSort", forceMergeSort)
                 .add("intermediateTid", intermediateTupleDesc.getId())
                 .add("intermediateTid", outputTupleDesc.getId())
                 .add("outputTid", outputTupleDesc.getId())
@@ -215,6 +219,7 @@ public class AnalyticEvalNode extends PlanNode {
 
         msg.analytic_node.setUse_hash_based_partition(useHashBasedPartition);
         msg.analytic_node.setIs_skewed(isSkewed);
+        msg.analytic_node.setForce_merge_sort(forceMergeSort);
 
         if (bufferedTupleDesc != null) {
             msg.analytic_node.setBuffered_tuple_id(bufferedTupleDesc.getId().asInt());

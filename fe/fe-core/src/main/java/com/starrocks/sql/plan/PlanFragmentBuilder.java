@@ -3146,6 +3146,7 @@ public class PlanFragmentBuilder {
                     node.getAnalyticWindow(),
                     node.isUseHashBasedPartition(),
                     node.isSkewed(),
+                    node.isForceMergeSort(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -3165,8 +3166,10 @@ public class PlanFragmentBuilder {
                 analyticEvalNode.getConjuncts()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
+            // Both the skewed and the forceMergeSort paths make the AnalyticNode consume a single
+            // ordered stream via OrderedPartitionExchanger, so the child SortNode must merge.
             passPartitionByToSortNode(context, inputFragment.getPlanRoot(), analyticEvalNode.getPartitionExprs(),
-                    node.isSkewed());
+                    node.isSkewed() || node.isForceMergeSort());
 
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
