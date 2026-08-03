@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include <type_traits>
+#include <vector>
 
 #include "arrow/array/array_binary.h"
 #include "arrow/array/array_nested.h"
@@ -34,6 +35,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -895,6 +897,127 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, JsonGuard<LT>> {
     }
 };
 
+static Status validate_paimon_variant_arrow_type(const arrow::DataType* type) {
+    if (type == nullptr || type->id() != ArrowTypeId::STRUCT) {
+        return Status::InvalidArgument(fmt::format("Paimon VARIANT requires Arrow struct type, got {}",
+                                                   type == nullptr ? "null" : type->ToString()));
+    }
+
+    const auto* struct_type = down_cast<const arrow::StructType*>(type);
+    if (struct_type->num_fields() != 2) {
+        return Status::InvalidArgument(fmt::format("Paimon VARIANT requires exactly two Arrow fields, got {} in {}",
+                                                   struct_type->num_fields(), type->ToString()));
+    }
+
+    const auto& value_field = struct_type->field(0);
+    const auto& metadata_field = struct_type->field(1);
+    if (value_field->name() != "value" || value_field->type()->id() != ArrowTypeId::BINARY || value_field->nullable()) {
+        return Status::InvalidArgument(fmt::format("Paimon VARIANT field 0 must be `value: binary not null`, got {}",
+                                                   value_field->ToString()));
+    }
+    if (metadata_field->name() != "metadata" || metadata_field->type()->id() != ArrowTypeId::BINARY ||
+        metadata_field->nullable()) {
+        return Status::InvalidArgument(fmt::format("Paimon VARIANT field 1 must be `metadata: binary not null`, got {}",
+                                                   metadata_field->ToString()));
+    }
+    return Status::OK();
+}
+
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, VariantGuard<LT>> {
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                        [[maybe_unused]] Filter* chunk_filter, [[maybe_unused]] ArrowConvertContext* ctx,
+                        [[maybe_unused]] ConvertFuncTree* conv_func) {
+        RETURN_IF_ERROR(validate_paimon_variant_arrow_type(array->type().get()));
+        if (array_start_idx > static_cast<size_t>(array->length()) ||
+            num_elements > static_cast<size_t>(array->length()) - array_start_idx) {
+            return Status::InvalidArgument(
+                    fmt::format("Paimon VARIANT Arrow range starts at {} with length {}, but "
+                                "the array length is {}",
+                                array_start_idx, num_elements, array->length()));
+        }
+        if (column->size() != column_start_idx) {
+            return Status::InternalError(fmt::format(
+                    "Paimon VARIANT converter only supports append, column size {} differs from append offset {}",
+                    column->size(), column_start_idx));
+        }
+
+        const auto* struct_array = down_cast<const arrow::StructArray*>(array);
+        const auto value_child = struct_array->GetFieldByName("value");
+        const auto metadata_child = struct_array->GetFieldByName("metadata");
+        if (value_child == nullptr || metadata_child == nullptr) {
+            return Status::InvalidArgument("Paimon VARIANT Arrow struct is missing value or metadata field");
+        }
+        if (value_child->type_id() != ArrowTypeId::BINARY || metadata_child->type_id() != ArrowTypeId::BINARY) {
+            return Status::InvalidArgument(
+                    fmt::format("Paimon VARIANT Arrow children must both be binary arrays, got value={} metadata={}",
+                                value_child->type()->ToString(), metadata_child->type()->ToString()));
+        }
+        const auto* value_array = down_cast<const arrow::BinaryArray*>(value_child.get());
+        const auto* metadata_array = down_cast<const arrow::BinaryArray*>(metadata_child.get());
+
+        // Validate the full range before mutating the destination. A malformed row must not leave a partially
+        // appended VariantColumn, especially because the column stores metadata and value in separate buffers.
+        struct ConvertedRow {
+            bool is_null = false;
+            std::string_view metadata;
+            std::string_view value;
+        };
+        std::vector<ConvertedRow> converted_rows;
+        converted_rows.reserve(num_elements);
+        for (size_t i = 0; i < num_elements; ++i) {
+            const size_t row = array_start_idx + i;
+            if (struct_array->IsNull(row)) {
+                // The outer struct validity represents SQL NULL. Keep a canonical Variant placeholder in the data
+                // column so it remains aligned with the NullableColumn null bitmap.
+                converted_rows.emplace_back(ConvertedRow{.is_null = true});
+                continue;
+            }
+            if (value_array->IsNull(row) || metadata_array->IsNull(row)) {
+                return Status::Corruption(fmt::format("Paimon VARIANT row {} has a null value or metadata child", row));
+            }
+
+            const std::string_view value = value_array->GetView(row);
+            const std::string_view metadata = metadata_array->GetView(row);
+            if (value.empty()) {
+                return Status::Corruption(fmt::format("Paimon VARIANT row {} has an empty value", row));
+            }
+            const Status metadata_status = VariantRowValue::validate_metadata(metadata);
+            if (!metadata_status.ok()) {
+                return Status::Corruption(
+                        fmt::format("Invalid Paimon VARIANT metadata at row {}: {}", row, metadata_status.to_string()));
+            }
+            if (metadata.size() > VariantRowValue::kMaxVariantSize ||
+                value.size() > VariantRowValue::kMaxVariantSize - metadata.size()) {
+                return Status::CapacityLimitExceed(fmt::format("Paimon VARIANT row {} exceeds maximum size {}", row,
+                                                               VariantRowValue::kMaxVariantSize));
+            }
+            converted_rows.emplace_back(ConvertedRow{.metadata = metadata, .value = value});
+        }
+
+        auto* variant_column = down_cast<VariantColumn*>(column);
+        for (const auto& row : converted_rows) {
+            if (row.is_null) {
+                variant_column->append_shredded_null();
+            } else {
+                variant_column->append_shredded(Slice(row.metadata.data(), row.metadata.size()),
+                                                Slice(row.value.data(), row.value.size()));
+            }
+        }
+        return Status::OK();
+    }
+};
+
+static ConvertFunc get_paimon_variant_converter(bool is_nullable, bool is_strict) {
+    if (is_nullable) {
+        return is_strict ? &ArrowConverter<ArrowTypeId::STRUCT, TYPE_VARIANT, true, true>::apply
+                         : &ArrowConverter<ArrowTypeId::STRUCT, TYPE_VARIANT, true, false>::apply;
+    }
+    return is_strict ? &ArrowConverter<ArrowTypeId::STRUCT, TYPE_VARIANT, false, true>::apply
+                     : &ArrowConverter<ArrowTypeId::STRUCT, TYPE_VARIANT, false, false>::apply;
+}
+
 template <typename T>
 static void list_map_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
                                   UInt32Column* col_offsets) {
@@ -1226,6 +1349,13 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
     auto at = arrow_type->id();
     auto lt = type_desc->type;
     conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
+    if (at == ArrowTypeId::STRUCT && lt == TYPE_VARIANT && validate_paimon_variant_arrow_type(arrow_type).ok()) {
+        // Select the Paimon-specific direct converter only for its canonical
+        // physical layout. Ordinary Arrow structs retain STRUCT -> JSON ->
+        // VARIANT fallback, and unrelated get_arrow_converter() callers are
+        // unaffected by this connector-specific representation.
+        conv_func->func = get_paimon_variant_converter(is_nullable, strict_mode);
+    }
     conv_func->children.clear();
 
     switch (lt) {

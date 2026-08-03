@@ -135,6 +135,7 @@ Usage: $0 <options>
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
+     --with-paimon-cpp  build Backend with the Paimon C++ native reader (default without)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -195,6 +196,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
+  -l 'with-paimon-cpp' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -238,6 +240,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
+WITH_PAIMON_CPP=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -363,6 +366,7 @@ else
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --with-paimon-cpp) WITH_PAIMON_CPP=ON; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
@@ -429,6 +433,7 @@ echo "Get params:
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
     WITH_PCH                    -- $WITH_PCH
+    WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
@@ -583,6 +588,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DWITH_PCH=${WITH_PCH}                                \
+                  -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DBUILD_BE=${BUILD_BE}                                \
@@ -747,6 +753,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    if [ "${WITH_PAIMON_CPP}" = "ON" ]; then
+        cp -r -p "${STARROCKS_THIRDPARTY}/installed/lib/paimon" "${STARROCKS_OUTPUT}/be/lib/"
+    fi
     shopt -s nullglob
     be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
     if starrocks_is_darwin; then

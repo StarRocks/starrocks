@@ -262,6 +262,10 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
         : HiveTableDescriptor(tdesc, pool, mr),
           _paimon_native_table(tdesc.paimonTable.paimon_native_table, mr),
           _time_zone(tdesc.paimonTable.time_zone, mr),
+          _paimon_table_path(tdesc.paimonTable.paimon_table_path, mr),
+          _paimon_table_schema_json(tdesc.paimonTable.paimon_table_schema_json, mr),
+          _paimon_branch(tdesc.paimonTable.paimon_branch, mr),
+          _paimon_data_evolution_enabled(tdesc.paimonTable.paimon_data_evolution_enabled),
           _t_paimon_schema(tdesc.paimonTable.paimon_schema) {}
 
 std::string_view PaimonTableDescriptor::get_paimon_native_table() const {
@@ -270,6 +274,18 @@ std::string_view PaimonTableDescriptor::get_paimon_native_table() const {
 
 std::string_view PaimonTableDescriptor::get_time_zone() const {
     return _time_zone;
+}
+
+std::string_view PaimonTableDescriptor::get_paimon_table_path() const {
+    return _paimon_table_path;
+}
+
+std::string_view PaimonTableDescriptor::get_paimon_table_schema_json() const {
+    return _paimon_table_schema_json;
+}
+
+std::string_view PaimonTableDescriptor::get_paimon_branch() const {
+    return _paimon_branch;
 }
 
 OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)

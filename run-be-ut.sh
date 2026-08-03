@@ -72,6 +72,7 @@ Usage: $0 <options>
      --build-target TARGET          only build the specified target (e.g. base_test)
      --enable-shared-data           enable to build with shared-data feature support
      --without-starcache            build without starcache library
+     --with-paimon-cpp              build with the Paimon C++ native reader
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
@@ -129,6 +130,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'enable-shared-data' \
   -l 'build-target:' \
   -l 'without-starcache' \
+  -l 'with-paimon-cpp' \
   -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
@@ -154,6 +156,7 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
+WITH_PAIMON_CPP=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
@@ -194,6 +197,7 @@ while true; do
         --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
         --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --with-paimon-cpp) WITH_PAIMON_CPP=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         --build-target) BUILD_TARGET=$2; shift 2;;
@@ -322,6 +326,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC} \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
             -DWITH_TENANN=${WITH_TENANN} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
@@ -383,6 +388,9 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shar
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+if [[ "${WITH_PAIMON_CPP}" == "ON" ]]; then
+    append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib/paimon"
+fi
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"

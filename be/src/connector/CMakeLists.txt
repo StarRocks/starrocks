@@ -46,6 +46,9 @@ target_link_libraries(ConnectorCommon PUBLIC
 ADD_BE_LIB(ConnectorHive
         hive/hive_connector.cpp
         hive/hive_chunk_sink.cpp
+        hive/paimon/paimon_evaluator.cpp
+        hive/paimon/paimon_file_system.cpp
+        hive/paimon/paimon_scanner.cpp
         hive/scanner/cache_select_scanner.cpp
         hive/scanner/hdfs_scanner.cpp
         hive/scanner/hdfs_scanner_avro.cpp

@@ -34,6 +34,7 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
@@ -152,6 +153,12 @@ public class PaimonColumnConverterTest {
         org.apache.paimon.types.LocalZonedTimestampType paimonType = new org.apache.paimon.types.LocalZonedTimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assertions.assertEquals(result, com.starrocks.type.DateType.DATETIME);
+    }
+
+    @Test
+    public void testConvertVariant() {
+        Type result = ColumnTypeConverter.fromPaimonType(org.apache.paimon.types.DataTypes.VARIANT());
+        Assertions.assertEquals(VariantType.VARIANT, result);
     }
 
     @Test
@@ -275,6 +282,12 @@ public class PaimonColumnConverterTest {
     public void testConvertFromDatetime() {
         org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(DateType.DATETIME);
         Assertions.assertEquals(paimonDataType, org.apache.paimon.types.DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE());
+    }
+
+    @Test
+    public void testConvertFromVariant() {
+        org.apache.paimon.types.DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(VariantType.VARIANT);
+        Assertions.assertEquals(org.apache.paimon.types.DataTypes.VARIANT(), paimonDataType);
     }
 
     @Test

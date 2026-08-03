@@ -492,6 +492,15 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
+
+    // whether to use the Paimon C++ native reader
+    41: optional bool use_paimon_native_reader
+
+    // Paimon table path used by the native reader
+    42: optional string paimon_table_path
+
+    // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
+    43: optional binary paimon_split_info_binary
 }
 
 struct TBinlogScanRange {

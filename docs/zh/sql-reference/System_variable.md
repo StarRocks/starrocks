@@ -1296,6 +1296,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
 
+### paimon_force_native_reader
+
+* 描述：控制查询 Paimon 数据表时是否使用实验性的 paimon-cpp 原生 Reader。该 Reader 仅用于符合条件的 Paimon `DataSplit` Scan Range，并要求 BE 使用 `WITH_PAIMON_CPP` 编译。Paimon 系统表、使用 external path 的文件、不支持的 Split 类型或 Schema（包括 `TIME`、`MULTISET` 以及精度不是 0、3、6 或 9 的时间戳）以及未集成 paimon-cpp 的 BE 仍使用 JNI Reader。如果同时启用 `paimon_force_jni_reader`，则优先使用 JNI Reader。
+* 默认值：false
+* 类型：Boolean
+* 引入版本：v4.2
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。

@@ -91,6 +91,8 @@ add_executable(connector_hive_test
         hive/hive_test_main.cpp
         hive/hive_connector_test.cpp
         hive/hive_chunk_sink_test.cpp
+        hive/paimon/paimon_evaluator_test.cpp
+        hive/paimon/paimon_file_system_test.cpp
         hive/scanner/cache_select_scanner_test.cpp
         hive/scanner/hdfs_scanner_json_test.cpp
         hive/scanner/hdfs_scanner_test.cpp

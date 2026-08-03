@@ -687,6 +687,20 @@ struct TPaimonTable {
 
     // reuse iceberg schema here, used to support schema evolution
     4: optional TIcebergSchema paimon_schema
+
+    // Paimon table base path used by the C++ native reader
+    5: optional string paimon_table_path
+
+    // Paimon TableSchema serialized as JSON at planning time
+    6: optional string paimon_table_schema_json
+
+    // Paimon branch selected while planning this table
+    7: optional string paimon_branch
+
+    // Whether Paimon data evolution is enabled for this table. In this mode
+    // paimon-cpp must apply predicates after schema evolution instead of
+    // pushing them directly to files with an older physical schema.
+    8: optional bool paimon_data_evolution_enabled
 }
 
 struct TDeltaLakeTable {

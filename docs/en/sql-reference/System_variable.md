@@ -1528,6 +1528,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.1.10
 
+### paimon_force_native_reader
+
+* **Description**: Controls whether queries on Paimon data tables use the experimental paimon-cpp native reader. The native reader is used only for eligible Paimon `DataSplit` scan ranges on BEs built with `WITH_PAIMON_CPP`. Paimon system tables, external-path files, unsupported split types or schemas (including `TIME`, `MULTISET`, and timestamp precisions other than 0, 3, 6, or 9), and BEs without paimon-cpp continue to use the JNI reader. If `paimon_force_jni_reader` is also enabled, the JNI reader takes precedence.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.

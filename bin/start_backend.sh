@@ -108,7 +108,6 @@ MIN_JDK_VERSION=17
 RECOMMENDED_JDK_VERSION=21
 if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
     java_version=$(jdk_version)
@@ -149,6 +148,18 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 
 # ================= native section =====================
+export LD_LIBRARY_PATH="${STARROCKS_HOME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    export DYLD_LIBRARY_PATH="${STARROCKS_HOME}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+fi
+
+if [[ -d "${STARROCKS_HOME}/lib/paimon" ]]; then
+    export LD_LIBRARY_PATH="${STARROCKS_HOME}/lib/paimon${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        export DYLD_LIBRARY_PATH="${STARROCKS_HOME}/lib/paimon${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+    fi
+fi
+
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
 
