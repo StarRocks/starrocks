@@ -190,6 +190,7 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
             builder.isSkewed = windowOperator.isSkewed;
+            builder.inputIsBinary = windowOperator.inputIsBinary;
             return this;
         }
 
