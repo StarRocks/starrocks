@@ -505,10 +505,12 @@ def compare_view(
     # Compare each view attribute using dedicated functions
     # Order: definition+columns -> comment -> security
     resolved_schema = schema or autogen_context.dialect.default_schema_name
+    temp_view_schema = _configured_temp_view_schema(autogen_context) or resolved_schema
     definition_changed = _compare_view_definition_and_columns(
         alter_view_op, view_fqn, conn_view, metadata_view,
         conn=autogen_context.connection,
         schema=resolved_schema,
+        temp_view_schema=temp_view_schema,
     )
     comment_changed = _compare_view_comment(
         alter_view_op, view_fqn, conn_view, metadata_view
@@ -533,12 +535,33 @@ def compare_view(
 
         logger.debug(f"Detected changed view attributes ({', '.join(changed_attrs)}) on {view_fqn!r}")
 
+# Alembic ``context.configure()`` option naming the schema in which the transient view
+# used to canonicalize view/MV definitions is created. Setting it lets a locked-down
+# migration user be granted ``CREATE VIEW`` on a single schema (e.g. the same one as
+# ``version_table_schema``) instead of on every schema that contains a view. When unset,
+# the temp view is created in the schema of the object being compared (the prior default).
+TEMP_VIEW_SCHEMA_OPT = "starrocks_temp_view_schema"
+
+
+def _configured_temp_view_schema(autogen_context) -> Optional[str]:
+    """Return the schema configured via
+    ``context.configure(starrocks_temp_view_schema=...)``, or ``None`` when it is not set
+    (callers then default to the compared object's own schema)."""
+    migration_context = getattr(autogen_context, "migration_context", None)
+    opts = getattr(migration_context, "opts", None) or {}
+    return opts.get(TEMP_VIEW_SCHEMA_OPT) or None
+
+
 def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[str]:
     """Canonicalize SQL by round-tripping it through a temporary VIEW.
 
+    ``schema`` is the schema in which the transient view is created and read back; it may
+    differ from the compared object's schema when ``starrocks_temp_view_schema`` is set.
+
     Returns the reflected canonical SQL, or ``None`` if the temp VIEW could not be
-    created (e.g. a referenced table does not exist yet in this migration), in which
-    case the caller falls back to the regex-based normalizer.
+    created (e.g. a referenced table does not exist yet in this migration, or the
+    migration user lacks ``CREATE VIEW`` on ``schema``), in which case the caller falls
+    back to the regex-based normalizer.
     """
     temp_name = f"_alembic_cmp_{uuid.uuid4().hex[:12]}"
     quoted = f"`{schema}`.`{temp_name}`"
@@ -550,7 +573,15 @@ def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[st
             (schema, temp_name),
         ).fetchone()
         return row[0] if row else None
-    except Exception:
+    except Exception as e:
+        # Expected when the migration user cannot CREATE VIEW in ``schema`` (or a
+        # referenced object is missing); logged so the fallback is diagnosable rather
+        # than silent. Set ``starrocks_temp_view_schema`` to a schema the user can write.
+        logger.debug(
+            "Temp-view canonicalization could not create %s (falling back to AST/regex "
+            "normalization); grant CREATE VIEW on schema %r or set %s: %s",
+            quoted, schema, TEMP_VIEW_SCHEMA_OPT, e,
+        )
         return None
     finally:
         try:
@@ -585,6 +616,7 @@ def _compare_view_definition_and_columns(
     metadata_view: View,
     conn=None,
     schema: Optional[str] = None,
+    temp_view_schema: Optional[str] = None,
 ) -> bool:
     """
     Compare view definition and columns, and update AlterViewOp if changed.
@@ -610,11 +642,12 @@ def _compare_view_definition_and_columns(
     logger.debug("Compare view definition: conn_definition=%s, meta_definition=%s", conn_definition, meta_definition)
 
     if conn is not None and schema is not None:
-        canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_definition)
+        host_schema = temp_view_schema or schema
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, host_schema, meta_definition)
         if canonical_meta is not None:
             conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition)
             meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
-            logger.debug("View definition comparison via temp-view canonicalization.")
+            logger.debug("View definition comparison via temp-view canonicalization (temp schema %r).", host_schema)
         else:
             logger.debug("Temp-view canonicalization failed for %r; falling back to AST/regex normalizer.", view_fqn)
             conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_definition, meta_definition)
@@ -1029,6 +1062,7 @@ def _compare_mv_definition(
     conn_mv: Union[MaterializedView, Table],
     metadata_mv: Union[MaterializedView, Table],
     conn=None,
+    temp_view_schema: Optional[str] = None,
 ) -> None:
     """
     Compare MV definition and raise error if changed.
@@ -1043,8 +1077,9 @@ def _compare_mv_definition(
 
     # Preferred path: canonicalize both sides through temporary VIEWs.
     if conn is not None and schema is not None:  # schema is already resolved by _compare_mv
-        canonical_conn = _get_canonical_sql_via_temp_view(conn, schema, conn_def_raw)
-        canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_def_raw)
+        host_schema = temp_view_schema or schema
+        canonical_conn = _get_canonical_sql_via_temp_view(conn, host_schema, conn_def_raw)
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, host_schema, meta_def_raw)
         if canonical_conn is not None and canonical_meta is not None:
             conn_def_norm = TableAttributeNormalizer.normalize_sql(canonical_conn)
             meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
@@ -1241,8 +1276,9 @@ def _compare_mv(
     # Order: immutable attributes first (will raise error if changed), then mutable attributes
     # Immutable attributes (will raise NotImplementedError if changed):
     resolved_schema = schema or autogen_context.dialect.default_schema_name
+    temp_view_schema = _configured_temp_view_schema(autogen_context) or resolved_schema
     _compare_mv_definition(upgrade_ops.ops, resolved_schema, mv_name, conn_mv, metadata_mv,
-                           conn=autogen_context.connection)
+                           conn=autogen_context.connection, temp_view_schema=temp_view_schema)
     _compare_table_partition(
         upgrade_ops.ops,
         schema,
