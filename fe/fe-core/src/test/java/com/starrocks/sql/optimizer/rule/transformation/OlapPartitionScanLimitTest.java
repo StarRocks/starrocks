@@ -34,8 +34,7 @@ public class OlapPartitionScanLimitTest {
     public void testOlapPartitionScanLimit() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
-        Statement stmt = connection.createStatement();
-        try {
+        try (connection; Statement stmt = connection.createStatement()) {
             stmt.execute("create database olap_partition_scan_limit_test_db");
             stmt.execute("use olap_partition_scan_limit_test_db");
             stmt.execute("CREATE TABLE olap_partition_scan_limit_test_table " +
@@ -77,8 +76,6 @@ public class OlapPartitionScanLimitTest {
                 Assertions.assertTrue(e.getMessage().contains(exp));
             }
         } finally {
-            stmt.close();
-            connection.close();
             PseudoCluster.getInstance().shutdown(true);
         }
     }
