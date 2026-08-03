@@ -29,6 +29,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/crash_watchdog.h"
 #include "common/process_exit.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
@@ -284,6 +285,15 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
+        // Guarantee the process eventually dies even if the crash handler above stalls, so an
+        // orchestrator can restart it instead of leaving a live node stuck reporting SHUTDOWN.
+        // Opt-in only (default 0, disabled): when enabled, warn once at startup so the tradeoff is
+        // explicit -- the force-exit can terminate a crash cleanup or core dump slower than the bound.
+        int64_t crash_watchdog_timeout_seconds = config::process_force_exit_after_crash_handler_hang_second;
+        may_start_crash_watchdog(crash_watchdog_timeout_seconds);
+        if (crash_watchdog_timeout_seconds > 0) {
+            LOG(WARNING) << "crash watchdog enabled; may force-exit before a slow core dump completes";
+        }
     }
 
     logging_initialized = true;
