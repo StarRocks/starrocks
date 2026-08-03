@@ -230,6 +230,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             // remove the oldest partitions
             int toRemoveNum = mvToRefreshedPartitions.size() - refreshPartitionLimit;
             mvToRefreshedPartitions.removeFromStart(toRemoveNum);
+            // The oldest changed partitions were excluded from this complete refresh, so the batch does
+            // not cover the whole MV; prevent it from advancing lastFreshnessConfirmedAt, which
+            // isStalenessSatisfied() trusts to skip per-partition change detection.
+            mvContext.setPartitionLimitExcludedPartitions(true);
         }
     }
 
