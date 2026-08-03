@@ -395,6 +395,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 lastPartitionNum = TableProperty.INVALID;
             }
             inputRanges = PRangeCell.toCellMap(mv.getValidRangePartitionMap(lastPartitionNum));
+            // A complete auto-refresh whose oldest partitions were dropped by auto_refresh_partitions_limit
+            // does not cover the whole MV; flag it so this run does not confirm whole-MV freshness
+            // (isStalenessSatisfied() trusts lastFreshnessConfirmedAt to skip per-partition change detection).
+            if (isAutoRefresh && autoRefreshPartitionsLimit > 0
+                    && (partitionTTLNumber <= 0 || autoRefreshPartitionsLimit <= partitionTTLNumber)
+                    && mv.getValidRangePartitionMap(TableProperty.INVALID).size() > autoRefreshPartitionsLimit) {
+                mvContext.setPartitionLimitExcludedPartitions(true);
+            }
         }
         // filter by partition ttl conditions
         filterPartitionsByTTL(inputRanges, false);

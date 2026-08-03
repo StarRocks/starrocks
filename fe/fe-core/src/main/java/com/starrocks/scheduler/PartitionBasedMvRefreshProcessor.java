@@ -873,7 +873,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // Seed the batch's first-run start on the leader's spawn; later runs already carry it via the property copy above.
         // A partial-request leader seeds 0 so no run in its chain confirms whole-MV freshness.
-        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null) {
+        if (!newProperties.containsKey(TaskRun.MV_FRESHNESS_BASELINE_TIME) && mvContext.getStatus() != null
+                && !mvContext.isPartitionLimitExcludedPartitions()) {
             long processStartTime = mvContext.getStatus().getProcessStartTime();
             newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
                     new MVRefreshParams(mv, properties).isCompleteRefresh() && processStartTime > 0
