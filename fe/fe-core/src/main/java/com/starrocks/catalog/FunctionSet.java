@@ -519,6 +519,13 @@ public class FunctionSet {
     public static final String NGRAM_SEARCH = "ngram_search";
     public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
 
+<<<<<<< HEAD
+=======
+    public static final String TOKENIZE = "tokenize";
+    // Tokenizers GinFunctions::tokenize() implements on the BE. Matching is case-sensitive there.
+    public static final Set<String> SUPPORTED_TOKENIZERS =
+            ImmutableSet.of("english", "standard", "chinese");
+>>>>>>> 1412ce564a ([BugFix] Reject tokenize and ngram_search constant arguments that crash the BE (#77102))
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
