@@ -251,7 +251,7 @@ public class PredicatePushDownTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 1: v1 > 4: v4, rand() < 0.5");
+                "  |  other join predicates: 4: v4 < 1: v1, rand() < 0.5");
     }
 
     @Test
