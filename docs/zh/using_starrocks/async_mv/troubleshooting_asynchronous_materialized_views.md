@@ -396,7 +396,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
   StarRocks 会检查物化视图与基表数据的一致性。默认情况下，只有当物化视图中的数据为最新时，才能重写查询。要解决这个问题，您可以：
 
   - 为物化视图添加 `PROPERTIES('query_rewrite_consistency'='LOOSE')` 禁用一致性检查。
-  - 为物化视图添加 `PROPERTIES('mv_rewrite_staleness_second'='5')` 来容忍一定程度的数据不一致。只要上次刷新在该时间间隔之内，无论基表中的数据是否发生变化，查询都可以被重写。
+  - 为物化视图添加 `PROPERTIES('mv_rewrite_staleness_second'='5')` 来容忍一定程度的数据不一致。只要物化视图最近一次被确认的完整刷新在该时间间隔之内，无论基表中的数据是否发生变化，查询都可以被重写。仅覆盖部分分区的刷新操作不会更新该基线。
 
 - **检查物化视图的查询语句是否缺少输出列。**
 
