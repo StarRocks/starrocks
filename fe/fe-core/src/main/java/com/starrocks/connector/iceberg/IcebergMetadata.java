@@ -2315,9 +2315,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else if (table.isIcebergView()) {
             // The catalog returns a view under its fully-qualified name (catalog.db.view). Strip the known
             // catalog and database prefix rather than the last dot, so a quoted view name like "a.b" stays intact.
+            // Hive/Glue fold identifiers, so match the prefix case-insensitively to line up with the cache key.
+            IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+            boolean caseFolding = catalogType == IcebergCatalogType.HIVE_CATALOG
+                    || catalogType == IcebergCatalogType.GLUE_CATALOG;
             String prefix = catalogName + "." + srDbName + ".";
             String qualifiedName = table.getName();
-            String viewName = qualifiedName.startsWith(prefix) ? qualifiedName.substring(prefix.length()) : qualifiedName;
+            boolean hasPrefix = caseFolding
+                    ? qualifiedName.regionMatches(true, 0, prefix, 0, prefix.length())
+                    : qualifiedName.startsWith(prefix);
+            String viewName = hasPrefix ? qualifiedName.substring(prefix.length()) : qualifiedName;
             icebergCatalog.invalidateCache(srDbName, viewName);
         } else {
             IcebergTable icebergTable = (IcebergTable) table;

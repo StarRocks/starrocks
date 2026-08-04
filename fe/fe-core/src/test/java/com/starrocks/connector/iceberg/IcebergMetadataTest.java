@@ -2252,6 +2252,31 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testRefreshViewInvalidatesCacheCaseFolding(@Mocked CachingIcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        // Hive folds case: the qualified name's db segment can differ in case from the requested db, so the
+        // prefix must match case-insensitively to strip it and invalidate the right (folded) key.
+        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".DB.v", new ArrayList<>(),
+                "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
+        metadata.refreshTable("db", view, null, true);
+
+        new Verifications() {
+            {
+                icebergCatalog.invalidateCache("db", "v");
+                times = 1;
+            }
+        };
+    }
+
+    @Test
     public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws StarRocksException {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
