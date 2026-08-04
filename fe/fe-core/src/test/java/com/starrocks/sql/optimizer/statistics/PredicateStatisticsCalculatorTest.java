@@ -25,10 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
->>>>>>> f278e485f7 ([BugFix] Fix nullsFraction clamp in LargeOrCalculatingVisitor (backport #75864) (#76865))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -346,7 +343,6 @@ public class PredicateStatisticsCalculatorTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testOrPredicateShouldCorrectlyModifyNullsFractionWithoutNulls() {
         // GIVEN
         final var aColumn = new ColumnRefOperator(0, Type.VARCHAR, "a", true);
@@ -363,21 +359,10 @@ public class PredicateStatisticsCalculatorTest {
                 .addColumnStatistic(bColumn, ColumnStatistic.builder()
                         .setNullsFraction(0.0)
                         .setDistinctValuesCount(1_000_000)
-=======
-    public void testLargeOrNullsFractionIsAveragedNotFloored() {
-        // GIVEN a column with no nulls
-        final var aColumn = new ColumnRefOperator(0, Type.VARCHAR, "a", true);
-        final var statistics = Statistics.builder()
-                .setOutputRowCount(1000)
-                .addColumnStatistic(aColumn, ColumnStatistic.builder()
-                        .setNullsFraction(0.0)
-                        .setDistinctValuesCount(100)
->>>>>>> f278e485f7 ([BugFix] Fix nullsFraction clamp in LargeOrCalculatingVisitor (backport #75864) (#76865))
                         .setAverageRowSize(10)
                         .build())
                 .build();
 
-<<<<<<< HEAD
         // WHEN
         // (a IS NULL) OR (b IS NOT NULL)
         final var or1 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
@@ -507,7 +492,21 @@ public class PredicateStatisticsCalculatorTest {
 
         // THEN
         Assertions.assertEquals(200, nullOrNotNullNulls, 0.001);
-=======
+    }
+
+    @Test
+    public void testLargeOrNullsFractionIsAveragedNotFloored() {
+        // GIVEN a column with no nulls
+        final var aColumn = new ColumnRefOperator(0, Type.VARCHAR, "a", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0)
+                        .setDistinctValuesCount(100)
+                        .setAverageRowSize(10)
+                        .build())
+                .build();
+
         // (a IS NULL) OR (a IS NOT NULL), ANDed together more than
         // StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT (16) times so the estimator
         // routes through LargeOrCalculatingVisitor's averaging heuristic instead of the
@@ -526,6 +525,5 @@ public class PredicateStatisticsCalculatorTest {
         // Each OR arm hard-sets nullsFraction to 1.0 (IS NULL) and 0.0 (IS NOT NULL), so the
         // averaging heuristic should land on 0.5, not be floored up to 1.0.
         Assertions.assertEquals(0.5, result.getColumnStatistic(aColumn).getNullsFraction(), 0.001);
->>>>>>> f278e485f7 ([BugFix] Fix nullsFraction clamp in LargeOrCalculatingVisitor (backport #75864) (#76865))
     }
 }
