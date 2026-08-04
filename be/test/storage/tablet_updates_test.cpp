@@ -3806,8 +3806,8 @@ TEST_F(TabletUpdatesTest, link_builtin_gin_index_skips_standalone_directory) {
     rowset_meta.set_num_segments(1);
 
     std::set<std::string> created_index_dirs;
-    ASSERT_OK(SnapshotManager::instance()->link_inverted_index_directories(
-            snapshot_meta, schema, snapshot_dir, tablet_dir, &created_index_dirs));
+    ASSERT_OK(SnapshotManager::instance()->link_inverted_index_directories(snapshot_meta, schema, snapshot_dir,
+                                                                           tablet_dir, &created_index_dirs));
     ASSERT_TRUE(created_index_dirs.empty());
     std::set<std::string> destination_dirs;
     std::set<std::string> destination_files;
