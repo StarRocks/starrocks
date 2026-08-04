@@ -172,8 +172,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         // Append metadata and segment directory names
         src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
         src_data_dir = join_path(src_partition_starlet_uri, kSegmentDirectoryName);
-        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::src_meta_dir",
-                                 &src_meta_dir);
 
         VLOG(3) << "S3 storage: converted S3 full path to starlet URI, original: " << src_partition_full_path
                 << ", starlet_uri: " << src_partition_starlet_uri << ", meta_dir: " << src_meta_dir

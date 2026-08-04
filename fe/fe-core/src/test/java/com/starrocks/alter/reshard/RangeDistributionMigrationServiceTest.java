@@ -44,6 +44,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -251,6 +252,48 @@ class RangeDistributionMigrationServiceTest {
                 range(tuple(-1, "a"), incompatibleTypes), range(incompatibleTypes, null));
         Assertions.assertEquals("INCOMPATIBLE",
                 status(service().reconcile(request("mixed-finite-types", mixedFiniteTypes))));
+    }
+
+    @Test
+    void beSerializedVarcharLengthIsCompatibleOnlyWhenBoundaryFitsTarget() {
+        List<Column> columns = MetaUtils.getRangeDistributionColumns(table, latestIndex().getMetaId());
+        List<TabletRange> beSplitRanges = List.of(
+                TabletRange.fromEncodedString(
+                        "v1:LBksHBkcFQAcFQoAAAAYBDM5MzIVAAAcGRwVABwVHhWAgIABAAAAGAMwMTYVAAAAEhIA"),
+                TabletRange.fromEncodedString(
+                        "v1:HBksHBkcFQAcFQoAAAAYBDM5MzIVAAAcGRwVABwVHhWAgIABAAAAGAMwMTYVAAAA"
+                                + "HBksHBkcFQAcFQoAAAAYBDc4NjQVAAAcGRwVABwVHhWAgIABAAAAGAMwMzIVAAAAERIA"),
+                TabletRange.fromEncodedString(
+                        "v1:HBksHBkcFQAcFQoAAAAYBDc4NjQVAAAcGRwVABwVHhWAgIABAAAAGAMwMzIVAAAAIRIA"));
+        Variant beVarchar = beSplitRanges.get(0).getRange().getUpperBound().getValues().get(1);
+
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(),
+                ((ScalarType) beVarchar.getType()).getLength());
+        Assertions.assertDoesNotThrow(
+                () -> RangeDistributionMigrationService.validateRangeSequenceForTest(beSplitRanges, columns));
+
+        ScalarType widenedVarchar = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+        Tuple widenedNull = new Tuple(List.of(
+                Variant.of(IntegerType.INT, "10"), Variant.nullVariant(widenedVarchar)));
+        Assertions.assertDoesNotThrow(() -> RangeDistributionMigrationService.validateRangeSequenceForTest(
+                List.of(range(null, widenedNull), range(widenedNull, null)), columns));
+
+        Tuple exactlyTenBytes = new Tuple(List.of(Variant.of(IntegerType.INT, "10"),
+                Variant.of(widenedVarchar, "a中中中")));
+        Assertions.assertDoesNotThrow(() -> RangeDistributionMigrationService.validateRangeSequenceForTest(
+                List.of(range(null, exactlyTenBytes), range(exactlyTenBytes, null)), columns));
+
+        Tuple tooLong = new Tuple(List.of(Variant.of(IntegerType.INT, "10"),
+                Variant.of(widenedVarchar, "01234567890")));
+        assertInvalid(List.of(range(null, tooLong), range(tooLong, null)), columns);
+
+        Tuple tooManyUtf8Bytes = new Tuple(List.of(Variant.of(IntegerType.INT, "10"),
+                Variant.of(widenedVarchar, "中中中中")));
+        assertInvalid(List.of(range(null, tooManyUtf8Bytes), range(tooManyUtf8Bytes, null)), columns);
+
+        Tuple charBoundary = new Tuple(List.of(Variant.of(IntegerType.INT, "10"),
+                Variant.of(TypeFactory.createCharType(10), "a")));
+        assertInvalid(List.of(range(null, charBoundary), range(charBoundary, null)), columns);
     }
 
     @Test

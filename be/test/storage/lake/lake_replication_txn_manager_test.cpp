@@ -949,21 +949,17 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_uses_virtual_shard_u
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = mock_fs;
     });
-
-    std::string observed_meta_dir;
-    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_lake_remote_storage::src_meta_dir",
-                                          [&](void* arg) { observed_meta_dir = *static_cast<std::string*>(arg); });
+    // Seed only the raw-path cache entry for the expected virtual shard, then remove the injection.
+    // The replication call can reach this mock only if it uses virtual_tablet_id as the URI authority.
+    ASSERT_NE(nullptr, new_fs_starlet(_virtual_tablet_id, true));
+    SyncPoint::GetInstance()->ClearCallBack("new_fs_starlet::get_shard_filesystem");
 
     auto request = build_request(true /* with_full_path */);
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
-    EXPECT_EQ("staros://80001/path/to/db123/456/789/meta", observed_meta_dir);
     ASSERT_FALSE(mock_fs->opened_paths().empty());
-    const auto expected_metadata_filename = tablet_metadata_filename(_src_tablet_id, 2);
-    const auto& opened_path = mock_fs->opened_paths().front();
-    ASSERT_GE(opened_path.size(), expected_metadata_filename.size());
-    EXPECT_EQ(expected_metadata_filename, opened_path.substr(opened_path.size() - expected_metadata_filename.size()));
+    EXPECT_EQ("path/to/db123/456/789/meta/000000000000C351_0000000000000002.meta", mock_fs->opened_paths().front());
 }
 
 // Test Case 1: has_full_path=true, new_fs_starlet returns nullptr

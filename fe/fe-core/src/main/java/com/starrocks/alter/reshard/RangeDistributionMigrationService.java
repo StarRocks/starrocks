@@ -771,7 +771,8 @@ public final class RangeDistributionMigrationService {
         }
         for (int i = 0; i < values.size(); i++) {
             Variant value = values.get(i);
-            if (value == null || !value.getType().equals(columns.get(i).getType())) {
+            Column column = columns.get(i);
+            if (value == null || !isCompatibleBoundaryType(value, column)) {
                 throw new IllegalArgumentException("Range tuple type does not match distribution column " + i);
             }
             if (value instanceof MinVariant || value instanceof MaxVariant) {
@@ -781,9 +782,30 @@ public final class RangeDistributionMigrationService {
             if (value instanceof NullVariant) {
                 continue;
             }
-            if (value instanceof DecimalVariant) {
-                validateDecimalValue(value, (ScalarType) columns.get(i).getType(), i);
+            if (value.getType().isStringType()) {
+                validateStringValue(value, (ScalarType) column.getType(), i);
             }
+            if (value instanceof DecimalVariant) {
+                validateDecimalValue(value, (ScalarType) column.getType(), i);
+            }
+        }
+    }
+
+    private static boolean isCompatibleBoundaryType(Variant value, Column column) {
+        if (value.getType().equals(column.getType())) {
+            return true;
+        }
+        return value.getType().isStringType()
+                && column.getType().isStringType()
+                && value.getType().getPrimitiveType() == column.getType().getPrimitiveType();
+    }
+
+    private static void validateStringValue(Variant value, ScalarType targetType, int columnIndex) {
+        int targetLength = targetType.getLength();
+        if (targetLength > 0
+                && value.getStringValue().getBytes(StandardCharsets.UTF_8).length > targetLength) {
+            throw new BadBoundaryValueException(
+                    "String range value exceeds target length at column " + columnIndex);
         }
     }
 
