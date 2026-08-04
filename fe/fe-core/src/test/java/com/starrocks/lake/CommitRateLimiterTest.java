@@ -219,7 +219,8 @@ public class CommitRateLimiterTest {
         transactionState.setWriteDurationMs(1_000);
         transactionState.setAllowCommitTimeMs(currentTimeMs + 2_000);
         transactionState.setTransactionStatus(TransactionStatus.PREPARED);
-        transactionState.setPreparedTimeAndTimeout(currentTimeMs, timeoutMs, true);
+        transactionState.setPreparedTimeAndTimeout(
+                currentTimeMs, timeoutMs, TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
 
         CommitFailedException e = Assertions.assertThrows(
                 CommitFailedException.class, () -> limiter.check(Collections.emptySet(), currentTimeMs));

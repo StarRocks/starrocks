@@ -144,6 +144,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    public enum TxnPrepareMode {
+        // PREPARED is only an in-memory transition inside a one-phase commit.
+        INTERNAL_ONE_PHASE,
+        // PREPARED is an explicit, persisted transaction state controlled by the client.
+        EXPLICIT_TWO_PHASE
+    }
+
     public enum TxnSourceType {
         FE(1),
         BE(2);
@@ -355,11 +362,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
     @SerializedName("pto")
     private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
 
-    // A one-phase commit uses PREPARED only as an internal, in-memory transition and must continue
-    // to honor its original begin-to-commit timeout. Explicit two-phase transactions instead use
-    // their prepared-state timeout. This flag is not persisted because the one-phase PREPARED state
-    // itself is not written to the edit log.
-    private boolean useOriginalTimeoutDeadline = false;
+    // This mode is not persisted because INTERNAL_ONE_PHASE PREPARED state is not written to the edit log,
+    // while a recovered PREPARED state is always an explicit two-phase transaction.
+    private TxnPrepareMode txnPrepareMode = TxnPrepareMode.EXPLICIT_TWO_PHASE;
 
     // optional
     @SerializedName("ta")
@@ -548,7 +553,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.callbackIdList = txnState.callbackIdList;
         this.timeoutMs = txnState.timeoutMs;
         this.preparedTimeoutMs = txnState.preparedTimeoutMs;
-        this.useOriginalTimeoutDeadline = txnState.useOriginalTimeoutDeadline;
+        this.txnPrepareMode = txnState.txnPrepareMode;
         this.txnCommitAttachment = txnState.txnCommitAttachment;
         this.warehouseId = txnState.warehouseId;
         this.computeResource = txnState.computeResource;
@@ -773,7 +778,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
             return prepareTime + timeoutMs;
         }
         if (transactionStatus == TransactionStatus.PREPARED) {
-            if (useOriginalTimeoutDeadline) {
+            if (txnPrepareMode == TxnPrepareMode.INTERNAL_ONE_PHASE) {
                 return prepareTime + timeoutMs;
             }
             return preparedTime + getPreparedTimeoutMs();
@@ -926,14 +931,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
-        setPreparedTimeAndTimeout(preparedTime, preparedTimeoutMs, false);
+        setPreparedTimeAndTimeout(preparedTime, preparedTimeoutMs, TxnPrepareMode.EXPLICIT_TWO_PHASE);
     }
 
     public void setPreparedTimeAndTimeout(
-            long preparedTime, long preparedTimeoutMs, boolean useOriginalTimeoutDeadline) {
+            long preparedTime, long preparedTimeoutMs, TxnPrepareMode txnPrepareMode) {
         this.preparedTime = preparedTime;
         this.preparedTimeoutMs = preparedTimeoutMs;
-        this.useOriginalTimeoutDeadline = useOriginalTimeoutDeadline;
+        this.txnPrepareMode = Objects.requireNonNull(txnPrepareMode, "txnPrepareMode is null");
     }
 
     public long getPreparedTime() {

@@ -36,6 +36,7 @@ import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnPrepareMode;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -271,7 +272,7 @@ public class TransactionStateTest {
             assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
 
-            txn.setPreparedTimeAndTimeout(4000, 10_000, true);
+            txn.setPreparedTimeAndTimeout(4000, 10_000, TxnPrepareMode.INTERNAL_ONE_PHASE);
             assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
             assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
 

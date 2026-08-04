@@ -343,7 +343,8 @@ public class DatabaseTransactionMgrTest {
         try {
             masterDbTransMgr.prepareTransaction(
                     transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
-                    buildTabletCommitInfoList(), Lists.newArrayList(), null, false);
+                    buildTabletCommitInfoList(), Lists.newArrayList(), null,
+                    TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
         } finally {
             locker.unLockTableWithIntensiveDbLock(
                     GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
