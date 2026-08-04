@@ -464,7 +464,7 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 
 ### Incremental Materialized View
 
-StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`). Please note the following usage guidance:
+StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`, valid values: `pct`, `incremental`). Please note the following usage guidance:
 
 - There are restrictions when adjusting `refresh_mode`:
   - You cannot change legacy materialized views (for example, those of type `PCT`) to use `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.

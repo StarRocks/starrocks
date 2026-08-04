@@ -61,6 +61,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -556,7 +557,7 @@ public class IVMAnalyzer {
             String mode = properties.get(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(mode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new SemanticException("Invalid refresh_mode: " + mode +
                         ". Only INCREMENTAL, PCT are supported.");
