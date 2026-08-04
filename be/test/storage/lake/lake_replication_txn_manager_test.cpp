@@ -339,6 +339,7 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     src_bundled_rowset->set_id(2);
     auto* src_bundled_segment = src_bundled_rowset->add_segment_metas();
     src_bundled_segment->set_filename(kSourceBundledSegment);
+    src_bundled_segment->set_size(1234);
     src_bundled_segment->set_bundle_file_offset(4096);
 
     auto target_child_id = generate_tablet_metadata(GetParam())->id();
@@ -406,6 +407,8 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     ASSERT_TRUE(built_bundled_segment.has_bundle_file_offset());
     EXPECT_EQ(4096, built_bundled_segment.bundle_file_offset());
     EXPECT_TRUE(built_bundled_segment.shared());
+    ASSERT_TRUE(segment_name_to_size_map.contains(kSourceBundledSegment));
+    EXPECT_EQ(0, segment_name_to_size_map.at(kSourceBundledSegment));
     EXPECT_EQ(1, file_locations.size());
     EXPECT_EQ(1, filename_map.size());
 }
@@ -1362,11 +1365,20 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
         sm->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
         sm->set_size(2048); // src_file_size for segment 2
     }
+    auto* bundled_rowset = src_meta_v2->add_rowsets();
+    bundled_rowset->set_id(2);
+    bundled_rowset->set_overlapped(false);
+    bundled_rowset->set_num_rows(10);
+    bundled_rowset->set_data_size(1234);
+    auto* bundled_segment = bundled_rowset->add_segment_metas();
+    bundled_segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000004.dat");
+    bundled_segment->set_size(1234); // logical segment size, not the physical bundle size
+    bundled_segment->set_bundle_file_offset(4096);
     // Add a delvec for non-segment path
     auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
     auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
     delvec_entry.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.delvec");
-    src_meta_v2->set_next_rowset_id(2);
+    src_meta_v2->set_next_rowset_id(3);
 
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
                                           [&](void* arg) {
@@ -1407,6 +1419,15 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
     (void)update_master_info(original_master_info);
 
     ASSERT_OK(status);
+    auto txn_log = _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id);
+    ASSERT_OK(txn_log);
+    const auto& replicated_rowsets = txn_log.value()->op_replication().tablet_metadata().rowsets();
+    ASSERT_EQ(2, replicated_rowsets.size());
+    EXPECT_EQ(2048, replicated_rowsets.Get(0).segment_metas(0).size());
+    const auto& replicated_bundled_segment = replicated_rowsets.Get(1).segment_metas(0);
+    EXPECT_EQ(1234, replicated_bundled_segment.size());
+    ASSERT_TRUE(replicated_bundled_segment.has_bundle_file_offset());
+    EXPECT_EQ(4096, replicated_bundled_segment.bundle_file_offset());
 }
 
 // Test Case 10: Parallel copy with mocked file operations - covers parallel branch,

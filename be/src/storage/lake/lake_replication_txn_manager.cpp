@@ -345,7 +345,10 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                             src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
                             &final_file_size));
                 }
-                if (is_seg && final_file_size > 0 && final_file_size != src_file_size) {
+                // A bundled segment uses src_file_size == 0 as a sentinel so the copy reads the
+                // complete physical bundle. Keep the logical segment size from metadata in that
+                // case; replacing it with the bundle size would corrupt subsequent segment reads.
+                if (is_seg && src_file_size > 0 && final_file_size > 0 && final_file_size != src_file_size) {
                     if (shared_mutex != nullptr) {
                         std::lock_guard lock(*shared_mutex);
                         segment_size_changes[target_file_name] = final_file_size;
@@ -782,7 +785,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             }
 
             // build segment_name_to_size_map, record the size of source segment file
-            if (src_seg_meta.has_size()) {
+            if (src_seg_meta.has_bundle_file_offset()) {
+                // Multiple logical segments can share one physical bundle. Replication keeps the
+                // bundle and its offsets intact, so copy the complete object instead of reading a
+                // logical segment-sized prefix from offset zero. Zero makes the copy path query the
+                // physical object size from the source filesystem.
+                segment_name_to_size_map.insert_or_assign(src_segment_filename, 0);
+            } else if (src_seg_meta.has_size()) {
                 segment_name_to_size_map.emplace(src_segment_filename, src_seg_meta.size());
             }
         }
