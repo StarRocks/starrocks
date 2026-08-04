@@ -15,6 +15,8 @@ StarRocks をデプロイおよび運用する際、ログシステムを理解�
 - `sys_log_roll_num`: ログファイルの無制限な増加を防ぐために保持するログファイルの数を制御します。デフォルトは 10
 - `sys_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは `DAY` で、ログは毎日ローテーションされます
 - `sys_log_delete_age`: 古いログファイルを削除するまでの保持期間を制御します。デフォルトは 7 日
+- `sys_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `sys_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 - `sys_log_roll_mode`: ログローテーションモード。デフォルトは `SIZE-MB-1024` で、現在のログファイルが 1024 MB に達すると新しいログファイルが作成されます。`sys_log_roll_interval` と組み合わせて、FE ログは日次またはファイルサイズに基づいてローテーションされることを示します
 - `sys_log_enable_compress`: ログ圧縮が有効かどうかを制御します。デフォルトは false で、圧縮は無効です
 
@@ -85,6 +87,8 @@ StarRocks をデプロイおよび運用する際、ログシステムを理解�
 - `profile_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 5 ファイルが保持され、古いファイルは削除されます
 - `profile_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 1 日
 - `profile_log_latency_threshold_ms`: プロファイルをログに書き込むための最小クエリレイテンシ（ミリ秒）。デフォルトは 0 で、すべてのプロファイルが記録されることを意味します
+- `profile_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `profile_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 
 ### `fe.internal.log`
 
@@ -105,6 +109,8 @@ StarRocks をデプロイおよび運用する際、ログシステムを理解�
 - `internal_log_roll_num`: 保持するファイルの数。デフォルトは 90
 - `internal_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 90 ファイルが保持され、古いファイルは削除されます
 - `internal_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 7 日
+- `internal_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `internal_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 
 ### `fe.audit.log`
 
@@ -121,6 +127,8 @@ StarRocks をデプロイおよび運用する際、ログシステムを理解�
 - `audit_log_roll_num`: 保持するファイルの数。デフォルトは 90
 - `audit_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 90 ファイルが保持され、古いファイルは削除されます
 - `audit_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 7 日
+- `audit_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `audit_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 - `audit_log_json_format`: JSON 形式でログを記録するかどうか。デフォルトは false
 - `audit_log_enable_compress`: 圧縮が有効かどうか
 
@@ -138,6 +146,8 @@ StarRocks をデプロイおよび運用する際、ログシステムを理解�
 - `big_query_log_modules`: 内部ログモジュールの種類。デフォルトは query
 - `big_query_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 10 ファイルが保持され、古いファイルは削除されます
 - `big_query_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 7 日
+- `big_query_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `big_query_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 
 ### `fe.dump.log`
 
@@ -159,6 +169,8 @@ SET enable_query_dump = true;
 - `dump_log_modules`: 内部ログモジュールの種類。デフォルトは query
 - `dump_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 10 ファイルが保持され、古いファイルは削除されます
 - `dump_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 7 日
+- `dump_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `dump_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 
 ### `fe.features.log`
 これは StarRocks のクエリプラン機能ログであり、クエリ実行プランの機能情報を収集および記録するために使用されます。主に機械学習とクエリ最適化分析に役立ちます。主な目的には以下が含まれます:
@@ -183,6 +195,8 @@ enable_query_cost_prediction = false  // デフォルトでは無効
 - `feature_log_roll_num`: 保持するファイルの数。デフォルトは 5
 - `feature_log_roll_interval`: ローテーションの頻度を指定します。デフォルトは DAY で、日次ローテーションを意味します。ローテーション条件が満たされると、最新の 5 ファイルが保持され、古いファイルは削除されます
 - `feature_log_delete_age`: 古いファイルを削除するまでの保持期間を制御します。デフォルトは 3 日
+- `feature_log_roll_file_index`: ロールオーバーのファイルインデックス戦略（`min`、`max`、`nomax`）。デフォルトは `min`
+- `feature_log_delete_count`: ディスク上に保持されるロールされたアーカイブ数の上限。Delete アクションによって適用されます。デフォルトは `-1`（無効）。
 - `feature_log_roll_size_mb`: ログローテーションサイズ。デフォルトは 1024 MB で、1 GB ごとに新しいファイルが作成されます
 
 ## BE/CN ロギングの詳細
