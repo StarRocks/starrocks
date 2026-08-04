@@ -41,6 +41,11 @@
 
 namespace starrocks::lake {
 
+PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr,
+                                                 int64_t tablet_id)
+        : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id),
+          _map(std::less<>(), MapAllocator(&_map_node_bytes)) {}
+
 Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                                                  const std::shared_ptr<FileSystem>& fs) {
     _location_provider = location_provider;
@@ -194,7 +199,8 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
-    return _keys_heap_size + _map.bytes_used();
+    DCHECK_GE(_map_node_bytes, 0);
+    return sizeof(_map) + static_cast<size_t>(_map_node_bytes) + _keys_heap_size;
 }
 
 size_t PkTabletUnsortSSTWriter::memory_usage() const {

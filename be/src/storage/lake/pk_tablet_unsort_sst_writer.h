@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "base/phmap/btree.h"
+#include "runtime/memory/counting_allocator.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/sstable/table_builder.h"
 
@@ -47,8 +48,7 @@ namespace starrocks::lake {
 // and is not released by a map spill. Writer memory is charged to the load-spill merge mem tracker.
 class PkTabletUnsortSSTWriter : public PkTabletSSTWriter {
 public:
-    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id) {}
+    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id);
     ~PkTabletUnsortSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;
@@ -83,6 +83,9 @@ private:
         uint64_t order;
         uint32_t rowid;
     };
+    using MapValue = std::pair<const std::string, Entry>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<std::string, Entry, std::less<>, MapAllocator>;
     // An intermediate SST spilled from `_map` when it got full. Its entries store both rowid and order
     // (order in the value's version field) so the final merge can pick the dedup winner across SSTs.
     struct IntermediateSst {
@@ -117,7 +120,10 @@ private:
     // per key and appending the losing rowids to `_deleted_rowids`.
     Status merge_intermediates_into(sstable::TableBuilder* builder);
 
-    phmap::btree_map<std::string, Entry, std::less<>> _map;
+    // Bytes allocated for B-tree nodes. MapAllocator maintains this counter incrementally, so
+    // checking the spill threshold does not have to traverse the whole tree.
+    int64_t _map_node_bytes = 0;
+    Map _map;
     std::vector<uint32_t> _deleted_rowids;
     // Encoded primary keys (del-file binary format) whose latest op is a DELETE, collected at flush and
     // moved out via take_delete_keys(). A map/merge key IS an encoded-PK slice, so it is appended

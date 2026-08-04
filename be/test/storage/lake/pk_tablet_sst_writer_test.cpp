@@ -1040,14 +1040,20 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
         uint64_t order;
         uint32_t rowid;
     };
-    phmap::btree_map<std::string, ExpectedEntry, std::less<>> expected_map;
+    using ExpectedMapValue = std::pair<const std::string, ExpectedEntry>;
+    using ExpectedMapAllocator = STLCountingAllocator<ExpectedMapValue>;
+    using ExpectedMap = phmap::btree_map<std::string, ExpectedEntry, std::less<>, ExpectedMapAllocator>;
+    int64_t expected_map_node_bytes = 0;
+    ExpectedMap expected_map{std::less<>(), ExpectedMapAllocator(&expected_map_node_bytes)};
     size_t expected_keys_heap_size = 0;
     for (uint32_t i = 0; i < encoded_keys.size(); ++i) {
         auto [it, inserted] = expected_map.emplace(encoded_keys[i], ExpectedEntry{order[i], i});
         ASSERT_TRUE(inserted);
         expected_keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
     }
-    const size_t expected_map_usage = expected_map.bytes_used() + expected_keys_heap_size;
+    EXPECT_EQ(expected_map.bytes_used(), sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes));
+    const size_t expected_map_usage =
+            sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes) + expected_keys_heap_size;
 
     ASSERT_OK(w->append_sst_record(chunk, &order));
     EXPECT_EQ(expected_map_usage, w->memory_usage());
