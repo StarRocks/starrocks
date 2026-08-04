@@ -31,24 +31,12 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定此参数，则在用户登录时，角色会自动分配给用户并默认激活。如果未指定，则此用户不具有任何权限。请确保所有指定的角色都已存在。
 
-<<<<<<< HEAD
-- `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
-
-- `PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`）、密码策略（`PASSWORD_POLICY`）、Catalog、数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
-=======
 - `PROPERTIES` 用于设置用户属性，包括最大用户连接数 (`max_user_connections`)、catalog、database 或用户级别的会话变量。用户级别的会话变量在用户登录时生效。此功能从 v3.3.3 版本开始支持。
->>>>>>> a20389f1e6f... [Doc] move to snippet (#73117)
 
   ```SQL
   -- 设置最大用户连接数。
   PROPERTIES ("max_user_connections" = "<Integer>")
-<<<<<<< HEAD
-  -- 为用户绑定一个已存在的密码策略。
-  PROPERTIES ("PASSWORD_POLICY" = "<policy_name>")
-  -- 设置 Catalog。
-=======
   -- 设置 catalog。
->>>>>>> a20389f1e6f... [Doc] move to snippet (#73117)
   PROPERTIES ("catalog" = "<catalog_name>")
   -- 设置 database。
   PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
@@ -57,21 +45,12 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   :::tip
-<<<<<<< HEAD
-  - `PROPERTIES` 作用于用户本身而非用户标识。
-  - `PASSWORD_POLICY` 必须引用一个已存在的密码策略。设置后，该策略会优先于系统级密码策略对该用户生效。
-  - 全局变量和只读变量无法为单个用户设置。
-  - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
-  - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
-  :::
-=======
 
   - `PROPERTIES` 作用于用户，而不是用户身份。
   - 全局变量和只读变量不能为特定用户设置。
   - 变量按以下顺序生效：SET_VAR > 会话 > 用户属性 > 全局。
   - 您可以使用 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
 :::
->>>>>>> a20389f1e6f... [Doc] move to snippet (#73117)
 
 ## 示例
 
@@ -144,17 +123,7 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
-<<<<<<< HEAD
-示例十一：创建用户，并绑定一个已存在的密码策略。
-
-```SQL
-CREATE USER 'jack'@'192.168.%' IDENTIFIED BY '123456Ab!' PROPERTIES ('PASSWORD_POLICY' = 'app_password_policy');
-```
-
-示例十二：使用 JSON Web Token 认证创建用户。
-=======
 示例 12：创建一个使用 JSON Web Token 认证的用户。
->>>>>>> a20389f1e6f... [Doc] move to snippet (#73117)
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_jwt AS
@@ -166,11 +135,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-<<<<<<< HEAD
-示例十三：使用 OAuth 2.0 认证创建用户。
-=======
 示例 13：创建一个使用 OAuth 2.0 认证的用户。
->>>>>>> a20389f1e6f... [Doc] move to snippet (#73117)
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
