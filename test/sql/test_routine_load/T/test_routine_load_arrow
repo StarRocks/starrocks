@@ -27,9 +27,6 @@ from kafka
     "kafka_broker_list" = "127.0.0.1:9092",
     "kafka_topic" = "arrow_topic",
     "property.group.id" = "arrow_group"
-);
-
-show create routine load arrow_load_job;
 
 stop routine load for arrow_load_job;
 
