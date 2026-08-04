@@ -221,6 +221,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         }
     }
 
+    // The buffer accumulates across inserts and is only measured against its budget afterwards, so
+    // it can end up holding more than a column can address with uint32 offsets even when every
+    // chunk that went into it was fine on its own. Everything downstream -- the flushed segment and
+    // the apply that reads it back -- inherits the wrapped offsets, so stop here instead.
+    if (auto st = _chunk->capacity_limit_reached(); !st.ok()) {
+        return Status::CapacityLimitExceed(fmt::format(
+                "memtable of tablet {} is too large to flush: {}. Reduce the number of rows per batch, or the size "
+                "of the string/array values in it.",
+                _tablet_id, st.message()));
+    }
+
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
