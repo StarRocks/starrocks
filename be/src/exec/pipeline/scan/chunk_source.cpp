@@ -17,6 +17,8 @@
 #include "base/failpoint/fail_point.h"
 #include "base/time/monotime.h"
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "compute_env/workgroup/scan_task_queue.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -87,8 +89,30 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 auto* scan_op_factory = down_cast<ScanOperatorFactory*>(_scan_op->get_factory());
                 auto& slot_ids = scan_op_factory->scan_node()->get_heavy_expr_slot_ids();
                 auto& expr_ctxs = scan_op_factory->scan_node()->get_heavy_expr_ctxs();
+                const size_t num_rows = chunk->num_rows();
                 for (auto k = 0; k < slot_ids.size(); ++k) {
                     ASSIGN_OR_RETURN(auto col, expr_ctxs[k]->evaluate(chunk.get()));
+                    // The heavy expr result must follow the slot's declared type/nullability, the same
+                    // way ProjectOperator normalizes its own evaluated columns. Without this the column
+                    // implementation drifts across chunks -- a chunk whose rows all evaluate non-null
+                    // yields a bare BinaryColumn while the next one yields NullableColumn<BinaryColumn>.
+                    // ChunkPipelineAccumulator::push then appends one into the other, and
+                    // BinaryColumnBase::append reinterprets the source through a release-mode down_cast.
+                    const auto& type_desc = expr_ctxs[k]->root()->type();
+                    if (col->only_null()) {
+                        auto mutable_col = ColumnHelper::create_column(type_desc, true);
+                        mutable_col->append_nulls(num_rows);
+                        col = std::move(mutable_col);
+                    } else if (col->is_constant()) {
+                        MutableColumnPtr new_column = ColumnHelper::create_column(type_desc, false);
+                        auto* const_column = down_cast<const ConstColumn*>(col.get());
+                        new_column->append(*const_column->data_column(), 0, 1);
+                        new_column->assign(num_rows, 0);
+                        col = std::move(new_column);
+                    }
+                    if (expr_ctxs[k]->root()->is_nullable() && !col->is_nullable()) {
+                        col = NullableColumn::create(col, NullColumn::create(num_rows, 0));
+                    }
                     chunk->append_column(std::move(col), slot_ids[k]);
                 }
             }
