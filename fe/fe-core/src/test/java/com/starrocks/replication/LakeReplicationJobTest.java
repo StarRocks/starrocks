@@ -20,6 +20,7 @@ import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.DeepCopy;
@@ -30,6 +31,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
@@ -43,6 +45,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -50,8 +53,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class LakeReplicationJobTest {
@@ -74,7 +79,7 @@ public class LakeReplicationJobTest {
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table lake_single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                "distributed by hash(key1) buckets 1\n" +
+                "distributed by hash(key1) buckets 3\n" +
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
@@ -139,6 +144,68 @@ public class LakeReplicationJobTest {
 
         Assertions.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
                 srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+    }
+
+    @Test
+    public void testHashTableTabletTasksRetainPerTabletRouting() {
+        Map<Long, Long> computeNodeByTablet = new HashMap<>();
+        List<Long> routedTabletIds = new ArrayList<>();
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
+                routedTabletIds.add(tabletId);
+                return computeNodeByTablet.computeIfAbsent(tabletId, id -> id + 100000L);
+            }
+        };
+
+        job.run();
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        Assertions.assertEquals(3, runningTasks.size());
+        Assertions.assertTrue(runningTasks.values().stream().allMatch(task -> {
+            ReplicateSnapshotTask replicateTask = (ReplicateSnapshotTask) task;
+            return task.getBackendId() == computeNodeByTablet.get(replicateTask.getTabletId());
+        }));
+
+        List<Long> expectedTabletIds = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
+                .map(com.starrocks.catalog.Tablet::getId)
+                .sorted()
+                .toList();
+        routedTabletIds.sort(Long::compareTo);
+        Assertions.assertEquals(expectedTabletIds, routedTabletIds);
+    }
+
+    @Test
+    public void testRangeTableTabletTasksUseOneAnchorComputeNode() {
+        List<Long> routedTabletIds = new ArrayList<>();
+        final long anchorComputeNodeId = 123456L;
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Long getComputeNodeId(ComputeResource computeResource, long tabletId) {
+                routedTabletIds.add(tabletId);
+                return anchorComputeNodeId;
+            }
+        };
+
+        long expectedAnchorTabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
+                .mapToLong(com.starrocks.catalog.Tablet::getId)
+                .min()
+                .orElseThrow();
+        var originalDistribution = table.getDefaultDistributionInfo();
+        try {
+            table.setDefaultDistributionInfo(new RangeDistributionInfo());
+            job.run();
+            Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+
+            Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+            Assertions.assertEquals(3, runningTasks.size());
+            Assertions.assertTrue(runningTasks.values().stream()
+                    .allMatch(task -> task.getBackendId() == anchorComputeNodeId));
+            Assertions.assertEquals(List.of(expectedAnchorTabletId), routedTabletIds);
+        } finally {
+            table.setDefaultDistributionInfo(originalDistribution);
+        }
     }
 
     @Test

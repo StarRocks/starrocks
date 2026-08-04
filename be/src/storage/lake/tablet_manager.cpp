@@ -85,13 +85,14 @@ static std::string singleflight_cache_key(const std::string& path, const std::sh
 
 // Save a lake metadata/txn-log protobuf, using the checksummed header format when
 // lake_enable_protobuf_file_checksum is on and the legacy headerless format otherwise.
-static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message) {
+static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message,
+                                 bool must_create = false) {
     if (config::lake_enable_protobuf_file_checksum) {
         ProtobufFileWithHeader file(path, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
-        return file.save(message);
+        return file.save(message, true, must_create);
     }
     ProtobufFile file(path);
-    return file.save(message);
+    return file.save(message, true, must_create);
 }
 
 // Load a lake metadata/txn-log protobuf. Auto-detects the checksummed header format and
@@ -181,6 +182,10 @@ std::string TabletManager::combined_txn_log_location(int64_t tablet_id, int64_t 
 
 std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->txn_slog_location(tablet_id, txn_id);
+}
+
+std::string TabletManager::txn_abort_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->txn_abort_location(tablet_id, txn_id);
 }
 
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
@@ -1303,6 +1308,42 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 
 Status TabletManager::put_txn_slog(const TxnLogPtr& log) {
     return put_txn_log(log, txn_slog_location(log->tablet_id(), log->txn_id()));
+}
+
+Status TabletManager::put_txn_slog_if_absent(const TxnLogPtr& log) {
+    if (UNLIKELY(!log->has_tablet_id())) {
+        return Status::InvalidArgument("txn log does not have tablet id");
+    }
+    if (UNLIKELY(!log->has_txn_id())) {
+        return Status::InvalidArgument("txn log does not have txn id");
+    }
+    auto serializable_log = std::make_shared<TxnLog>(*log);
+    RETURN_IF_ERROR(normalize_txn_log_before_save(serializable_log.get()));
+    auto path = txn_slog_location(log->tablet_id(), log->txn_id());
+    RETURN_IF_ERROR(save_lake_protobuf(path, *serializable_log, true));
+    _metacache->cache_txn_log(path, log);
+    return Status::OK();
+}
+
+Status TabletManager::put_replication_abort_marker_if_absent(int64_t tablet_id, int64_t txn_id) {
+    TxnLog marker;
+    marker.set_tablet_id(tablet_id);
+    marker.set_txn_id(txn_id);
+    auto status = save_lake_protobuf(txn_abort_location(tablet_id, txn_id), marker, true);
+    return status.is_already_exist() ? Status::OK() : status;
+}
+
+StatusOr<bool> TabletManager::replication_abort_marker_exists(int64_t tablet_id, int64_t txn_id) const {
+    const auto path = txn_abort_location(tablet_id, txn_id);
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    auto status = fs->path_exists(path);
+    if (status.ok()) {
+        return true;
+    }
+    if (status.is_not_found()) {
+        return false;
+    }
+    return status;
 }
 
 Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path) {

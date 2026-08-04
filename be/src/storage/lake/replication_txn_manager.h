@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
+
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fs/encryption.h"
@@ -65,6 +70,10 @@ public:
     Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
     Status replicate_snapshot(const TReplicateSnapshotRequest& request, ThreadPool* replicate_file_thread_pool);
+
+    // Fence a replication transaction on this CN. New tasks are rejected, in-flight shared-data
+    // copy tasks observe the marker and clean late writes, and this call waits until they all exit.
+    void abort_replication_txn(int64_t txn_id);
 
     Status clear_snapshots(const TxnLogPtr& txn_slog);
 
@@ -137,6 +146,10 @@ private:
     lake::TabletManager* _tablet_manager;
     RemoteSnapshotClient* _snapshot_client = nullptr;
     std::unique_ptr<LakeReplicationTxnManager> _lake_replication_txn_manager;
+    mutable std::mutex _aborted_replication_txns_mu;
+    std::condition_variable _aborted_replication_txns_cv;
+    std::unordered_set<int64_t> _aborted_replication_txns;
+    std::unordered_map<int64_t, size_t> _active_lake_replication_txns;
 };
 
 } // namespace starrocks::lake

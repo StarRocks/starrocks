@@ -48,6 +48,11 @@ TEST_F(FilenamesTest, extract_uuid_from) {
         std::string uuid = extract_uuid_from(file_name);
         ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
     }
+    {
+        std::string file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst";
+        std::string uuid = extract_uuid_from(file_name);
+        ASSERT_EQ("6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b", uuid);
+    }
 
     // Test valid delvec file names
     {
@@ -109,12 +114,12 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.del", new_file_name);
     }
 
-    // Test valid sst file input (sst file only has uuid as name, no txn id)
+    // Test valid sst file input. Replicated SSTs gain a txn prefix while UUID extraction remains
+    // compatible with both source and target forms.
     {
         std::string old_file_name = "6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst";
         std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
-        // file name never changed
-        ASSERT_EQ(old_file_name, new_file_name);
+        ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.sst", new_file_name);
     }
 
     // Test valid delvec file input
@@ -188,6 +193,14 @@ TEST_F(FilenamesTest, gen_vector_index_filename) {
         ASSERT_NE(gen_vector_index_filename(segment_filename, 100, 1),
                   gen_vector_index_filename(segment_filename, 200, 1));
     }
+}
+
+TEST_F(FilenamesTest, replication_abort_marker_filename) {
+    constexpr int64_t kTabletId = 0x1234;
+    constexpr int64_t kTxnId = 0x5678;
+    auto filename = txn_abort_filename(kTabletId, kTxnId);
+    EXPECT_TRUE(is_txn_abort(filename));
+    EXPECT_EQ(std::make_pair(kTabletId, kTxnId), parse_txn_abort_filename(filename));
 }
 
 TEST_F(FilenamesTest, gen_vector_index_path_from_segment_path) {

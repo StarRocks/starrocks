@@ -17,6 +17,7 @@ package com.starrocks.replication;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.lake.StarOSAgent;
@@ -34,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
 
 import java.io.IOException;
+import java.util.Comparator;
 
 public class LakeReplicationJob extends ReplicationJob implements GsonPreProcessable {
     private static final Logger LOG = LogManager.getLogger(LakeReplicationJob.class);
@@ -149,18 +151,43 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
         runningTasks.clear();
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         byte[] encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+        boolean targetRangeDistribution = isTargetRangeDistributionTable();
         for (PartitionInfo partitionInfo : super.getPartitionInfos().values()) {
             // Get S3 full path if applicable (only for S3 storage type)
             // For non-S3 storage types, BE will use RemoteStarletLocationProvider to construct the path
             String srcPartitionFullPath = getPartitionFullPath(partitionInfo.getSrcPartitionId());
-            
+
+            Long rangeAnchorComputeNodeId = null;
+            if (targetRangeDistribution) {
+                // Range split children can reference the same physical object. Route every task for
+                // the partition to one deterministic anchor CN so the BE can single-flight those
+                // shared copies. Hash tables retain per-tablet routing and its multi-CN throughput.
+                long anchorTabletId = partitionInfo.getIndexInfos().values().stream()
+                        .flatMap(indexInfo -> indexInfo.getTabletInfos().values().stream())
+                        .map(TabletInfo::getTabletId)
+                        .min(Comparator.naturalOrder())
+                        .orElseThrow(() -> new RuntimeException("No target tablet found for partition: "
+                                + partitionInfo.getPartitionId()));
+                rangeAnchorComputeNodeId = warehouseMgr
+                        .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, anchorTabletId);
+                if (rangeAnchorComputeNodeId == null) {
+                    throw new RuntimeException(
+                            "Send lake replicate task failed, no compute node found for partition: "
+                                    + partitionInfo.getPartitionId() + ", anchor tablet: " + anchorTabletId);
+                }
+            }
+
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
-                    Long computeNodeId = warehouseMgr
-                            .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tabletInfo.getTabletId());
+                    Long computeNodeId = rangeAnchorComputeNodeId;
                     if (computeNodeId == null) {
-                        throw new RuntimeException("Send lake replicate task failed, no compute node found for tablet: "
-                                + tabletInfo.getTabletId());
+                        computeNodeId = warehouseMgr
+                                .getComputeNodeId(WarehouseManager.DEFAULT_RESOURCE, tabletInfo.getTabletId());
+                        if (computeNodeId == null) {
+                            throw new RuntimeException(
+                                    "Send lake replicate task failed, no compute node found for tablet: "
+                                            + tabletInfo.getTabletId());
+                        }
                     }
                     ReplicateSnapshotTask task = new ReplicateSnapshotTask(computeNodeId, super.getDatabaseId(),
                             super.getTableId(), partitionInfo.getPartitionId(), indexInfo.getIndexId(),
@@ -181,6 +208,12 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
                 taskNum, super.getPartitionInfos().size(), super.getDatabaseId(),
                 super.getTableId(), super.getTransactionId());
         sendRunningTasks();
+    }
+
+    private boolean isTargetRangeDistributionTable() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(super.getDatabaseId(), super.getTableId());
+        return table instanceof OlapTable && ((OlapTable) table).isRangeDistribution();
     }
 
     /**

@@ -30,8 +30,10 @@ import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.commons.collections.CollectionUtils;
@@ -46,6 +48,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -211,12 +214,95 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
-        if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            abortReplicationTxnWithCleanup(txnState);
+        } else if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {
             abortTxnWithCleanup(txnState);
         }
         txnState.clearAutomaticPartitionSnapshot();
+    }
+
+    private void abortReplicationTxnWithCleanup(TransactionState txnState) {
+        List<TxnInfoPB> txnInfos = Collections.singletonList(TxnInfoHelper.fromTransactionState(txnState));
+        Set<Long> tabletIds = Sets.newHashSet();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            for (MaterializedIndex index :
+                    txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition)) {
+                for (Tablet tablet : index.getTablets()) {
+                    tabletIds.add(tablet.getId());
+                }
+            }
+        }
+        if (tabletIds.isEmpty()) {
+            return;
+        }
+
+        List<ComputeNode> fenceNodes = getAllNodes();
+        if (fenceNodes.isEmpty()) {
+            LOG.error("Cannot clean aborted replication transaction {}, no compute node", txnState.getTransactionId());
+            return;
+        }
+
+        // Phase 1 fences every CN before any object is removed. Each RPC rejects new replication
+        // tasks and returns only after active tasks have exited and cleaned their own late writes.
+        boolean allNodesFenced = true;
+        for (ComputeNode node : fenceNodes) {
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.skipCleanup = true;
+            request.tabletIds = new ArrayList<>(tabletIds);
+            request.txnInfos = txnInfos;
+            try {
+                AbortTxnResponse response = sendAbortTxnRequest(request, node).get();
+                if (response == null) {
+                    allNodesFenced = false;
+                    LOG.error("Empty fence response for aborted replication transaction {} on node {}",
+                            txnState.getTransactionId(), node.getId());
+                } else if (response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    allNodesFenced = false;
+                    LOG.error("Failed to persist abort markers for replication transaction {} tablets {} on node {}",
+                            txnState.getTransactionId(), response.failedTablets, node.getId());
+                }
+            } catch (Throwable e) {
+                allNodesFenced = false;
+                LOG.error("Failed to fence aborted replication transaction {} on node {}",
+                        txnState.getTransactionId(), node.getId(), e);
+            }
+        }
+        if (!allNodesFenced) {
+            // A node that became unavailable after accepting a task can still be writing. Deleting
+            // without its acknowledgement is unsafe, so keep the immutable PREPARED manifests;
+            // txn-log vacuum consumes their data-file cleanup lists after the watermark advances.
+            return;
+        }
+
+        // All lake data is in shared storage, so any live CN can clean every target tablet. Retry
+        // another CN if the selected worker fails during the cleanup phase.
+        List<ComputeNode> nodes = getAllAliveNodes();
+        for (ComputeNode node : nodes) {
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.skipCleanup = false;
+            request.tabletIds = new ArrayList<>(tabletIds);
+            request.txnInfos = txnInfos;
+            try {
+                AbortTxnResponse response = sendAbortTxnRequest(request, node).get();
+                if (response == null) {
+                    LOG.warn("Empty cleanup response for aborted replication transaction {} on node {}, "
+                                    + "retry another node", txnState.getTransactionId(), node.getId());
+                } else if (response.failedTablets == null || response.failedTablets.isEmpty()) {
+                    return;
+                } else {
+                    LOG.warn("Cleanup of aborted replication transaction {} failed for tablets {} on node {}",
+                            txnState.getTransactionId(), response.failedTablets, node.getId());
+                }
+            } catch (Throwable e) {
+                LOG.warn("Failed to clean aborted replication transaction {} on node {}, retry another node",
+                        txnState.getTransactionId(), node.getId(), e);
+            }
+        }
+        LOG.error("Failed to clean aborted replication transaction {} on every alive node",
+                txnState.getTransactionId());
     }
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
@@ -274,10 +360,21 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
     }
 
+    static Future<AbortTxnResponse> sendAbortTxnRequest(AbortTxnRequest request, ComputeNode node) throws RpcException {
+        return BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
+    }
+
     static List<ComputeNode> getAllAliveNodes() {
         List<ComputeNode> nodes = new ArrayList<>();
         nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodes());
         nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
+        return nodes;
+    }
+
+    static List<ComputeNode> getAllNodes() {
+        List<ComputeNode> nodes = new ArrayList<>();
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends());
         return nodes;
     }
 

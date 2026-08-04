@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_replication_txn_manager.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 
@@ -35,10 +36,12 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/transactions.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoding_types.h"
@@ -113,7 +116,8 @@ std::string remove_db_id_component(const std::string& path, int64_t db_id) {
 }
 
 Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
-                                                                ThreadPool* replicate_file_thread_pool) {
+                                                                ThreadPool* replicate_file_thread_pool,
+                                                                std::function<bool()> is_txn_aborted) {
     auto src_tablet_id = request.src_tablet_id;
     auto src_visible_version = request.src_visible_version;
     auto src_db_id = request.src_db_id;
@@ -229,16 +233,90 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // have all segment file sizes.
     std::unordered_map<std::string, size_t> segment_name_to_size_map;
 
-    auto txn_log = std::make_shared<TxnLog>();
-
     ASSIGN_OR_RETURN(auto target_tablet, _tablet_manager->get_tablet(target_tablet_id));
     ASSIGN_OR_RETURN(auto target_tablet_meta, target_tablet.get_metadata(target_visible_version));
-    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
-    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
-    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
-                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
-                                                       target_tablet_id, txn_id, data_version, src_data_dir,
-                                                       segment_name_to_size_map, file_locations, filename_map));
+
+    std::unordered_set<std::string> shared_source_filenames;
+    bool has_bundled_segment = false;
+    bool has_encrypted_bundled_segment = false;
+    bool has_encrypted_source_file = false;
+    for (const auto& rowset : src_tablet_meta->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if (segment.has_bundle_file_offset()) {
+                has_bundled_segment = true;
+                has_encrypted_bundled_segment |= !segment.encryption_meta().empty();
+            }
+            has_encrypted_source_file |= !segment.encryption_meta().empty();
+            if (segment.shared() || segment.has_bundle_file_offset()) {
+                shared_source_filenames.emplace(segment.filename());
+            }
+        }
+        for (const auto& del : rowset.del_files()) {
+            has_encrypted_source_file |= !del.encryption_meta().empty();
+            if (del.shared()) {
+                shared_source_filenames.emplace(del.name());
+            }
+        }
+    }
+    if (src_tablet_meta->has_sstable_meta()) {
+        for (const auto& sst : src_tablet_meta->sstable_meta().sstables()) {
+            has_encrypted_source_file |= !sst.encryption_meta().empty();
+            if (sst.shared()) {
+                shared_source_filenames.emplace(sst.filename());
+            }
+        }
+    }
+    if (src_tablet_meta->has_delvec_meta()) {
+        for (const auto& [_, file_meta] : src_tablet_meta->delvec_meta().version_to_file()) {
+            has_encrypted_source_file |= !file_meta.encryption_meta().empty();
+            if (file_meta.shared()) {
+                shared_source_filenames.emplace(file_meta.name());
+            }
+        }
+    }
+    if (src_tablet_meta->has_dcg_meta()) {
+        for (const auto& [_, dcg_ver] : src_tablet_meta->dcg_meta().dcgs()) {
+            for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+                has_encrypted_source_file |=
+                        i < dcg_ver.encryption_metas_size() && !dcg_ver.encryption_metas(i).empty();
+                if (i < dcg_ver.shared_files_size() && dcg_ver.shared_files(i)) {
+                    shared_source_filenames.emplace(dcg_ver.column_files(i));
+                }
+            }
+        }
+    }
+    if (src_tablet_meta->has_idg_meta()) {
+        for (const auto& [_, idg_ver] : src_tablet_meta->idg_meta().idgs()) {
+            for (const auto& entry : idg_ver.entries()) {
+                has_encrypted_source_file |= !entry.encryption_meta().empty();
+                if (entry.has_index_file() && entry.shared_file()) {
+                    shared_source_filenames.emplace(entry.index_file());
+                }
+            }
+        }
+    }
+
+    // A bundle can contain slices written with different encryption keys. The current replication
+    // stream opens the physical source object without each slice's encryption metadata, so copying
+    // an encrypted bundle as one object would publish unreadable target slices. Fail before creating
+    // any target files until replication can read and rewrite every slice independently.
+    if (has_encrypted_bundled_segment) {
+        return Status::NotSupported("Cross-cluster replication of encrypted bundled segments is not supported");
+    }
+    // The remote Starlet reader does not receive source-cluster encryption metadata. Raw-copying
+    // any source-encrypted object and then clearing its encryption metadata would publish
+    // ciphertext as plaintext on the target. This applies to both ordinary and split-shared files.
+    if (has_encrypted_source_file) {
+        return Status::NotSupported("Cross-cluster replication of encrypted source files is not supported");
+    }
+    // Each tablet task independently creates target encryption metadata. Shared source files must
+    // use one target object and one encryption pair across all child tablets, so fail closed until
+    // that pair can be coordinated transaction-wide.
+    if (!shared_source_filenames.empty() && config::enable_transparent_data_encryption) {
+        return Status::NotSupported(
+                "Cross-cluster replication of shared files with transparent data encryption is not supported");
+    }
+
     // calc column unique id to adapt for fast schema change
     if (!src_tablet_meta->has_schema()) {
         LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
@@ -250,12 +328,55 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
                                                 &column_unique_id_map);
 
+    // SegmentStreamConverter parses one segment footer and can change that segment's length. It
+    // cannot safely rewrite a physical object containing multiple independently-addressed slices
+    // while preserving their bundle offsets and logical sizes.
+    if (has_bundled_segment && !column_unique_id_map.empty()) {
+        return Status::NotSupported("Cross-cluster replication cannot convert column unique ids in bundled segments");
+    }
+
+    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
+    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
+    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
+                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
+                                                       target_tablet_id, txn_id, data_version, src_data_dir,
+                                                       segment_name_to_size_map, file_locations, filename_map));
+
     if (column_unique_id_map.size() > 0) {
         LOG(INFO) << "Lake replicate storage task, need rebuild column unique id, txn_id: " << txn_id
                   << ", tablet_id: " << target_tablet_id << ", unique_id_map size: " << column_unique_id_map.size();
     }
     std::vector<std::string> files_to_delete;
-    CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
+    bool final_txn_log_written = false;
+    bool late_abort_detected = false;
+    DeferOp clean_late_aborted_files([&]() {
+        const bool locally_aborted = is_txn_aborted && is_txn_aborted();
+        const bool below_watermark = txn_id < get_master_info().min_active_txn_id;
+        if (!late_abort_detected && !locally_aborted && !below_watermark) {
+            return;
+        }
+        if (final_txn_log_written) {
+            auto txn_log_path = _tablet_manager->txn_log_location(target_tablet_id, txn_id);
+            _tablet_manager->metacache()->erase(txn_log_path);
+            files_to_delete.emplace_back(std::move(txn_log_path));
+        }
+        auto cleanup_status = lake::delete_files_callable(std::move(files_to_delete)).get();
+        LOG_IF(WARNING, !cleanup_status.ok())
+                << "Failed to clean files written by an aborted lake replication task: " << cleanup_status;
+    });
+    auto check_abort_after_writes = [&]() -> Status {
+        if ((is_txn_aborted && is_txn_aborted()) || txn_id < get_master_info().min_active_txn_id) {
+            late_abort_detected = true;
+            return Status::Aborted("Lake replication transaction has been aborted");
+        }
+        ASSIGN_OR_RETURN(bool durable_abort_marker,
+                         _tablet_manager->replication_abort_marker_exists(target_tablet_id, txn_id));
+        if (durable_abort_marker) {
+            late_abort_detected = true;
+            return Status::Aborted("Lake replication transaction has a durable abort marker");
+        }
+        return Status::OK();
+    };
 
     // Compute PK encoding transcode context for .del files. prepare_del_transcode_context
     // validates PK column count/type match and rejects V2→V1 on byte-incompatible PK shapes.
@@ -263,6 +384,10 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // DelFileStreamConverter for .del files.
     ASSIGN_OR_RETURN(auto del_transcode_ctx,
                      lake::ReplicationTxnManager::prepare_del_transcode_context(*target_tablet_meta, source_schema_pb));
+    const bool need_del_transcode =
+            del_transcode_ctx.pkey_schema != nullptr &&
+            requires_v1_to_v2_del_transcode(del_transcode_ctx.source_encoding, del_transcode_ctx.target_encoding,
+                                            *del_transcode_ctx.pkey_schema);
 
     auto file_converters = lake::ReplicationTxnManager::build_file_converters(
             _tablet_manager, request, filename_map, column_unique_id_map, files_to_delete,
@@ -311,6 +436,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             src_file_size = size_it->second;
         }
         bool is_seg = is_segment(src_file_name);
+        bool is_shared_source_file = shared_source_filenames.contains(src_file_name);
+        bool shared_copy_size_matches_source = is_shared_source_file && !(is_seg && !column_unique_id_map.empty()) &&
+                                               !(is_del(src_file_name) && need_del_transcode);
         // Segments and .del files go through download_lake_file_with_converter + file_converters,
         // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
         bool use_converter = is_seg || is_del(src_file_name);
@@ -321,7 +449,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, use_converter, encryption_info]() -> Status {
+                            is_seg, is_shared_source_file, use_converter, shared_copy_size_matches_source,
+                            encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -330,54 +459,97 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                              << ", src_file: " << src_file_name;
                 return Status::Aborted("Lake replication cancelled, transaction is aborted");
             }
+            if (is_txn_aborted && is_txn_aborted()) {
+                return Status::Aborted("Lake replication transaction has been aborted");
+            }
             TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy", nullptr);
 
             LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
                       << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
-            size_t final_file_size = 0;
             auto start_ts = butil::gettimeofday_us();
-            if (use_converter) {
-                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
-                                         &final_file_size);
-                if (final_file_size == 0) {
-                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
-                            src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
-                            &final_file_size));
-                }
-                // A bundled segment uses src_file_size == 0 as a sentinel so the copy reads the
-                // complete physical bundle. Keep the logical segment size from metadata in that
-                // case; replacing it with the bundle size would corrupt subsequent segment reads.
-                if (is_seg && src_file_size > 0 && final_file_size > 0 && final_file_size != src_file_size) {
+            auto copy_file = [&]() -> StatusOr<size_t> {
+                size_t copied_file_size = 0;
+                if (use_converter) {
+                    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
+                                             &copied_file_size);
+                    if (copied_file_size == 0) {
+                        RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
+                                src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
+                                &copied_file_size));
+                    }
+                } else {
+                    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                    if (config::enable_transparent_data_encryption) {
+                        opts.encryption_info = encryption_info;
+                    }
+                    int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+                    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                             &copied_file_size);
+                    if (copied_file_size == 0) {
+                        ASSIGN_OR_RETURN(copied_file_size,
+                                         copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                          target_file_location, opts, max_retry));
+                    }
                     if (shared_mutex != nullptr) {
                         std::lock_guard lock(*shared_mutex);
-                        segment_size_changes[target_file_name] = final_file_size;
+                        files_to_delete.push_back(target_file_location);
                     } else {
-                        segment_size_changes[target_file_name] = final_file_size;
+                        files_to_delete.push_back(target_file_location);
                     }
-                    LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
-                              << ", target_file: " << target_file_name << ", original size: " << src_file_size
-                              << ", final size: " << final_file_size;
                 }
+                return copied_file_size;
+            };
+
+            size_t final_file_size = 0;
+            if (is_shared_source_file) {
+                // Split children and bundled slices can point at the same physical object. FE
+                // routes every tablet in a partition to one CN, and the real target path collapses
+                // their different Starlet shard URIs into one process-wide single-flight key.
+                ASSIGN_OR_RETURN(auto shared_copy_key,
+                                 _tablet_manager->location_provider()->real_location(target_file_location));
+                ASSIGN_OR_RETURN(
+                        final_file_size, _shared_file_copy_group.Do(shared_copy_key, [&]() -> StatusOr<size_t> {
+                            // Split children can arrive after the first flight has completed. When
+                            // this path is byte-preserving, reuse the immutable target object only
+                            // after its physical size exactly matches the source. Converted segment
+                            // and transcoded .del output can differ in size, so those paths rely on
+                            // concurrent single-flight and conservatively recopy on a later task.
+                            if (shared_copy_size_matches_source) {
+                                ASSIGN_OR_RETURN(auto source_file_size,
+                                                 shared_src_fs->get_file_size(src_file_location));
+                                ASSIGN_OR_RETURN(auto target_fs,
+                                                 FileSystemFactory::CreateSharedFromString(target_file_location));
+                                auto target_size = target_fs->get_file_size(target_file_location);
+                                if (target_size.ok() && *target_size == source_file_size) {
+                                    LOG(INFO) << "Reuse replicated shared file, src_file: " << src_file_location
+                                              << ", target_file: " << target_file_location
+                                              << ", size: " << source_file_size << ", txn_id: " << txn_id;
+                                    return source_file_size;
+                                }
+                                if (!target_size.ok() && !target_size.status().is_not_found()) {
+                                    return target_size.status();
+                                }
+                            }
+                            return copy_file();
+                        }));
             } else {
-                WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-                if (config::enable_transparent_data_encryption) {
-                    opts.encryption_info = encryption_info;
-                }
-                int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
-                TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
-                                         &final_file_size);
-                if (final_file_size == 0) {
-                    ASSIGN_OR_RETURN(final_file_size,
-                                     copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
-                                                                      target_file_location, opts, max_retry));
-                }
+                ASSIGN_OR_RETURN(final_file_size, copy_file());
+            }
+
+            // A bundled segment uses src_file_size == 0 as a sentinel so the copy reads the
+            // complete physical bundle. Keep the logical segment size from metadata in that
+            // case; replacing it with the bundle size would corrupt subsequent segment reads.
+            if (is_seg && src_file_size > 0 && final_file_size > 0 && final_file_size != src_file_size) {
                 if (shared_mutex != nullptr) {
                     std::lock_guard lock(*shared_mutex);
-                    files_to_delete.push_back(target_file_location);
+                    segment_size_changes[target_file_name] = final_file_size;
                 } else {
-                    files_to_delete.push_back(target_file_location);
+                    segment_size_changes[target_file_name] = final_file_size;
                 }
+                LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
+                          << ", target_file: " << target_file_name << ", original size: " << src_file_size
+                          << ", final size: " << final_file_size;
             }
 
             total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
@@ -392,6 +564,74 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::OK();
         });
     }
+    auto build_txn_log = [&](ReplicationTxnStatePB state) {
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(target_tablet_id);
+        txn_log->set_txn_id(txn_id);
+        auto* op_replication = txn_log->mutable_op_replication();
+        op_replication->mutable_tablet_metadata()->CopyFrom(*copied_target_tablet_meta);
+
+        // Persist exactly the newly planned target objects before copying. If the CN exits, the
+        // request moves to another CN, or any tablet task fails, abort_txn can recover this manifest
+        // from object storage and remove every otherwise-unreferenced file. Existing target files
+        // are absent from filename_map and therefore cannot be deleted by an abort.
+        auto* cleanup_manifest = op_replication->mutable_tablet_metadata()->mutable_orphan_files();
+        cleanup_manifest->Clear();
+        std::unordered_set<std::string> cleanup_filenames;
+        for (const auto& [_, mapped] : filename_map) {
+            if (!cleanup_filenames.emplace(mapped.first).second) {
+                continue;
+            }
+            auto* file = cleanup_manifest->Add();
+            file->set_name(mapped.first);
+            file->set_version(kReplicationCleanupFileVersion);
+        }
+
+        auto* txn_meta = op_replication->mutable_txn_meta();
+        txn_meta->set_tablet_id(target_tablet_id);
+        txn_meta->set_txn_id(txn_id);
+        txn_meta->set_txn_state(state);
+        txn_meta->set_visible_version(target_visible_version);
+        txn_meta->set_data_version(data_version);
+        txn_meta->set_snapshot_version(src_visible_version);
+        txn_meta->set_incremental_snapshot(false);
+        return txn_log;
+    };
+
+    // The PREPARED slog is the durable cleanup intent. Keeping it separate from the final txn log
+    // prevents a late duplicate request from downgrading a completed REPLICATED log. No target data
+    // copy starts before this intent exists.
+    auto prepared_txn_slog = build_txn_log(ReplicationTxnStatePB::TXN_PREPARED);
+    auto put_intent_status = _tablet_manager->put_txn_slog_if_absent(prepared_txn_slog);
+    if (put_intent_status.is_already_exist()) {
+        ASSIGN_OR_RETURN(auto existing_intent, _tablet_manager->get_txn_slog(target_tablet_id, txn_id));
+        const auto& expected_op = prepared_txn_slog->op_replication();
+        const auto& existing_op = existing_intent->op_replication();
+        std::unordered_set<std::string> expected_files;
+        std::unordered_set<std::string> existing_files;
+        for (const auto& file : expected_op.tablet_metadata().orphan_files()) {
+            if (file.version() == kReplicationCleanupFileVersion) {
+                expected_files.emplace(file.name());
+            }
+        }
+        for (const auto& file : existing_op.tablet_metadata().orphan_files()) {
+            if (file.version() == kReplicationCleanupFileVersion) {
+                existing_files.emplace(file.name());
+            }
+        }
+        if (!existing_intent->has_op_replication() ||
+            existing_op.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_PREPARED ||
+            existing_op.txn_meta().tablet_id() != target_tablet_id || existing_op.txn_meta().txn_id() != txn_id ||
+            existing_op.txn_meta().snapshot_version() != src_visible_version || existing_files != expected_files) {
+            return Status::Corruption(
+                    "Existing shared-data replication cleanup intent does not match the retry request");
+        }
+    } else {
+        RETURN_IF_ERROR(put_intent_status);
+    }
+
+    RETURN_IF_ERROR(check_abort_after_writes());
+
     // step 4: execute tasks and collect copy metrics.
     // Follow the ThreadPoolToken(CONCURRENT) + wait() pattern used in txn_manager.cpp.
     if (use_parallel) {
@@ -419,6 +659,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             RETURN_IF_ERROR(task());
         }
     }
+    // A durable marker is visible even when the CN running this task could not acknowledge FE's
+    // fence RPC. Check it after every copy has closed but before publishing a final txn log.
+    RETURN_IF_ERROR(check_abort_after_writes());
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
     double copy_rate = 0.0;
     if (total_time_sec > 0) {
@@ -434,27 +677,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     if (!segment_size_changes.empty()) {
         RETURN_IF_ERROR(update_tablet_metadata_segment_sizes(copied_target_tablet_meta, segment_size_changes));
     }
-    txn_log->mutable_op_replication()->mutable_tablet_metadata()->CopyFrom(*copied_target_tablet_meta);
-
-    // write txn log
-    txn_log->set_tablet_id(target_tablet_id);
-    txn_log->set_txn_id(txn_id);
-
-    auto* txn_meta = txn_log->mutable_op_replication()->mutable_txn_meta();
-    txn_meta->set_tablet_id(target_tablet_id);
-    txn_meta->set_txn_id(txn_id);
-    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
-    txn_meta->set_visible_version(target_visible_version);
-    txn_meta->set_data_version(data_version);
-    txn_meta->set_snapshot_version(src_visible_version);
-    // mark full replication for shared-data cluster migration
-    txn_meta->set_incremental_snapshot(false);
-
-    RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
+    auto final_txn_log = build_txn_log(ReplicationTxnStatePB::TXN_REPLICATED);
+    Status injected_final_log_status;
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::before_final_txn_log", &injected_final_log_status);
+    RETURN_IF_ERROR(injected_final_log_status);
+    RETURN_IF_ERROR(_tablet_manager->put_txn_log(final_txn_log));
+    final_txn_log_written = true;
+    RETURN_IF_ERROR(check_abort_after_writes());
 
     VLOG(3) << "Replicate lake remote files finished, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
-    clean_files.cancel();
     return Status::OK();
 }
 
@@ -761,7 +993,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
-            new_seg_meta->set_shared(is_existed && reused_file_is_shared(src_segment_filename));
+            new_seg_meta->set_shared(is_existed ? reused_file_is_shared(src_segment_filename)
+                                                : src_seg_meta.shared() || src_seg_meta.has_bundle_file_offset());
 
             // Add encryption metadata for files
             if (config::enable_transparent_data_encryption) {
@@ -808,7 +1041,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
-            new_del->set_shared(is_existed && reused_file_is_shared(src_del_filename));
+            new_del->set_shared(is_existed ? reused_file_is_shared(src_del_filename) : src_del.shared());
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -835,12 +1068,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         for (PersistentIndexSstablePB& sst_ref : *dest_meta->mutable_sstables()) {
             PersistentIndexSstablePB* sst = &sst_ref;
             const auto& src_sst_filename = sst->filename();
+            const bool source_file_is_shared = sst->shared();
             std::string final_sst_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_sst_filename, txn_id, existed_filename_uuids,
                                                                        final_sst_filename, target_tablet_id,
                                                                        src_data_dir, file_locations, filename_map));
             sst->set_filename(final_sst_filename);
-            sst->set_shared(is_existed && reused_file_is_shared(src_sst_filename));
+            sst->set_shared(is_existed ? reused_file_is_shared(src_sst_filename) : source_file_is_shared);
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -866,6 +1100,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         dest_meta->CopyFrom(src_tablet_meta->delvec_meta());
         for (const auto& [version, file_meta_pb] : dest_meta->version_to_file()) {
             auto src_delvec_filename = file_meta_pb.name();
+            const bool source_file_is_shared = file_meta_pb.shared();
             std::string final_delvec_filename;
             ASSIGN_OR_RETURN(
                     auto is_existed,
@@ -873,7 +1108,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                              target_tablet_id, src_data_dir, file_locations, filename_map));
             auto& item = (*dest_meta->mutable_version_to_file())[version];
             item.set_name(final_delvec_filename);
-            item.set_shared(is_existed && reused_file_is_shared(src_delvec_filename));
+            item.set_shared(is_existed ? reused_file_is_shared(src_delvec_filename) : source_file_is_shared);
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -900,6 +1135,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         for (auto& [segment_id, dcg_ver_pb] : *dest_meta->mutable_dcgs()) {
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
                 auto src_dcg_filename = dcg_ver_pb.column_files(i);
+                const bool source_file_is_shared = i < dcg_ver_pb.shared_files_size() && dcg_ver_pb.shared_files(i);
                 std::string final_dcg_filename;
                 ASSIGN_OR_RETURN(
                         auto is_existed,
@@ -909,7 +1145,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 while (dcg_ver_pb.shared_files_size() <= i) {
                     dcg_ver_pb.add_shared_files(false);
                 }
-                dcg_ver_pb.set_shared_files(i, is_existed && reused_file_is_shared(src_dcg_filename));
+                dcg_ver_pb.set_shared_files(
+                        i, is_existed ? reused_file_is_shared(src_dcg_filename) : source_file_is_shared);
 
                 if (config::enable_transparent_data_encryption) {
                     if (!is_existed) {
@@ -983,13 +1220,14 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                     continue;
                 }
                 const auto src_idx_filename = entry.index_file();
+                const bool source_file_is_shared = entry.shared_file();
                 std::string final_idx_filename;
                 ASSIGN_OR_RETURN(
                         auto is_existed,
                         determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 entry.set_index_file(final_idx_filename);
-                entry.set_shared_file(is_existed && reused_file_is_shared(src_idx_filename));
+                entry.set_shared_file(is_existed ? reused_file_is_shared(src_idx_filename) : source_file_is_shared);
                 // The source's encryption meta belongs to the source cluster; drop it and
                 // re-derive against the target (matching the segment handling above).
                 entry.clear_encryption_meta();
@@ -1029,6 +1267,15 @@ StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
         LOG(INFO) << "File: " << src_filename
                   << " already exists on target cluster, use existing target filename: " << final_filename;
         return true;
+    }
+
+    // File bundling lets multiple logical segments reference the same physical source object at
+    // different offsets. Reuse the mapping (including its target encryption pair) when that object
+    // has already been planned in this replication transaction, so it is copied exactly once.
+    auto mapped_it = filename_map.find(src_filename);
+    if (mapped_it != filename_map.end()) {
+        final_filename = mapped_it->second.first;
+        return false;
     }
 
     // UUID not exists, generate new filename

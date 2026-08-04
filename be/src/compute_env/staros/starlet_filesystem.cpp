@@ -112,7 +112,7 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
-    explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+    explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)) {};
     ~StarletInputStream() override = default;
     StarletInputStream(const StarletInputStream&) = delete;
     void operator=(const StarletInputStream&) = delete;
@@ -242,7 +242,7 @@ private:
 
 class StarletOutputStream : public starrocks::io::OutputStream {
 public:
-    explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+    explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)) {};
     ~StarletOutputStream() override = default;
     StarletOutputStream(const StarletOutputStream&) = delete;
     void operator=(const StarletOutputStream&) = delete;
@@ -399,6 +399,9 @@ public:
         }
         staros::starlet::fslib::WriteOptions fslib_opts;
         fslib_opts.create_missing_parent = true;
+        // Starlet implements overwrite=false in the storage backend's create operation, avoiding
+        // the exists()+create() TOCTOU race for MUST_CREATE across different CNs.
+        fslib_opts.overwrite = opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
         fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
         if (config::starlet_write_file_with_tag) {
             if (lake::is_segment(pair.first)) {

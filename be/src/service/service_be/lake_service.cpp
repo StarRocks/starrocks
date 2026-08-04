@@ -19,6 +19,7 @@
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
 
+#include <algorithm>
 #include <set>
 
 #include "agent/agent_server.h"
@@ -51,6 +52,7 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
@@ -1023,7 +1025,32 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         }
     }
 
-    if (!request->has_skip_cleanup() || request->skip_cleanup()) {
+    const bool skip_cleanup = !request->has_skip_cleanup() || request->skip_cleanup();
+
+    // Fence shared-data replication tasks before either returning from the phase-1 abort request
+    // or deleting their durable cleanup manifests in phase 2. Phase 1 first publishes a marker in
+    // shared storage, so an in-flight task on a CN that cannot acknowledge the RPC still observes
+    // the abort before publishing. The local marker then rejects new work and drains active tasks.
+    if (auto* replication_mgr = StorageEnv::GetInstance()->lake_replication_txn_manager(); replication_mgr != nullptr) {
+        for (const auto& txn_info : request->txn_infos()) {
+            if (txn_info.txn_type() == TXN_REPLICATION) {
+                if (skip_cleanup) {
+                    for (auto tablet_id : request->tablet_ids()) {
+                        auto marker_status =
+                                _tablet_mgr->put_replication_abort_marker_if_absent(tablet_id, txn_info.txn_id());
+                        if (!marker_status.ok()) {
+                            LOG(WARNING) << "Failed to persist replication abort marker for tablet " << tablet_id
+                                         << ", txn " << txn_info.txn_id() << ": " << marker_status;
+                            response->add_failed_tablets(tablet_id);
+                        }
+                    }
+                }
+                replication_mgr->abort_replication_txn(txn_info.txn_id());
+            }
+        }
+    }
+
+    if (skip_cleanup) {
         return;
     }
 
@@ -1046,17 +1073,34 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
                         info.set_combined_txn_log(false);
                     }
                 }
+                bool has_replication_txn = std::ranges::any_of(
+                        txn_infos, [](const auto& txn_info) { return txn_info.txn_type() == TXN_REPLICATION; });
                 for (auto tablet_id : request->tablet_ids()) {
-                    lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+                    if (has_replication_txn) {
+                        auto cleanup_status = lake::abort_replication_txn_sync(_tablet_mgr, tablet_id, txn_infos);
+                        if (!cleanup_status.ok()) {
+                            LOG(WARNING) << "Failed to synchronously clean aborted replication transaction for tablet "
+                                         << tablet_id << ": " << cleanup_status;
+                            response->add_failed_tablets(tablet_id);
+                        }
+                    } else {
+                        lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+                    }
                 }
             },
             [&] {
                 LOG(WARNING) << "abort transaction task has been cancelled";
+                for (auto tablet_id : request->tablet_ids()) {
+                    response->add_failed_tablets(tablet_id);
+                }
                 latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
+        for (auto tablet_id : request->tablet_ids()) {
+            response->add_failed_tablets(tablet_id);
+        }
         latch.count_down();
     }
 

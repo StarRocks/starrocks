@@ -39,7 +39,7 @@ typedef struct _FixedFileHeader {
     uint32_t protobuf_checksum;
 } __attribute__((packed)) FixedFileHeader;
 
-Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, bool sync) {
+Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, bool sync, bool must_create) {
     uint32_t unused_flag = 0;
     FixedFileHeader header;
     std::string serialized_message;
@@ -62,7 +62,8 @@ Status ProtobufFileWithHeader::save(const ::google::protobuf::Message& message, 
     } else {
         ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     }
-    WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    WritableFileOptions opts{.sync_on_close = sync,
+                             .mode = must_create ? FileSystem::MUST_CREATE : FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto output_file, fs->new_writable_file(opts, _path));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&header), sizeof(header))));
     RETURN_IF_ERROR(output_file->append(Slice((const char*)(&unused_flag), sizeof(unused_flag))));
@@ -182,7 +183,7 @@ Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* mes
     return Status::OK();
 }
 
-Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync) {
+Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync, bool must_create) {
     std::string serialized_message;
     bool r = message.SerializeToString(&serialized_message);
     TEST_SYNC_POINT_CALLBACK("ProtobufFile::save:serialize", &r);
@@ -196,7 +197,8 @@ Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync)
     } else {
         ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     }
-    WritableFileOptions opts{.sync_on_close = sync, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    WritableFileOptions opts{.sync_on_close = sync,
+                             .mode = must_create ? FileSystem::MUST_CREATE : FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto output_file, fs->new_writable_file(opts, _path));
     RETURN_IF_ERROR(output_file->append(serialized_message));
     RETURN_IF_ERROR(output_file->close());

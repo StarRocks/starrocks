@@ -36,6 +36,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/vacuum_full.h"
 #include "test_util.h"
@@ -77,7 +78,8 @@ protected:
         std::string full_path;
         if (is_tablet_metadata(name)) {
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
-        } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
+        } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_txn_abort(name) ||
+                   is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
                    is_idx(name) || is_lcrm(name)) {
@@ -164,6 +166,59 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
         EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     }
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_txn_log_consumes_only_aborted_replication_cleanup_intent) {
+    constexpr int64_t kTabletId = 501;
+    constexpr int64_t kTxnId = 12344;
+    constexpr const char* kFilename = "0000000000003038_aaaaaaaa-bbbb-cccc-dddd-000000000099.dat";
+    create_data_file(kFilename);
+
+    auto txn_slog = std::make_shared<TxnLogPB>();
+    txn_slog->set_tablet_id(kTabletId);
+    txn_slog->set_txn_id(kTxnId);
+    auto* op_replication = txn_slog->mutable_op_replication();
+    op_replication->mutable_txn_meta()->set_txn_state(ReplicationTxnStatePB::TXN_PREPARED);
+    auto* cleanup_file = op_replication->mutable_tablet_metadata()->add_orphan_files();
+    cleanup_file->set_name(kFilename);
+    cleanup_file->set_version(kReplicationCleanupFileVersion);
+    ASSERT_OK(_tablet_mgr->put_txn_slog(txn_slog));
+    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(kTabletId, kTxnId));
+
+    int64_t vacuumed_files = 0;
+    int64_t vacuumed_file_size = 0;
+    ASSERT_OK(vacuum_txn_log(kTestDir, kTxnId + 1, &vacuumed_files, &vacuumed_file_size));
+
+    EXPECT_FALSE(file_exist(kFilename));
+    EXPECT_TRUE(file_exist(txn_slog_filename(kTabletId, kTxnId)));
+    EXPECT_TRUE(file_exist(txn_abort_filename(kTabletId, kTxnId)));
+    EXPECT_EQ(1, vacuumed_files);
+}
+
+TEST_P(LakeVacuumTest, test_vacuum_txn_log_does_not_delete_published_replication_data) {
+    constexpr int64_t kTabletId = 502;
+    constexpr int64_t kTxnId = 12343;
+    constexpr const char* kFilename = "0000000000003037_aaaaaaaa-bbbb-cccc-dddd-000000000098.dat";
+    create_data_file(kFilename);
+
+    auto txn_slog = std::make_shared<TxnLogPB>();
+    txn_slog->set_tablet_id(kTabletId);
+    txn_slog->set_txn_id(kTxnId);
+    auto* op_replication = txn_slog->mutable_op_replication();
+    op_replication->mutable_txn_meta()->set_txn_state(ReplicationTxnStatePB::TXN_PREPARED);
+    auto* cleanup_file = op_replication->mutable_tablet_metadata()->add_orphan_files();
+    cleanup_file->set_name(kFilename);
+    cleanup_file->set_version(kReplicationCleanupFileVersion);
+    ASSERT_OK(_tablet_mgr->put_txn_slog(txn_slog));
+
+    int64_t vacuumed_files = 0;
+    int64_t vacuumed_file_size = 0;
+    ASSERT_OK(vacuum_txn_log(kTestDir, kTxnId + 1, &vacuumed_files, &vacuumed_file_size));
+
+    EXPECT_TRUE(file_exist(kFilename));
+    EXPECT_FALSE(file_exist(txn_slog_filename(kTabletId, kTxnId)));
+    EXPECT_FALSE(file_exist(txn_abort_filename(kTabletId, kTxnId)));
+    EXPECT_EQ(1, vacuumed_files);
 }
 
 // Check that vacuum_full cleans up the expected metadata files
@@ -1078,6 +1133,11 @@ TEST_P(LakeVacuumTest, test_delete_tablets_01) {
         }
         )DEL")));
 
+    constexpr int64_t kAbortTxnId = 703;
+    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(700, kAbortTxnId));
+    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(701, kAbortTxnId));
+    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(702, kAbortTxnId));
+
     DeleteTabletRequest request;
     DeleteTabletResponse response;
     request.add_tablet_ids(700);
@@ -1091,6 +1151,9 @@ TEST_P(LakeVacuumTest, test_delete_tablets_01) {
     EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 3)));
+    EXPECT_FALSE(file_exist(txn_abort_filename(700, kAbortTxnId)));
+    EXPECT_FALSE(file_exist(txn_abort_filename(701, kAbortTxnId)));
+    EXPECT_TRUE(file_exist(txn_abort_filename(702, kAbortTxnId)));
 }
 
 // NOLINTNEXTLINE

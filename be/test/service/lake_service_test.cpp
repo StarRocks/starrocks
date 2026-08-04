@@ -20,6 +20,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <string>
@@ -4652,6 +4653,61 @@ TEST_F(LakeServiceTest, test_abort3) {
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
 
+TEST_F(LakeServiceTest, test_replication_abort_phase1_persists_shared_marker) {
+    auto txn_id = next_id();
+    AbortTxnRequest request;
+    request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(true);
+    auto* txn_info = request.add_txn_infos();
+    txn_info->set_txn_id(txn_id);
+    txn_info->set_txn_type(TXN_REPLICATION);
+
+    AbortTxnResponse response;
+    _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+
+    EXPECT_EQ(0, response.failed_tablets_size());
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_abort_location(_tablet_id, txn_id)));
+}
+
+TEST_F(LakeServiceTest, test_replication_abort_phase2_submit_failure_preserves_cleanup_intent) {
+    auto txn_id = next_id();
+    std::array<int64_t, 2> tablet_ids = {_tablet_id, _tablet_id + 1};
+    for (auto tablet_id : tablet_ids) {
+        auto txn_slog = std::make_shared<TxnLog>();
+        txn_slog->set_tablet_id(tablet_id);
+        txn_slog->set_txn_id(txn_id);
+        txn_slog->mutable_op_replication()->mutable_txn_meta()->set_txn_state(ReplicationTxnStatePB::TXN_PREPARED);
+        ASSERT_OK(_tablet_mgr->put_txn_slog(txn_slog));
+        ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(tablet_id, txn_id));
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    AbortTxnRequest request;
+    request.set_skip_cleanup(false);
+    for (auto tablet_id : tablet_ids) {
+        request.add_tablet_ids(tablet_id);
+    }
+    auto* txn_info = request.add_txn_infos();
+    txn_info->set_txn_id(txn_id);
+    txn_info->set_txn_type(TXN_REPLICATION);
+
+    AbortTxnResponse response;
+    _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+
+    ASSERT_EQ(tablet_ids.size(), response.failed_tablets_size());
+    for (int i = 0; i < response.failed_tablets_size(); ++i) {
+        EXPECT_EQ(tablet_ids[i], response.failed_tablets(i));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_abort_location(tablet_ids[i], txn_id)));
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_slog_location(tablet_ids[i], txn_id)));
+    }
+}
+
 TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -5207,6 +5263,8 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
         request.add_txn_ids(next_id());
         AbortTxnResponse response;
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
     }
 
     {

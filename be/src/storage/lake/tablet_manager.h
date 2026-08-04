@@ -170,6 +170,15 @@ public:
 
     Status put_txn_slog(const TxnLogPtr& log);
 
+    // Persist an immutable replication intent. Returns AlreadyExist without truncating the
+    // existing slog when a retry has already installed the same intent.
+    Status put_txn_slog_if_absent(const TxnLogPtr& log);
+
+    // Publish immutable, shared evidence that a replication transaction was aborted.
+    Status put_replication_abort_marker_if_absent(int64_t tablet_id, int64_t txn_id);
+
+    StatusOr<bool> replication_abort_marker_exists(int64_t tablet_id, int64_t txn_id) const;
+
     Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
@@ -236,6 +245,8 @@ public:
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
 
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string txn_abort_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 

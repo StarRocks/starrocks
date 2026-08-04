@@ -20,6 +20,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
+#include <filesystem>
+#include <mutex>
 #include <random>
 #include <thread>
 
@@ -29,6 +32,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "common/system/master_info.h"
+#include "storage/lake/replication_txn_manager.h"
 #ifdef USE_STAROS
 #include <fslib/file.h>
 #include <fslib/file_system.h>
@@ -312,6 +316,11 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     constexpr const char* kSourceSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat";
     constexpr const char* kTargetSegment = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat";
     constexpr const char* kNewSourceSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat";
+    constexpr const char* kNewSourceDel = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000009.del";
+    constexpr const char* kNewSourceSst = "aaaaaaaa-bbbb-cccc-dddd-000000000010.sst";
+    constexpr const char* kNewSourceDelvec = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000011.delvec";
+    constexpr const char* kNewSourceDcg = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000012.cols";
+    constexpr const char* kNewSourceIdg = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000013.idx";
     constexpr const char* kSourceBundledSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000008.dat";
     constexpr const char* kTargetBundledSegment = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000008.dat";
     constexpr const char* kSourceDel = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.del";
@@ -366,11 +375,27 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     // Bundled segments are effectively shared even when the explicit shared flag is absent.
     target_bundled_segment->set_shared(false);
 
-    // This file was written on the source after the split. It is not shared by any target sibling
-    // and must become target-private after replication even if it is source-shared.
+    // This source-shared file was not present in the target split-child baseline. Replication must
+    // preserve the shared ownership flag because another source child can reference the same object
+    // and will deterministically map it to the same target object.
     auto* new_source_segment = src_rowset->add_segment_metas();
     new_source_segment->set_filename(kNewSourceSegment);
     new_source_segment->set_shared(true);
+    auto* new_source_del = src_rowset->add_del_files();
+    new_source_del->set_name(kNewSourceDel);
+    new_source_del->set_shared(true);
+    auto* new_source_sst = src_metadata->mutable_sstable_meta()->add_sstables();
+    new_source_sst->set_filename(kNewSourceSst);
+    new_source_sst->set_shared(true);
+    auto& new_source_delvec = (*src_metadata->mutable_delvec_meta()->mutable_version_to_file())[2];
+    new_source_delvec.set_name(kNewSourceDelvec);
+    new_source_delvec.set_shared(true);
+    auto& new_source_dcg = (*src_metadata->mutable_dcg_meta()->mutable_dcgs())[2];
+    new_source_dcg.add_column_files(kNewSourceDcg);
+    new_source_dcg.add_shared_files(true);
+    auto* new_source_idg = (*src_metadata->mutable_idg_meta()->mutable_idgs())[2].add_entries();
+    new_source_idg->set_index_file(kNewSourceIdg);
+    new_source_idg->set_shared_file(true);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_child_metadata));
     ASSERT_TRUE(_tablet_mgr->get_tablet_metadata(target_child_metadata->id(), 1).status().is_not_found());
 
@@ -390,18 +415,23 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     ASSERT_EQ(2, built_rowset.segment_metas_size());
     EXPECT_EQ(kTargetSegment, built_rowset.segment_metas(0).filename());
     EXPECT_TRUE(built_rowset.segment_metas(0).shared());
-    EXPECT_FALSE(built_rowset.segment_metas(1).shared());
-    ASSERT_EQ(1, built_rowset.del_files_size());
+    EXPECT_TRUE(built_rowset.segment_metas(1).shared());
+    ASSERT_EQ(2, built_rowset.del_files_size());
     EXPECT_EQ(kTargetDel, built_rowset.del_files(0).name());
     EXPECT_TRUE(built_rowset.del_files(0).shared());
-    ASSERT_EQ(1, result.value()->sstable_meta().sstables_size());
+    EXPECT_TRUE(built_rowset.del_files(1).shared());
+    ASSERT_EQ(2, result.value()->sstable_meta().sstables_size());
     EXPECT_TRUE(result.value()->sstable_meta().sstables(0).shared());
+    EXPECT_TRUE(result.value()->sstable_meta().sstables(1).shared());
     EXPECT_EQ(kTargetDelvec, result.value()->delvec_meta().version_to_file().at(1).name());
     EXPECT_TRUE(result.value()->delvec_meta().version_to_file().at(1).shared());
+    EXPECT_TRUE(result.value()->delvec_meta().version_to_file().at(2).shared());
     EXPECT_EQ(kTargetDcg, result.value()->dcg_meta().dcgs().at(1).column_files(0));
     EXPECT_TRUE(result.value()->dcg_meta().dcgs().at(1).shared_files(0));
+    EXPECT_TRUE(result.value()->dcg_meta().dcgs().at(2).shared_files(0));
     EXPECT_EQ(kTargetIdg, result.value()->idg_meta().idgs().at(1).entries(0).index_file());
     EXPECT_TRUE(result.value()->idg_meta().idgs().at(1).entries(0).shared_file());
+    EXPECT_TRUE(result.value()->idg_meta().idgs().at(2).entries(0).shared_file());
     const auto& built_bundled_segment = result.value()->rowsets(1).segment_metas(0);
     EXPECT_EQ(kTargetBundledSegment, built_bundled_segment.filename());
     ASSERT_TRUE(built_bundled_segment.has_bundle_file_offset());
@@ -409,8 +439,8 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     EXPECT_TRUE(built_bundled_segment.shared());
     ASSERT_TRUE(segment_name_to_size_map.contains(kSourceBundledSegment));
     EXPECT_EQ(0, segment_name_to_size_map.at(kSourceBundledSegment));
-    EXPECT_EQ(1, file_locations.size());
-    EXPECT_EQ(1, filename_map.size());
+    EXPECT_EQ(6, file_locations.size());
+    EXPECT_EQ(6, filename_map.size());
 }
 
 TEST_P(SharedDataReplicationTxnManagerTest, test_target_hash_tablet_without_data_version_metadata) {
@@ -887,21 +917,122 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
 }
 
 #ifdef USE_STAROS
+class InMemoryInputStreamForReplication : public staros::starlet::fslib::InputStream {
+public:
+    explicit InMemoryInputStreamForReplication(std::shared_ptr<const std::string> content)
+            : _content(std::move(content)) {}
+
+    bool support_seek() override { return true; }
+    bool support_tell() override { return true; }
+    bool support_size() override { return true; }
+
+    absl::StatusOr<size_t> seek(int64_t offset, Anchor anchor) override {
+        int64_t base = 0;
+        switch (anchor) {
+        case BEGIN:
+            break;
+        case CURRENT:
+            base = static_cast<int64_t>(_offset);
+            break;
+        case END:
+            base = static_cast<int64_t>(_content->size());
+            break;
+        }
+        const int64_t position = base + offset;
+        if (position < 0 || position > static_cast<int64_t>(_content->size())) {
+            return absl::InvalidArgumentError("seek outside in-memory source file");
+        }
+        _offset = static_cast<size_t>(position);
+        return _offset;
+    }
+
+    absl::StatusOr<size_t> tell() override { return _offset; }
+    absl::StatusOr<size_t> size() override { return _content->size(); }
+    absl::Status close() override {
+        _closed = true;
+        return absl::OkStatus();
+    }
+    bool closed() const override { return _closed; }
+
+    absl::StatusOr<size_t> read(void* data, size_t length) override {
+        const size_t bytes_to_read = std::min(length, _content->size() - _offset);
+        std::memcpy(data, _content->data() + _offset, bytes_to_read);
+        _offset += bytes_to_read;
+        return bytes_to_read;
+    }
+
+private:
+    std::shared_ptr<const std::string> _content;
+    size_t _offset = 0;
+    bool _closed = false;
+};
+
+class InMemoryReadOnlyFileForReplication : public staros::starlet::fslib::ReadOnlyFile {
+public:
+    InMemoryReadOnlyFileForReplication(std::string name, std::shared_ptr<const std::string> content)
+            : _name(std::move(name)), _content(std::move(content)), _stream(_content) {}
+
+    const std::string& name() override { return _name; }
+    absl::StatusOr<size_t> size() override { return _content->size(); }
+    absl::StatusOr<std::string> get_meta(std::string_view) override {
+        return absl::UnimplementedError("get_meta is not needed by this test");
+    }
+    absl::Status set_meta(std::string_view, std::string_view) override {
+        return absl::UnimplementedError("set_meta is not needed by this test");
+    }
+    absl::Status remove_meta(std::string_view) override {
+        return absl::UnimplementedError("remove_meta is not needed by this test");
+    }
+    absl::Status close() override { return _stream.close(); }
+    absl::StatusOr<staros::starlet::fslib::InputStream*> stream() override { return &_stream; }
+
+private:
+    std::string _name;
+    std::shared_ptr<const std::string> _content;
+    InMemoryInputStreamForReplication _stream;
+};
+
 // Mock staros::starlet::fslib::FileSystem for SyncPoint injection
 class MockStarletFileSystemForReplication : public staros::starlet::fslib::FileSystem {
 public:
     MockStarletFileSystemForReplication() : staros::starlet::fslib::FileSystem() {}
+    explicit MockStarletFileSystemForReplication(std::string file_content)
+            : staros::starlet::fslib::FileSystem(),
+              _file_content(std::make_shared<const std::string>(std::move(file_content))) {}
     ~MockStarletFileSystemForReplication() override = default;
 
     std::string_view scheme() override { return "mock"; }
 
     absl::StatusOr<std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>> open(
             std::string_view path, const staros::starlet::fslib::ReadOptions& opts) override {
-        _opened_paths.emplace_back(path);
+        {
+            std::lock_guard lock(_mutex);
+            _opened_paths.emplace_back(path);
+            if (_fail_open_count > 0) {
+                --_fail_open_count;
+                return absl::InternalError("injected source open failure");
+            }
+        }
+        if (_file_content != nullptr) {
+            return std::make_unique<InMemoryReadOnlyFileForReplication>(std::string(path), _file_content);
+        }
         return absl::UnimplementedError("MockStarletFileSystemForReplication::open not implemented");
     }
 
-    const std::vector<std::string>& opened_paths() const { return _opened_paths; }
+    std::vector<std::string> opened_paths() const {
+        std::lock_guard lock(_mutex);
+        return _opened_paths;
+    }
+
+    void set_stat_size(size_t size) {
+        _stat_size = size;
+        _has_stat_size = true;
+    }
+
+    void set_fail_open_count(int count) {
+        std::lock_guard lock(_mutex);
+        _fail_open_count = count;
+    }
 
     absl::StatusOr<std::unique_ptr<staros::starlet::fslib::WritableFile>> create(
             std::string_view path, const staros::starlet::fslib::WriteOptions& opts) override {
@@ -929,6 +1060,12 @@ public:
     }
 
     absl::StatusOr<staros::starlet::fslib::Stat> stat(std::string_view path) override {
+        if (_file_content != nullptr) {
+            return staros::starlet::fslib::Stat{.size = _file_content->size(), .mode = S_IFREG};
+        }
+        if (_has_stat_size) {
+            return staros::starlet::fslib::Stat{.size = _stat_size, .mode = S_IFREG};
+        }
         return absl::UnimplementedError("not implemented");
     }
 
@@ -950,7 +1087,31 @@ protected:
     absl::Status initialize(const staros::starlet::fslib::Configuration& conf) override { return absl::OkStatus(); }
 
 private:
+    mutable std::mutex _mutex;
     std::vector<std::string> _opened_paths;
+    std::shared_ptr<const std::string> _file_content;
+    size_t _stat_size = 0;
+    bool _has_stat_size = false;
+    int _fail_open_count = 0;
+};
+
+// Models different Starlet shard URIs that resolve to one physical partition root. The virtual
+// paths retain a tablet-specific alias component, while local filesystem traversal and
+// real_location() both collapse the aliases to the same files under _root.
+class AliasedLocalLocationProvider : public lake::LocationProvider {
+public:
+    explicit AliasedLocalLocationProvider(std::string root) : _root(std::move(root)) {}
+
+    std::string root_location(int64_t tablet_id) const override {
+        return fmt::format("{}/aliases/{}/../..", _root, tablet_id);
+    }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return std::filesystem::path(virtual_path).lexically_normal().string();
+    }
+
+private:
+    std::string _root;
 };
 
 // Test fixture for testing the USE_STAROS code path in replicate_lake_remote_storage
@@ -987,6 +1148,19 @@ protected:
 
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         ASSERT_OK(fs::remove_all(_test_dir));
+    }
+
+    void use_aliased_local_location_provider(std::initializer_list<int64_t> tablet_ids) {
+        _replication_txn_manager.reset();
+        _tablet_mgr.reset();
+        _update_manager.reset();
+        for (int64_t tablet_id : tablet_ids) {
+            CHECK_OK(fs::create_directories(fmt::format("{}/aliases/{}", _test_dir, tablet_id)));
+        }
+        _location_provider = std::make_shared<AliasedLocalLocationProvider>(_test_dir);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
     }
 
     std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(int64_t tablet_id) {
@@ -1221,7 +1395,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
 
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_aborted()) << status;
-    EXPECT_NE(std::string::npos, status.message().find("Lake replication cancelled, transaction is aborted"));
+    EXPECT_NE(std::string::npos, status.message().find("Lake replication transaction has been aborted"));
 }
 
 // Test Case 7: Fast cancel - when min_active_txn_id advances during file copy (between
@@ -1338,10 +1512,932 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     EXPECT_FALSE(status.is_aborted()) << "Should not abort when min_active_txn_id <= txn_id, status: " << status;
 }
 
+TEST_F(LakeReplicationRemoteStorageTest, test_copy_complete_bundle_once_for_multiple_logical_segments) {
+    const std::string unreferenced_prefix = "bundle-prefix-for-another-tablet";
+    const std::string logical_segment1 = "logical-segment-one";
+    const std::string logical_segment2 = "logical-segment-two-with-more-bytes";
+    const std::string physical_bundle = unreferenced_prefix + logical_segment1 + logical_segment2;
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_bundle);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kBundleFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000009.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(20);
+    rowset->set_data_size(logical_segment1.size() + logical_segment2.size());
+    auto* segment1 = rowset->add_segment_metas();
+    segment1->set_filename(kBundleFilename);
+    segment1->set_size(logical_segment1.size());
+    segment1->set_bundle_file_offset(unreferenced_prefix.size());
+    auto* segment2 = rowset->add_segment_metas();
+    segment2->set_filename(kBundleFilename);
+    segment2->set_size(logical_segment2.size());
+    segment2->set_bundle_file_offset(unreferenced_prefix.size() + logical_segment1.size());
+    src_meta_v2->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    // new_fs_starlet caches filesystems by virtual shard id across fixture instances. Use a
+    // process-unique id so this test cannot inherit a mock filesystem from an earlier/repeated test.
+    request.__set_virtual_tablet_id(next_id());
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+
+    (void)update_master_info(original_master_info);
+    ASSERT_OK(status);
+
+    // The two logical segments share one source object, so replication must open and copy it once.
+    ASSERT_EQ(1, mock_fs->opened_paths().size());
+
+    auto txn_log = _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id);
+    ASSERT_OK(txn_log);
+    const auto& replicated_rowsets = txn_log.value()->op_replication().tablet_metadata().rowsets();
+    ASSERT_EQ(1, replicated_rowsets.size());
+    ASSERT_EQ(2, replicated_rowsets.Get(0).segment_metas_size());
+    const auto& replicated_segment1 = replicated_rowsets.Get(0).segment_metas(0);
+    const auto& replicated_segment2 = replicated_rowsets.Get(0).segment_metas(1);
+    EXPECT_EQ(replicated_segment1.filename(), replicated_segment2.filename());
+    EXPECT_TRUE(replicated_segment1.shared());
+    EXPECT_TRUE(replicated_segment2.shared());
+    EXPECT_EQ(logical_segment1.size(), replicated_segment1.size());
+    EXPECT_EQ(logical_segment2.size(), replicated_segment2.size());
+    EXPECT_EQ(unreferenced_prefix.size(), replicated_segment1.bundle_file_offset());
+    EXPECT_EQ(unreferenced_prefix.size() + logical_segment1.size(), replicated_segment2.bundle_file_offset());
+
+    const auto target_bundle_path = _tablet_mgr->segment_location(_target_tablet_id, replicated_segment1.filename());
+    ASSIGN_OR_ABORT(auto target_bundle_file, fs::new_random_access_file(target_bundle_path));
+    ASSIGN_OR_ABORT(auto target_bundle_size, target_bundle_file->get_size());
+    ASSERT_EQ(physical_bundle.size(), target_bundle_size);
+    std::string target_bundle(target_bundle_size, '\0');
+    ASSERT_OK(target_bundle_file->read_at_fully(0, target_bundle.data(), target_bundle.size()));
+    EXPECT_EQ(physical_bundle, target_bundle);
+
+    ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_bundle_path));
+    RandomAccessFileOptions opts;
+    FileInfo segment1_info{.path = target_bundle_path,
+                           .size = replicated_segment1.size(),
+                           .bundle_file_offset = replicated_segment1.bundle_file_offset()};
+    ASSIGN_OR_ABORT(auto segment1_file, target_fs->new_random_access_file_with_bundling(opts, segment1_info));
+    std::string target_segment1(logical_segment1.size(), '\0');
+    ASSERT_OK(segment1_file->read_at_fully(0, target_segment1.data(), target_segment1.size()));
+    EXPECT_EQ(logical_segment1, target_segment1);
+
+    FileInfo segment2_info{.path = target_bundle_path,
+                           .size = replicated_segment2.size(),
+                           .bundle_file_offset = replicated_segment2.bundle_file_offset()};
+    ASSIGN_OR_ABORT(auto segment2_file, target_fs->new_random_access_file_with_bundling(opts, segment2_info));
+    std::string target_segment2(logical_segment2.size(), '\0');
+    ASSERT_OK(segment2_file->read_at_fully(0, target_segment2.data(), target_segment2.size()));
+    EXPECT_EQ(logical_segment2, target_segment2);
+
+    // Publishing removes the PREPARED cleanup intent but must not delete the now-visible bundle.
+    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(0);
+    std::vector<TxnInfoPB> txns{txn_info};
+    ASSIGN_OR_ABORT(auto published,
+                    publish_version(_tablet_mgr.get(), PublishTabletInfo(_target_tablet_id), 1, 2, txns, false));
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_TRUE(fs::path_exist(target_bundle_path));
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
+    for (const auto& file : published->orphan_files()) {
+        EXPECT_NE(kReplicationCleanupFileVersion, file.version());
+    }
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reuse_complete_shared_segment_across_sequential_tablet_tasks) {
+    const std::string physical_segment = "one-cross-boundary-segment-shared-by-split-children";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kSegmentFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000017.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_segment.size());
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kSegmentFilename);
+    segment->set_size(physical_segment.size());
+    segment->set_shared(true);
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    const int64_t second_target_tablet_id = _target_tablet_id + 1;
+    use_aliased_local_location_provider({_target_tablet_id, second_target_tablet_id});
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(second_target_tablet_id)));
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto first_request = build_request(false /* with_full_path */);
+    first_request.__set_virtual_tablet_id(next_id());
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr));
+    ASSERT_EQ(1, mock_fs->opened_paths().size());
+
+    auto second_request = first_request;
+    second_request.__set_tablet_id(second_target_tablet_id);
+    second_request.__set_src_tablet_id(_src_tablet_id + 1);
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(second_request, nullptr));
+    EXPECT_EQ(1, mock_fs->opened_paths().size());
+
+    const auto target_filename = gen_filename_from(_transaction_id, kSegmentFilename);
+    for (int64_t tablet_id : {_target_tablet_id, second_target_tablet_id}) {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, _transaction_id));
+        const auto& replicated_segment = txn_log->op_replication().tablet_metadata().rowsets(0).segment_metas(0);
+        EXPECT_EQ(target_filename, replicated_segment.filename());
+        EXPECT_TRUE(replicated_segment.shared());
+        EXPECT_FALSE(replicated_segment.has_bundle_file_offset());
+        EXPECT_EQ(physical_segment.size(), replicated_segment.size());
+    }
+
+    const auto target_path = _tablet_mgr->segment_location(_target_tablet_id, target_filename);
+    ASSIGN_OR_ABORT(auto target_segment_file, fs::new_random_access_file(target_path));
+    std::string target_segment(physical_segment.size(), '\0');
+    ASSERT_OK(target_segment_file->read_at_fully(0, target_segment.data(), target_segment.size()));
+    EXPECT_EQ(physical_segment, target_segment);
+
+    (void)update_master_info(original_master_info);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_singleflight_shared_bundle_across_tablet_tasks_and_retry) {
+    const std::string physical_bundle = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_bundle);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kBundleFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000012.dat";
+    auto make_source_meta = [&](size_t offset, size_t size) {
+        auto metadata = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+        metadata->set_version(2);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(size);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(kBundleFilename);
+        segment->set_size(size);
+        segment->set_bundle_file_offset(offset);
+        segment->set_shared(true);
+        metadata->set_next_rowset_id(2);
+        return metadata;
+    };
+    auto first_source_meta = make_source_meta(5, 11);
+    auto second_source_meta = make_source_meta(23, 13);
+    auto retry_source_meta = make_source_meta(40, 12);
+    std::atomic<int> injected_metadata_count{0};
+    SyncPoint::GetInstance()->SetCallBack(
+            "LakeReplicationTxnManager::build_source_tablet_meta::inject", [&](void* arg) {
+                auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                int index = injected_metadata_count.fetch_add(1);
+                *meta_ptr = index == 0 ? first_source_meta : index == 1 ? second_source_meta : retry_source_meta;
+            });
+
+    const int64_t second_target_tablet_id = _target_tablet_id + 1;
+    const int64_t mismatch_target_tablet_id = _target_tablet_id + 2;
+    const int64_t reuse_target_tablet_id = _target_tablet_id + 3;
+    use_aliased_local_location_provider(
+            {_target_tablet_id, second_target_tablet_id, mismatch_target_tablet_id, reuse_target_tablet_id});
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(second_target_tablet_id)));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(mismatch_target_tablet_id)));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(reuse_target_tablet_id)));
+
+    const auto target_filename = gen_filename_from(_transaction_id, kBundleFilename);
+    const auto first_virtual_path = _tablet_mgr->segment_location(_target_tablet_id, target_filename);
+    const auto second_virtual_path = _tablet_mgr->segment_location(second_target_tablet_id, target_filename);
+    ASSERT_NE(first_virtual_path, second_virtual_path);
+    ASSIGN_OR_ABORT(auto first_real_path, _location_provider->real_location(first_virtual_path));
+    ASSIGN_OR_ABORT(auto second_real_path, _location_provider->real_location(second_virtual_path));
+    ASSERT_EQ(first_real_path, second_real_path);
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    // Hold the single-flight leader after it has published its Future until the second
+    // tablet task has joined that same key. This makes the concurrency assertion deterministic.
+    CountDownLatch leader_started(1);
+    CountDownLatch follower_joined(1);
+    std::atomic<bool> leader_wait_timed_out{false};
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        leader_started.count_down();
+        if (!follower_joined.wait_for(std::chrono::seconds(5))) {
+            leader_wait_timed_out = true;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) { follower_joined.count_down(); });
+
+    auto first_request = build_request(false /* with_full_path */);
+    first_request.__set_virtual_tablet_id(next_id());
+    auto second_request = first_request;
+    second_request.__set_tablet_id(second_target_tablet_id);
+    second_request.__set_src_tablet_id(_src_tablet_id + 1);
+
+    Status first_status;
+    Status second_status;
+    std::thread first(
+            [&]() { first_status = _replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr); });
+    bool observed_leader = leader_started.wait_for(std::chrono::seconds(5));
+    std::thread second([&]() {
+        second_status = _replication_txn_manager->replicate_lake_remote_storage(second_request, nullptr);
+    });
+    first.join();
+    second.join();
+
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+    EXPECT_TRUE(observed_leader);
+    EXPECT_FALSE(leader_wait_timed_out.load());
+    ASSERT_OK(first_status);
+    ASSERT_OK(second_status);
+    ASSERT_EQ(1, mock_fs->opened_paths().size());
+
+    auto verify_replicated_segment = [&](int64_t tablet_id, size_t expected_offset, size_t expected_size) {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, _transaction_id));
+        const auto& replicated_segment = txn_log->op_replication().tablet_metadata().rowsets(0).segment_metas(0);
+        EXPECT_EQ(target_filename, replicated_segment.filename());
+        EXPECT_TRUE(replicated_segment.shared());
+        ASSERT_TRUE(replicated_segment.has_bundle_file_offset());
+        EXPECT_EQ(expected_offset, replicated_segment.bundle_file_offset());
+        EXPECT_EQ(expected_size, replicated_segment.size());
+    };
+    verify_replicated_segment(_target_tablet_id, 5, 11);
+    verify_replicated_segment(second_target_tablet_id, 23, 13);
+
+    // Corrupt the completed target's physical size. A later tablet must detect the mismatch and
+    // recopy the complete immutable bundle rather than treating mere existence as completion.
+    WritableFileOptions truncate_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_ABORT(auto truncated_file, fs::new_writable_file(truncate_opts, first_virtual_path));
+    ASSERT_OK(truncated_file->append(Slice("short")));
+    ASSERT_OK(truncated_file->close());
+
+    auto mismatch_request = first_request;
+    mismatch_request.__set_tablet_id(mismatch_target_tablet_id);
+    mismatch_request.__set_src_tablet_id(_src_tablet_id + 2);
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(mismatch_request, nullptr));
+    EXPECT_EQ(2, mock_fs->opened_paths().size());
+    verify_replicated_segment(mismatch_target_tablet_id, 40, 12);
+
+    ASSIGN_OR_ABORT(auto target_bundle_file, fs::new_random_access_file(first_virtual_path));
+    ASSIGN_OR_ABORT(auto target_bundle_size, target_bundle_file->get_size());
+    ASSERT_EQ(physical_bundle.size(), target_bundle_size);
+    std::string target_bundle(target_bundle_size, '\0');
+    ASSERT_OK(target_bundle_file->read_at_fully(0, target_bundle.data(), target_bundle.size()));
+    EXPECT_EQ(physical_bundle, target_bundle);
+
+    // Once the physical size is complete again, a non-overlapping retry reuses it without a third
+    // source read and still publishes its own slice metadata.
+    auto reuse_request = first_request;
+    reuse_request.__set_tablet_id(reuse_target_tablet_id);
+    reuse_request.__set_src_tablet_id(_src_tablet_id + 3);
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(reuse_request, nullptr));
+    EXPECT_EQ(2, mock_fs->opened_paths().size());
+    verify_replicated_segment(reuse_target_tablet_id, 40, 12);
+
+    (void)update_master_info(original_master_info);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_shared_bundle_final_log_failure_is_reclaimed_by_abort) {
+    const std::string physical_bundle = "complete-bundle-after-retry";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_bundle);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kBundleFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000014.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_bundle.size() - 3);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kBundleFilename);
+    segment->set_size(physical_bundle.size() - 3);
+    segment->set_bundle_file_offset(3);
+    segment->set_shared(true);
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    const int64_t second_target_tablet_id = _target_tablet_id + 1;
+    use_aliased_local_location_provider({_target_tablet_id, second_target_tablet_id});
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(second_target_tablet_id)));
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    // Fail only the final txn-log write, after PREPARED cleanup intents exist and the shared object
+    // has been copied. Abort must recover the manifest without relying on process memory or full
+    // vacuum.
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log", [&](void* arg) {
+        *static_cast<Status*>(arg) = Status::InternalError("injected final txn log failure");
+    });
+
+    CountDownLatch leader_started(1);
+    CountDownLatch follower_joined(1);
+    std::atomic<bool> leader_wait_timed_out{false};
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        leader_started.count_down();
+        if (!follower_joined.wait_for(std::chrono::seconds(5))) {
+            leader_wait_timed_out = true;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) { follower_joined.count_down(); });
+
+    auto first_request = build_request(false /* with_full_path */);
+    first_request.__set_virtual_tablet_id(next_id());
+    auto second_request = first_request;
+    second_request.__set_tablet_id(second_target_tablet_id);
+    second_request.__set_src_tablet_id(_src_tablet_id + 1);
+    Status first_status;
+    Status second_status;
+    std::thread first(
+            [&]() { first_status = _replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr); });
+    bool observed_leader = leader_started.wait_for(std::chrono::seconds(5));
+    std::thread second([&]() {
+        second_status = _replication_txn_manager->replicate_lake_remote_storage(second_request, nullptr);
+    });
+    first.join();
+    second.join();
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+    SyncPoint::GetInstance()->ClearCallBack("LakeReplicationTxnManager::before_final_txn_log");
+
+    EXPECT_TRUE(observed_leader);
+    EXPECT_FALSE(leader_wait_timed_out.load());
+    ASSERT_FALSE(first_status.ok());
+    ASSERT_FALSE(second_status.ok());
+    EXPECT_EQ(first_status.to_string(), second_status.to_string());
+    EXPECT_EQ(1, mock_fs->opened_paths().size());
+
+    const auto target_filename = gen_filename_from(_transaction_id, kBundleFilename);
+    const auto target_path = _tablet_mgr->segment_location(_target_tablet_id, target_filename);
+    EXPECT_TRUE(fs::path_exist(target_path));
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(second_target_tablet_id, _transaction_id).status().is_not_found());
+
+    auto verify_prepared_manifest = [&](int64_t tablet_id) {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_slog(tablet_id, _transaction_id));
+        EXPECT_EQ(ReplicationTxnStatePB::TXN_PREPARED, txn_log->op_replication().txn_meta().txn_state());
+        const auto& manifest = txn_log->op_replication().tablet_metadata().orphan_files();
+        ASSERT_EQ(1, manifest.size());
+        EXPECT_EQ(target_filename, manifest.Get(0).name());
+        EXPECT_EQ(kReplicationCleanupFileVersion, manifest.Get(0).version());
+    };
+    verify_prepared_manifest(_target_tablet_id);
+    verify_prepared_manifest(second_target_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    std::vector<TxnInfoPB> txns{txn_info};
+    SyncPoint::GetInstance()->SetCallBack("transactions::abort_replication_txn_sync:delete_data", [&](void* arg) {
+        *static_cast<Status*>(arg) = Status::InternalError("injected cleanup failure");
+    });
+    EXPECT_FALSE(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns).ok());
+    SyncPoint::GetInstance()->ClearCallBack("transactions::abort_replication_txn_sync:delete_data");
+    EXPECT_TRUE(fs::path_exist(target_path));
+    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), second_target_tablet_id, txns));
+    EXPECT_FALSE(fs::path_exist(target_path));
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(second_target_tablet_id, _transaction_id).status().is_not_found());
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(second_target_tablet_id, _transaction_id).status().is_not_found());
+
+    // A retry after abort performs a fresh copy and publishes a readable final log.
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr));
+    EXPECT_EQ(2, mock_fs->opened_paths().size());
+    ASSIGN_OR_ABORT(auto target_bundle_file, fs::new_random_access_file(target_path));
+    ASSIGN_OR_ABORT(auto target_bundle_size, target_bundle_file->get_size());
+    ASSERT_EQ(physical_bundle.size(), target_bundle_size);
+    std::string target_bundle(target_bundle_size, '\0');
+    ASSERT_OK(target_bundle_file->read_at_fully(0, target_bundle.data(), target_bundle.size()));
+    EXPECT_EQ(physical_bundle, target_bundle);
+
+    (void)update_master_info(original_master_info);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_after_copy_removes_late_files_and_final_log) {
+    const std::string physical_segment = "late-file-written-before-abort-fence";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kSegmentFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000015.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_segment.size());
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kSegmentFilename);
+    segment->set_size(physical_segment.size());
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    std::atomic<bool> aborted{false};
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log",
+                                          [&](void*) { aborted = true; });
+
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    Status status =
+            _replication_txn_manager->replicate_lake_remote_storage(request, nullptr, [&]() { return aborted.load(); });
+    SyncPoint::GetInstance()->ClearCallBack("LakeReplicationTxnManager::before_final_txn_log");
+    (void)update_master_info(original_master_info);
+
+    ASSERT_TRUE(status.is_aborted()) << status;
+    const auto target_filename = gen_filename_from(_transaction_id, kSegmentFilename);
+    const auto target_path = _tablet_mgr->segment_location(_target_tablet_id, target_filename);
+    EXPECT_FALSE(fs::path_exist(target_path));
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    std::vector<TxnInfoPB> txns{txn_info};
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_drains_active_task_before_phase2_cleanup) {
+    const std::string physical_segment = "phase-two-must-wait-for-active-copy";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kSegmentFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000017.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_segment.size());
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kSegmentFilename);
+    segment->set_size(physical_segment.size());
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    CountDownLatch task_before_final_log(1);
+    CountDownLatch release_task(1);
+    CountDownLatch abort_marker_installed(1);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log", [&](void*) {
+        task_before_final_log.count_down();
+        release_task.wait();
+    });
+    SyncPoint::GetInstance()->SetCallBack("ReplicationTxnManager::abort_replication_txn:fenced",
+                                          [&](void*) { abort_marker_installed.count_down(); });
+
+    ReplicationTxnManager txn_manager(_tablet_mgr.get());
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    Status replication_status;
+    std::thread replication([&]() { replication_status = txn_manager.replicate_snapshot(request, nullptr); });
+    if (!task_before_final_log.wait_for(std::chrono::seconds(5))) {
+        release_task.count_down();
+        replication.join();
+        FAIL() << "replication task did not reach the final-log barrier";
+    }
+
+    CountDownLatch fence_returned(1);
+    std::thread fence([&]() {
+        txn_manager.abort_replication_txn(_transaction_id);
+        fence_returned.count_down();
+    });
+    if (!abort_marker_installed.wait_for(std::chrono::seconds(5))) {
+        release_task.count_down();
+        replication.join();
+        fence.join();
+        FAIL() << "abort task did not install its fence marker";
+    }
+    EXPECT_FALSE(fence_returned.wait_for(std::chrono::milliseconds(100)));
+    release_task.count_down();
+    replication.join();
+    fence.join();
+    SyncPoint::GetInstance()->ClearCallBack("LakeReplicationTxnManager::before_final_txn_log");
+    SyncPoint::GetInstance()->ClearCallBack("ReplicationTxnManager::abort_replication_txn:fenced");
+    (void)update_master_info(original_master_info);
+
+    ASSERT_TRUE(replication_status.is_aborted()) << replication_status;
+    const auto target_filename = gen_filename_from(_transaction_id, kSegmentFilename);
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_target_tablet_id, target_filename)));
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    std::vector<TxnInfoPB> txns{txn_info};
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_durable_abort_marker_stops_task_on_unreachable_cn) {
+    const std::string physical_segment = "durable-marker-stops-unfenced-copy";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kSegmentFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000018.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_segment.size());
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kSegmentFilename);
+    segment->set_size(physical_segment.size());
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    CountDownLatch task_before_final_log(1);
+    CountDownLatch release_task(1);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log", [&](void*) {
+        task_before_final_log.count_down();
+        release_task.wait();
+    });
+
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    Status replication_status;
+    std::thread replication(
+            [&]() { replication_status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr); });
+    if (!task_before_final_log.wait_for(std::chrono::seconds(5))) {
+        release_task.count_down();
+        replication.join();
+        FAIL() << "replication task did not reach the final-log barrier";
+    }
+
+    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(_target_tablet_id, _transaction_id));
+    release_task.count_down();
+    replication.join();
+    SyncPoint::GetInstance()->ClearCallBack("LakeReplicationTxnManager::before_final_txn_log");
+    (void)update_master_info(original_master_info);
+
+    ASSERT_TRUE(replication_status.is_aborted()) << replication_status;
+    const auto target_filename = gen_filename_from(_transaction_id, kSegmentFilename);
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_target_tablet_id, target_filename)));
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_abort_location(_target_tablet_id, _transaction_id)));
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    std::vector<TxnInfoPB> txns{txn_info};
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_abort_location(_target_tablet_id, _transaction_id)));
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_singleflight_failure_is_shared_and_retry_recovers) {
+    const std::string physical_bundle = "complete-bundle-after-copy-retry";
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_bundle);
+    mock_fs->set_fail_open_count(1);
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    constexpr const char* kBundleFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000016.dat";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(physical_bundle.size() - 4);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(kBundleFilename);
+    segment->set_size(physical_bundle.size() - 4);
+    segment->set_bundle_file_offset(4);
+    segment->set_shared(true);
+    src_meta_v2->set_next_rowset_id(2);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    const int64_t second_target_tablet_id = _target_tablet_id + 1;
+    use_aliased_local_location_provider({_target_tablet_id, second_target_tablet_id});
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_target_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*generate_simple_tablet_metadata(second_target_tablet_id)));
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    CountDownLatch leader_started(1);
+    CountDownLatch follower_joined(1);
+    std::atomic<bool> leader_wait_timed_out{false};
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        leader_started.count_down();
+        if (!follower_joined.wait_for(std::chrono::seconds(5))) {
+            leader_wait_timed_out = true;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) { follower_joined.count_down(); });
+
+    auto first_request = build_request(false /* with_full_path */);
+    first_request.__set_virtual_tablet_id(next_id());
+    auto second_request = first_request;
+    second_request.__set_tablet_id(second_target_tablet_id);
+    second_request.__set_src_tablet_id(_src_tablet_id + 1);
+    Status first_status;
+    Status second_status;
+    std::thread first(
+            [&]() { first_status = _replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr); });
+    bool observed_leader = leader_started.wait_for(std::chrono::seconds(5));
+    std::thread second([&]() {
+        second_status = _replication_txn_manager->replicate_lake_remote_storage(second_request, nullptr);
+    });
+    first.join();
+    second.join();
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+
+    EXPECT_TRUE(observed_leader);
+    EXPECT_FALSE(leader_wait_timed_out.load());
+    ASSERT_FALSE(first_status.ok());
+    ASSERT_FALSE(second_status.ok());
+    EXPECT_EQ(first_status.to_string(), second_status.to_string());
+    EXPECT_EQ(1, mock_fs->opened_paths().size());
+    ASSIGN_OR_ABORT(auto first_intent, _tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
+    ASSIGN_OR_ABORT(auto second_intent, _tablet_mgr->get_txn_slog(second_target_tablet_id, _transaction_id));
+    EXPECT_EQ(ReplicationTxnStatePB::TXN_PREPARED, first_intent->op_replication().txn_meta().txn_state());
+    EXPECT_EQ(ReplicationTxnStatePB::TXN_PREPARED, second_intent->op_replication().txn_meta().txn_state());
+
+    const auto target_filename = gen_filename_from(_transaction_id, kBundleFilename);
+    const auto target_path = _tablet_mgr->segment_location(_target_tablet_id, target_filename);
+    EXPECT_FALSE(fs::path_exist(target_path));
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(_transaction_id);
+    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
+    std::vector<TxnInfoPB> txns{txn_info};
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), second_target_tablet_id, txns));
+
+    // Group::Do removes a failed flight, so retry after abort executes a fresh source read and copy.
+    ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr));
+    EXPECT_EQ(2, mock_fs->opened_paths().size());
+    ASSIGN_OR_ABORT(auto target_bundle_file, fs::new_random_access_file(target_path));
+    ASSIGN_OR_ABORT(auto target_bundle_size, target_bundle_file->get_size());
+    ASSERT_EQ(physical_bundle.size(), target_bundle_size);
+    std::string target_bundle(target_bundle_size, '\0');
+    ASSERT_OK(target_bundle_file->read_at_fully(0, target_bundle.data(), target_bundle.size()));
+    EXPECT_EQ(physical_bundle, target_bundle);
+
+    (void)update_master_info(original_master_info);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reject_column_id_conversion_for_bundled_segment) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    src_meta_v2->mutable_schema()->mutable_column(0)->set_unique_id(101);
+    auto* segment = src_meta_v2->add_rowsets()->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000010.dat");
+    segment->set_size(128);
+    segment->set_bundle_file_offset(256);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("column unique ids"));
+    EXPECT_TRUE(mock_fs->opened_paths().empty());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    std::vector<std::string> target_files;
+    ASSERT_OK(fs::get_children(lake::join_path(_test_dir, lake::kSegmentDirectoryName), &target_files));
+    EXPECT_TRUE(target_files.empty());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reject_encrypted_bundled_segment) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* segment = src_meta_v2->add_rowsets()->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000011.dat");
+    segment->set_size(128);
+    segment->set_bundle_file_offset(256);
+    segment->set_encryption_meta("source-slice-encryption-meta");
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("encrypted bundled segments"));
+    EXPECT_TRUE(mock_fs->opened_paths().empty());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    std::vector<std::string> target_files;
+    ASSERT_OK(fs::get_children(lake::join_path(_test_dir, lake::kSegmentDirectoryName), &target_files));
+    EXPECT_TRUE(target_files.empty());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reject_encrypted_source_segment_without_target_encryption) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* segment = src_meta_v2->add_rowsets()->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000015.dat");
+    segment->set_size(128);
+    segment->set_encryption_meta("source-encryption-meta");
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    BoolConfigGuard encryption_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("encrypted source files"));
+    EXPECT_TRUE(mock_fs->opened_paths().empty());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    std::vector<std::string> target_files;
+    ASSERT_OK(fs::get_children(lake::join_path(_test_dir, lake::kSegmentDirectoryName), &target_files));
+    EXPECT_TRUE(target_files.empty());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reject_encrypted_shared_delvec_without_target_encryption) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto& delvec = (*src_meta_v2->mutable_delvec_meta()->mutable_version_to_file())[2];
+    delvec.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000018.delvec");
+    delvec.set_shared(true);
+    delvec.set_encryption_meta("source-shared-delvec-encryption-meta");
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    BoolConfigGuard encryption_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("encrypted source files"));
+    EXPECT_TRUE(mock_fs->opened_paths().empty());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+    std::vector<std::string> target_files;
+    ASSERT_OK(fs::get_children(lake::join_path(_test_dir, lake::kSegmentDirectoryName), &target_files));
+    EXPECT_TRUE(target_files.empty());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, test_reject_shared_file_with_target_encryption) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* segment = src_meta_v2->add_rowsets()->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000013.dat");
+    segment->set_size(128);
+    segment->set_shared(true);
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    BoolConfigGuard encryption_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+    auto request = build_request(false /* with_full_path */);
+    request.__set_virtual_tablet_id(next_id());
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_NE(std::string::npos, status.message().find("shared files with transparent data encryption"));
+    EXPECT_TRUE(mock_fs->opened_paths().empty());
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
+}
+
 // Test Case 9: Sequential copy with mocked file operations - covers task lambda body,
 // segment download path, non-segment copy path, size tracking, encryption, slow log.
 TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_operations) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    mock_fs->set_stat_size(8192);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = mock_fs;
@@ -1414,6 +2510,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
     ASSERT_TRUE(update_master_info(info));
 
     auto request = build_request(false /* with_full_path */);
+    // Use a unique virtual shard so this test cannot reuse a Starlet filesystem cached by an
+    // earlier test that installed a different mock implementation.
+    request.__set_virtual_tablet_id(next_id());
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     (void)update_master_info(original_master_info);

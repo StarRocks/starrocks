@@ -39,7 +39,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ProtobufFile);
 
-    Status save(const ::google::protobuf::Message& message, bool sync = true);
+    Status save(const ::google::protobuf::Message& message, bool sync = true, bool must_create = false);
 
     Status load(::google::protobuf::Message* message, bool fill_cache = true);
 
@@ -74,7 +74,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
 
-    Status save(const ::google::protobuf::Message& message, bool sync = true);
+    Status save(const ::google::protobuf::Message& message, bool sync = true, bool must_create = false);
 
     Status load(::google::protobuf::Message* message, bool fill_cache = true);
 

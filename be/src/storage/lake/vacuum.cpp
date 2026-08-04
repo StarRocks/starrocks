@@ -29,6 +29,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "common/storage_path_constants.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -44,6 +45,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_retain_info.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/storage_cleanup_executor.h"
@@ -703,6 +705,54 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
             if (txn_id >= min_active_txn_id) {
                 return true;
             }
+            // A PREPARED slog also exists for successfully published replication transactions and
+            // may survive their asynchronous cleanup. Only an explicit abort marker authorizes
+            // deleting its manifest; otherwise use the original behavior and remove the old slog
+            // without touching data that can already be referenced by visible tablet metadata.
+            auto abort_marker_path = join_path(log_dir, txn_abort_filename(tablet_id, txn_id));
+            auto marker_status = fs->path_exists(abort_marker_path);
+            if (marker_status.is_not_found()) {
+                // Fall through and delete only the slog.
+            } else if (!marker_status.ok()) {
+                LOG(WARNING) << "Fail to check replication abort marker " << abort_marker_path << ": " << marker_status;
+                ret.update(marker_status);
+                return false;
+            } else {
+                // Keep both marker and slog after cleanup. If a CN could not acknowledge the abort
+                // fence, a late task can still rewrite one of these deterministic targets; keeping
+                // the manifest makes the next vacuum pass idempotently remove that late write.
+                auto slog_path = join_path(log_dir, entry.name);
+                TxnLogPB txn_slog;
+                ProtobufFileWithHeader slog_file(slog_path, fs, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                 /*allow_plain_protobuf_fallback=*/true);
+                auto load_status = slog_file.load(&txn_slog, false);
+                if (!load_status.ok()) {
+                    LOG(WARNING) << "Fail to load replication cleanup slog " << slog_path << ": " << load_status;
+                    ret.update(load_status);
+                    return false;
+                }
+                std::vector<std::string> cleanup_files;
+                if (txn_slog.has_op_replication() && txn_slog.op_replication().has_tablet_metadata()) {
+                    auto data_dir = join_path(root_location, kSegmentDirectoryName);
+                    for (const auto& file : txn_slog.op_replication().tablet_metadata().orphan_files()) {
+                        if (file.version() == kReplicationCleanupFileVersion) {
+                            cleanup_files.emplace_back(join_path(data_dir, file.name()));
+                        }
+                    }
+                }
+                auto cleanup_status = do_delete_files(fs.get(), cleanup_files);
+                if (!cleanup_status.ok()) {
+                    LOG(WARNING) << "Fail to consume replication cleanup slog " << slog_path << ": " << cleanup_status;
+                    ret.update(cleanup_status);
+                    return false;
+                }
+                *vacuumed_files += cleanup_files.size();
+                return true;
+            }
+        } else if (is_txn_abort(entry.name)) {
+            // Abort markers are removed synchronously by phase 2 only after every CN has drained.
+            // Retain a fallback marker indefinitely when a CN could not acknowledge the fence.
+            return true;
         } else if (is_combined_txn_log(entry.name)) {
             auto txn_id = parse_combined_txn_log_filename(entry.name);
             if (txn_id >= min_active_txn_id) {
@@ -1062,6 +1112,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
         } else if (is_txn_slog(name)) {
             auto [tablet_id, txn_id] = parse_txn_slog_filename(name);
+            if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+                return true;
+            }
+        } else if (is_txn_abort(name)) {
+            auto [tablet_id, txn_id] = parse_txn_abort_filename(name);
             if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
                 return true;
             }

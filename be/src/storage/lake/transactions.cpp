@@ -61,7 +61,21 @@ void release_publish_tablet(int64_t tablet_id) {
     tablet_txns.erase(tablet_id);
 }
 
-static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
+static void collect_replication_cleanup_files(TabletManager* tablet_mgr, int64_t tablet_id, const TxnLog& txn_log,
+                                              std::vector<std::string>* files_to_delete) {
+    if (!txn_log.has_op_replication() || !txn_log.op_replication().has_tablet_metadata()) {
+        return;
+    }
+    // Shared-data replication stores only newly planned target files in this sentinel manifest;
+    // target-baseline files reused by the transaction never appear here.
+    for (const auto& file : txn_log.op_replication().tablet_metadata().orphan_files()) {
+        if (file.version() == kReplicationCleanupFileVersion) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, file.name()));
+        }
+    }
+}
+
+static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, bool aborting,
                                         std::vector<std::string>* files_to_delete) {
     auto slog_path = tablet_mgr->txn_slog_location(tablet_id, txn_id);
     auto txn_slog_or = tablet_mgr->get_txn_log(slog_path, false);
@@ -77,9 +91,17 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
         return;
     }
 
-    run_clear_task_async([txn_slog = std::move(txn_slog_or.value())]() {
-        (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
-    });
+    auto txn_slog = std::move(txn_slog_or.value());
+    if (aborting) {
+        collect_replication_cleanup_files(tablet_mgr, tablet_id, *txn_slog, files_to_delete);
+    }
+    // A shared-data PREPARED slog has no remote BE snapshot to release; it exists solely as the
+    // durable data-file cleanup intent.
+    if (!txn_slog->op_replication().txn_meta().src_snapshot_path().empty()) {
+        run_clear_task_async([txn_slog = std::move(txn_slog)]() {
+            (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
+        });
+    }
 
     tablet_mgr->metacache()->erase(slog_path);
     files_to_delete->emplace_back(std::move(slog_path));
@@ -495,7 +517,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     return new_version_metadata_or_error(txn_log_st.status());
                 }
             } // close: if (txn_log_st.status().is_not_found())
-        }     // close: else (admin force-skip vs normal path)
+        } // close: else (admin force-skip vs normal path)
 
         if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_info=" << tablet_info
@@ -610,7 +632,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
             // Clear remote snapshot and slog for replication txn
             if (txn_log->has_op_replication()) {
-                clear_remote_snapshot_async(tablet_mgr, tablet_id_in_txn_log, txns[i].txn_id(), &files_to_delete);
+                clear_remote_snapshot_async(tablet_mgr, tablet_id_in_txn_log, txns[i].txn_id(), false,
+                                            &files_to_delete);
             }
         }
     }
@@ -870,6 +893,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             }
             collect_vi_files(op_write.rowset());
         }
+        collect_replication_cleanup_files(tablet_mgr, tablet_id, txn_log, files_to_delete);
     }
 
     // Multi-statement transactions cache the .log under the 4-segment key; use the
@@ -891,7 +915,7 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
 
         // Clear remote snapshot and slog for replication txn
         if (txn_type == TxnTypePB::TXN_REPLICATION) {
-            clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
+            clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, true, &files_to_delete);
         }
 
         if (txns[i].load_ids_size() > 0) {
@@ -939,6 +963,74 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
     }
 
     delete_files_async(std::move(files_to_delete));
+}
+
+Status abort_replication_txn_sync(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns) {
+    for (const auto& txn : txns) {
+        if (txn.txn_type() != TxnTypePB::TXN_REPLICATION) {
+            continue;
+        }
+
+        const auto txn_id = txn.txn_id();
+        const auto slog_path = tablet_mgr->txn_slog_location(tablet_id, txn_id);
+        const auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+        const auto abort_marker_path = tablet_mgr->txn_abort_location(tablet_id, txn_id);
+        std::vector<std::string> data_files;
+        bool has_slog = false;
+        bool has_txn_log = false;
+        ASSIGN_OR_RETURN(bool has_abort_marker, tablet_mgr->replication_abort_marker_exists(tablet_id, txn_id));
+        TxnLogPtr txn_slog;
+
+        auto txn_slog_or = tablet_mgr->get_txn_log(slog_path, false);
+        if (txn_slog_or.ok()) {
+            has_slog = true;
+            txn_slog = std::move(txn_slog_or).value();
+            collect_replication_cleanup_files(tablet_mgr, tablet_id, *txn_slog, &data_files);
+        } else if (!txn_slog_or.status().is_not_found()) {
+            return txn_slog_or.status();
+        }
+
+        // The final log may already exist when abort races with task completion. Its op_writes
+        // cover shared-nothing replication, while shared-data cleanup ownership comes exclusively
+        // from the sentinel manifest and therefore never includes target-baseline files.
+        auto txn_log_or = tablet_mgr->get_txn_log(txn_log_path, false);
+        if (txn_log_or.ok()) {
+            has_txn_log = true;
+            collect_files_in_log(tablet_mgr, *txn_log_or.value(), &data_files);
+        } else if (!txn_log_or.status().is_not_found()) {
+            return txn_log_or.status();
+        }
+
+        Status injected_delete_status;
+        TEST_SYNC_POINT_CALLBACK("transactions::abort_replication_txn_sync:delete_data", &injected_delete_status);
+        RETURN_IF_ERROR(injected_delete_status);
+        RETURN_IF_ERROR(delete_files_callable(std::move(data_files)).get());
+
+        if (txn_slog != nullptr && txn_slog->has_op_replication() &&
+            !txn_slog->op_replication().txn_meta().src_snapshot_path().empty()) {
+            run_clear_task_async([txn_slog = std::move(txn_slog)]() {
+                (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
+            });
+        }
+
+        // Keep the PREPARED slog until both data and the publishable final log are gone. If either
+        // deletion fails, the next CN (or vacuum_txn_log) can reload the same immutable manifest.
+        if (has_txn_log) {
+            RETURN_IF_ERROR(delete_files_callable({txn_log_path}).get());
+            tablet_mgr->metacache()->erase(txn_log_path);
+        }
+        if (has_slog) {
+            RETURN_IF_ERROR(delete_files_callable({slog_path}).get());
+            tablet_mgr->metacache()->erase(slog_path);
+        }
+        // Every CN has acknowledged the phase-1 drain before FE issues phase 2, so the shared abort
+        // marker is no longer needed only after data, final log, and cleanup intent are all gone.
+        if (has_abort_marker) {
+            RETURN_IF_ERROR(delete_files_callable({abort_marker_path}).get());
+        }
+        tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_id);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

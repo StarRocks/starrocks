@@ -79,6 +79,10 @@ inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("{:016X}_{:016X}.slog", tablet_id, txn_id);
 }
 
+inline std::string txn_abort_filename(int64_t tablet_id, int64_t txn_id) {
+    return fmt::format("{:016X}_{:016X}.abort", tablet_id, txn_id);
+}
+
 inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
@@ -173,7 +177,14 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
     // sst file: uuid.sst
     if (extension == ".sst") {
-        return std::string(file_name.substr(0, dot_pos));
+        std::string_view basename = file_name.substr(0, dot_pos);
+        // Replicated SSTs use the same txn-prefixed form as other lake files so an abort cleanup
+        // manifest can never claim a sibling tablet's or retained snapshot's uuid.sst object.
+        constexpr size_t TXN_ID_LENGTH = 16;
+        if (basename.size() == TXN_ID_LENGTH + 1 + 36 && basename[TXN_ID_LENGTH] == '_') {
+            return std::string(basename.substr(TXN_ID_LENGTH + 1));
+        }
+        return std::string(basename);
     }
 
     // normal case：{:016x}_uuid.ext, with txn_id (16bit) as prefix
@@ -207,8 +218,11 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 // Helper function to generate a new filename from old filename, which is used in shared-data cross cluster migration
 inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_name) {
     if (is_sst(old_file_name)) {
-        // sst file's name will keep no change,
-        return std::string(old_file_name);
+        auto uuid = extract_uuid_from(old_file_name);
+        if (UNLIKELY(uuid.empty())) {
+            return {};
+        }
+        return fmt::format("{:016x}_{}.sst", txn_id, uuid);
     }
 
     if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
@@ -280,6 +294,16 @@ inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_
 }
 
 inline std::pair<int64_t, int64_t> parse_txn_slog_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    StringParser::ParseResult res;
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 17, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return {tablet_id, txn_id};
+}
+
+inline std::pair<int64_t, int64_t> parse_txn_abort_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     StringParser::ParseResult res;
     auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);

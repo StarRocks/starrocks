@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/bthreads/single_flight.h"
 #include "common/status.h"
 #include "fs/encryption.h"
 #include "gen_cpp/AgentService_types.h"
@@ -53,7 +54,8 @@ public:
     }
 
     Status replicate_lake_remote_storage(const TReplicateSnapshotRequest& request,
-                                         ThreadPool* replicate_file_thread_pool);
+                                         ThreadPool* replicate_file_thread_pool,
+                                         std::function<bool()> is_txn_aborted = {});
 
     StatusOr<TabletMetadataPtr> build_source_tablet_meta(int64_t src_tablet_id, int64_t version,
                                                          const std::string& meta_dir,
@@ -113,6 +115,10 @@ public:
 
 private:
     TabletManager* _tablet_manager;
+    // File bundling and tablet split can make several tablet replication tasks reference the
+    // same physical target object. FE co-locates those tasks on one CN; this group then makes
+    // the actual copy process-wide single-flight on that CN.
+    bthreads::singleflight::Group<std::string, StatusOr<size_t>> _shared_file_copy_group;
 #ifdef USE_STAROS
     // Used for non-S3 storage types to construct relative paths
     // S3 storage type uses full path provided by FE instead

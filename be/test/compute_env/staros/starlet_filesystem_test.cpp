@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -570,6 +571,34 @@ public:
         set_staros_worker_for_test(nullptr);
     }
 };
+
+class CaptureWriteOptionsStarletFileSystem : public MockStarletFileSystem {
+public:
+    absl::StatusOr<std::unique_ptr<staros::starlet::fslib::WritableFile>> create(
+            std::string_view path, const staros::starlet::fslib::WriteOptions& opts) override {
+        overwrite_options.push_back(opts.overwrite);
+        return absl::InternalError("captured write options");
+    }
+
+    std::vector<bool> overwrite_options;
+};
+
+TEST_F(NewFsStarletTest, test_writable_file_preserves_atomic_must_create) {
+    auto mock_fs = std::make_shared<CaptureWriteOptionsStarletFileSystem>();
+    constexpr int64_t kShardId = 99997;
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto fs = new_fs_starlet(kShardId, false);
+    WritableFileOptions must_create{.mode = FileSystem::MUST_CREATE};
+    EXPECT_FALSE(fs->new_writable_file(must_create, fmt::format("staros://{}/intent.slog", kShardId)).ok());
+    WritableFileOptions overwrite{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    EXPECT_FALSE(fs->new_writable_file(overwrite, fmt::format("staros://{}/final.log", kShardId)).ok());
+
+    EXPECT_EQ((std::vector<bool>{false, true}), mock_fs->overwrite_options);
+}
 
 // Minimal mock InputStream whose only useful operation is `get_io_stats()` —
 // returns a pre-populated `IOStats` with distinct sentinel values per field, so
