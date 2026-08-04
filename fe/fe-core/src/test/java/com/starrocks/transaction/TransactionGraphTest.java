@@ -203,6 +203,66 @@ public class TransactionGraphTest {
     }
 
     @Test
+    public void testGetTxnsWithTxnDependencyBatchMultiTable() {
+        // CDC-like chain: every txn writes the same multi-table set
+        TransactionGraph graph = new TransactionGraph();
+        for (int i = 1; i <= 6; i++) {
+            graph.add(i, Lists.newArrayList(1L, 2L, 3L));
+        }
+        List<Long> batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L), batch);
+        // maxBatchSize caps the batch
+        batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 4, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L), batch);
+
+        // diamond: txn1 {1,2} -> txn2 {1} / txn3 {2} -> txn4 {1,2}.
+        // txn2 and txn3 are independent of each other, so only one of them may chain onto
+        // txn1; the other is left out to publish in parallel after the batch finishes.
+        TransactionGraph graph2 = new TransactionGraph();
+        graph2.add(1, Lists.newArrayList(1L, 2L));
+        graph2.add(2, Lists.newArrayList(1L));
+        graph2.add(3, Lists.newArrayList(2L));
+        graph2.add(4, Lists.newArrayList(1L, 2L));
+        batch = graph2.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L), batch);
+
+        // a txn introducing a new table still joins when it extends the chain; a txn
+        // independent of the chain tail does not, even though its dependencies are in
+        // the batch
+        TransactionGraph graph3 = new TransactionGraph();
+        graph3.add(1, Lists.newArrayList(1L, 2L));
+        graph3.add(2, Lists.newArrayList(1L, 3L)); // table 3 is new, depends on txn1 only
+        graph3.add(3, Lists.newArrayList(2L));     // depends on txn1 only, independent of txn2
+        graph3.add(4, Lists.newArrayList(1L));     // depends on txn2, extends the chain
+        batch = graph3.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 4L), batch);
+
+        // single-table head: a multi-table successor joins as well
+        TransactionGraph graph4 = new TransactionGraph();
+        graph4.add(1, Lists.newArrayList(1L));
+        graph4.add(2, Lists.newArrayList(1L));
+        graph4.add(3, Lists.newArrayList(1L, 2L));
+        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L, 2L, 3L), batch);
+
+        // minBatchSize not reached -> empty result
+        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(4, 10, 1);
+        assertEquals(0, batch.size());
+
+        // a txn depending on another dependency-free head outside the batch must not join:
+        // publishing it in this batch would jump over that txn
+        TransactionGraph graph5 = new TransactionGraph();
+        graph5.add(1, Lists.newArrayList(9L));     // independent head on table 9
+        graph5.add(2, Lists.newArrayList(1L, 2L)); // head of the walk
+        graph5.add(3, Lists.newArrayList(2L, 9L)); // depends on txn2 AND txn1 (outside)
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 2);
+        assertEquals(Lists.newArrayList(2L), batch);
+        // walking from txn1 must not pull txn3 either (txn2 outside that batch)
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        assertEquals(Lists.newArrayList(1L), batch);
+    }
+
+    @Test
     public void testPrintGraph() {
         TransactionGraph graph = new TransactionGraph();
         graph.add(1, Lists.newArrayList(1L));

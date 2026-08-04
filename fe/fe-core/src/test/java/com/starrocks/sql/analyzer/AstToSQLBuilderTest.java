@@ -302,6 +302,35 @@ public class AstToSQLBuilderTest {
         Assertions.assertEquals("INSERT INTO `t0` (`v1`,`v2`) VALUES(?, ?)", AstToSQLBuilder.toDigest(stmt));
     }
 
+    /** Deparses in the production shape: the deparser is only used on an analyzed AST. */
+    private static String deparseAnalyzed(String sql) {
+        StatementBase stmt = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Analyzer.analyze(stmt, AnalyzeTestUtil.getConnectContext());
+        return AstToSQLBuilder.toSQL(stmt);
+    }
+
+    /** What a view persists is the deparsed text, so that text must analyze again. */
+    private static void assertReanalyzable(String sql) {
+        String out = deparseAnalyzed(sql);
+        StatementBase again = SqlParser.parse(out, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Assertions.assertDoesNotThrow(() -> Analyzer.analyze(again, AnalyzeTestUtil.getConnectContext()),
+                () -> "deparsed form no longer analyzes: " + out);
+    }
+
+    @Test
+    public void testUntypedArrayLiteralKeepsNoTypePrefix() {
+        // ARRAY<NULL> has no printable form, so the prefix used to come out as the BOOLEAN stand-in. That
+        // froze a type the literal never had, and the frozen type then failed function overload matching.
+        Assertions.assertTrue(deparseAnalyzed("select [NULL] from t0").contains("[NULL]"));
+        Assertions.assertFalse(deparseAnalyzed("select [NULL] from t0").contains("ARRAY<BOOLEAN>"));
+        assertReanalyzable("select array_contains_all(v3, [NULL]) from tarray");
+
+        // A literal that does carry an element type still prints it, or the type would be lost on the
+        // way back in.
+        Assertions.assertTrue(deparseAnalyzed("select [1, 2] from t0").contains("ARRAY<TINYINT>[1, 2]"));
+        assertReanalyzable("select [1, 2] from t0");
+        assertReanalyzable("select array_length([]) from t0");
+    }
     @Test
     public void testTemporaryPartitionQualifierIsPreserved() throws Exception {
         // Temporary and formal partitions are separate namespaces. Dropping TEMPORARY on the way out

@@ -157,6 +157,52 @@ TEST_F(BlockCompressionTest, single) {
     test_single_slice(starrocks::CompressionTypePB::LZ4_HADOOP);
 }
 
+// A ColumnMetaPB that never set compression_level reads back 0 (segment.proto declares no default
+// sentinel). ZSTD must fall back to its default level rather than handing back a null codec, which
+// callers such as PageIO interpret as "write the page body uncompressed".
+TEST_F(BlockCompressionTest, zstd_unset_compression_level_is_not_no_compression) {
+    for (int level : {0, -1, -5, 23, 100}) {
+        const BlockCompressionCodec* codec = nullptr;
+        ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::ZSTD, &codec, level).ok())
+                << "level=" << level;
+        ASSERT_NE(nullptr, codec) << "level=" << level;
+    }
+
+    // In-range levels still get the level-specific instance.
+    for (int level : {1, 3, 22}) {
+        const BlockCompressionCodec* codec = nullptr;
+        ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::ZSTD, &codec, level).ok())
+                << "level=" << level;
+        ASSERT_NE(nullptr, codec) << "level=" << level;
+    }
+
+    // NO_COMPRESSION is the only type allowed to yield a null codec.
+    const BlockCompressionCodec* none_codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::NO_COMPRESSION, &none_codec).ok());
+    ASSERT_EQ(nullptr, none_codec);
+}
+
+// A page written with an unset level must round-trip as genuinely compressed data.
+TEST_F(BlockCompressionTest, zstd_unset_compression_level_actually_compresses) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::ZSTD, &codec, 0).ok());
+    ASSERT_NE(nullptr, codec);
+
+    // Highly repetitive input, so a working codec must shrink it substantially.
+    std::string orig(64 * 1024, 'a');
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(orig.size()));
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(orig, &compressed_slice).ok());
+    ASSERT_LT(compressed_slice.get_size(), orig.size() / 10);
+
+    std::string uncompressed;
+    uncompressed.resize(orig.size());
+    Slice uncompressed_slice(uncompressed);
+    ASSERT_TRUE(codec->decompress(compressed_slice, &uncompressed_slice).ok());
+    ASSERT_EQ(orig, uncompressed_slice.to_string());
+}
+
 TEST_F(BlockCompressionTest, lz4_explicit_options) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::LZ4, &codec).ok());

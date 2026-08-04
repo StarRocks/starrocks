@@ -255,6 +255,7 @@
                         "data_source/catalog/benchmark_catalog",
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
+                        "data_source/catalog/fluss_catalog",
                         "data_source/catalog/unified_catalog",
                         "data_source/catalog/maxcompute_catalog",
                         "data_source/catalog/kudu_catalog",

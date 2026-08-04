@@ -34,6 +34,7 @@ import com.starrocks.common.util.UnionFind;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -1155,6 +1156,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
+            // Condition 1.2: an aggregate-state column stores a serialized aggregate state, not the
+            // values its type describes. The BE reads it through the agg state descriptor rather than
+            // through the column type, so it would decode dictionary codes as if they were still the
+            // original values.
+            if (isAggStateColumn(scan, column)) {
+                continue;
+            }
+
             // If it's not an extended column, we have to check the cardinality of the column.
             // TODO(murphy) support collect cardinality of extended column
             if (!checkExtendedColumn(scan, column)) {
@@ -1198,6 +1207,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    private boolean isAggStateColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        Column columnMeta = scan.getColRefToColumnMetaMap().get(column);
+        return columnMeta != null && columnMeta.getAggregationType() == AggregateType.AGG_STATE_UNION;
     }
 
     private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {

@@ -47,18 +47,6 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 
 每个表仅支持一个向量索引。
 
-### 前提条件
-
-在创建向量索引之前，必须通过设置FE配置项`enable_experimental_vector`为`true`来启用它。
-
-执行以下语句以动态启用：
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-要永久启用它，必须将`enable_experimental_vector = true`添加到FE配置文件`fe.conf`中并重启FE。
-
 ### 创建向量索引
 
 本教程在创建表时创建向量索引。您也可以将向量索引附加到现有表中。有关详细说明，请参见[附加向量索引](#append-vector-index)。
@@ -270,8 +258,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 ```
 
 ### 使用向量索引执行ANNS
-
-在运行向量搜索之前，请确保FE配置项`enable_experimental_vector`设置为`true`。
 
 #### 基于向量索引的查询要求
 

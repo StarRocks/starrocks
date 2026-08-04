@@ -431,7 +431,10 @@ public final class ExprToThrift {
 
         @Override
         public Void visitSubqueryExpr(Subquery node, TExprNode msg) {
-            return null;
+            // A subquery has to be rewritten into a join/apply by the optimizer. Serializing it would produce a
+            // TExprNode without a node_type, which the BE rejects with an unhelpful thrift error.
+            throw new StarRocksPlannerException(
+                    "Subquery needs to be rewritten before it can be sent to the backend.", ErrorType.INTERNAL_ERROR);
         }
 
         @Override

@@ -24,12 +24,31 @@ IF shouldTrigger("statistic_executor_collect_statistics")
 DO sleep(10000);
 ENDRULE
 
-RULE bdb_write_jitter
+# Only the predicate overload is hooked: the production write path (JournalWriter) calls it
+# directly, and the no-arg batchWriteCommit() delegates to it - hooking both would double the
+# injected delay for no-arg callers.
+RULE bdb_write_jitter_with_retry_predicate
 CLASS com.starrocks.journal.bdbje.BDBJEJournal
-METHOD batchWriteCommit()
+METHOD batchWriteCommit(java.util.function.BooleanSupplier)
 HELPER com.starrocks.failpoint.FailPointHelper
 IF shouldTrigger("bdb_write_jitter")
 DO sleep(10000);
+ENDRULE
+
+# Hangs the in-memory apply of a CREATE DATABASE while the leader WAL fence still counts it in-flight
+# but the fence lock is not held (unprotectCreateDb runs in the EditLog WALApplier.apply, after the
+# journal commit), so a concurrent demotion's EditLog.awaitWalDrained sees inFlight>0 and times out ->
+# deterministic drain-timeout self-fence (TC-HA-FP-02). The sleep must exceed the TEST's (small)
+# leader_demotion_drain_timeout_sec, not the 180s default. CAVEAT: unprotectCreateDb is also on the
+# replay path (replayCreateDb) and thus on the checkpoint thread's image replay - while this
+# failpoint is armed, a checkpoint or follower replaying a CREATE DATABASE stalls 20s too. Only arm
+# it for the duration of the drain-timeout test.
+RULE wal_apply_hang
+CLASS com.starrocks.server.LocalMetastore
+METHOD unprotectCreateDb
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("wal_apply_hang")
+DO sleep(20000);
 ENDRULE
 
 # Thrift server accept exception

@@ -1,0 +1,38 @@
+name: CD SCAN PENDING PRS
+
+# Reverse-sync ordering release loop. Mirror of celerdata-enterprise's
+# sync-scan-pending.yml, direction reversed (runs on StarRocks; releases pending
+# cd-sync PRs once their file-overlapping predecessors merge). Triggered on a
+# 30-min cron and by cd-repo-sync.yml (workflow_dispatch after each executor run).
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: PENDING-SCAN-CD
+  cancel-in-progress: false
+
+jobs:
+
+  scan-pending-cd-pr:
+    name: SCAN PENDING CD-SYNC PRS
+    runs-on: [self-hosted, sync]
+    if: github.repository == 'StarRocks/starrocks'
+    steps:
+      - name: scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          cd /var/lib/elastic-service
+          git pull || true
+          python3 lib/pr_sequence_checker_reverse.py scan

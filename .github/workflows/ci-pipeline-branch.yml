@@ -75,20 +75,13 @@ jobs:
         if: github.base_ref != 'main'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-          ref: refs/pull/${{ github.event.pull_request.number }}/head
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
-          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
+          fetch-depth: 1
+          ref: refs/heads/${{ github.base_ref }}
+          sparse-checkout: .github
 
       - name: Branch Access Check
         id: branch_access_check
-        if: steps.checkout_pr.outcome =='success'
+        if: steps.checkout_code.outcome == 'success'
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |
@@ -355,8 +348,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.rocky9_image_cache_id }}
-      LINUX_DISTRO: rocky9
     steps:
       - name: BRANCH INFO
         id: branch
@@ -371,10 +362,10 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID
@@ -500,8 +491,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
-      LINUX_DISTRO: ubuntu
     steps:
       - name: clean
         run: |
@@ -522,11 +511,12 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}"
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID

@@ -47,18 +47,6 @@ HNSW offers both efficiency and precision, making it adaptable to various data a
 
 Each table supports only one vector index.
 
-### Prerequisites
-
-Before creating vector indexes, you must enable it by setting the FE configuration item `enable_experimental_vector` to `true`.
-
-Execute the following statement to enable it dynamically:
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-To enable it permanently, you must add `enable_experimental_vector = true` to the FE configuration file `fe.conf` and restart FE.
-
 ### Create vector index
 
 This tutorial creates vector indexes while creating tables. You can also append vector indexes to an existing table. See [Append vector index](#append-vector-index) for detailed instructions.
@@ -270,8 +258,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 ```
 
 ### Perform ANNS with vector indexes
-
-Before running a vector search, make sure the FE configuration item `enable_experimental_vector` is set to `true`.
 
 #### Requirements for vector index-based queries
 

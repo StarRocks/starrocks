@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：行
 - 是否动态：是
-- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。此行数包含 Segment 行数以及 del 文件中记录的 tombstone（删除）行数，因此产生少量大型 del 文件的删除密集型负载也会计入该阈值；旧版本写入、未记录行数的 del 文件按 0 计。
 - 引入版本：-
 
 ### download_buffer_size

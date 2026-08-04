@@ -25,6 +25,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,9 +65,10 @@ public class TransactionStateBatch implements Writable {
     // the partitionId will not be the same,
     // and transactionStates is read-only which will not be changed
     public void setCompactionScore(long tableId, long partitionId, Quantiles quantiles) {
+        // commitInfo can be null in a multi-table batch when a txn does not write this table
         this.transactionStates.stream()
                 .map(transactionState -> transactionState.getTableCommitInfo(tableId))
-                .filter(commitInfo -> commitInfo.getPartitionCommitInfo(partitionId) != null)
+                .filter(commitInfo -> commitInfo != null && commitInfo.getPartitionCommitInfo(partitionId) != null)
                 .forEach(commitInfo -> commitInfo.getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
     }
 
@@ -144,14 +146,15 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.stream().map(TransactionState::getTransactionId).collect(Collectors.toList());
     }
 
-    // all transactionState in batch have the same table and return the tableId
-    public long getTableId() {
-        if (!transactionStates.isEmpty()) {
-            List<Long> tableIdList = transactionStates.get(0).getTableIdList();
-            assert tableIdList.size() == 1;
-            return tableIdList.get(0);
+    // Union of table ids across all transactions in the batch, in first-appearance order.
+    // For a single-table batch this is a singleton list; for a multi-table batch
+    // (lake_enable_batch_publish_multi_table) table sets may differ across transactions.
+    public List<Long> getTableIdList() {
+        Set<Long> tableIds = new LinkedHashSet<>();
+        for (TransactionState state : transactionStates) {
+            tableIds.addAll(state.getTableIdList());
         }
-        return -1;
+        return new ArrayList<>(tableIds);
     }
 
     public long size() {

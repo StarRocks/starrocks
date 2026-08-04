@@ -17,6 +17,7 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
 #include <gflags/gflags_declare.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
@@ -30,6 +31,7 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -44,6 +46,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/monotime.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_thread_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -68,6 +71,15 @@ DECLARE_int32(thread_inject_start_latency_ms);
 namespace starrocks {
 
 static const char* kDefaultPoolName = "test";
+
+// Our bvar lacks Variable::find_exposed; describe_exposed returns the Adder value.
+static int64_t threadpool_task_exception_total_value() {
+    const std::string desc = bvar::Variable::describe_exposed("threadpool_task_exception_total");
+    if (desc.empty()) {
+        return -1;
+    }
+    return std::stoll(desc);
+}
 
 class ThreadPoolTest : public ::testing::Test {
 public:
@@ -1135,6 +1147,88 @@ TEST_F(ThreadPoolTest, TestSubmitFailureDoesNotCauseUseAfterFree) {
     // on the destroyed latch). With the fix, we reach here safely.
 
     _pool->wait();
+    _pool->shutdown();
+}
+
+// With enable_threadpool_catch_task_exception turned on, a task that throws must not take
+// the worker thread down: the pool keeps draining its queue and later tasks still run.
+//
+// The default (false) path cannot be covered here: without an enclosing catch clause the
+// exception finds no handler and terminates the whole test process at the throw point.
+// Verifying it would need a death test, which is unreliable in a process that already owns
+// pool threads, so the off path is left to the compile-time structure and to review.
+TEST_F(ThreadPoolTest, TestTaskExceptionIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    // Serialized on a single worker thread, so the throwing task is guaranteed to run first.
+    ASSERT_TRUE(_pool->submit_func([]() { throw std::runtime_error("injected in threadpool test"); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    // The worker survived the throw and kept executing the queue.
+    ASSERT_EQ(2, ran_after_throw.load());
+    ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+TEST_F(ThreadPoolTest, TestTaskBadAllocIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    ASSERT_TRUE(_pool->submit_func([]() { throw std::bad_alloc(); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+TEST_F(ThreadPoolTest, TestTaskUnknownExceptionIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    // Non-std::exception types take the catch(...) branch.
+    ASSERT_TRUE(_pool->submit_func([]() { throw 42; }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
     _pool->shutdown();
 }
 

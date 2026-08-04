@@ -207,12 +207,27 @@ private:
 
     SegmentFooterPB _footer;
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
+    // Built in addition to _index_builder when _full_sort_key_index is on. Stores the full,
+    // untruncated, all-sort-column order-preserving sort key index in a separate page (footer
+    // field 11). Shares the legacy builder's block geometry (same SeekTuple, same block-boundary
+    // test), so both indexes have one entry per block with matching num_items / rows-per-block.
+    std::unique_ptr<ShortKeyIndexBuilder> _full_sort_key_index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
     VariantTuple _sort_key_min;
     VariantTuple _sort_key_max;
+
+    // Snapshot of config::enable_full_sort_key_index && is_full_sort_key_encodable(...) (see
+    // storage/full_sort_key_codec.h) for the tablet schema's sort key columns, captured once at
+    // construction (in the constructor init list). Read exactly once so a mid-write mutable-config
+    // toggle cannot mix encodings within a single segment. The codec-support check keeps this false
+    // whenever a sort key column has no registered KeyCoder (e.g. FLOAT/DOUBLE/JSON/complex),
+    // forcing the legacy short-key index + metadata sort-key samples for such sort keys even when
+    // the config is on. When true, the short key index stores the full untruncated sort key (all
+    // sort columns) and metadata sort-key samples are not collected.
+    bool _full_sort_key_index = false;
 
     // Sort-key sampler state. Armed at most once, on the first init() call
     // with has_key=true and non-empty _sort_column_indexes. Preserved across

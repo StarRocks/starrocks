@@ -684,6 +684,10 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // A column addresses its bytes with uint32 offsets, so a chunk wider than that cannot be
+    // carried through to apply. Fail the load here, where the statement can still be retried with
+    // less data per batch, rather than let it commit and leave apply to fail on every retry.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(chunk, "load chunk", _tablet_id, _txn_id));
 
     // Fast-fail if writer has been cancelled.
     auto cancel_st = current_cancel_status();
@@ -875,6 +879,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             for (size_t i = 0; i < del_idx; ++i) {
                 op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
             }
+        }
+        // Carry the per-del tombstone count (parallel to dels_meta, index by del_id). Unlike
+        // del_op_offsets this has no downgrade-safety concern: a pre-fix reader simply ignores
+        // DelfileWithRowsetId.num_rows, so it is emitted unconditionally.
+        const auto& del_num_rows = _tablet_writer->del_num_rows();
+        for (size_t i = 0; i < del_idx; ++i) {
+            op_write->add_del_num_rows(i < del_num_rows.size() ? del_num_rows[i] : 0);
         }
     }
     for (const auto& sst : _tablet_writer->ssts()) {
