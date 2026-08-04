@@ -59,7 +59,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -570,7 +569,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         try {
             Config.enable_use_table_sample_collect_statistics = false;
             sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                    db, olapTable, 0.1, 64L, stringMcv, "v2", Type.VARCHAR, false);
+                    db, olapTable, 0.1, 64L, stringMcv, "v2", Type.VARCHAR);
             Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                             "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                             "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +

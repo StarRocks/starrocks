@@ -209,6 +209,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         addMcvToContext(context, mostCommonValues);
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
 
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
         context.put("totalRows", Config.histogram_max_sample_row_count);
 
         // TODO: use it by default and remove this switch
