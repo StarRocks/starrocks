@@ -128,17 +128,10 @@ public:
     T* allocate(size_t n) {
         DCHECK(_counter != nullptr);
         T* result = static_cast<T*>(malloc(n * sizeof(T)));
-        // in ut mode, mem_hook won't take effect and tls_delta_memory will always be 0,
-        // we use logical size for counting,
-        // otherwise, we use the actual size allocated by memory allocator.
-#ifndef BE_TEST
-        *_counter += tls_delta_memory;
-#else
-        *_counter += (result != nullptr) ? n * sizeof(T) : 0;
-#endif
         if (UNLIKELY(result == nullptr)) {
             throw std::bad_alloc();
         }
+        *_counter += _memory_delta_or(static_cast<int64_t>(n * sizeof(T)));
 
         return result;
     }
@@ -146,11 +139,7 @@ public:
     void deallocate(T* ptr, size_t n) {
         DCHECK(_counter != nullptr);
         free(ptr);
-#ifndef BE_TEST
-        *_counter += tls_delta_memory;
-#else
-        *_counter -= n * sizeof(T);
-#endif
+        *_counter += _memory_delta_or(-static_cast<int64_t>(n * sizeof(T)));
     }
 
     STLCountingAllocator& operator=(const STLCountingAllocator& rhs) = default;
@@ -169,6 +158,14 @@ public:
     void swap(STLCountingAllocator& rhs) {}
 
     int64_t* _counter = nullptr;
+
+private:
+    // malloc hooks publish the allocator's actual byte delta through tls_delta_memory. The hooks are disabled in
+    // BE_TEST, macOS and sanitizer builds, where the delta remains zero and the requested logical size is the best
+    // available accounting value.
+    static int64_t _memory_delta_or(int64_t logical_delta) {
+        return tls_delta_memory != 0 ? tls_delta_memory : logical_delta;
+    }
 };
 template <class T>
 void swap(STLCountingAllocator<T>& lhs, STLCountingAllocator<T>& rhs) {

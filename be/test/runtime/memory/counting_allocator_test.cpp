@@ -80,6 +80,20 @@ TEST(STLCountingAllocatorTest, normal) {
     ASSERT_EQ(memory_usage, 0);
 }
 
+TEST(STLCountingAllocatorTest, logical_size_when_malloc_hook_delta_is_unavailable) {
+    int64_t memory_usage = 0;
+    tls_delta_memory = 0;
+    STLCountingAllocator<int64_t> allocator(&memory_usage);
+
+    constexpr size_t kNumElements = 7;
+    auto* ptr = allocator.allocate(kNumElements);
+    ASSERT_NE(ptr, nullptr);
+    ASSERT_EQ(kNumElements * sizeof(int64_t), memory_usage);
+
+    allocator.deallocate(ptr, kNumElements);
+    ASSERT_EQ(0, memory_usage);
+}
+
 TEST(STLCountingAllocatorTest, btree) {
     using MapValue = std::pair<const int, int>;
     using MapAllocator = STLCountingAllocator<MapValue>;
