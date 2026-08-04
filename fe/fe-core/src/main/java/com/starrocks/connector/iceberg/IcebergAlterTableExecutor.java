@@ -318,7 +318,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
     @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
-        icebergCatalog.renameTable(context, tableName.getDb(), tableName.getTbl(), clause.getNewTableName());
+        ConnectContext ctx = this.context != null ? this.context : ConnectContext.get();
+        icebergCatalog.renameTable(ctx, tableName.getDb(), tableName.getTbl(), clause.getNewTableName());
         return null;
     }
 
