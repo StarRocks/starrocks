@@ -121,4 +121,109 @@ public class Log4jConfigTest {
         Assertions.assertEquals("main", jsonObject.get("thread.name").getAsString());
         Assertions.assertEquals(logMessage, jsonObject.get("message").getAsString());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testJulToSlf4jBridge() throws IOException {
+        Config.sys_log_format = "plaintext";
+        Config.sys_log_to_console = true;
+        Config.sys_log_level = "INFO";
+
+        Log4jConfig.initLogging();
+
+        PrintStream oldErr = System.err;
+        ByteArrayOutputStream byteOs = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(byteOs, true));
+
+        try {
+            String julMessage = "This is a message from java.util.logging";
+            java.util.logging.Logger julLogger = java.util.logging.Logger.getLogger("com.starrocks.test.jul");
+            julLogger.info(julMessage);
+
+            String capturedOutput = byteOs.toString(Charset.defaultCharset());
+
+            Assertions.assertTrue(capturedOutput.contains(julMessage),
+                    "The JUL log message should be captured by Log4j2. Captured: " + capturedOutput);
+            Assertions.assertTrue(capturedOutput.contains("INFO"), "Log output should contain level info");
+
+        } finally {
+            System.setErr(oldErr);
+            Config.sys_log_to_console = false;
+            SLF4JBridgeHandler.uninstall();
+        }
+    }
+
+    @Test
+    public void testRolloverFileIndexAndDeleteCount() throws IOException {
+        Config.sys_log_format = "plaintext";
+        String oldFileIndex = Config.profile_log_roll_file_index;
+        int oldDeleteCount = Config.profile_log_delete_count;
+        try {
+            // default: preserve historical behavior (min file index, no accumulated-count cap)
+            Config.profile_log_roll_file_index = "min";
+            Config.profile_log_delete_count = -1;
+            String xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+            Assertions.assertTrue(xmlConfig.contains("<DefaultRolloverStrategy max=\"5\" fileIndex=\"min\">"));
+            Assertions.assertTrue(xmlConfig.contains("<IfFileName glob=\"fe.profile.log.*\" />"));
+            Assertions.assertFalse(xmlConfig.contains("<IfAccumulatedFileCount"),
+                    "no accumulated-count cap should be emitted when delete_count <= 0");
+
+            // opt-in: nomax file index with a hard retention cap
+            Config.profile_log_roll_file_index = "nomax";
+            Config.profile_log_delete_count = 3;
+            xmlConfig = Log4jConfig.generateActiveLog4jXmlConfig();
+            Assertions.assertTrue(xmlConfig.contains("fileIndex=\"nomax\""));
+            Assertions.assertTrue(xmlConfig.contains("<IfAccumulatedFileCount exceeds=\"3\" />"));
+            Assertions.assertTrue(xmlConfig.contains("<IfAny>"));
+
+            // invalid file index is rejected
+            Config.profile_log_roll_file_index = "bogus";
+            Config.profile_log_delete_count = -1;
+            try {
+                Log4jConfig.generateActiveLog4jXmlConfig();
+                Assertions.fail("Expected IOException for invalid fileIndex");
+            } catch (IOException e) {
+                Assertions.assertTrue(e.getMessage().contains("profile_log_roll_file_index config error"));
+            }
+        } finally {
+            Config.profile_log_roll_file_index = oldFileIndex;
+            Config.profile_log_delete_count = oldDeleteCount;
+        }
+    }
+
+    @Test
+    public void testJulLevelMapping() throws IOException {
+
+        java.util.logging.Logger rootLogger = java.util.logging.Logger.getLogger("");
+
+        try {
+            Log4jConfig.updateLogging("DEBUG", null, null);
+            Assertions.assertEquals(java.util.logging.Level.FINE, rootLogger.getLevel());
+
+            Log4jConfig.updateLogging("WARN", null, null);
+            Assertions.assertEquals(java.util.logging.Level.WARNING, rootLogger.getLevel());
+
+            Log4jConfig.updateLogging("ERROR", null, null);
+            Assertions.assertEquals(java.util.logging.Level.SEVERE, rootLogger.getLevel());
+
+            Log4jConfig.updateLogging("FATAL", null, null);
+            Assertions.assertEquals(java.util.logging.Level.SEVERE, rootLogger.getLevel());
+
+            Log4jConfig.updateLogging("INFO", null, null);
+            Assertions.assertEquals(java.util.logging.Level.INFO, rootLogger.getLevel());
+
+            try {
+                Log4jConfig.updateLogging("TRACE", null, null);
+                Assertions.fail("Expected IOException was not thrown for unsupported TRACE level");
+            } catch (IOException e) {
+                Assertions.assertTrue(e.getMessage().contains("sys_log_level config error"));
+            }
+            Assertions.assertEquals(java.util.logging.Level.INFO, rootLogger.getLevel());
+
+        } finally {
+            Log4jConfig.updateLogging("INFO", null, null);
+        }
+    }
+>>>>>>> 8fc3acd205 ([Enhancement] Add configurable rollover file index and delete count for FE logs (#76760))
 }

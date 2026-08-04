@@ -83,6 +83,14 @@ public class Config extends ConfigBase {
      * 60m     60 mins
      * 120s    120 seconds
      * <p>
+     * sys_log_roll_file_index:
+     * Rollover file index strategy for fe.log/fe.warn.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set sys_log_delete_count to bound disk usage.
+     * <p>
+     * sys_log_delete_count:
+     * Hard cap on the number of retained rolled fe.log/fe.warn.log files (counted separately), enforced by the Delete
+     * action. <= 0 disables the cap.
+     * <p>
      * sys_log_enable_compress:
      *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
@@ -98,6 +106,10 @@ public class Config extends ConfigBase {
     public static String sys_log_roll_interval = "DAY";
     @ConfField
     public static String sys_log_delete_age = "7d";
+    @ConfField
+    public static String sys_log_roll_file_index = "min";
+    @ConfField
+    public static int sys_log_delete_count = -1;
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
@@ -149,6 +161,14 @@ public class Config extends ConfigBase {
      * 60m     60 mins
      * 120s    120 seconds
      * <p>
+     * audit_log_roll_file_index:
+     * Rollover file index strategy for fe.audit.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set audit_log_delete_count to bound disk usage.
+     * <p>
+     * audit_log_delete_count:
+     * Hard cap on the number of retained rolled fe.audit.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
+     * <p>
      * audit_log_enable_compress:
      *      default is false. if true, then compress fe.audit.log by gzip
      */
@@ -168,6 +188,10 @@ public class Config extends ConfigBase {
     public static String audit_log_roll_interval = "DAY";
     @ConfField
     public static String audit_log_delete_age = "30d";
+    @ConfField
+    public static String audit_log_roll_file_index = "min";
+    @ConfField
+    public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
     @ConfField
@@ -191,6 +215,14 @@ public class Config extends ConfigBase {
     /*
      * internal log:
      * This specifies FE MV/Statistics log dir.
+     * <p>
+     * internal_log_roll_file_index:
+     * Rollover file index strategy for fe.internal.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set internal_log_delete_count to bound disk usage.
+     * <p>
+     * internal_log_delete_count:
+     * Hard cap on the number of retained rolled fe.internal.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
      */
     @ConfField
     public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -203,6 +235,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static String internal_log_delete_age = "7d";
     @ConfField
+<<<<<<< HEAD
+=======
+    public static String internal_log_roll_file_index = "min";
+    @ConfField
+    public static int internal_log_delete_count = -1;
+    @ConfField(mutable = true)
+>>>>>>> 8fc3acd205 ([Enhancement] Add configurable rollover file index and delete count for FE logs (#76760))
     public static boolean internal_log_json_format = false;
 
     /**
@@ -224,6 +263,14 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * dump_log_roll_file_index:
+     * Rollover file index strategy for fe.dump.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set dump_log_delete_count to bound disk usage.
+     * <p>
+     * dump_log_delete_count:
+     * Hard cap on the number of retained rolled fe.dump.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
      */
     @ConfField
     public static int dump_log_roll_num = 10;
@@ -233,6 +280,10 @@ public class Config extends ConfigBase {
     public static String dump_log_roll_interval = "DAY";
     @ConfField
     public static String dump_log_delete_age = "7d";
+    @ConfField
+    public static String dump_log_roll_file_index = "min";
+    @ConfField
+    public static int dump_log_delete_count = -1;
 
     /**
      * plan_log_roll_num:
@@ -250,6 +301,14 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * plan_log_roll_file_index:
+     * Rollover file index strategy for fe.plan.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set plan_log_delete_count to bound disk usage.
+     * <p>
+     * plan_log_delete_count:
+     * Hard cap on the number of retained rolled fe.plan.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
      */
     @ConfField
     public static int plan_log_roll_num = 10;
@@ -257,6 +316,10 @@ public class Config extends ConfigBase {
     public static String plan_log_roll_interval = "DAY";
     @ConfField
     public static String plan_log_delete_age = "7d";
+    @ConfField
+    public static String plan_log_roll_file_index = "min";
+    @ConfField
+    public static int plan_log_delete_count = -1;
 
     /**
      * big_query_log_dir:
@@ -286,6 +349,14 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 mins
      * 120s    120 seconds
+     * <p>
+     * big_query_log_roll_file_index:
+     * Rollover file index strategy for fe.big_query.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set big_query_log_delete_count to bound disk usage.
+     * <p>
+     * big_query_log_delete_count:
+     * Hard cap on the number of retained rolled fe.big_query.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
      */
     @ConfField
     public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
@@ -297,6 +368,10 @@ public class Config extends ConfigBase {
     public static String big_query_log_roll_interval = "DAY";
     @ConfField
     public static String big_query_log_delete_age = "7d";
+    @ConfField
+    public static String big_query_log_roll_file_index = "min";
+    @ConfField
+    public static int big_query_log_delete_count = -1;
 
     /**
      * profile_log_dir:
@@ -316,6 +391,14 @@ public class Config extends ConfigBase {
      * 10h     10 hours
      * 60m     60 minutes
      * 120s    120 seconds
+     * <p>
+     * profile_log_roll_file_index:
+     * Rollover file index strategy for fe.profile.log: min, max, or nomax.
+     * Default 'min'. With 'nomax' set profile_log_delete_count to bound disk usage.
+     * <p>
+     * profile_log_delete_count:
+     * Hard cap on the number of retained rolled fe.profile.log files, enforced by the Delete action.
+     * <= 0 disables the cap.
      */
     @ConfField
     public static boolean enable_profile_log = true;
@@ -330,6 +413,10 @@ public class Config extends ConfigBase {
     public static String profile_log_roll_interval = "DAY";
     @ConfField
     public static String profile_log_delete_age = "1d";
+    @ConfField
+    public static String profile_log_roll_file_index = "min";
+    @ConfField
+    public static int profile_log_delete_count = -1;
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
@@ -2871,6 +2958,10 @@ public class Config extends ConfigBase {
     public static String feature_log_roll_interval = "DAY";
     @ConfField
     public static String feature_log_delete_age = "3d";
+    @ConfField
+    public static String feature_log_roll_file_index = "min";
+    @ConfField
+    public static int feature_log_delete_count = -1;
     @ConfField
     public static int feature_log_roll_num = 5;
     @ConfField
