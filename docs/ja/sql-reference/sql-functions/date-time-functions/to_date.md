@@ -8,7 +8,7 @@ DATETIME 値を日付に変換します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE TO_DATE(DATETIME datetime)
 ```
 

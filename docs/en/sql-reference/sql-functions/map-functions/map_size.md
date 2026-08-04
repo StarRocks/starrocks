@@ -12,7 +12,7 @@ This function has an alias [cardinality()](cardinality.md). It is supported from
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT map_size(any_map)
 ```
 

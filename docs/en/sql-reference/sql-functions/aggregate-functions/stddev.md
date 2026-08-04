@@ -11,7 +11,7 @@ Returns the population standard deviation of the expr expression. Since v2.5.10,
 
 ## Syntax
 
-```Haskell
+```plaintext
 STDDEV(expr)
 ```
 

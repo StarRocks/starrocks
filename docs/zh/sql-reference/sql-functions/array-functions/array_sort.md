@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 -- 不使用 Lambda Comparator
 array_sort(array)
 

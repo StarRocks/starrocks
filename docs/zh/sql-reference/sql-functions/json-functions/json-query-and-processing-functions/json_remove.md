@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 json_remove(json_object_expr, json_path[, json_path] ...)
 ```
 

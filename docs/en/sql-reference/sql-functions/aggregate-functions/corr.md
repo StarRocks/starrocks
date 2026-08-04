@@ -10,7 +10,7 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 
 ## Syntax
 
-```Haskell
+```plaintext
 CORR(expr1, expr2)
 ```
 

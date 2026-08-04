@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE str2date(VARCHAR str, VARCHAR format);
 ```
 

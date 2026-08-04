@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN regexp(VARCHAR expr, VARCHAR pattern);
 ```
 

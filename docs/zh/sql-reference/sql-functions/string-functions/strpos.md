@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT strpos(VARCHAR str, VARCHAR substr [, INT instance])
 ```
 

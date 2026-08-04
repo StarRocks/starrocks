@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_CONT (expr, percentile) 
 ```
 

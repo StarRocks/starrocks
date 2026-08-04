@@ -10,7 +10,7 @@ Aggregates values (including `NULL`) in a column into an array (multiple rows to
 
 ## Syntax
 
-```Haskell
+```plaintext
 ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 

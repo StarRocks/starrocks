@@ -10,7 +10,7 @@ Count the number of different values ​​in columns of type TINYINT, SMALLINT 
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT bitmap_union_int(expr)
 ```
 

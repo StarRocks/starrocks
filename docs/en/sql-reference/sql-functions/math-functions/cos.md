@@ -10,7 +10,7 @@ Computes the cosine of the argument.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE cos(DOUBLE arg)
 ```
 

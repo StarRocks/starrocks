@@ -13,7 +13,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 json_contains(json_target, json_candidate)
 ```
 

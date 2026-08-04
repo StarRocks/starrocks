@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP sub_bitmap(BITMAP src, BIGINT offset, BIGINT len)
 ```
 

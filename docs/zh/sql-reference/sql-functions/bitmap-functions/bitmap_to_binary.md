@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARBINARY bitmap_to_binary(BITMAP bitmap)
 ```
 

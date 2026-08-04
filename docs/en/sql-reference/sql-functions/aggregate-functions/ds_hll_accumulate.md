@@ -8,7 +8,7 @@ It is based on Apache DataSketches and provides high precision for approximate d
 
 ## Syntax
 
-```Haskell
+```plaintext
 sketch ds_hll_accumulate(expr)
 sketch ds_hll_accumulate(expr, log_k)
 sketch ds_hll_accumulate(expr, log_k, tgt_type)

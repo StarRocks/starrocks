@@ -52,7 +52,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 ```
 

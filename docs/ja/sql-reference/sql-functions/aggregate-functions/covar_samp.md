@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 COVAR_SAMP(expr1, expr2)
 ```
 

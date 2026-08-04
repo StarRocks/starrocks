@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 INT regexp_count(VARCHAR str, VARCHAR pattern)
 ```
 

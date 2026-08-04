@@ -10,7 +10,7 @@ Converts a DATETIME value into a date.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE TO_DATE(DATETIME datetime)
 ```
 

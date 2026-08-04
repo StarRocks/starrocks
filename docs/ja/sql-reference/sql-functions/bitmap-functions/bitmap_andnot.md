@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 bitmap_andnot(BITMAP lhs, BITMAP rhs)
 ```
 

@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BITMAP bitmap_from_binary(VARBINARY str)
 ```
 
