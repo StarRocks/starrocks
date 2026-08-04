@@ -89,7 +89,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -523,8 +522,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             } else {
-                long tableId = txnStateBatch.getTableId();
-                if (!publishingLakeTransactionsBatchTableId.contains(tableId)) {
+                // A single-table batch involves exactly one table; a multi-table batch
+                // (lake_enable_batch_publish_multi_table) involves the union of its
+                // transactions' tables. Every involved table must be free before this batch
+                // may start, so that two in-flight publishes never share a table.
+                List<Long> batchTableIdList = txnStateBatch.getTableIdList();
+                if (batchTableIdList.stream().noneMatch(publishingLakeTransactionsBatchTableId::contains)) {
                     // When the `enable_lake_batch_publish_version` switch is just set to true,
                     // it is possible that the result of publish task
                     // sent by `publishVersionForLakeTable` has not been returned,
@@ -543,10 +546,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     if (needWait) {
                         continue;
                     }
-                    publishingLakeTransactionsBatchTableId.add(tableId);
+                    publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
-                    future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
+                    future.thenRun(() -> batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             }
         }
@@ -864,48 +867,54 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
 
         long dbId = txnStateBatch.getDbId();
-        long tableId = txnStateBatch.getTableId();
+        List<Long> tableIdList = txnStateBatch.getTableIdList();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
 
-        // Step 1: Collect first version per partition across the batch
-        // partitionId -> firstVersion (from the earliest txn in the batch that touches it)
-        Map<Long, Long> partitionFirstVersions = new LinkedHashMap<>();
+        // Step 1: Collect first version per (table, partition) across the batch
+        // tableId -> partitionId -> firstVersion (from the earliest txn in the batch that touches it)
+        Map<Long, Map<Long, Long>> tableToPartitionFirstVersions = new LinkedHashMap<>();
         for (TransactionState state : states) {
-            TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
-            if (tableCommitInfo == null) {
-                continue;
-            }
-            for (Map.Entry<Long, PartitionCommitInfo> entry :
-                    tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
-                partitionFirstVersions.putIfAbsent(entry.getKey(), entry.getValue().getVersion());
+            for (Long tableId : state.getTableIdList()) {
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
+                Map<Long, Long> partitionFirstVersions =
+                        tableToPartitionFirstVersions.computeIfAbsent(tableId, k -> new LinkedHashMap<>());
+                for (Map.Entry<Long, PartitionCommitInfo> entry :
+                        tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                    partitionFirstVersions.putIfAbsent(entry.getKey(), entry.getValue().getVersion());
+                }
             }
         }
 
-        // Step 2: Check each partition's first version against visibleVersion
+        // Step 2: Check each partition's first version against visibleVersion.
+        // Partition ids are globally unique, so one gap set covers all tables.
         Set<Long> gapPartitions = new HashSet<>();
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable(dbId, tableId);
-        if (table == null) {
-            return txnStateBatch;
-        }
-
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(dbId, tableIdList, LockType.READ);
         try {
-            for (Map.Entry<Long, Long> entry : partitionFirstVersions.entrySet()) {
-                long partitionId = entry.getKey();
-                long firstVersion = entry.getValue();
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                if (partition != null
-                        && partition.getVisibleVersion() + 1 != firstVersion
-                        // REPLICATION txns may have non-consecutive versions, skip check
-                        && states.get(0).getSourceType()
-                                != TransactionState.LoadJobSourceType.REPLICATION) {
-                    gapPartitions.add(partitionId);
+            for (Map.Entry<Long, Map<Long, Long>> tableEntry : tableToPartitionFirstVersions.entrySet()) {
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                        .getLocalMetastore().getTable(dbId, tableEntry.getKey());
+                if (table == null) {
+                    continue; // table has been dropped
+                }
+                for (Map.Entry<Long, Long> entry : tableEntry.getValue().entrySet()) {
+                    long partitionId = entry.getKey();
+                    long firstVersion = entry.getValue();
+                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                    if (partition != null
+                            && partition.getVisibleVersion() + 1 != firstVersion
+                            // REPLICATION txns may have non-consecutive versions, skip check
+                            && states.get(0).getSourceType()
+                                    != TransactionState.LoadJobSourceType.REPLICATION) {
+                        gapPartitions.add(partitionId);
+                    }
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(dbId, List.of(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(dbId, tableIdList, LockType.READ);
         }
 
         if (gapPartitions.isEmpty()) {
@@ -914,8 +923,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         // Step 3: Find the first transaction that touches any gap-affected partition
         for (int i = 0; i < states.size(); i++) {
-            TableCommitInfo tableCommitInfo = states.get(i).getTableCommitInfo(tableId);
-            if (tableCommitInfo != null) {
+            TransactionState state = states.get(i);
+            for (Long tableId : state.getTableIdList()) {
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
                 for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
                     if (gapPartitions.contains(partitionId)) {
                         if (i == 0) {
@@ -944,27 +957,30 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
-        // pick up all tableCommitInfo
-        // only one table,if batch has multi transactionState for now,
-        // the batch only has one transactionState for multi table.
+        // Pick up all tableCommitInfos of every txn in the batch. Without
+        // lake_enable_batch_publish_multi_table all txns share one table; with it table sets
+        // may differ across txns. Publish stays per (table, partition):
+        // partition ids are globally unique, so the map below is keyed by partition id alone.
         long dbId = txnStateBatch.getDbId();
-        long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
         states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
-            TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
-            Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
-            for (Long partitionId : partitionCommitInfoMap.keySet()) {
-                if (!publishVersionDataMap.containsKey(partitionId)) {
-                    publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
+            for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
+                long tableId = tableCommitInfo.getTableId();
+                Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
+                for (Long partitionId : partitionCommitInfoMap.keySet()) {
+                    if (!publishVersionDataMap.containsKey(partitionId)) {
+                        publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
+                    }
+                    PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
+                    publishVersionData.addTransaction(state);
                 }
-                PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
-                publishVersionData.addTransaction(state);
             }
         }
-        LOG.info("start publish lake batch db:{} table:{} txns:{}", dbId, tableId,
+        LOG.info("start publish lake batch db:{} tables:{} txns:{}", dbId,
+                StringUtils.join(txnStateBatch.getTableIdList(), ","),
                 StringUtils.join(states.stream().map(TransactionState::getTransactionId).toArray(), ","));
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -986,7 +1002,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-                boolean success = publishPartitionBatch(db, tableId, publishVersionData, txnStateBatch);
+                boolean success = publishPartitionBatch(db, publishVersionData.getTableId(),
+                        publishVersionData, txnStateBatch);
                 long versionTime = success ? System.currentTimeMillis() : -System.currentTimeMillis();
                 for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
                     commitInfo.setVersionTime(versionTime);

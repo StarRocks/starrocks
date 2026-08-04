@@ -376,7 +376,7 @@ class MergePathCascadeMerger {
 public:
     MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,
                            std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
-                           const TupleDescriptor* tuple_desc, const TTopNType::type topn_type, const int64_t offset,
+                           RecordDescriptor record_desc, const TTopNType::type topn_type, const int64_t offset,
                            const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers,
                            TLateMaterializeMode::type mode = TLateMaterializeMode::AUTO);
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
@@ -463,7 +463,7 @@ private:
     const int32_t _degree_of_parallelism;
     const std::vector<ExprContext*> _sort_exprs;
     const SortDescs _sort_descs;
-    const TupleDescriptor* _tuple_desc;
+    const RecordDescriptor _record_desc;
     const TTopNType::type _topn_type;
     const int64_t _offset;
     const int64_t _limit;

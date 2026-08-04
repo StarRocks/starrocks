@@ -1378,6 +1378,58 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
     final_check(tablet, rowsets);
 }
 
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_source_chunk_limit_counts_source_bytes) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(2 * N);
+    std::vector<int64_t> partial_keys(N);
+    for (int i = 0; i < 2 * N; i++) {
+        keys[i] = i;
+        if (i % 2 == 0) {
+            partial_keys[i / 2] = i;
+        }
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(12);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(tablet, keys));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    for (int i = 0; i < 2; i++) {
+        std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(create_partial_rowset(tablet, partial_keys, column_indexes, v1_func, v2_func,
+                                                   partial_schemas[i], 1, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
+    }
+
+    int64_t old_vector_chunk_size = config::vector_chunk_size;
+    int64_t old_limit = config::partial_update_memory_limit_per_worker;
+    config::vector_chunk_size = 10;
+    // Sized so that only the source half of the bound can reach it. The accumulator holds 2 * N
+    // rows and the old bound was rows * upt_memory_usage_per_row, which for this schema stays well
+    // under this budget for the whole segment -- so before the fix the segment was never split and
+    // the budget was, in effect, not applied at all. Adding the accumulator's own bytes_usage()
+    // takes the sum past it partway through, so the segment now arrives in several containers and
+    // the rowid bookkeeping across those boundaries is what this checks.
+    config::partial_update_memory_limit_per_worker = 4096;
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    ASSERT_TRUE(check_tablet(tablet, version, 2 * N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        if (k1 % 2 == 0) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        } else {
+            return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }
+    }));
+    config::vector_chunk_size = old_vector_chunk_size;
+    config::partial_update_memory_limit_per_worker = old_limit;
+    final_check(tablet, rowsets);
+}
+
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_fast_schema_evolution) {
     config::enable_light_pk_compaction_publish = false;
     const int N = 100;

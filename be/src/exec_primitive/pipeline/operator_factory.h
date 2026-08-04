@@ -17,6 +17,7 @@
 #include <mutex>
 
 #include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/runtime_filter_core_types.h"
 
 namespace starrocks::pipeline {
 
@@ -42,14 +43,14 @@ public:
 
     // Invoked by the ExecNode-to-pipeline adapter to initialize fields involving runtime filter.
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
-                             const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
+                             const LocalRFWaitingSet& rf_waiting_set, const RecordDescriptor& record_desc,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
                              const std::vector<SlotId>& filter_null_value_columns,
                              const std::vector<TupleSlotMapping>& tuple_slot_mappings) {
         _runtime_filter_hub = runtime_filter_hub;
         _tuple_ids = tuple_ids;
         _rf_waiting_set = rf_waiting_set;
-        _row_desc = row_desc;
+        _record_desc = &record_desc;
         _runtime_filter_collector = runtime_filter_collector;
         _filter_null_value_columns = filter_null_value_columns;
         _tuple_slot_mappings = tuple_slot_mappings;
@@ -75,7 +76,7 @@ public:
 
     RuntimeState* runtime_state() const { return _state; }
 
-    RowDescriptor* row_desc() { return &_row_desc; }
+    const RecordDescriptor* record_desc() const { return _record_desc; }
 
     // Whether it has any runtime in-filter or bloom-filter.
     // MUST be invoked after init_runtime_filter.
@@ -115,7 +116,7 @@ protected:
     // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
     LocalRFWaitingSet _rf_waiting_set;
     std::once_flag _prepare_runtime_in_filters_once;
-    RowDescriptor _row_desc;
+    const RecordDescriptor* _record_desc = nullptr;
     std::vector<ExprContext*> _runtime_in_filters;
     std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector = nullptr;
     std::vector<SlotId> _filter_null_value_columns;

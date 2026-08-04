@@ -142,7 +142,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                         mv.getName());
                 // No base-table change means the MV is confirmed fresh as of this run's start.
                 confirmFreshness();
-                return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+                // Every delta here is a point range (from == to): the window records that the
+                // bookmark had caught up with the base table head.
+                recordImvSourceRangesOnTaskRun();
+                // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
+                return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
             }
         }
 
@@ -164,14 +168,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             insertStmt = prepareRefreshPlan();
         }
         recordImvSourceRangesOnTaskRun();
-        return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
+        return ProcessExecPlan.success(mvContext.getExecPlan(), insertStmt);
     }
 
     /**
      * Record the staged TVR version range and snapshot commit times per base table on the task
      * run's extra message, surfaced via information_schema.task_runs.EXTRA_MESSAGE.
-     * Must stay after prepareRefreshPlan(): recording earlier leaves stale ranges on the task
-     * run when the hybrid processor falls back to PCT on an IVM planning failure.
+     * Only call this where IVM planning can no longer fail: a planning failure makes the hybrid
+     * processor fall back to PCT, and a range recorded before that point is left behind stale. So
+     * either after prepareRefreshPlan(), or on the skip path, which returns without planning.
      */
     private void recordImvSourceRangesOnTaskRun() {
         updateTaskRunStatus(status -> {
@@ -499,6 +504,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             long processStartTime = mvContext.getStatus().getProcessStartTime();
             newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
         // warehouse

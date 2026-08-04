@@ -63,7 +63,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _type_is_nullable.reserve(column_size);
 
     std::map<SlotId, bool> slot_null_mapping;
-    for (auto const& slot : row_desc().tuple_descriptors()[0]->slots()) {
+    for (auto const& slot : record_desc().slots()) {
         slot_null_mapping[slot->id()] = slot->is_nullable();
     }
 
@@ -240,7 +240,7 @@ void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilt
             if (_slot_ids[i] == slot_id) {
                 // replace with new probe expr
                 ExprContext* new_probe_expr_ctx = _expr_ctxs[i];
-                rf_desc->replace_probe_expr_ctx(state, row_desc(), new_probe_expr_ctx);
+                rf_desc->replace_probe_expr_ctx(state, new_probe_expr_ctx);
                 match = true;
                 break;
             }

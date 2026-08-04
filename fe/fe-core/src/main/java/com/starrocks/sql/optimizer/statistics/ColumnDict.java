@@ -17,12 +17,17 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.Map;
 
 public final class ColumnDict extends StatsVersion {
     /**
@@ -32,7 +37,7 @@ public final class ColumnDict extends StatsVersion {
      * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
      * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
      */
-    private static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
+    public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
         int aPos = a.position();
         int bPos = b.position();
         int aLen = a.limit() - aPos;
@@ -109,6 +114,22 @@ public final class ColumnDict extends StatsVersion {
         jsonMap.put("collectedVersion", collectedVersion);
         jsonMap.put("version", version);
         return gson.toJson(jsonMap);
+    }
+
+    // Inverse of toJson, used by query-dump replay to rebuild a captured global dict. Keys round-trip through
+    // UTF-8 (matching toJson); this is lossy only for non-UTF-8 dict bytes, which never surface in a plan (the
+    // plan shows dict ids, not the strings), so it is safe for replay. Uses the 3-arg constructor so a dump
+    // captured under a different low_cardinality_threshold does not trip the 2-arg size precondition.
+    public static ColumnDict fromJson(String json) {
+        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+        JsonObject dictObj = obj.getAsJsonObject("dict");
+        ImmutableMap.Builder<ByteBuffer, Integer> builder = ImmutableMap.builder();
+        for (Map.Entry<String, JsonElement> entry : dictObj.entrySet()) {
+            builder.put(ByteBuffer.wrap(entry.getKey().getBytes(StandardCharsets.UTF_8)), entry.getValue().getAsInt());
+        }
+        long collectedVersion = obj.get("collectedVersion").getAsLong();
+        long version = obj.get("version").getAsLong();
+        return new ColumnDict(builder.build(), collectedVersion, version);
     }
 
     /**

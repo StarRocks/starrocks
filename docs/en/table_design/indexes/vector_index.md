@@ -47,18 +47,6 @@ HNSW offers both efficiency and precision, making it adaptable to various data a
 
 Each table supports only one vector index.
 
-### Prerequisites
-
-Before creating vector indexes, you must enable it by setting the FE configuration item `enable_experimental_vector` to `true`.
-
-Execute the following statement to enable it dynamically:
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
-```
-
-To enable it permanently, you must add `enable_experimental_vector = true` to the FE configuration file `fe.conf` and restart FE.
-
 ### Create vector index
 
 This tutorial creates vector indexes while creating tables. You can also append vector indexes to an existing table. See [Append vector index](#append-vector-index) for detailed instructions.
@@ -92,8 +80,9 @@ This tutorial creates vector indexes while creating tables. You can also append 
             "dim"="5", 
             "metric_type" = "l2_distance", 
             "is_vector_normed" = "false", 
-            "nbits" = "16", 
-            "nlist" = "40"
+            "nbits" = "8",
+            "nlist" = "40",
+            "M_IVFPQ" = "1"
         )
     ) ENGINE=OLAP
     DUPLICATE KEY(id)
@@ -136,9 +125,17 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 ##### index_build_threshold
 
-- **Default**: 10000 (determined by the BE configuration item `config_vector_index_default_build_threshold`)
+- **Default**: 10000 (determined by the BE configuration item [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold))
 - **Required**: No
 - **Description**: Row-count threshold that triggers the vector index build. If the number of rows written is smaller than this threshold, the vector index is not built and searches fall back to brute-force scan. It must be an integer greater than or equal to `1`. For IVFPQ indexes, the value must also be greater than or equal to `nlist`, because IVFPQ k-means training requires at least `nlist` vectors. DDL statements that violate this constraint are rejected.
+
+##### index_build_mode
+
+- **Default**: `sync`
+- **Required**: No
+- **Description**: Index build mode for shared-data clusters. Valid values:
+  - `sync`: Builds the index during data writes. Queries can use the index immediately, at the cost of higher load latency.
+  - `async`: Builds the index in the background after the write finishes. Until the build completes, queries over the affected segments automatically fall back to brute-force search. Use [`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) to select the build warehouse and [`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) to control load-tail dispatch delay.
 
 ##### M
 
@@ -175,9 +172,9 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 ##### nbits
 
-- **Default**: 16
+- **Default**: 8
 - **Required**: No
-- **Description**: IVFPQ-specific parameter. Precision of Product Quantization (PQ).  It must be the multiplier of `8`. With IVFPQ, each vector is divided into multiple subvectors, and then each subvector is quantized. `Nbits` defines the precision of quantization, that is, how many binary digits each subvector is quantized into. The larger the value of `nbits`, the higher the quantization precision, but the higher storage and computation costs.
+- **Description**: IVFPQ-specific parameter. Number of bits used by Product Quantization (PQ). Currently, only `8` is supported.
 
 ##### nlist
 
@@ -187,8 +184,9 @@ This tutorial creates vector indexes while creating tables. You can also append 
 
 ##### M_IVFPQ
 
+- **Default**: N/A
 - **Required**: Yes
-- **Description**: IVFPQ-specific parameter. Number of the subvectors the original vector will be split into. The IVFPQ index will divide a `dim`-dimensional vector into `M_IVFPQ` equal-length subvectors. Therefore, it must be a factor of the value of `dim`.
+- **Description**: IVFPQ-specific parameter. Number of the subvectors the original vector will be split into. The IVFPQ index will divide a `dim`-dimensional vector into `M_IVFPQ` equal-length subvectors. Therefore, it must be a factor of the value of `dim`. The SQL property name is `M_IVFPQ`; `M` is a different, HNSW-only property.
 
 #### Append vector index
 
@@ -204,8 +202,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false",  
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 
 ALTER TABLE ivfpq 
@@ -215,8 +214,9 @@ USING VECTOR (
     "metric_type" = "l2_distance", 
     "is_vector_normed" = "false", 
     "dim"="5", 
-    "nlist" = "256", 
-    "nbits"="10"
+    "nlist" = "256",
+    "nbits" = "8",
+    "M_IVFPQ" = "1"
 );
 ```
 
@@ -258,8 +258,6 @@ ALTER TABLE ivfpq DROP INDEX ivfpq_vector;
 ```
 
 ### Perform ANNS with vector indexes
-
-Before running a vector search, make sure the FE configuration item `enable_experimental_vector` is set to `true`.
 
 #### Requirements for vector index-based queries
 
@@ -309,8 +307,9 @@ CREATE TABLE test_hnsw (
         "index_type" = "hnsw",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "M" = "512", 
-        "dim"="5")
+        "M" = "512",
+        "dim" = "5",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -326,10 +325,11 @@ CREATE TABLE test_ivfpq (
         "index_type" = "ivfpq",
         "metric_type" = "l2_distance", 
         "is_vector_normed" = "false", 
-        "nlist" = "256", 
-        "nbits"="8",
-        "dim"="5",
-        "M_IVFPQ"="1")
+        "nlist" = "1",
+        "nbits" = "8",
+        "dim" = "5",
+        "M_IVFPQ" = "1",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1;
@@ -401,7 +401,7 @@ LIMIT 1;
 
 Parameter tuning is essential in vector search, as it affects both performance and accuracy. It is recommended to tune the search paramters on a small dataset and move to large datasets only when expected recall and latency are achieved.
 
-Search parameters are passed through hints in SQL statements.
+Search parameters are passed through the [`ann_params`](../../sql-reference/System_variable.md#ann_params) session variable or hints in SQL statements.
 
 ##### For HNSW index
 
@@ -409,7 +409,7 @@ Before proceeding, make sure the vector column is built with the HNSW index.
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{efsearch=256}') */ 
+    /*+ SET_VAR (ann_params='{"efsearch":"256"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_hnsw 
 WHERE id = 1 
@@ -421,7 +421,7 @@ LIMIT 1;
 
 ###### efsearch
 
-- **Default**: 16
+- **Default**: 40
 - **Required**: No
 - **Description**: Parameter that controls precision-speed tradeoff. During a hierarchical graph structure search, this parameter controls the size of the candidate list during the search. The larger the value of `efsearch`, the higher the accuracy, but the lower the speed.
 
@@ -431,7 +431,7 @@ Before proceeding, make sure the vector column is built with the IVFPQ index.
 
 ```SQL
 SELECT 
-    /*+ SET_VAR (ann_params='{nprobe=256,max_codes=0,scan_table_threshold=0,polysemous_ht=0,range_search_confidence=0.1}') */
+    /*+ SET_VAR (ann_params='{"nprobe":"256","max_codes":"0","scan_table_threshold":"0","polysemous_ht":"0","range_search_confidence":"0.1"}') */
     id, approx_l2_distance([1,1,1,1,1], vector) 
 FROM test_ivfpq 
 ORDER BY approx_l2_distance([1,1,1,1,1], vector) 
@@ -469,6 +469,24 @@ LIMIT 1;
 - **Default**: 0.1
 - **Required**: No
 - **Description**: Confidence of approximate range searches. Value range: [0, 1]. Setting it to `1` produces the most accurate results.
+
+#### Tune candidate count and result refinement
+
+The following session variables control the number of candidates returned by the index and whether StarRocks recomputes their exact distances:
+
+- [`k_factor`](../../sql-reference/System_variable.md#k_factor), default `1`: Multiplies `LIMIT` to determine the number of candidates requested from each segment. A larger value can improve recall after results from multiple segments are merged, but increases CPU, memory, and downstream work.
+- [`enable_vector_index_refine`](../../sql-reference/System_variable.md#enable_vector_index_refine), default `false`: For IVFPQ and HNSW indexes using the `sq4`, `sq8`, or `pq` quantizer, recomputes exact distances from the original vectors and reranks the candidates. It has no effect on unquantized HNSW indexes (`quantizer = flat`).
+- [`pq_refine_factor`](../../sql-reference/System_variable.md#pq_refine_factor), default `1`: For a range search with exact-distance refinement enabled, further multiplies the candidate count after `k_factor` is applied.
+
+For example:
+
+```SQL
+SET enable_vector_index_refine = true;
+SET k_factor = 2;
+SET pq_refine_factor = 2;
+```
+
+Higher candidate multipliers generally improve recall at the cost of more index, I/O, and distance-computation work. Use `EXPLAIN` and check `Refine: ON/OFF` to verify whether exact-distance refinement is active.
 
 #### Calculate approximate recall
 

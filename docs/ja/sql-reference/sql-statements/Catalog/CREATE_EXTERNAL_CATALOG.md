@@ -16,6 +16,7 @@ description: "CREATE EXTERNAL CATALOG creates an external catalog for querying e
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): JDBC 互換のデータソースからデータをクエリするために使用されます。
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md): Elasticsearch からデータをクエリするために使用されます。Elasticsearch カタログは v3.1 以降でサポートされています。
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md): Apache Paimon からデータをクエリするために使用されます。Paimon カタログは v3.1 以降でサポートされています。
+- [Fluss catalog](../../../data_source/catalog/fluss_catalog.md): Apache Fluss のデータをクエリするために使用されます。
 - [Unified catalog](../../../data_source/catalog/unified_catalog.md): Hive、Iceberg、Hudi、および Delta Lake データソースを統合データソースとしてクエリするために使用されます。Unified カタログは v3.2 以降でサポートされています。
 
 > **NOTE**
@@ -37,7 +38,7 @@ PROPERTIES ("key"="value", ...)
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | はい          | 外部カタログの名前。命名規則については、[System limits](../../System_limit.md) を参照してください。 |
 | comment       | いいえ           | 外部カタログの説明。 |
-| PROPERTIES    | はい          | 外部カタログのプロパティ。外部カタログの種類に基づいてプロパティを設定します。詳細については、[Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、および [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md) を参照してください。 |
+| PROPERTIES    | はい          | 外部カタログのプロパティ。外部カタログの種類に基づいてプロパティを設定します。詳細については、[Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)、[JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)、および [Fluss catalog](../../../data_source/catalog/fluss_catalog.md) を参照してください。 |
 
 ## 例
 

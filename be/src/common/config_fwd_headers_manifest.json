@@ -283,7 +283,8 @@
     {
       "path": "be/src/common/config_thread_fwd.h",
       "configs": [
-        "priority_queue_remaining_tasks_increased_frequency"
+        "priority_queue_remaining_tasks_increased_frequency",
+        "enable_threadpool_catch_task_exception"
       ]
     },
     {
@@ -958,6 +959,7 @@
         "pipeline_gcore_timeout_threshold_sec",
         "pipeline_gcore_output_dir",
         "enable_core_file_size_optimization",
+        "process_force_exit_after_crash_handler_hang_second",
         "try_release_resource_before_core_dump",
         "sys_mlock_modules",
         "exception_stack_black_list",
