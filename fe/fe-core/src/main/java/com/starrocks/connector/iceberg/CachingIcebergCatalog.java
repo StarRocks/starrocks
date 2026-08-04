@@ -80,10 +80,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     // idle entry can't outlive its token. Provider-agnostic: bounds cache lifetime, no per-cloud expiry parse.
     private static final long REST_TABLE_CACHE_MAX_TTL_SEC = 3000;
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<ConnectContext> VIEW_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
-    private final com.github.benmanes.caffeine.cache.Cache<IcebergTableName, View> views;
+    private final com.github.benmanes.caffeine.cache.LoadingCache<ViewCacheKey, View> views;
     private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -112,7 +113,15 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 NEVER_CACHE, DEFAULT_CACHE_NUM).build();
         this.views = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
-                NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+                NEVER_CACHE, DEFAULT_CACHE_NUM)
+                .build(new com.github.benmanes.caffeine.cache.CacheLoader<ViewCacheKey, View>() {
+                    @Override
+                    public View load(ViewCacheKey key) {
+                        ConnectContext context = VIEW_LOAD_CONTEXT.get();
+                        return delegate.getView(context != null ? context : new ConnectContext(),
+                                key.dbName, key.viewName);
+                    }
+                });
         long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
         if (delegate instanceof IcebergRESTCatalog) {
             tableCacheTtlSec = Math.min(tableCacheTtlSec, REST_TABLE_CACHE_MAX_TTL_SEC);
@@ -338,7 +347,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                               boolean replace) {
         boolean created = delegate.createView(connectContext, catalogName, connectorViewDefinition, replace);
         // A create-or-replace can overwrite an existing definition, so we drop any stale cached entry.
-        views.invalidate(new IcebergTableName(connectorViewDefinition.getDatabaseName(),
+        views.invalidate(viewCacheKey(connectorViewDefinition.getDatabaseName(),
                 connectorViewDefinition.getViewName()));
         return created;
     }
@@ -346,7 +355,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean alterView(ConnectContext connectContext, View currentView, ConnectorViewDefinition connectorViewDefinition) {
         boolean altered = delegate.alterView(connectContext, currentView, connectorViewDefinition);
-        views.invalidate(new IcebergTableName(connectorViewDefinition.getDatabaseName(),
+        views.invalidate(viewCacheKey(connectorViewDefinition.getDatabaseName(),
                 connectorViewDefinition.getViewName()));
         return altered;
     }
@@ -354,7 +363,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropView(ConnectContext connectContext, String dbName, String viewName) {
         boolean dropped = delegate.dropView(connectContext, dbName, viewName);
-        views.invalidate(new IcebergTableName(dbName, viewName));
+        views.invalidate(viewCacheKey(dbName, viewName));
         return dropped;
     }
 
@@ -364,24 +373,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     public View getView(ConnectContext connectContext, String dbName, String viewName) {
-        IcebergTableName viewKey = new IcebergTableName(dbName, viewName);
-
-        // We do not cache if a per-request auth token is used AND it is a REST Catalog.
+        // Skip the cache for a REST catalog using a per-request auth token.
         boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
                 (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
         if (!cacheAllowed) {
             return delegate.getView(connectContext, dbName, viewName);
         }
 
-        View cachedView = views.getIfPresent(viewKey);
-        if (cachedView != null) {
-            return cachedView;
+        ViewCacheKey viewKey = viewCacheKey(dbName, viewName);
+        if (shouldOnlyReadCache(connectContext)) {
+            View cachedView = views.getIfPresent(viewKey);
+            return cachedView != null ? cachedView : delegate.getView(connectContext, dbName, viewName);
         }
-        View view = delegate.getView(connectContext, dbName, viewName);
-        if (view != null && !shouldOnlyReadCache(connectContext)) {
-            views.put(viewKey, view);
+        // Load through the cache so the fill and any concurrent invalidation stay coordinated per key.
+        // A racing DDL or refresh can't leave a stale definition behind.
+        try {
+            VIEW_LOAD_CONTEXT.set(connectContext);
+            return views.get(viewKey);
+        } finally {
+            VIEW_LOAD_CONTEXT.remove();
         }
-        return view;
     }
 
     @Override
@@ -557,7 +568,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private void invalidateCache(IcebergTableName key) {
         tables.invalidate(key);
         // Tables and views share a namespace, so drop any cached view under the same identifier.
-        views.invalidate(key);
+        views.invalidate(viewCacheKey(key.dbName, key.tableName));
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         tableLatestAccessTime.remove(key);
@@ -605,6 +616,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return context != null && context.isOnlyReadIcebergCache();
     }
 
+    // Hive and Glue fold identifiers to lower case; every other catalog (e.g. REST) keeps them
+    // case-sensitive, so V and v are distinct views and must not share a cache entry.
+    private ViewCacheKey viewCacheKey(String dbName, String viewName) {
+        IcebergCatalogType type = delegate.getIcebergCatalogType();
+        if (type == IcebergCatalogType.HIVE_CATALOG || type == IcebergCatalogType.GLUE_CATALOG) {
+            return new ViewCacheKey(dbName.toLowerCase(Locale.ROOT), viewName.toLowerCase(Locale.ROOT));
+        }
+        return new ViewCacheKey(dbName, viewName);
+    }
+
     public static class IcebergTableName {
         private final String dbName;
         private final String tableName;
@@ -650,6 +671,40 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             sb.append(", tableName='").append(tableName).append('\'');
             sb.append('}');
             return sb.toString();
+        }
+    }
+
+    // Unlike IcebergTableName, this key compares identifiers case-sensitively. Callers fold the case for
+    // catalogs that normalize identifiers (see viewCacheKey), so REST views keep V and v as separate entries.
+    private static class ViewCacheKey {
+        private final String dbName;
+        private final String viewName;
+
+        ViewCacheKey(String dbName, String viewName) {
+            this.dbName = dbName;
+            this.viewName = viewName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            ViewCacheKey that = (ViewCacheKey) o;
+            return dbName.equals(that.dbName) && viewName.equals(that.viewName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(dbName, viewName);
+        }
+
+        @Override
+        public String toString() {
+            return "ViewCacheKey{dbName='" + dbName + "', viewName='" + viewName + "'}";
         }
     }
 

@@ -2313,10 +2313,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (isResourceMappingCatalog(catalogName)) {
             refreshTableWithResource(table);
         } else if (table.isIcebergView()) {
-            // The catalog stores a view under its fully-qualified name (e.g., catalog.db.view), but the cache is
-            // keyed by the simple view name, so we strip any qualifier before invalidating.
-            String viewName = table.getName();
-            viewName = viewName.substring(viewName.lastIndexOf('.') + 1);
+            // The catalog returns a view under its fully-qualified name (catalog.db.view). Strip the known
+            // catalog and database prefix rather than the last dot, so a quoted view name like "a.b" stays intact.
+            String prefix = catalogName + "." + srDbName + ".";
+            String qualifiedName = table.getName();
+            String viewName = qualifiedName.startsWith(prefix) ? qualifiedName.substring(prefix.length()) : qualifiedName;
             icebergCatalog.invalidateCache(srDbName, viewName);
         } else {
             IcebergTable icebergTable = (IcebergTable) table;

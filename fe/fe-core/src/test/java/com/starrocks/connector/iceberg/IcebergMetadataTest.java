@@ -2238,14 +2238,14 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), null);
         // A view is a ConnectorView, not an IcebergTable, so refresh must invalidate by name, not cast.
-        // The stored name is fully-qualified, so it strips down to the simple key ("v").
-        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".db.v", new ArrayList<>(),
+        // The catalog.db. prefix is stripped (not the last dot), so a quoted view name like "a.b" stays intact.
+        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".db.a.b", new ArrayList<>(),
                 "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
         metadata.refreshTable("db", view, null, true);
 
         new Verifications() {
             {
-                icebergCatalog.invalidateCache("db", "v");
+                icebergCatalog.invalidateCache("db", "a.b");
                 times = 1;
             }
         };

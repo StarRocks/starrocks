@@ -576,6 +576,54 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testGetViewCaseSensitiveForRestCatalog(@Mocked IcebergRESTCatalog restCatalog,
+                                                       @Mocked View upperView, @Mocked View lowerView) {
+        ConnectContext ctx = new ConnectContext();
+        new Expectations() {
+            {
+                restCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.REST_CATALOG;
+                minTimes = 0;
+
+                restCatalog.getView(ctx, "db", "V");
+                result = upperView;
+                times = 1;
+
+                restCatalog.getView(ctx, "db", "v");
+                result = lowerView;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        // REST keeps identifiers case-sensitive, so "V" and "v" get separate entries; re-reads hit the cache.
+        Assertions.assertSame(upperView, cachingIcebergCatalog.getView(ctx, "db", "V"));
+        Assertions.assertSame(lowerView, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Assertions.assertSame(upperView, cachingIcebergCatalog.getView(ctx, "db", "V"));
+        Assertions.assertSame(lowerView, cachingIcebergCatalog.getView(ctx, "db", "v"));
+    }
+
+    @Test
+    public void testGetViewFoldsCaseForHiveCatalog(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        // Hive folds case, so "V" and "v" resolve to one entry and the delegate is hit once.
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "V"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+    }
+
+    @Test
     public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
         ConnectContext ctx = new ConnectContext();
         ctx.setAuthToken("token");
