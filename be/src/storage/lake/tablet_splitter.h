@@ -24,6 +24,8 @@
 
 namespace starrocks {
 class TabletRange;
+class Segment;
+class Schema;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -55,6 +57,30 @@ struct SegmentSplitInfo {
     // sort_key_sample_row_interval at their defaults (empty/zero).
     // Requires num_rows to be set before calling.
     Status load_sort_key_samples(const SegmentMetadataPB& segment_meta);
+
+    // Load sort-key samples directly from |segment|'s full sort key index page, for a
+    // segment that carries the full, untruncated all-column order-preserving index.
+    // Precondition (enforced by the caller's gate): segment.has_full_sort_key_index_page()
+    // is true AND segment.ensure_full_sort_key_index_usable() has returned true, so
+    // segment.full_sort_key_index_decoder() is a non-null validated decoder. min_key,
+    // max_key, and num_rows must also be set before calling.
+    //
+    // Full-page entry 0 is row 0 (== min_key), not a sample; entries [1, num_items) are
+    // decoded via decode_full_sort_key into sort_key_samples, so sample[i] (0-indexed) is
+    // the key at row (i+1) * segment.num_rows_per_block() (block geometry is shared with the
+    // legacy page). sort_key_sample_row_interval is set to segment.num_rows_per_block() only
+    // when at least one sample was decoded (fewer than 2 blocks yields zero samples and leaves
+    // the interval at 0), preserving the sort_key_samples.empty() <=> interval == 0 invariant.
+    //
+    // Runtime-validates the decoded samples (data-safe, not just DCHECK): each sample's arity
+    // must equal segment.num_sort_key_columns(); samples must be non-decreasing; and each must
+    // fall within [min_key, max_key]. Returns true iff index samples were loaded and passed
+    // validation; returns false (NOT an error) when the full decoder is unavailable or any
+    // decoded sample fails validation, leaving sort_key_samples empty so the caller can fall
+    // back to metadata samples or the coarse [min, max] range. A bad/corrupt full page never
+    // aborts the split.
+    StatusOr<bool> load_samples_from_short_key_index(const Segment& segment, const Schema& schema,
+                                                     const std::vector<uint32_t>& sort_key_idxes);
 };
 
 // Per-range estimated statistics keyed by source_id.
@@ -106,6 +132,30 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
         const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info);
+
+// Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
+// non-empty" -- the data-driven and external-boundaries callers have different
+// semantics on empty (one errors, the other treats it as a no-op fast path) and
+// own that check.
+//
+// When |tablet_manager| is non-null, opportunistically loads each rowset's segments
+// (via Rowset::load_segments, using that rowset's own historical schema) to read a
+// full-key segment's short key index directly (load_samples_from_short_key_index).
+// The loader is opened for a rowset only when it has a segment lacking metadata
+// samples AND its schema resolves to a valid registered id (both are cheap protobuf
+// reads checked before the Rowset is constructed, so a pure-legacy tablet does no
+// segment I/O and synthetic reshard metadata with an unset schema id never aborts).
+// A legacy segment falls back to load_sort_key_samples (deprecated_sort_key_samples),
+// and a segment whose LoadedSegment is null (skipped/ignored/lost) or whose files
+// fail to load falls back the same way without ever dereferencing the null segment.
+// When |tablet_manager| is null (synthetic metadata-only callers), the loader is
+// skipped entirely and every segment sources from deprecated_sort_key_samples or
+// coarse [min, max], matching pre-existing behavior.
+//
+// Exposed for unit testing; production call sites are get_tablet_split_ranges_impl
+// and compute_split_ranges_from_external_boundaries_impl.
+Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
+                                   std::vector<SegmentSplitInfo>* segments);
 
 // Per-rowset estimated stats; used by the external boundaries split path's per-range output.
 struct Statistic {
