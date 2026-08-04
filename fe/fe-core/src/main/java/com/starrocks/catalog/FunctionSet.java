@@ -215,6 +215,13 @@ public class FunctionSet {
     public static final String ST_X = "st_x";
     public static final String ST_Y = "st_y";
 
+    // H3 functions:
+    public static final String GEO_TO_H3 = "geotoh3";
+    public static final String H3_TO_GEO_LAT = "h3togeolat";
+    public static final String H3_TO_GEO_LNG = "h3togeolong";
+    public static final String H3_IS_VALID = "h3isvalid";
+    public static final String H3_GET_RESOLUTION = "h3getresolution";
+
     // String functions
     public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
     public static final String ASCII = "ascii";

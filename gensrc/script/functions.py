@@ -1053,6 +1053,18 @@ vectorized_functions = [
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
 
+    # H3 functions
+    [120015, "geoToH3", False, False, "BIGINT", ["DOUBLE", "DOUBLE", "INT"],
+     "H3Functions::geo_to_h3"],
+    [120016, "h3ToGeoLat", False, False, "DOUBLE", ["BIGINT"],
+     "H3Functions::h3_to_geo_lat"],
+    [120017, "h3ToGeoLng", False, False, "DOUBLE", ["BIGINT"],
+     "H3Functions::h3_to_geo_lng"],
+    [120018, "h3IsValid", False, False, "BOOLEAN", ["BIGINT"],
+     "H3Functions::h3_is_valid"],
+    [120019, "h3GetResolution", False, False, "INT", ["BIGINT"],
+     "H3Functions::h3_get_resolution"],
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],
