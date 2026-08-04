@@ -113,6 +113,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -1116,7 +1117,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (StringUtils.isEmpty(tableProperty.getMvRefreshMode())) {
             return RefreshMode.PCT;
         }
-        return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase());
+        return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase(Locale.ROOT));
     }
 
     public RefreshMode getCurrentRefreshMode() {

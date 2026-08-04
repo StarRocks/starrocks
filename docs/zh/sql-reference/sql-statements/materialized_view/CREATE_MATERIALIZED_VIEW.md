@@ -455,7 +455,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
 ### 增量物化视图
 
-StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`）决定的默认刷新模式。请注意以下使用说明：
+StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`，有效值为 `pct`、`incremental`）决定的默认刷新模式。请注意以下使用说明：
 
 - 调整 `refresh_mode` 时存在以下限制：
   - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
