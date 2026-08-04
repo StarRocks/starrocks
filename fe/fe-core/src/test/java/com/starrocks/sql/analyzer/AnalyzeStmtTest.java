@@ -66,6 +66,9 @@ import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -218,6 +221,37 @@ public class AnalyzeStmtTest {
         sql = "analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assertions.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
+    }
+
+    @Test
+    public void testAnalyzeExternalPredicateColumns() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of(new ExternalColumnUsage("table-hash", table.getCatalogName(),
+                        table.getCatalogDBName(), table.getCatalogTableName(), "c_name",
+                        ColumnUsage.UseCase.PREDICATE));
+            }
+        };
+
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(
+                "analyze sample table hive0.tpch.customer predicate columns");
+        Assertions.assertTrue(analyzeStmt.isExternal());
+        Assertions.assertTrue(analyzeStmt.isSample());
+        Assertions.assertEquals(List.of("c_name"), analyzeStmt.getColumnNames());
+    }
+
+    @Test
+    public void testAnalyzeExternalPredicateColumnsWithoutUsage() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of();
+            }
+        };
+
+        analyzeFail("analyze sample table hive0.tpch.customer predicate columns",
+                "No predicate columns found for external table 'customer'");
     }
 
     @Test
