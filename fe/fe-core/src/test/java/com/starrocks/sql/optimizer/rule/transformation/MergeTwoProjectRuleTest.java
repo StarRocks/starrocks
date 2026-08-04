@@ -15,17 +15,21 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,6 +37,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MergeTwoProjectRuleTest {
 
@@ -143,5 +148,92 @@ public class MergeTwoProjectRuleTest {
         // And the original b -> ASSERT_TRUE(a) mapping from the lower project must be preserved per rule
         assertInstanceOf(CallOperator.class, resMap.get(b));
         assertEquals(com.starrocks.catalog.FunctionSet.ASSERT_TRUE, ((CallOperator) resMap.get(b)).getFnName());
+    }
+
+    @Test
+    public void testFoldConstantComparisonIntroducedByMerge() {
+        ColumnRefOperator source = new ColumnRefOperator(1, IntegerType.INT, "source", true);
+        ColumnRefOperator joinedValue = new ColumnRefOperator(2, VarcharType.VARCHAR, "joined_value", true);
+        ColumnRefOperator value = new ColumnRefOperator(3, IntegerType.INT, "value", true);
+        ColumnRefOperator output = new ColumnRefOperator(4, BooleanType.BOOLEAN, "output", true);
+
+        Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
+        bottomMap.put(joinedValue, ConstantOperator.createNull(VarcharType.VARCHAR));
+        bottomMap.put(value, source);
+
+        BinaryPredicateOperator joinedValuePredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, joinedValue, ConstantOperator.createVarchar("foo"));
+        BinaryPredicateOperator valuePredicate = new BinaryPredicateOperator(
+                BinaryType.NE, value, ConstantOperator.createInt(0));
+        CompoundPredicateOperator topExpression = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, joinedValuePredicate, valuePredicate);
+
+        LogicalProjectOperator bottomProject = new LogicalProjectOperator(bottomMap);
+        LogicalProjectOperator topProject = new LogicalProjectOperator(Map.of(output, topExpression));
+        OptExpression top = OptExpression.create(topProject, OptExpression.create(bottomProject));
+
+        MergeTwoProjectRule rule = new MergeTwoProjectRule();
+        List<OptExpression> result = rule.transform(top, OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+        LogicalProjectOperator mergedProject = (LogicalProjectOperator) result.get(0).getOp();
+        CompoundPredicateOperator mergedExpression =
+                assertInstanceOf(CompoundPredicateOperator.class, mergedProject.getColumnRefMap().get(output));
+        ConstantOperator foldedComparison =
+                assertInstanceOf(ConstantOperator.class, mergedExpression.getChild(0));
+        assertEquals(BooleanType.BOOLEAN, foldedComparison.getType());
+        assertTrue(foldedComparison.isNull());
+        BinaryPredicateOperator rewrittenValuePredicate =
+                assertInstanceOf(BinaryPredicateOperator.class, mergedExpression.getChild(1));
+        assertEquals(source, rewrittenValuePredicate.getChild(0));
+    }
+
+    @Test
+    public void testNormalizeConstantComparisonIntroducedByMerge() {
+        ColumnRefOperator source = new ColumnRefOperator(1, IntegerType.INT, "source", true);
+        ColumnRefOperator constantValue = new ColumnRefOperator(2, IntegerType.INT, "constant_value", true);
+        ColumnRefOperator inputValue = new ColumnRefOperator(3, IntegerType.INT, "input_value", true);
+        ColumnRefOperator output = new ColumnRefOperator(4, BooleanType.BOOLEAN, "output", true);
+
+        LogicalProjectOperator bottomProject = new LogicalProjectOperator(Map.of(
+                constantValue, ConstantOperator.createInt(1),
+                inputValue, source));
+        BinaryPredicateOperator topExpression =
+                new BinaryPredicateOperator(BinaryType.EQ, constantValue, inputValue);
+        LogicalProjectOperator topProject = new LogicalProjectOperator(Map.of(output, topExpression));
+        OptExpression top = OptExpression.create(topProject, OptExpression.create(bottomProject));
+
+        MergeTwoProjectRule rule = new MergeTwoProjectRule();
+        List<OptExpression> result = rule.transform(top, OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+        LogicalProjectOperator mergedProject = (LogicalProjectOperator) result.get(0).getOp();
+        BinaryPredicateOperator normalizedExpression =
+                assertInstanceOf(BinaryPredicateOperator.class, mergedProject.getColumnRefMap().get(output));
+        assertEquals(source, normalizedExpression.getChild(0));
+        assertEquals(ConstantOperator.createInt(1), normalizedExpression.getChild(1));
+    }
+
+    @Test
+    public void testSkipConstantFoldWithoutConstantReplacement() {
+        ColumnRefOperator source = new ColumnRefOperator(1, IntegerType.INT, "source", true);
+        ColumnRefOperator value = new ColumnRefOperator(2, IntegerType.INT, "value", true);
+        ColumnRefOperator output = new ColumnRefOperator(3, BooleanType.BOOLEAN, "output", true);
+
+        LogicalProjectOperator bottomProject = new LogicalProjectOperator(Map.of(value, source));
+        BinaryPredicateOperator constantPredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, ConstantOperator.createInt(1), ConstantOperator.createInt(1));
+        BinaryPredicateOperator valuePredicate = new BinaryPredicateOperator(
+                BinaryType.NE, value, ConstantOperator.createInt(0));
+        CompoundPredicateOperator topExpression = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, constantPredicate, valuePredicate);
+        LogicalProjectOperator topProject = new LogicalProjectOperator(Map.of(output, topExpression));
+        OptExpression top = OptExpression.create(topProject, OptExpression.create(bottomProject));
+
+        MergeTwoProjectRule rule = new MergeTwoProjectRule();
+        List<OptExpression> result = rule.transform(top, OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+        LogicalProjectOperator mergedProject = (LogicalProjectOperator) result.get(0).getOp();
+        CompoundPredicateOperator mergedExpression =
+                assertInstanceOf(CompoundPredicateOperator.class, mergedProject.getColumnRefMap().get(output));
+        assertInstanceOf(BinaryPredicateOperator.class, mergedExpression.getChild(0));
     }
 }
