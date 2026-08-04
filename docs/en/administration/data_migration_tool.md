@@ -167,6 +167,7 @@ The following table requirements apply:
 
 - Only non-colocate range-distribution tables are supported. `range-colocate` tables are not supported.
 - Range-distribution columns of type `VARBINARY` are not supported. The first-release boundary transport cannot preserve arbitrary binary values losslessly, so the target rejects these tables before submitting a split.
+- Transparent data encryption (TDE) must be disabled on both clusters for range-distribution migration. The target rejects encrypted source snapshot files and target-encrypted shared files before copying data.
 - Each logical partition must contain exactly one physical partition.
 - The migration snapshot covers all logical partitions and all visible indexes, including rollup indexes. A partial snapshot is rejected.
 - Reconciliation is split-only: the target layout can be equal to the source layout or can be refined to the source layout by exact range splits. A source merge, a target layout that is finer than the source, or any topology that would require a target merge is rejected without starting replication.
@@ -771,4 +772,5 @@ For migration between shared-data clusters:
 - The target cluster must be running on v4.1 or later.
 - Migration from a shared-data cluster to a shared-nothing target is not supported.
 - Each storage volume used by the source cluster's tables must have a corresponding `src_<volume_name>` storage volume pre-created on the target cluster.
+- Source snapshots that contain TDE-encrypted storage files are not supported. For range-distribution migrations that reference split-shared files, TDE must also be disabled on the target cluster.
 - Range-distribution migration is split-only and supports only non-colocate tables with one physical partition per logical partition and no `VARBINARY` distribution columns. `range-colocate`, `VARBINARY` range keys, source merge, and target-merge topologies are not supported.
