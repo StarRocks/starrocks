@@ -45,7 +45,7 @@ jobs:
 
   pr-info:
     name: Add PR Information
-    runs-on: [self-hosted, sync]
+    runs-on: [self-hosted, sync, ubuntu]
     env:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
@@ -63,7 +63,7 @@ jobs:
 
   cd-repo-sync-main:
     name: CD Repo Sync - main
-    runs-on: [self-hosted, sync]
+    runs-on: [self-hosted, sync, ubuntu]
     if: inputs.BRANCH == 'main'
     needs: pr-info
     env:
