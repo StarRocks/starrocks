@@ -164,7 +164,10 @@ public class UpdatePlanner {
         long tableId = targetTable.getId();
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        for (Column column : targetTable.getFullSchema()) {
+        // UpdateAnalyzer builds the update output from the base schema. Keep the sink tuple
+        // aligned with that output instead of including shadow columns from an in-progress
+        // schema change in the full schema.
+        for (Column column : targetTable.getBaseSchema()) {
             if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                     !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                 continue;

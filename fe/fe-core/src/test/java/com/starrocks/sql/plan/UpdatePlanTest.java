@@ -14,8 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
@@ -23,6 +25,7 @@ import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -48,6 +51,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -63,6 +67,14 @@ public class UpdatePlanTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+        starRocksAssert.withTable("CREATE TABLE update_shadow_generated_column (\n" +
+                "  pk bigint NOT NULL,\n" +
+                "  v int NOT NULL,\n" +
+                "  g int NULL AS (v + 1)\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY (pk)\n" +
+                "DISTRIBUTED BY HASH (pk) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
     }
 
     @Test
@@ -92,6 +104,31 @@ public class UpdatePlanTest extends PlanTestBase {
         testExplain("explain verbose update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         testExplain("explain costs update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
         connectContext.getSessionVariable().setPartialUpdateMode(oldVal);
+    }
+
+    @Test
+    public void testUpdateSinkUsesBaseSchemaWithShadowGeneratedColumns() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        List<Column> schemaWithShadowGeneratedColumns = new ArrayList<>(originalFullSchema);
+        for (Column column : table.getBaseSchema()) {
+            if (column.isGeneratedColumn()) {
+                Column shadowColumn = column.deepCopy();
+                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
+                schemaWithShadowGeneratedColumns.add(shadowColumn);
+            }
+        }
+        table.setNewFullSchema(schemaWithShadowGeneratedColumns);
+
+        try {
+            ExecPlan execPlan = getUpdateExecPlanObject(
+                    "update update_shadow_generated_column set v = 2 where pk = 1");
+            OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+            assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+        } finally {
+            table.setNewFullSchema(originalFullSchema);
+        }
     }
 
     @Test
@@ -186,6 +223,10 @@ public class UpdatePlanTest extends PlanTestBase {
     }
 
     private static String getUpdateExecPlan(String originStmt) throws Exception {
+        return getUpdateExecPlanObject(originStmt).getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private static ExecPlan getUpdateExecPlanObject(String originStmt) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
@@ -193,10 +234,7 @@ public class UpdatePlanTest extends PlanTestBase {
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
                         .get(0);
         connectContext.getDumpInfo().setOriginStmt(originStmt);
-        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
-
-        String ret = execPlan.getExplainString(TExplainLevel.NORMAL);
-        return ret;
+        return new StatementPlanner().plan(statementBase, connectContext);
     }
 
     private static ExecPlan getIcebergUpdateExecPlan(String originStmt) throws Exception {
