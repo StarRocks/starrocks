@@ -366,8 +366,10 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     target_bundled_segment->set_shared(false);
 
     // This file was written on the source after the split. It is not shared by any target sibling
-    // and must stay private after replication.
-    src_rowset->add_segment_metas()->set_filename(kNewSourceSegment);
+    // and must become target-private after replication even if it is source-shared.
+    auto* new_source_segment = src_rowset->add_segment_metas();
+    new_source_segment->set_filename(kNewSourceSegment);
+    new_source_segment->set_shared(true);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_child_metadata));
     ASSERT_TRUE(_tablet_mgr->get_tablet_metadata(target_child_metadata->id(), 1).status().is_not_found());
 

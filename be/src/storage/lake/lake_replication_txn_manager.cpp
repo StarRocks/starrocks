@@ -35,6 +35,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -520,7 +521,10 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
 
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
+    // The explicit source filesystem owns the path authority. Always read durable source metadata:
+    // a target-local or previous-source metacache entry with the same logical path is not valid here.
+    const CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true};
+    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, cache_opts, 0, shared_src_fs);
     if (!src_tablet_meta_or.ok()) {
         VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
                 << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
@@ -754,9 +758,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
-            if (is_existed && reused_file_is_shared(src_segment_filename)) {
-                new_seg_meta->set_shared(true);
-            }
+            new_seg_meta->set_shared(is_existed && reused_file_is_shared(src_segment_filename));
 
             // Add encryption metadata for files
             if (config::enable_transparent_data_encryption) {
@@ -797,9 +799,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
-            if (is_existed && reused_file_is_shared(src_del_filename)) {
-                new_del->set_shared(true);
-            }
+            new_del->set_shared(is_existed && reused_file_is_shared(src_del_filename));
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -831,9 +831,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                                                        final_sst_filename, target_tablet_id,
                                                                        src_data_dir, file_locations, filename_map));
             sst->set_filename(final_sst_filename);
-            if (is_existed && reused_file_is_shared(src_sst_filename)) {
-                sst->set_shared(true);
-            }
+            sst->set_shared(is_existed && reused_file_is_shared(src_sst_filename));
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -866,9 +864,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                              target_tablet_id, src_data_dir, file_locations, filename_map));
             auto& item = (*dest_meta->mutable_version_to_file())[version];
             item.set_name(final_delvec_filename);
-            if (is_existed && reused_file_is_shared(src_delvec_filename)) {
-                item.set_shared(true);
-            }
+            item.set_shared(is_existed && reused_file_is_shared(src_delvec_filename));
 
             if (config::enable_transparent_data_encryption) {
                 if (!is_existed) {
@@ -901,12 +897,10 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         determine_final_filename(src_dcg_filename, txn_id, existed_filename_uuids, final_dcg_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 dcg_ver_pb.set_column_files(i, final_dcg_filename);
-                if (is_existed && reused_file_is_shared(src_dcg_filename)) {
-                    while (dcg_ver_pb.shared_files_size() <= i) {
-                        dcg_ver_pb.add_shared_files(false);
-                    }
-                    dcg_ver_pb.set_shared_files(i, true);
+                while (dcg_ver_pb.shared_files_size() <= i) {
+                    dcg_ver_pb.add_shared_files(false);
                 }
+                dcg_ver_pb.set_shared_files(i, is_existed && reused_file_is_shared(src_dcg_filename));
 
                 if (config::enable_transparent_data_encryption) {
                     if (!is_existed) {
@@ -986,9 +980,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 entry.set_index_file(final_idx_filename);
-                if (is_existed && reused_file_is_shared(src_idx_filename)) {
-                    entry.set_shared_file(true);
-                }
+                entry.set_shared_file(is_existed && reused_file_is_shared(src_idx_filename));
                 // The source's encryption meta belongs to the source cluster; drop it and
                 // re-derive against the target (matching the segment handling above).
                 entry.clear_encryption_meta();

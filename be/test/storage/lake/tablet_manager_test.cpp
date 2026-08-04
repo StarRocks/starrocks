@@ -18,7 +18,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <condition_variable>
 #include <fstream>
+#include <mutex>
+#include <thread>
 
 #include "base/bthreads/util.h"
 #include "base/failpoint/fail_point.h"
@@ -30,6 +33,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/storage_define.h"
 #include "fs/fs.h"
+#include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -51,6 +55,24 @@
 #include "script/script.h"
 
 namespace starrocks {
+
+class TrackingMemoryFileSystem : public MemoryFileSystem {
+public:
+    Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) override {
+        std::lock_guard lock(_mutex);
+        _dropped_path = path;
+        return Status::OK();
+    }
+
+    std::string dropped_path() const {
+        std::lock_guard lock(_mutex);
+        return _dropped_path;
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::string _dropped_path;
+};
 
 class LakeTabletManagerTest : public testing::Test {
 public:
@@ -1282,6 +1304,173 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_rejects_incomplete_bund
             EXPECT_EQ(2, metadata->version());
         }
     }
+}
+
+// Cross-cluster replication passes an explicit source metadata path and source filesystem. If the
+// source partition uses bundled metadata, the fallback must read 0_<version>.meta from that same
+// source directory instead of deriving a bundle path from the target cluster's location provider.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_by_remote_path_reads_bundle_from_same_directory) {
+    TabletSchemaPB schema;
+    schema.set_id(next_id());
+    schema.set_num_short_key_columns(1);
+    schema.set_keys_type(DUP_KEYS);
+    schema.set_num_rows_per_row_block(65535);
+    auto* column = schema.add_column();
+    column->set_unique_id(0);
+    column->set_name("k1");
+    column->set_type("INT");
+    column->set_is_key(true);
+    column->set_is_nullable(false);
+
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(kVersion);
+    metadata.mutable_schema()->CopyFrom(schema);
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    metadatas.emplace(tablet_id, metadata);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto fs = FileSystem::Default();
+    const auto local_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    const auto remote_meta_dir = lake::join_path(_test_dir, "remote_source/meta");
+    ASSERT_OK(fs->create_dir_recursive(remote_meta_dir));
+    const auto remote_bundle_path = lake::join_path(remote_meta_dir, lake::tablet_metadata_filename(0, kVersion));
+    ASSERT_OK(fs::copy_file(local_bundle_path, remote_bundle_path));
+    ASSERT_OK(fs->delete_file(local_bundle_path));
+    _tablet_manager->prune_metacache();
+
+    const auto remote_tablet_path =
+            lake::join_path(remote_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    ASSIGN_OR_ABORT(auto remote_fs, FileSystemFactory::CreateSharedFromString(remote_tablet_path));
+    auto result = _tablet_manager->get_tablet_metadata(remote_tablet_path, true, 0, remote_fs);
+    ASSERT_OK(result);
+    EXPECT_EQ(tablet_id, result.value()->id());
+    EXPECT_EQ(kVersion, result.value()->version());
+    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(remote_tablet_path));
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                               _tablet_manager->tablet_metadata_location(tablet_id, kVersion)));
+}
+
+// Two source clusters can have identical logical metadata paths while their explicit filesystems
+// point at different storage volumes. Such reads must not share a singleflight result. A dirty
+// bundled read must also evict the bundle through the supplied source filesystem, not through a
+// filesystem reconstructed from the target-visible path.
+TEST_F(LakeTabletManagerTest, get_remote_bundle_metadata_isolated_by_filesystem) {
+    TabletSchemaPB schema;
+    schema.set_id(next_id());
+    schema.set_num_short_key_columns(1);
+    schema.set_keys_type(DUP_KEYS);
+    schema.set_num_rows_per_row_block(65535);
+    auto* column = schema.add_column();
+    column->set_unique_id(0);
+    column->set_name("k1");
+    column->set_type("INT");
+    column->set_is_key(true);
+    column->set_is_nullable(false);
+
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    auto make_bundle = [&](int64_t gtid) {
+        TabletMetadataPB metadata;
+        metadata.set_id(tablet_id);
+        metadata.set_version(kVersion);
+        metadata.set_gtid(gtid);
+        metadata.mutable_schema()->CopyFrom(schema);
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(tablet_id, metadata);
+        CHECK_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+        const auto local_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+        ASSIGN_OR_ABORT(auto input, FileSystem::Default()->new_random_access_file(local_path));
+        ASSIGN_OR_ABORT(auto content, input->read_all());
+        return content;
+    };
+
+    const auto bundle_a = make_bundle(101);
+    const auto bundle_b = make_bundle(202);
+    const std::string remote_meta_dir = "/same_source_path/meta";
+    const auto remote_bundle_path = lake::join_path(remote_meta_dir, lake::tablet_metadata_filename(0, kVersion));
+    const auto remote_tablet_path =
+            lake::join_path(remote_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    auto fs_a = std::make_shared<TrackingMemoryFileSystem>();
+    auto fs_b = std::make_shared<TrackingMemoryFileSystem>();
+    for (const auto& [remote_fs, content] :
+         {std::pair<std::shared_ptr<TrackingMemoryFileSystem>, std::string_view>(fs_a, bundle_a),
+          std::pair<std::shared_ptr<TrackingMemoryFileSystem>, std::string_view>(fs_b, bundle_b)}) {
+        ASSERT_OK(remote_fs->create_dir_recursive(remote_meta_dir));
+        ASSERT_OK(remote_fs->create_file(remote_bundle_path));
+        ASSERT_OK(remote_fs->append_file(remote_bundle_path, content));
+    }
+
+    std::mutex barrier_mutex;
+    std::condition_variable barrier_cv;
+    int leaders = 0;
+    int followers = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) {
+        std::lock_guard lock(barrier_mutex);
+        ++followers;
+        barrier_cv.notify_all();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        std::unique_lock lock(barrier_mutex);
+        ++leaders;
+        barrier_cv.notify_all();
+        barrier_cv.wait_for(lock, std::chrono::seconds(5), [&] { return leaders == 2 || followers == 1; });
+    });
+
+    // Cross-cluster replication explicitly bypasses the long-lived metadata cache because the
+    // source filesystem authority is not necessarily encoded in the logical metadata path.
+    const lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true};
+    TabletMetadataPtr metadata_a;
+    TabletMetadataPtr metadata_b;
+    Status status_a;
+    Status status_b;
+    std::thread thread_a([&] {
+        auto result = _tablet_manager->get_tablet_metadata(remote_tablet_path, cache_opts, 0, fs_a);
+        status_a = result.status();
+        if (result.ok()) {
+            metadata_a = std::move(result).value();
+        }
+    });
+    std::thread thread_b([&] {
+        auto result = _tablet_manager->get_tablet_metadata(remote_tablet_path, cache_opts, 0, fs_b);
+        status_b = result.status();
+        if (result.ok()) {
+            metadata_b = std::move(result).value();
+        }
+    });
+    thread_a.join();
+    thread_b.join();
+
+    ASSERT_OK(status_a);
+    ASSERT_OK(status_b);
+    ASSERT_NE(nullptr, metadata_a);
+    ASSERT_NE(nullptr, metadata_b);
+    EXPECT_EQ(101, metadata_a->gtid());
+    EXPECT_EQ(202, metadata_b->gtid());
+    EXPECT_EQ(2, leaders);
+    EXPECT_EQ(0, followers);
+
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+    SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto sequential_a, _tablet_manager->get_tablet_metadata(remote_tablet_path, cache_opts, 0, fs_a));
+    ASSIGN_OR_ABORT(auto sequential_b, _tablet_manager->get_tablet_metadata(remote_tablet_path, cache_opts, 0, fs_b));
+    EXPECT_EQ(101, sequential_a->gtid());
+    EXPECT_EQ(202, sequential_b->gtid());
+
+    auto mismatched = _tablet_manager->get_tablet_metadata(remote_tablet_path, cache_opts, 999, fs_a);
+    EXPECT_TRUE(mismatched.status().is_not_found()) << mismatched.status();
+    EXPECT_EQ(remote_bundle_path, fs_a->dropped_path());
 }
 
 // Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
