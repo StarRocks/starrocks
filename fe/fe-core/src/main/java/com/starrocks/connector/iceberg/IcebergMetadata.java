@@ -267,7 +267,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
 
@@ -284,7 +284,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
-        return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
+        try {
+            return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
+        } catch (org.apache.iceberg.exceptions.AlreadyExistsException e) {
+            throw new AlreadyExistsException("Table Already Exists: " + tableName);
+        }
     }
 
     @Override
