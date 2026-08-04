@@ -1,0 +1,247 @@
+-- name: test_histogram_scope_default
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1') WITH SYNC MODE;
+select count(1) from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1';
+-- result:
+1
+-- !result
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1	1
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_histogram_scope_mcv
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+select buckets like '[["Infinity"%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+0
+-- !result
+select buckets like '[["1","5000",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+select json_length(parse_json(buckets)) from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'MCV') WITH SYNC MODE;
+select mcv is not null, buckets like '[["1","5000",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1	1
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_histogram_scope_buckets
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+select mcv is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+select buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+select json_length(parse_json(buckets)) > 1 from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+select buckets like '[["Infinity"%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+0
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_histogram_scope_both
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'both') WITH SYNC MODE;
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1	1
+-- !result
+select json_length(parse_json(buckets)) > 1 from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_num';
+-- result:
+1
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_num, k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'both') WITH SYNC MODE;
+[ORDER] select column_name, mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' order by column_name;
+-- result:
+k_num	1
+k_str	1
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_histogram_scope_low_cardinality
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'both') WITH SYNC MODE;
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+-- result:
+1
+-- !result
+select buckets is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+-- result:
+1
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+select mcv is null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+-- result:
+1	1
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_low PROPERTIES('histogram_sample_ratio' = '1', 'histogram_mcv_size' = '5', 'histogram_stats_scope' = 'both') WITH SYNC MODE;
+select mcv is not null, buckets is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_low';
+-- result:
+1	1
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_histogram_scope_varchar
+create database histo_test_${uuid0};
+-- result:
+-- !result
+use histo_test_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k_num`  bigint,
+    `k_low`  int,
+    `k_str`  varchar(32)
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t1
+SELECT g1, g1 % 20, concat('v_', g1 % 40)
+FROM TABLE(generate_series(1, 5000)) AS t(g1);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'mcv') WITH SYNC MODE;
+select mcv is not null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+-- result:
+1
+-- !result
+select buckets like '[["Infinity","Infinity",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+-- result:
+1
+-- !result
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k_str PROPERTIES('histogram_sample_ratio' = '1', 'histogram_stats_scope' = 'buckets') WITH SYNC MODE;
+select mcv is null from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+-- result:
+1
+-- !result
+select buckets like '[["Infinity","Infinity",%' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+-- result:
+1
+-- !result
+select buckets = '[["Infinity","Infinity",5000,0]]' from _statistics_.histogram_statistics where table_name = 'histo_test_${uuid0}.t1' and column_name = 'k_str';
+-- result:
+1
+-- !result
+drop database histo_test_${uuid0} force;
+-- result:
+-- !result
