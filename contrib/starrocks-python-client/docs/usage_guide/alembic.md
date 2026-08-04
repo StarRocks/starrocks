@@ -143,8 +143,8 @@ def run_migrations_online() -> None:
 ### Advanced: Choosing the canonicalization schema for view/MV comparison
 
 On StarRocks versions before 4.0.6 a view/MV definition is stored in the engine's own
-canonical form, which differs textually from the SQL you wrote in your model (dropped
-`col AS col` aliases, added parentheses, `LEFT OUTER JOIN LATERAL unnest`, etc.). To avoid
+canonical form, which could differ textually from the SQL in the model (dropped
+`col AS col` aliases, added parentheses, etc.) but the same semantically. To avoid
 reporting a phantom change on every autogenerate, the dialect canonicalizes your model's
 definition by round-tripping it through a **temporary view** and comparing the engine's
 stored form of both sides.
