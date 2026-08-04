@@ -949,9 +949,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_uses_virtual_shard_u
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = absl::InternalError("stop after observing the source partition URI");
     });
-    SyncPoint::GetInstance()->SetCallBack(
-            "LakeReplicationTxnManager::src_partition_starlet_uri",
-            [&](void* arg) { src_partition_starlet_uri = *static_cast<std::string*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_partition_starlet_uri", [&](void* arg) {
+        src_partition_starlet_uri = *static_cast<std::string*>(arg);
+    });
 
     auto request = build_request(true /* with_full_path */);
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
