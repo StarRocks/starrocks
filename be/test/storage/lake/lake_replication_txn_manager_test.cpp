@@ -304,6 +304,53 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_no_missing_versions) 
     EXPECT_FALSE(status.ok());
 }
 
+TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data_version_metadata) {
+    auto src_metadata = generate_tablet_metadata(GetParam());
+    src_metadata->set_version(3);
+
+    auto target_child_id = generate_tablet_metadata(GetParam())->id();
+    auto target_child_metadata = std::make_shared<TabletMetadataPB>(*src_metadata);
+    target_child_metadata->set_id(target_child_id);
+    target_child_metadata->set_version(2);
+    target_child_metadata->mutable_range();
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_child_metadata));
+    ASSERT_TRUE(_tablet_mgr->get_tablet_metadata(target_child_metadata->id(), 1).status().is_not_found());
+
+    std::unordered_map<std::string, size_t> segment_name_to_size_map;
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            src_metadata, target_child_metadata, src_metadata->id(), target_child_metadata->id(), _transaction_id, 1,
+            lake::join_path(_test_dir, lake::kSegmentDirectoryName), segment_name_to_size_map, file_locations,
+            filename_map);
+
+    ASSERT_OK(result);
+    EXPECT_EQ(target_child_metadata->id(), result.value()->id());
+    EXPECT_EQ(2, result.value()->version());
+    EXPECT_TRUE(file_locations.empty());
+    EXPECT_TRUE(filename_map.empty());
+}
+
+TEST_P(SharedDataReplicationTxnManagerTest, test_target_hash_tablet_without_data_version_metadata) {
+    auto src_metadata = generate_tablet_metadata(GetParam());
+    src_metadata->set_version(3);
+
+    auto target_metadata = generate_tablet_metadata(GetParam());
+    target_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_metadata));
+    ASSERT_TRUE(_tablet_mgr->get_tablet_metadata(target_metadata->id(), 1).status().is_not_found());
+
+    std::unordered_map<std::string, size_t> segment_name_to_size_map;
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            src_metadata, target_metadata, src_metadata->id(), target_metadata->id(), _transaction_id, 1,
+            lake::join_path(_test_dir, lake::kSegmentDirectoryName), segment_name_to_size_map, file_locations,
+            filename_map);
+
+    ASSERT_TRUE(result.status().is_not_found());
+}
+
 // Tests for LakeReplicationTxnManager::copy_non_segment_file_with_retry
 class CopyNonSegmentFileWithRetryTest : public testing::Test {
 protected:

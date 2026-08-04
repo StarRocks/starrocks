@@ -687,8 +687,23 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
             << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
     // find all files that already replicated to target storage in previous txns
-    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
+    auto target_data_version_tablet_meta_or =
+            _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr);
+    TabletMetadataPtr target_data_version_tablet_meta;
+    if (target_data_version_tablet_meta_or.ok()) {
+        target_data_version_tablet_meta = std::move(target_data_version_tablet_meta_or).value();
+    } else if (target_data_version_tablet_meta_or.status().is_not_found() && target_tablet_meta->has_range() &&
+               target_tablet_meta->version() > data_version) {
+        // A range tablet created by metadata-only split/merge does not exist at the partition's data version.
+        // Its current visible metadata inherits the files already replicated by its ancestor, so use it for the
+        // full-snapshot file-dedup baseline while keeping data_version unchanged for transaction versioning.
+        target_data_version_tablet_meta = target_tablet_meta;
+        LOG(INFO) << "Use current range tablet metadata as replication file-dedup baseline"
+                  << ", tablet_id: " << target_tablet_id << ", data_version: " << data_version
+                  << ", metadata_version: " << target_tablet_meta->version() << ", txn_id: " << txn_id;
+    } else {
+        return target_data_version_tablet_meta_or.status();
+    }
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
     // <uuid, pair<existed_filename, encryption_meta>>
     std::unordered_map<std::string, std::pair<std::string, std::string>> existed_filename_uuids;
