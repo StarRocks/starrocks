@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <functional>
+#include <unordered_set>
 #include <vector>
 
 #include "common/status.h"
@@ -71,10 +72,11 @@ public:
     // Helper function to build existed filename UUIDs map from target tablet metadata
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
     // is already replicated to target storage. Map from UUID to target filename.
-    // Also, in order to support file encryption, we also need to keep the encryption meta.
+    // Also keep target-side encryption and shared-ownership metadata for each reused file.
     Status build_existed_filename_uuids_map(
             const TabletMetadataPtr& target_data_version_tablet_meta,
-            std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids);
+            std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids,
+            std::unordered_set<std::string>& existed_shared_filename_uuids);
 
     // Helper function to create replication txn log with converted metadata
     // generate and replace file names to adapt for target storage

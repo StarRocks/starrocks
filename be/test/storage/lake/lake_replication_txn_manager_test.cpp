@@ -307,12 +307,67 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_no_missing_versions) 
 TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data_version_metadata) {
     auto src_metadata = generate_tablet_metadata(GetParam());
     src_metadata->set_version(3);
+    src_metadata->mutable_range();
+
+    constexpr const char* kSourceSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat";
+    constexpr const char* kTargetSegment = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat";
+    constexpr const char* kNewSourceSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat";
+    constexpr const char* kSourceBundledSegment = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000008.dat";
+    constexpr const char* kTargetBundledSegment = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000008.dat";
+    constexpr const char* kSourceDel = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.del";
+    constexpr const char* kTargetDel = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000003.del";
+    constexpr const char* kSst = "aaaaaaaa-bbbb-cccc-dddd-000000000004.sst";
+    constexpr const char* kSourceDelvec = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000005.delvec";
+    constexpr const char* kTargetDelvec = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000005.delvec";
+    constexpr const char* kSourceDcg = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000006.cols";
+    constexpr const char* kTargetDcg = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000006.cols";
+    constexpr const char* kSourceIdg = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000007.idx";
+    constexpr const char* kTargetIdg = "0000000000000002_aaaaaaaa-bbbb-cccc-dddd-000000000007.idx";
+
+    auto* src_rowset = src_metadata->add_rowsets();
+    src_rowset->set_id(1);
+    src_rowset->add_segment_metas()->set_filename(kSourceSegment);
+    src_rowset->add_del_files()->set_name(kSourceDel);
+    src_metadata->mutable_sstable_meta()->add_sstables()->set_filename(kSst);
+    (*src_metadata->mutable_delvec_meta()->mutable_version_to_file())[1].set_name(kSourceDelvec);
+    auto& src_dcg = (*src_metadata->mutable_dcg_meta()->mutable_dcgs())[1];
+    src_dcg.add_column_files(kSourceDcg);
+    src_dcg.add_shared_files(false);
+    auto* src_idg_entry = (*src_metadata->mutable_idg_meta()->mutable_idgs())[1].add_entries();
+    src_idg_entry->set_index_file(kSourceIdg);
+    auto* src_bundled_rowset = src_metadata->add_rowsets();
+    src_bundled_rowset->set_id(2);
+    auto* src_bundled_segment = src_bundled_rowset->add_segment_metas();
+    src_bundled_segment->set_filename(kSourceBundledSegment);
+    src_bundled_segment->set_bundle_file_offset(4096);
 
     auto target_child_id = generate_tablet_metadata(GetParam())->id();
     auto target_child_metadata = std::make_shared<TabletMetadataPB>(*src_metadata);
     target_child_metadata->set_id(target_child_id);
     target_child_metadata->set_version(2);
-    target_child_metadata->mutable_range();
+    auto* target_rowset = target_child_metadata->mutable_rowsets(0);
+    target_rowset->mutable_segment_metas(0)->set_filename(kTargetSegment);
+    target_rowset->mutable_segment_metas(0)->set_shared(true);
+    target_rowset->mutable_del_files(0)->set_name(kTargetDel);
+    target_rowset->mutable_del_files(0)->set_shared(true);
+    target_child_metadata->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
+    auto& target_delvec = (*target_child_metadata->mutable_delvec_meta()->mutable_version_to_file())[1];
+    target_delvec.set_name(kTargetDelvec);
+    target_delvec.set_shared(true);
+    auto& target_dcg = (*target_child_metadata->mutable_dcg_meta()->mutable_dcgs())[1];
+    target_dcg.set_column_files(0, kTargetDcg);
+    target_dcg.set_shared_files(0, true);
+    auto* target_idg_entry = (*target_child_metadata->mutable_idg_meta()->mutable_idgs())[1].mutable_entries(0);
+    target_idg_entry->set_index_file(kTargetIdg);
+    target_idg_entry->set_shared_file(true);
+    auto* target_bundled_segment = target_child_metadata->mutable_rowsets(1)->mutable_segment_metas(0);
+    target_bundled_segment->set_filename(kTargetBundledSegment);
+    // Bundled segments are effectively shared even when the explicit shared flag is absent.
+    target_bundled_segment->set_shared(false);
+
+    // This file was written on the source after the split. It is not shared by any target sibling
+    // and must stay private after replication.
+    src_rowset->add_segment_metas()->set_filename(kNewSourceSegment);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_child_metadata));
     ASSERT_TRUE(_tablet_mgr->get_tablet_metadata(target_child_metadata->id(), 1).status().is_not_found());
 
@@ -327,8 +382,30 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_target_split_child_without_data
     ASSERT_OK(result);
     EXPECT_EQ(target_child_metadata->id(), result.value()->id());
     EXPECT_EQ(2, result.value()->version());
-    EXPECT_TRUE(file_locations.empty());
-    EXPECT_TRUE(filename_map.empty());
+    ASSERT_EQ(2, result.value()->rowsets_size());
+    const auto& built_rowset = result.value()->rowsets(0);
+    ASSERT_EQ(2, built_rowset.segment_metas_size());
+    EXPECT_EQ(kTargetSegment, built_rowset.segment_metas(0).filename());
+    EXPECT_TRUE(built_rowset.segment_metas(0).shared());
+    EXPECT_FALSE(built_rowset.segment_metas(1).shared());
+    ASSERT_EQ(1, built_rowset.del_files_size());
+    EXPECT_EQ(kTargetDel, built_rowset.del_files(0).name());
+    EXPECT_TRUE(built_rowset.del_files(0).shared());
+    ASSERT_EQ(1, result.value()->sstable_meta().sstables_size());
+    EXPECT_TRUE(result.value()->sstable_meta().sstables(0).shared());
+    EXPECT_EQ(kTargetDelvec, result.value()->delvec_meta().version_to_file().at(1).name());
+    EXPECT_TRUE(result.value()->delvec_meta().version_to_file().at(1).shared());
+    EXPECT_EQ(kTargetDcg, result.value()->dcg_meta().dcgs().at(1).column_files(0));
+    EXPECT_TRUE(result.value()->dcg_meta().dcgs().at(1).shared_files(0));
+    EXPECT_EQ(kTargetIdg, result.value()->idg_meta().idgs().at(1).entries(0).index_file());
+    EXPECT_TRUE(result.value()->idg_meta().idgs().at(1).entries(0).shared_file());
+    const auto& built_bundled_segment = result.value()->rowsets(1).segment_metas(0);
+    EXPECT_EQ(kTargetBundledSegment, built_bundled_segment.filename());
+    ASSERT_TRUE(built_bundled_segment.has_bundle_file_offset());
+    EXPECT_EQ(4096, built_bundled_segment.bundle_file_offset());
+    EXPECT_TRUE(built_bundled_segment.shared());
+    EXPECT_EQ(1, file_locations.size());
+    EXPECT_EQ(1, filename_map.size());
 }
 
 TEST_P(SharedDataReplicationTxnManagerTest, test_target_hash_tablet_without_data_version_metadata) {
