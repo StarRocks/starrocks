@@ -11,7 +11,7 @@ description: "从 Bitmap 中删除指定的数值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 bitmap_remove(lhs, input)
 ```
 

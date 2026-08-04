@@ -13,7 +13,7 @@ This function may return different results for different time zones. For more in
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATETIME|DATE dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

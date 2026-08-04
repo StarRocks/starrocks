@@ -11,7 +11,7 @@ description: "covar_samp 返回两个表达式的样本协方差，支持作为�
 
 ## 语法
 
-```Haskell
+```plaintext
 COVAR_SAMP(expr1, expr2)
 ```
 

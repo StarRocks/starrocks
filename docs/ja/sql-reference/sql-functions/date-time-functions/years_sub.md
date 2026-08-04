@@ -9,7 +9,7 @@ description: "指定された年数を日時値または日付値から減算し
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME YEARS_SUB(DATETIME date, INT years)
 ```
 

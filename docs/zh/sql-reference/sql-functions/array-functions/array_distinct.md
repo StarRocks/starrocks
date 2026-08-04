@@ -11,7 +11,7 @@ description: "移除数组中的重复元素。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY_DISTINCT(array)
 ```
 

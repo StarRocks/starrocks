@@ -9,7 +9,7 @@ description: "2つの入力ビットマップの和集合を計算し、新し�
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP BITMAP_OR(BITMAP lhs, BITMAP rhs)
 ```
 

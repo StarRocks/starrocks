@@ -11,7 +11,7 @@ Converts a value to an hll type. Typically used in imports to map a value in the
 
 ## Syntax
 
-```Haskell
+```plaintext
 HLL_HASH(column_name)
 ```
 

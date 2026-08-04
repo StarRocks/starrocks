@@ -13,7 +13,7 @@ description: "返回输入字符串的64位xxhash3哈希值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT XX_HASH3_64(VARCHAR input, ...)
 ```
 

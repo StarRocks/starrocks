@@ -11,7 +11,7 @@ Returns the ISO standard week of the year for the specified date as an integer w
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT WEEK_ISO(DATETIME date)
 ```
 

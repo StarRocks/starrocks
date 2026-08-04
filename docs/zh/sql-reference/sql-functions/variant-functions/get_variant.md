@@ -11,7 +11,7 @@ description: "从 VARIANT 对象指定路径中提取类型化值的函数族。
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT get_variant_int(variant_expr, path)
 DOUBLE get_variant_double(variant_expr, path)
 VARCHAR get_variant_string(variant_expr, path)

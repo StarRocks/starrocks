@@ -11,7 +11,7 @@ description: "按 ISO 标准返回指定日期对应的周几（1-7），其中 
 
 ## 语法
 
-```Haskell
+```plaintext
 INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 

@@ -11,7 +11,7 @@ description: "从字符串的左侧和右侧移除连续出现的空格或指定
 
 ## 语法
 
-```Haskell
+```plaintext
 trim(str[,characters]);
 ```
 

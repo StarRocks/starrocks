@@ -9,7 +9,7 @@ description: "ARRAY_CONTAINS関数は配列が特定の要素を含んでいる�
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_contains(any_array, any_element)
 ```
 

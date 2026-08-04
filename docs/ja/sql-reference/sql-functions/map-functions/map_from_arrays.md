@@ -11,7 +11,7 @@ description: "指定されたキーと値の配列からMAP値を作成します
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_from_arrays(ARRAY keys, ARRAY values)
 ```
 

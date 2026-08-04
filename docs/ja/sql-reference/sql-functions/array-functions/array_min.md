@@ -9,7 +9,7 @@ ARRAY 内のすべてのデータの最小値を取得し、この結果を返�
 
 ## 構文
 
-```Haskell
+```plaintext
 array_min(array(type))
 ```
 

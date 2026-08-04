@@ -9,7 +9,7 @@ description: "文字列を正規表現パターンで分割し、最大指定要
 
 ## Syntax
 
-```Haskell
+```plaintext
 regexp_split(str, pattern[, max_split])
 ```
 

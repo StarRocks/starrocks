@@ -23,7 +23,7 @@ The parameters are compared based on the following rules:
 
 ## Syntax
 
-```Haskell
+```plaintext
 GREATEST(expr1,...);
 ```
 

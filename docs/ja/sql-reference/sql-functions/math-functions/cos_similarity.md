@@ -19,7 +19,7 @@ description: "2つのベクトル間の角度の余弦を計算してベクト�
 
 ## 構文
 
-```Haskell
+```plaintext
 cosine_similarity(a, b)
 ```
 

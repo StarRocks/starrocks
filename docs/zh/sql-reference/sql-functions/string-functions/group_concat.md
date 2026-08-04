@@ -13,7 +13,7 @@ description: "将分组中的多个非NULL值连接成一个字符串，使用�
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
              [ORDER BY {unsigned_integer | col_name | expr}
                  [ASC | DESC] [,col_name ...]]

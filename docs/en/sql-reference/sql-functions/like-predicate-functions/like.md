@@ -13,7 +13,7 @@ LIKE is usually used together with characters such as the percent sign (%) and u
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN like(VARCHAR expr, VARCHAR pattern);
 ```
 

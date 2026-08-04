@@ -13,7 +13,7 @@ description: "返回dividend除以divisor后的余数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 mod(dividend,divisor);
 ```
 

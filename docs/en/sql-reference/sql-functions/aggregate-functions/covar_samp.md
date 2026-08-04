@@ -9,7 +9,7 @@ Returns the sample covariance of two expressions. This function is supported fro
 
 ## Syntax
 
-```Haskell
+```plaintext
 COVAR_SAMP(expr1, expr2)
 ```
 

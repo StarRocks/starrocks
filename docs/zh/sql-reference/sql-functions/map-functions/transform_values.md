@@ -13,13 +13,13 @@ description: "使用 Lambda 表达式对 Map 中的 Value 进行转换。"
 
 ## 语法
 
-```Haskell
+```plaintext
 map transform_values(lambda_func, any_map)
 ```
 
 `lambda_func` 也可以放在 `any_map` 之后，即:
 
-```Haskell
+```plaintext
 map transform_values(any_map, lambda_func)
 ```
 

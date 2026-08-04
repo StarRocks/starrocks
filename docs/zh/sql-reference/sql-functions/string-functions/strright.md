@@ -11,7 +11,7 @@ description: "从字符串右侧返回指定长度的字符，是right函数的�
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR strright(VARCHAR str, INT len)
 ```
 

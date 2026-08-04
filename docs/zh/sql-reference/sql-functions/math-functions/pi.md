@@ -11,7 +11,7 @@ description: "返回圆周率π的值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 PI();
 ```
 

@@ -9,7 +9,7 @@ description: "Advanced Encryption Standard (AES) アルゴリズムで文字列�
 
 ## Syntax
 
-```Haskell
+```plaintext
 aes_encrypt(str, key_str[, init_vector][, encryption_mode][, aad_str]);
 ```
 

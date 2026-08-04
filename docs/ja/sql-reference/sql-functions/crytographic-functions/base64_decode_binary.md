@@ -11,7 +11,7 @@ Base64 でエンコードされた文字列をデコードし、BINARY を返し
 
 ## 構文
 
-```Haskell
+```plaintext
 base64_decode_binary(str);
 ```
 

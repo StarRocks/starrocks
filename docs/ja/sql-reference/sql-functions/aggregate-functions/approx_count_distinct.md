@@ -11,7 +11,7 @@ COUNT と DISTINCT の組み合わせよりも高速で、固定サイズのメ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 APPROX_COUNT_DISTINCT(expr)
 ```
 

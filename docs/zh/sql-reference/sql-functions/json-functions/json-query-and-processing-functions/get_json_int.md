@@ -25,7 +25,7 @@ json_path 必须以 `$` 开头，并使用 `.` 作为路径分隔符。
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT get_json_int(VARCHAR json_str, VARCHAR json_path)
 ```
 

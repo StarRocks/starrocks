@@ -9,7 +9,7 @@ grouping_id は、同じグループ化基準の統計結果を区別するた�
 
 ## 構文
 
-```Haskell
+```plaintext
 GROUPING_ID(expr)
 ```
 

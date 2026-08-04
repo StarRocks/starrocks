@@ -11,7 +11,7 @@ description: "向日期时间添加指定的微秒数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 

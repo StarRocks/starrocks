@@ -11,7 +11,7 @@ description: "grouping 判断列是否为聚合列，是则返回 0，否则返�
 
 ## 语法
 
-```Haskell
+```plaintext
 GROUPING(col_expr)
 ```
 

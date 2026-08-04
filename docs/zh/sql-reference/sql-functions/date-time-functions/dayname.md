@@ -13,7 +13,7 @@ description: "返回指定日期对应的星期名称。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR DAYNAME(DATETIME|DATE date)
 ```
 

@@ -11,7 +11,7 @@ description: "URLのクエリ文字列から指定パラメータの値を抽出
 
 ## 構文
 
-```haskell
+```plaintext
 VARCHAR url_extract_parameter(VARCHAR str, VARCHAR name)
 ```
 

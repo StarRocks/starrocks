@@ -9,7 +9,7 @@ description: "引数の積を計算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 multiply(arg1, arg2)
 ```
 

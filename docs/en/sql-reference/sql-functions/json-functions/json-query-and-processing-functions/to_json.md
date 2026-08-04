@@ -19,7 +19,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 to_json(any_value)
 ```
 
@@ -33,7 +33,7 @@ Returns a JSON value.
 
 ## Examples
 
-```Haskell
+```plaintext
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |

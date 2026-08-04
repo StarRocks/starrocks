@@ -11,7 +11,7 @@ Converts a VARCHAR string to a binary value based on the specified binary format
 
 ## Syntax
 
-```Haskell
+```plaintext
 to_binary(str[, binary_type])
 ```
 

@@ -11,7 +11,7 @@ description: "获取当前的日期，以 DATE 类型返回。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATE CURDATE()
 ```
 

@@ -9,7 +9,7 @@ description: "指定されたセパレータを使用して文字列を結合し
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 ```
 

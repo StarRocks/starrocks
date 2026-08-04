@@ -11,7 +11,7 @@ Converts the specified date into a string in the specified Joda DateTimeFormat p
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 
