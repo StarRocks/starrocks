@@ -24,7 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -47,7 +47,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProcessable {
+public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TabletReshardJobMgr.class);
 
     @SerializedName(value = "tabletReshardJobs")
@@ -294,12 +294,18 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         reshardingTabletInfos.remove(tabletId);
     }
 
+    // tabletReshardJobs is persistent (@SerializedName, save/load via image) and
+    // reshardingTabletInfos is also serialized through writer.writeJson(this), so neither
+    // map should be cleared on demotion - the next leader resumes those jobs from the same
+    // maps. Default onStopped() is sufficient.
+
     @Override
-    protected void runAfterCatalogReady() {
-        // Hard-gate the whole reshard tick: this is a FrontendDaemon (not stopped on demotion),
-        // and neither runTabletReshardJobs() nor ColocateChecker.runOneCycle() self-gates on
-        // leader/admission. Both create reshard jobs that journal via the non-throwing logJsonObject
-        // path, so a demoted node must not run them.
+    protected void runAfterLeaseValid() {
+        // The LeaderDaemon lease gate already skips this tick on a demoted node; this admission
+        // re-check also covers the activation window (lease valid before leader-work admission opens):
+        // neither runTabletReshardJobs() nor ColocateChecker.runOneCycle() self-gates on leader/admission,
+        // and both create reshard jobs that journal via the non-throwing logJsonObject path, so a
+        // non-admitted node must drop pending candidates and skip the tick.
         if (!isLeaderAdmissionOpen()) {
             reshardCandidates.clear();
             sizeSplitLatch.clear();
@@ -312,7 +318,7 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
     @VisibleForTesting
     void runAfterCatalogReadyForTest() {
-        runAfterCatalogReady();
+        runAfterLeaseValid();
     }
 
     @VisibleForTesting

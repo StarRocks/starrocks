@@ -176,6 +176,32 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+    public void testReplayVisibleWithManualLoadTxnCommitAttachment() {
+        ManualLoadTxnCommitAttachment attachment = mock(ManualLoadTxnCommitAttachment.class);
+        when(attachment.getLoadedRows()).thenReturn(100L);
+        when(attachment.getFilteredRows()).thenReturn(10L);
+        when(attachment.getUnselectedRows()).thenReturn(5L);
+        when(attachment.getLoadedBytes()).thenReturn(1000L);
+        when(attachment.getErrorLogUrl()).thenReturn("http://error.log");
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(attachment);
+        txnState.setReason("Replay visible");
+        txnState.setFinishTime(System.currentTimeMillis());
+
+        streamLoadTask.replayOnVisible(txnState);
+
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals("100%", loadInfo.getProgress());
+        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
+        Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        Assertions.assertEquals("http://error.log", loadInfo.getUrl());
+        Assertions.assertEquals("Replay visible", loadInfo.getError_msg());
+    }
+
+    @Test
     public void testSetLoadStateWithRLTaskTxnCommitAttachment() {
         RLTaskTxnCommitAttachment attachment = mock(RLTaskTxnCommitAttachment.class);
         when(attachment.getLoadedRows()).thenReturn(200L);

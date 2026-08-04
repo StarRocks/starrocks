@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
@@ -82,7 +82,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * CheckpointController daemon is running on master node. handle the checkpoint work for starrocks.
  */
-public class CheckpointController extends FrontendDaemon {
+public class CheckpointController extends LeaderDaemon {
     public static final Logger LOG = LogManager.getLogger(CheckpointController.class);
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
@@ -94,8 +94,10 @@ public class CheckpointController extends FrontendDaemon {
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
 
-    private final Set<String> nodesToPushImage;
-    private final Map<String, Long> lastFailedTime = new HashMap<>();
+    // Package-private so same-package tests can assert on the cleared-on-demotion contract
+    // without reflection.
+    final Set<String> nodesToPushImage;
+    final Map<String, Long> lastFailedTime = new HashMap<>();
 
     private volatile String workerNodeName;
     private volatile long workerSelectedTime;
@@ -104,6 +106,15 @@ public class CheckpointController extends FrontendDaemon {
 
     // save the cluster snapshot info getted from the checkpoint worker.
     private volatile ClusterSnapshotInfo clusterSnapshotInfo;
+
+    // The HTTP connection this controller's worker thread is currently blocked on (image
+    // push / download / journal_id probe), or null between calls. Held so onStopRequested()
+    // can disconnect OUR OWN connection on demotion to break out of an otherwise-uninterruptible
+    // socket read (a push can block up to PUT_TIMEOUT_SECOND). Scoped to this controller, so it
+    // never touches another caller's connection. Only one HTTP op runs at a time on the
+    // single-threaded worker, so a single reference is sufficient.
+    // Package-private so same-package tests can set it to verify the disconnect-on-stop path.
+    volatile HttpURLConnection inFlightConnection;
 
     public CheckpointController(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
@@ -123,13 +134,75 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         RW_LOCK.readLock().lock();
         try {
             runCheckpointController();
         } finally {
             RW_LOCK.readLock().unlock();
         }
+    }
+
+    /**
+     * Coordinated stop for leader demotion. All three checkpoint phases (createImage,
+     * pushImage, deleteOldJournals) are idempotent at the system level - worker FE
+     * keeps writing the image regardless of this leader's lifecycle, and the next
+     * leader will re-orchestrate pushImage / deleteOldJournals from scratch. So we
+     * only have to wake the current checkpoint wait, break out of any in-flight HTTP,
+     * and let the daemon thread exit; onStopped() clears the leader-session bookkeeping.
+     *
+     * Bare {@link HttpURLConnection} socket reads honor neither {@link Thread#interrupt()}
+     * nor any cooperative flag, so we disconnect the connection this controller's own worker
+     * is currently blocked on. That unblocks its read within the drain budget instead of
+     * waiting out the per-node push/download timeout (up to 3600s). We only ever disconnect
+     * OUR OWN connection, so no other caller's request is affected.
+     */
+    @Override
+    protected void onStopRequested() {
+        BlockingQueue<CheckpointCompletionStatus> currentResult = result;
+        if (currentResult != null) {
+            currentResult.offer(new CheckpointCompletionStatus(false, "leader checkpoint controller is stopping", null));
+        }
+        HttpURLConnection conn = inFlightConnection;
+        if (conn != null) {
+            try {
+                conn.disconnect();
+            } catch (Throwable t) {
+                LOG.warn("failed to disconnect in-flight checkpoint connection on stop", t);
+            }
+        }
+    }
+
+    @Override
+    protected void onStopped() {
+        // Leader-session bookkeeping: nodesToPushImage tracks pending pushes from the
+        // last createImage round; lastFailedTime drives worker-selection ordering for
+        // the next round. Both must reset so a re-elected leader does not inherit
+        // stale targets. workerNodeName / workerSelectedTime / journalId / result /
+        // clusterSnapshotInfo are per-round volatile fields naturally overwritten by
+        // the next createImage() call - no need to clear here.
+        // Under RW_LOCK like every other accessor of these plain collections: the cluster-snapshot
+        // scheduler drives this controller inline from its own worker thread, which can run
+        // concurrently with this daemon's onStopped.
+        RW_LOCK.writeLock().lock();
+        try {
+            nodesToPushImage.clear();
+            lastFailedTime.clear();
+        } finally {
+            RW_LOCK.writeLock().unlock();
+        }
+    }
+
+    /**
+     * Interrupt-unsafe: the worker calls BDBJE/JE directly (getFinalizedJournalId /
+     * deleteJournals -> removeDatabase) where an interrupt can invalidate the environment, and
+     * blocks in uninterruptible HttpURLConnection reads. It stops cooperatively instead: the
+     * isStopRequested() polling between phases + onStopRequested() (waking the result queue and
+     * disconnecting the in-flight HTTP connection).
+     */
+    @Override
+    protected boolean interruptOnStop() {
+        return false;
     }
 
     protected void runCheckpointController() {
@@ -167,6 +240,9 @@ public class CheckpointController extends FrontendDaemon {
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
+                if (isStopRequested()) {
+                    return createImageRet;
+                }
                 // do not push to the worker node
                 if (!frontend.getNodeName().equals(createImageRet.second)) {
                     nodesToPushImage.add(frontend.getNodeName());
@@ -181,6 +257,9 @@ public class CheckpointController extends FrontendDaemon {
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = createImageRet.first ? maxJournalId : imageJournalId;
         if (needToPushCnt > 0) {
+            if (isStopRequested()) {
+                return createImageRet;
+            }
             pushImage(newImageVersion);
         }
 
@@ -191,6 +270,9 @@ public class CheckpointController extends FrontendDaemon {
         //                we must make sure all the other nodes have got the new image and then delete old journals.
         if ((createImageRet.first && needToPushCnt == 0)
                 || (needToPushCnt > 0 && nodesToPushImage.isEmpty())) {
+            if (isStopRequested()) {
+                return createImageRet;
+            }
             deleteOldJournals(newImageVersion);
         }
 
@@ -220,8 +302,14 @@ public class CheckpointController extends FrontendDaemon {
             long startNs = System.nanoTime();
             CheckpointCompletionStatus ret = null;
             while (ret == null
+                    && !isStopRequested()
                     && System.nanoTime() - startNs < TimeUnit.SECONDS.toNanos(Config.checkpoint_timeout_seconds)) {
                 ret = result.poll(1, TimeUnit.SECONDS);
+            }
+            if (isStopRequested()) {
+                LOG.info("stop waiting checkpoint on node: {} because leader checkpoint controller is stopping",
+                        workerNodeName);
+                return Pair.create(false, workerNodeName);
             }
             if (ret == null) {
                 LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
@@ -274,7 +362,21 @@ public class CheckpointController extends FrontendDaemon {
                 "/image?version=" + journalId
                 + "&subdir=" + subDir
                 + "&image_format_version=" + imageFormatVersion;
-        MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir);
+        try {
+            MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir,
+                    conn -> {
+                        // Publish-point self-check: a stop landing between the worker's last
+                        // isStopRequested() poll and this publication would find inFlightConnection
+                        // still null in onStopRequested() and disconnect nothing. requestStop sets the
+                        // flag BEFORE onStopRequested, so checking it here covers both orders.
+                        inFlightConnection = conn;
+                        if (isStopRequested()) {
+                            conn.disconnect();
+                        }
+                    });
+        } finally {
+            inFlightConnection = null;
+        }
 
         // clean the old images
         MetaCleaner cleaner = new MetaCleaner(imageDir);
@@ -331,6 +433,9 @@ public class CheckpointController extends FrontendDaemon {
     }
 
     private boolean doCheckpoint(Frontend frontend, boolean needClusterSnapshotInfo) {
+        if (isStopRequested()) {
+            return false;
+        }
         String selfName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
         long epoch = GlobalStateMgr.getCurrentState().getEpoch();
         if (selfName.equals(frontend.getNodeName())) {
@@ -397,6 +502,9 @@ public class CheckpointController extends FrontendDaemon {
         int needToPushCnt = nodesToPushImage.size();
         int successPushedCnt = 0;
         while (iterator.hasNext()) {
+            if (isStopRequested()) {
+                break;
+            }
             String nodeName = iterator.next();
 
             Frontend frontend = GlobalStateMgr.getServingState().getNodeMgr().getFeByName(nodeName);
@@ -414,7 +522,16 @@ public class CheckpointController extends FrontendDaemon {
                     + "&for_global_state=" + belongToGlobalStateMgr
                     + "&image_format_version=" + formatVersion.toString();
             try {
-                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
+                    // Publish-point self-check (see downloadImage): without it, a stop landing in the
+                    // check-then-publish gap leaves this worker blocked on a socket read for up to
+                    // PUT_TIMEOUT_SECOND (an hour) with no interrupt possible (interruptOnStop is
+                    // false), keeping isRunning true and tripping the re-activation gate into exit.
+                    inFlightConnection = conn;
+                    if (isStopRequested()) {
+                        conn.disconnect();
+                    }
+                });
 
                 LOG.info("push image successfully, url = {}", url);
                 if (MetricRepo.hasInit) {
@@ -423,6 +540,8 @@ public class CheckpointController extends FrontendDaemon {
             } catch (IOException e) {
                 pushSuccess = false;
                 LOG.error("Exception when pushing image file. url = {}", url, e);
+            } finally {
+                inFlightConnection = null;
             }
             if (pushSuccess) {
                 iterator.remove();
@@ -450,6 +569,11 @@ public class CheckpointController extends FrontendDaemon {
                  */
                 idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
                 conn = (HttpURLConnection) idURL.openConnection();
+                inFlightConnection = conn;
+                if (isStopRequested()) {
+                    // Publish-point self-check, same as downloadImage/pushImage.
+                    conn.disconnect();
+                }
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
                 String idString = conn.getHeaderField("id");
@@ -463,6 +587,7 @@ public class CheckpointController extends FrontendDaemon {
                 minReplayedJournalId = 0;
                 break;
             } finally {
+                inFlightConnection = null;
                 if (conn != null) {
                     conn.disconnect();
                 }

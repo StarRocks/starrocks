@@ -60,7 +60,9 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
         journalWriter = new JournalWriter(bdbjeJournal, journalQueue);
 
-        editLog = new EditLog(journalQueue);
+        // StarMgr writes its own separate journal and is never fenced by leader demotion, so its EditLog's
+        // WAL admission gate is always open.
+        editLog = new EditLog(journalQueue, true);
 
         replayedJournalId = new AtomicLong(0L);
 
@@ -72,7 +74,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(journal);
         journalSystem.journalWriter = new JournalWriter(journalSystem.bdbjeJournal, journalQueue);
-        journalSystem.editLog = new EditLog(journalQueue);
+        journalSystem.editLog = new EditLog(journalQueue, true);
         return journalSystem;
     }
 
@@ -80,7 +82,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public StarOSBDBJEJournalSystem(Journal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
-        editLog = new EditLog(null);
+        editLog = new EditLog(null, true);
     }
 
     public long getReplayId() {
