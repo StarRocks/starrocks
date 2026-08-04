@@ -4641,6 +4641,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 
+    /**
+     * Total budget this FE spends looking for a StarRocks-catalog remote-scan session on its peer
+     * FEs, shared across the whole probe (each peer gets the remaining budget divided by the number
+     * of peers left, so one hung peer cannot starve the FE that actually owns the session). Keep it
+     * below the calling cluster's starrocks.fe.http.timeout.ms so the answer arrives before the
+     * caller gives up; raise it on a busy source cluster where peers legitimately answer slowly.
+     */
+    @ConfField(mutable = true, comment = "Total budget in milliseconds for forwarding a StarRocks "
+            + "catalog remote-scan session request across peer FEs")
+    public static int starrocks_catalog_forward_timeout_ms = 8000;
+
     // Expiration time (in seconds) for Arrow Flight SQL tokens. Default is 3 days.
     // Expired tokens will be removed from the cache and the associated connection will be closed.
     @ConfField(mutable = true)

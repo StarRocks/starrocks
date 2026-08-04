@@ -629,6 +629,20 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    /**
+     * Second half of the remote-scan deferred deployment: prepare_scan builds the
+     * plan and runs prepareExec without delivering fragments; start_scan calls this
+     * to actually deploy them (StarRocksRemoteScanService.RemoteScanContext.start).
+     */
+    public void deployPreparedFragments() throws RpcException, StarRocksException {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = connectContext.getSessionVariable().isEnableConnectorDeployScanRangesBackground();
+        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
+            deliverExecFragments(option);
+        }
+        scheduler.continueSchedule(option);
+    }
+
     @Override
     public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
         try {

@@ -97,6 +97,8 @@ import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
+import com.starrocks.http.rest.StarRocksCatalogControlAction;
+import com.starrocks.http.rest.StarRocksCatalogStatsAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.StreamLoadMetaAction;
@@ -284,6 +286,8 @@ public class HttpServer {
         com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
         TablePartitionAction.registerAction(controller);
         TableQueryPlanAction.registerAction(controller);
+        StarRocksCatalogStatsAction.registerAction(controller);
+        StarRocksCatalogControlAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
 

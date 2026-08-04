@@ -330,8 +330,8 @@ public final class StarRocksRemoteScanWire {
         public List<String> supportedTransports;
         @SerializedName("feature_flags")
         public List<String> featureFlags;
-        @SerializedName("brpc_port")
-        public int brpcPort;
+        // Only the Arrow Flight port is cluster-wide; each serving BE's brpc endpoint travels
+        // per stream in the prepare_scan response.
         @SerializedName("arrow_flight_port")
         public int arrowFlightPort;
     }

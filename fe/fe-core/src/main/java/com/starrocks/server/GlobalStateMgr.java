@@ -262,6 +262,7 @@ import com.starrocks.scheduler.MVLifecycleAutoKeeper;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.service.StarRocksRemoteScanService;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -457,6 +458,10 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
+
+    // Control-plane server for the StarRocks external catalog, consumed by peer clusters over
+    // HTTP; also the daemon that sweeps expired remote-scan sessions.
+    private final StarRocksRemoteScanService starRocksRemoteScanService;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -846,6 +851,7 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+        this.starRocksRemoteScanService = new StarRocksRemoteScanService();
         this.authenticationMgr = new AuthenticationMgrEPack();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
@@ -1259,6 +1265,10 @@ public class GlobalStateMgr {
 
     public TabletStatMgr getTabletStatMgr() {
         return tabletStatMgr;
+    }
+
+    public StarRocksRemoteScanService getStarRocksRemoteScanService() {
+        return starRocksRemoteScanService;
     }
 
     public StatisticStorage getStatisticStorage() {
@@ -2099,6 +2109,7 @@ public class GlobalStateMgr {
 
         portConnectivityChecker.start();
         tabletStatMgr.start();
+        starRocksRemoteScanService.start();
         // load and export job label cleaner thread
         labelCleaner.start();
         // ES state store
