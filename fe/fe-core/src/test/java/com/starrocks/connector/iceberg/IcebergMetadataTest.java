@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -110,6 +111,8 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
@@ -371,6 +374,67 @@ public class IcebergMetadataTest extends TableTestBase {
                 () -> metadata.createDb("TEST_PROBE", new HashMap<>()));
         Assertions.assertTrue(e.getMessage().contains("TEST_PROBE"),
                 "translated message should carry the database name, but was: " + e.getMessage());
+    }
+
+    @Test
+    public void testCreateTableTranslatesConnectorAlreadyExists(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog, @Mocked CreateTableStmt stmt) {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        new Expectations() {
+            {
+                stmt.getDbName();
+                result = "db";
+                minTimes = 0;
+                stmt.getTableName();
+                result = "tbl";
+                minTimes = 0;
+                stmt.getColumns();
+                result = Lists.newArrayList(new Column("id", Type.INT));
+                minTimes = 0;
+                stmt.getPartitionDesc();
+                result = null;
+                minTimes = 0;
+
+                icebergHiveCatalog.createTable(anyString, anyString, (Schema) any,
+                        (PartitionSpec) any, anyString, (Map<String, String>) any);
+                result = new org.apache.iceberg.exceptions.AlreadyExistsException("Table already exists: db.tbl");
+                times = 1;
+            }
+        };
+        AlreadyExistsException e = assertThrows(AlreadyExistsException.class,
+                () -> metadata.createTable(stmt));
+        Assertions.assertTrue(e.getMessage().contains("tbl"),
+                "translated message should carry the table name, but was: " + e.getMessage());
+    }
+
+    @Test
+    public void testCreateTableReturnsConnectorResult(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog, @Mocked CreateTableStmt stmt) throws Exception {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        new Expectations() {
+            {
+                stmt.getDbName();
+                result = "db";
+                minTimes = 0;
+                stmt.getTableName();
+                result = "tbl";
+                minTimes = 0;
+                stmt.getColumns();
+                result = Lists.newArrayList(new Column("id", Type.INT));
+                minTimes = 0;
+                stmt.getPartitionDesc();
+                result = null;
+                minTimes = 0;
+
+                icebergHiveCatalog.createTable(anyString, anyString, (Schema) any,
+                        (PartitionSpec) any, anyString, (Map<String, String>) any);
+                result = true;
+                times = 1;
+            }
+        };
+        Assertions.assertTrue(metadata.createTable(stmt));
     }
 
     @Test
