@@ -34,11 +34,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.sql.ast.PartitionNames;
-=======
->>>>>>> 84c430ccd6 ([UT] Move PseudoCluster based scan limit test out of PartitionPruneRuleTest (#77179))
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
