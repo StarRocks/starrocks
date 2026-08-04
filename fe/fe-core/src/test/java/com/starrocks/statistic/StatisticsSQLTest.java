@@ -277,11 +277,11 @@ public class StatisticsSQLTest extends PlanTestBase {
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
 
         ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(VarcharType.VARCHAR),
+                "hive0", db, region, Lists.newArrayList("r_name"), Lists.<Type>newArrayList(Type.VARCHAR),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         String sql = Deencapsulation.invoke(job, "buildCollectHistogram",
-                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", VarcharType.VARCHAR);
+                db, region, 0.1, 10L, ImmutableMap.of("a", "10"), "r_name", Type.VARCHAR);
 
         Assertions.assertTrue(sql.contains("concat('[[\"Infinity\",\"Infinity\",', " +
                 "cast(greatest(0, count(`r_name`) - 10) as varchar), ',0]]')"), sql);
