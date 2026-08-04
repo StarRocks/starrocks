@@ -96,6 +96,11 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+    // An OnlineOptimizeJobV2 rewrite copies logical base rows into a temporary partition. Unlike a
+    // schema-change rewrite, it must not include unrelated shadow columns that may still be present
+    // in the table's full schema.
+    private boolean isOnlineOptimizeRewrite = false;
+
     private boolean isShadowRewrite = false;
     private Long targetWriteIndexId = null;
     // For a shadow-rewrite INSERT: the watershed txn id the converted op_schema_change log must be
@@ -211,6 +216,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isVersionOverwrite() {
         return isVersionOverwrite;
+    }
+
+    public void setOnlineOptimizeRewrite(boolean onlineOptimizeRewrite) {
+        isOnlineOptimizeRewrite = onlineOptimizeRewrite;
+    }
+
+    public boolean isOnlineOptimizeRewrite() {
+        return isOnlineOptimizeRewrite;
     }
 
     public void setShadowRewrite(boolean isShadowRewrite) {

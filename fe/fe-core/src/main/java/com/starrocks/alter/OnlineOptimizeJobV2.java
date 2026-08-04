@@ -944,7 +944,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
-                ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
+                InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                insertStmt.setIsVersionOverwrite(true);
+                insertStmt.setOnlineOptimizeRewrite(true);
             }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 

@@ -283,7 +283,11 @@ public class InsertPlanner {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
-            outputFullSchema = targetTable.getFullSchema();
+            // Online OPTIMIZE rewrites a temporary partition with the logical table schema. It does
+            // not perform a schema change, so stale shadow columns in fullSchema must not become sink
+            // slots: the rewrite SELECT and generated-column expansion are defined over baseSchema.
+            outputFullSchema = insertStmt.isOnlineOptimizeRewrite()
+                    ? outputBaseSchema : targetTable.getFullSchema();
         }
 
         if (targetTable.isIcebergTable()) {
