@@ -408,7 +408,7 @@ public class DatabaseTransactionMgr {
             if (copiedState.getTransactionStatus() == TransactionStatus.PREPARE) {
                 // update transaction state version
                 copiedState.setTransactionStatus(TransactionStatus.PREPARED);
-                copiedState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs);
+                copiedState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs, !writeEditLog);
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(copiedState);
                 }

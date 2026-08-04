@@ -75,6 +75,15 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         LakeTableTxnStateListener commitListener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
         Assertions.assertThrows(CommitRateExceededException.class,
                 () -> commitListener.preCommit(txnState));
+        Assertions.assertTrue(txnState.getReason().contains("delay commit"));
+
+        txnState.setAllowCommitTimeMs(System.currentTimeMillis() - 1);
+        commitListener.preCommit(txnState);
+        Assertions.assertEquals("", txnState.getReason());
+
+        TransactionState committedState = new TransactionState(txnState);
+        committedState.setTransactionStatus(TransactionStatus.COMMITTED);
+        Assertions.assertEquals("", committedState.getReason());
     }
 
     @Test

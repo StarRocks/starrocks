@@ -72,10 +72,14 @@ public class TransactionStateTest {
                 3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
+        transactionState.setReason("persistent reason");
+        transactionState.setTemporaryReason("temporary reason");
 
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+        Assertions.assertEquals("persistent reason", readTransactionState.getReason());
+        Assertions.assertFalse(json.contains("temporary reason"));
     }
 
     @Test
@@ -266,6 +270,10 @@ public class TransactionStateTest {
             assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
             assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(4000, 10_000, true);
+            assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
+            assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
 
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));
