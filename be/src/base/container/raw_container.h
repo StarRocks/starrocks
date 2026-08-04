@@ -131,8 +131,10 @@ public:
 // GNU libstdc++ with new CXX11 ABI
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
-// Page-aligned (4096) backing store: the base address is a multiple of 4096, required for
-// O_DIRECT spill writes where pwritev needs iov_base aligned to the device logical block size.
+// Page-aligned (4096) backing store ONCE HEAP-ALLOCATED, required for O_DIRECT spill writes where
+// pwritev needs iov_base aligned to the device logical block size. Short contents stay inline in
+// the string object and never reach the allocator, so a caller that needs the alignment must size
+// the buffer past that (the O_DIRECT spill path always resizes to ALIGN_UP(n, page), clearing it).
 // NOTE: RawAllocator's second parameter is TRAILING PADDING, not alignment -- the alignment
 // comes from composing AlignmentAllocator as the underlying allocator.
 using RawStringPage =
