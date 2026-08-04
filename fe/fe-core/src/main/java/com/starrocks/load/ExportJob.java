@@ -419,6 +419,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
                 ((OlapScanNode) scanNode).computePartitionInfo();
+                // Record the export scan as a user access, mirroring the query path. computePartitionInfo()
+                // has resolved the data-bearing logical partitions.
+                if (Config.enable_collect_partition_access_time) {
+                    GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                            .recordAccess(dbId, exportTable.getId(), ((OlapScanNode) scanNode).getSelectedPartitionIds());
+                }
                 break;
             case MYSQL:
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);

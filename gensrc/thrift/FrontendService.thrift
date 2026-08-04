@@ -1701,6 +1701,31 @@ struct TPartitionMetaInfo {
     // tablets. Only meaningful for tables with an async vector index (shared-data).
     33: optional i64 min_vi_built_version
     34: optional i64 max_vi_built_version
+    // Last time this partition was scanned by a query (unix seconds). In-memory only on FE
+    // (not persisted); 0/absent = never accessed, or the value was lost on FE restart/failover.
+    35: optional i64 last_access_time
+    // Last time this partition was modified by a user write (load/DML, excluding compaction),
+    // in unix seconds. 0/absent = unknown.
+    36: optional i64 last_update_time
+}
+
+// Ask one FE for its local in-memory partition query-access times of a table, so the querying FE
+// can aggregate (max) across all FEs. Best-effort: callers tolerate a missing/slow FE.
+struct TPartitionAccessTimeTableRef {
+    1: optional i64 db_id
+    2: optional i64 table_id
+}
+
+struct TGetPartitionAccessTimesRequest {
+    // One entry per requested table. SHOW PARTITIONS sends a single element; partitions_meta sends the
+    // whole page so a single RPC per FE covers many tables (O(FEs) round-trips, not O(tables * FEs)).
+    // Logical partition ids are globally unique, so the response merges into one logicalPartitionId -> ms map.
+    1: optional list<TPartitionAccessTimeTableRef> tables
+}
+
+struct TGetPartitionAccessTimesResponse {
+    1: optional Status.TStatus status
+    2: optional map<i64, i64> partition_id_to_access_time_ms // logicalPartitionId -> lastAccessTime(ms)
 }
 
 struct TGetPartitionsMetaResponse {
@@ -2753,9 +2778,13 @@ service FrontendService {
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
+<<<<<<< HEAD
     TGetTableBookmarkSummaryResponse getTableBookmarkSummary(1: optional TGetTableBookmarkSummaryRequest request)
     TGetTableBookmarkPartitionsResponse getTableBookmarkPartitions(1: optional TGetTableBookmarkPartitionsRequest request)
     TGetTableBookmarkReferencesResponse getTableBookmarkReferences(1: optional TGetTableBookmarkReferencesRequest request)
+=======
+    TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
+>>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 
