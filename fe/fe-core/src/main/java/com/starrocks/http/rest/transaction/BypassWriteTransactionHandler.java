@@ -257,13 +257,20 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     // Preserve the live-path source-type guard (see getTxnState) after the full state is count-evicted.
     // While the TransactionState is present, a label whose transaction was not created by BYPASS_WRITE is
     // rejected; the terminal-state cache/image now retains the source type so the same request cannot
-    // instead succeed off an untyped cached outcome once the state is gone. An UNKNOWN status means no
-    // cached outcome exists, so it is left to each method's not-found branch. Any non-bypass-write source
-    // (including a null/unknown source from a legacy image record) is rejected, matching the live path.
+    // instead succeed off an untyped cached outcome once the state is gone. Only a genuine cached terminal
+    // outcome -- the VISIBLE/COMMITTED/ABORTED states that commitEvictedByLabel/rollbackEvictedByLabel
+    // actually answer from -- is source-gated; any other status (UNKNOWN, or a non-terminal/absent outcome)
+    // falls through so each method's existing not-found / not-actionable branch stands exactly as it did
+    // before this guard. A terminal outcome from any non-bypass-write source (including a null/unknown
+    // source from a legacy image record) is rejected, matching the live path.
     @VisibleForTesting
     static void assertCachedOutcomeIsBypassWrite(TransactionStateSnapshot snapshot, String label)
             throws StarRocksException {
-        if (snapshot.getStatus() == TransactionStatus.UNKNOWN) {
+        TransactionStatus status = snapshot == null ? null : snapshot.getStatus();
+        boolean terminalOutcome = status == TransactionStatus.VISIBLE
+                || status == TransactionStatus.COMMITTED
+                || status == TransactionStatus.ABORTED;
+        if (!terminalOutcome) {
             return;
         }
         if (!BYPASS_WRITE.equals(snapshot.getSourceType())) {

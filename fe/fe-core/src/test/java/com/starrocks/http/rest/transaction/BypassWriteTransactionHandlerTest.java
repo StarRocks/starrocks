@@ -148,4 +148,15 @@ public class BypassWriteTransactionHandlerTest {
         TransactionStateSnapshot unknown = new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
         BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(unknown, "L"); // no throw
     }
+
+    // A non-terminal, non-UNKNOWN status (e.g. PREPARED, which the evicted path does not answer from and
+    // routes to its not-actionable branch) must fall through, regardless of source. Gating only on UNKNOWN
+    // would wrongly reject here and change the not-found message; the guard fires only on a real terminal
+    // outcome (VISIBLE/COMMITTED/ABORTED).
+    @Test
+    public void testAssertCachedOutcomeNonTerminalFallsThrough() throws StarRocksException {
+        TransactionStateSnapshot prepared = new TransactionStateSnapshot(
+                TransactionStatus.PREPARED, null, LoadJobSourceType.BACKEND_STREAMING);
+        BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(prepared, "L"); // no throw
+    }
 }

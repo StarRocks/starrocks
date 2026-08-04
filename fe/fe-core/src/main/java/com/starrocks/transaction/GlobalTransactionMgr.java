@@ -561,14 +561,11 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException, LockTimeoutException {
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
-        if (transactionState == null) {
-            // The full state may have been evicted (count-based eviction ignores age). There are no
-            // tables to lock; delegate to the db mgr, which resolves the outcome from the
-            // terminal-state cache (idempotent success for VISIBLE, commit-failed for ABORTED,
-            // or transaction-not-found otherwise).
-            return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
-        }
+        // commitAndPublishTransaction is the synchronous load/INSERT commit path, not an evicted-recommit
+        // entrypoint (Flink savepoint/resume recommits go through prepareTransaction / commitPreparedTransaction,
+        // which consult the terminal-state cache). A null here means the transaction is genuinely gone, so throw
+        // "transaction not found" as upstream does -- this also avoids an NPE on getTableIdList() below.
+        TransactionState transactionState = getTransactionStateOrThrow(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
         if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
