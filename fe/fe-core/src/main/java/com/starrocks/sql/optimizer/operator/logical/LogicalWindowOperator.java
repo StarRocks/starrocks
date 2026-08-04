@@ -206,12 +206,9 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
             builder.isSkewed = windowOperator.isSkewed;
-<<<<<<< HEAD
             builder.skewColumn = windowOperator.skewColumn;
             builder.skewValues = windowOperator.skewValues;
-=======
             builder.inputIsBinary = windowOperator.inputIsBinary;
->>>>>>> 2c29c6f04b6... [BugFix] Preserve inputIsBinary when copying logical window operators (backport #77058) (#77157)
             return this;
         }
 
