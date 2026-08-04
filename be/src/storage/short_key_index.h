@@ -94,7 +94,13 @@ public:
 
     uint64_t size() { return _key_buf.size() + _offset_buf.size(); }
 
+    // Emit a legacy SHORT_KEY_PAGE (truncated short key prefix).
     Status finalize(uint32_t num_rows, std::vector<Slice>* body, PageFooterPB* footer);
+
+    // Emit a SORT_KEY_PAGE (full, untruncated sort key). |num_sort_key_columns| is the number of
+    // sort-key columns encoded in each entry, recorded in the SortKeyFooterPB.
+    Status finalize_full_sort_key(uint32_t num_rows, std::vector<Slice>* body, PageFooterPB* footer,
+                                  uint32_t num_sort_key_columns);
 
 private:
     uint32_t _segment_id;
@@ -170,8 +176,12 @@ class ShortKeyIndexDecoder {
 public:
     ShortKeyIndexDecoder() = default;
 
-    // client should assure that body is available when this class is used
+    // client should assure that body is available when this class is used.
+    // A SHORT_KEY_PAGE (legacy truncated short key) and a SORT_KEY_PAGE (full sort key) share the
+    // same on-disk body layout, so one decoder parses either footer; num_sort_key_columns() is 0
+    // for a short key page and the full sort-key arity for a sort key page.
     Status parse(const Slice& body, const ShortKeyFooterPB& footer);
+    Status parse(const Slice& body, const SortKeyFooterPB& footer);
 
     ShortKeyIndexIterator begin() const {
         DCHECK(_parsed);
@@ -201,12 +211,24 @@ public:
 
     uint32_t num_items() const {
         DCHECK(_parsed);
-        return _footer.num_items();
+        return _num_items;
     }
 
     uint32_t num_rows_per_block() const {
         DCHECK(_parsed);
-        return _footer.num_rows_per_block();
+        return _num_rows_per_block;
+    }
+
+    uint32_t num_segment_rows() const {
+        DCHECK(_parsed);
+        return _num_segment_rows;
+    }
+
+    // Number of sort-key columns encoded in each entry: 0 for a legacy short key page, the full
+    // sort-key arity for a sort key page.
+    uint32_t num_sort_key_columns() const {
+        DCHECK(_parsed);
+        return _num_sort_key_columns;
     }
 
     Slice key(ssize_t ordinal) const {
@@ -216,11 +238,14 @@ public:
     }
 
     int64_t mem_usage() const {
-        return sizeof(ShortKeyIndexDecoder) + sizeof(uint32_t) * _offsets.size() + _key_data.size +
-               _footer.ByteSizeLong() - sizeof(_footer);
+        return sizeof(ShortKeyIndexDecoder) + sizeof(uint32_t) * _offsets.size() + _key_data.size;
     }
 
 private:
+    // Parse and runtime-validate the shared page body (KeyContent^N, KeyOffset(vint)^N) into
+    // _offsets / _key_data. Common to the SHORT_KEY_PAGE and SORT_KEY_PAGE footers.
+    Status parse_body(const Slice& body, uint32_t num_items, uint32_t key_bytes, uint32_t offset_bytes);
+
     template <bool lower_bound>
     ShortKeyIndexIterator seek(const Slice& key) const {
         auto comparator = [](const Slice& lhs, const Slice& rhs) { return lhs.compare(rhs) < 0; };
@@ -234,7 +259,10 @@ private:
     bool _parsed{false};
 
     // All following fields are only valid after parse has been executed successfully
-    ShortKeyFooterPB _footer;
+    uint32_t _num_items{0};
+    uint32_t _num_rows_per_block{0};
+    uint32_t _num_segment_rows{0};
+    uint32_t _num_sort_key_columns{0};
     std::vector<uint32_t> _offsets;
     Slice _key_data;
 };

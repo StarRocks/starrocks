@@ -406,6 +406,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable the Event-based Compaction Framework. `true` indicates Event-based Compaction Framework is enabled, and `false` indicates it is disabled. Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data.
 - Introduced in: -
 
+### enable_full_sort_key_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Write-time gate for the full sort key index. When enabled, the segment writer additionally writes a full, untruncated, all-sort-column order-preserving sort key index page alongside the legacy truncated short key index page, and stops writing the separate metadata sort-key samples governed by `segment_sort_key_sample_row_interval`. The legacy truncated short key index page is always written regardless of this setting, so older BE/CN versions read segments unchanged (no downgrade impact). Only newly written segments are affected; segments already on disk are unchanged.
+- Introduced in: -
+
 ### enable_lazy_delta_column_compaction
 
 - Default: true

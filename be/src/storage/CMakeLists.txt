@@ -162,6 +162,7 @@ set(STORAGE_FILES
     olap_meta_reader.cpp
     seek_tuple.cpp
     union_iterator.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
     column_aggregate_func.cpp
     chunk_aggregator.cpp

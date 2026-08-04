@@ -413,6 +413,8 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
+        ./storage/seek_tuple_test.cpp
+        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
@@ -653,6 +655,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
