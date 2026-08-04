@@ -328,76 +328,95 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     /**
      * Apply boolean absorption law:
-     *   a AND (a OR b) -> a
-     *   a OR (a AND b)  -> a
+     *   a AND (a OR b)              -> a
+     *   a OR (a AND b)              -> a
+     *   (a OR b) AND ((a OR b) OR c) -> a OR b   (compound absorber)
+     *   (a AND b) OR ((a AND b) AND c) -> a AND b (dual)
      *
-     * Skips absorption if the expression being kept (the absorber) contains a
-     * non-deterministic function such as rand()/uuid(), because each evaluation
-     * of that expression may yield a different value.
+     * <p>The absorber may itself be a compound of the opposite type. A target is
+     * absorbed when the absorber's flattened term set is a (strict) subset of the
+     * target's flattened term set, i.e. the target is implied by the absorber.
+     *
+     * <p>Terms are partitioned once so each opposite-type target is inspected a
+     * single time (single-term absorbers via a set lookup), avoiding an O(n^2)
+     * pairwise scan over wide predicate trees.
+     *
+     * <p>Skips using an expression as an absorber if it contains a
+     * non-deterministic function such as rand()/uuid(), because each evaluation of
+     * that expression may yield a different value.
      */
     private ScalarOperator tryAbsorb(CompoundPredicateOperator predicate) {
-        if (predicate.isAnd()) {
-            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            Set<Integer> absorbed = Sets.newHashSet();
-            for (int i = 0; i < conjuncts.size(); i++) {
-                ScalarOperator absorber = conjuncts.get(i);
-                if (Utils.hasNonDeterministicFunc(absorber)) {
-                    continue;
-                }
-                for (int j = 0; j < conjuncts.size(); j++) {
-                    if (i == j) {
-                        continue;
-                    }
-                    ScalarOperator target = conjuncts.get(j);
-                    if (target instanceof CompoundPredicateOperator &&
-                            ((CompoundPredicateOperator) target).isOr()) {
-                        if (Utils.extractDisjunctive(target).contains(absorber)) {
-                            absorbed.add(j);
-                        }
-                    }
-                }
+        boolean isAnd = predicate.isAnd();
+        if (!isAnd && !predicate.isOr()) {
+            return predicate;
+        }
+
+        // AND: terms are conjuncts, opposite-type target/absorber are OR compounds.
+        // OR:  terms are disjuncts, opposite-type target/absorber are AND compounds.
+        List<ScalarOperator> terms = isAnd
+                ? Utils.extractConjuncts(predicate)
+                : Utils.extractDisjunctive(predicate);
+
+        // Single-term absorbers -> O(1) membership lookup.
+        Set<ScalarOperator> singleAbsorbers = Sets.newHashSet();
+        // Opposite-type compound absorbers (e.g. (a OR b) inside an AND), kept as
+        // their flattened term sets for subset containment tests.
+        List<Set<ScalarOperator>> compoundAbsorbers = Lists.newArrayList();
+        for (ScalarOperator term : terms) {
+            if (Utils.hasNonDeterministicFunc(term)) {
+                continue;
             }
-            if (!absorbed.isEmpty()) {
-                List<ScalarOperator> remaining = Lists.newArrayList();
-                for (int i = 0; i < conjuncts.size(); i++) {
-                    if (!absorbed.contains(i)) {
-                        remaining.add(conjuncts.get(i));
-                    }
-                }
-                return Utils.compoundAnd(remaining);
-            }
-        } else if (predicate.isOr()) {
-            List<ScalarOperator> disjuncts = Utils.extractDisjunctive(predicate);
-            Set<Integer> absorbed = Sets.newHashSet();
-            for (int i = 0; i < disjuncts.size(); i++) {
-                ScalarOperator absorber = disjuncts.get(i);
-                if (Utils.hasNonDeterministicFunc(absorber)) {
-                    continue;
-                }
-                for (int j = 0; j < disjuncts.size(); j++) {
-                    if (i == j) {
-                        continue;
-                    }
-                    ScalarOperator target = disjuncts.get(j);
-                    if (target instanceof CompoundPredicateOperator &&
-                            ((CompoundPredicateOperator) target).isAnd()) {
-                        if (Utils.extractConjuncts(target).contains(absorber)) {
-                            absorbed.add(j);
-                        }
-                    }
-                }
-            }
-            if (!absorbed.isEmpty()) {
-                List<ScalarOperator> remaining = Lists.newArrayList();
-                for (int i = 0; i < disjuncts.size(); i++) {
-                    if (!absorbed.contains(i)) {
-                        remaining.add(disjuncts.get(i));
-                    }
-                }
-                return Utils.compoundOr(remaining);
+            if (isOppositeCompound(term, isAnd)) {
+                compoundAbsorbers.add(Sets.newHashSet(flatten(term, isAnd)));
+            } else {
+                singleAbsorbers.add(term);
             }
         }
-        return predicate;
+
+        Set<Integer> absorbed = Sets.newHashSet();
+        for (int j = 0; j < terms.size(); j++) {
+            ScalarOperator target = terms.get(j);
+            if (!isOppositeCompound(target, isAnd)) {
+                continue;
+            }
+            Set<ScalarOperator> targetTerms = Sets.newHashSet(flatten(target, isAnd));
+            boolean absorb = targetTerms.stream().anyMatch(singleAbsorbers::contains);
+            if (!absorb) {
+                for (Set<ScalarOperator> absorberTerms : compoundAbsorbers) {
+                    // Strict subset so a compound never absorbs an identical sibling.
+                    if (absorberTerms.size() < targetTerms.size() && targetTerms.containsAll(absorberTerms)) {
+                        absorb = true;
+                        break;
+                    }
+                }
+            }
+            if (absorb) {
+                absorbed.add(j);
+            }
+        }
+
+        if (absorbed.isEmpty()) {
+            return predicate;
+        }
+        List<ScalarOperator> remaining = Lists.newArrayList();
+        for (int i = 0; i < terms.size(); i++) {
+            if (!absorbed.contains(i)) {
+                remaining.add(terms.get(i));
+            }
+        }
+        return isAnd ? Utils.compoundAnd(remaining) : Utils.compoundOr(remaining);
+    }
+
+    private static boolean isOppositeCompound(ScalarOperator op, boolean isAnd) {
+        if (!(op instanceof CompoundPredicateOperator)) {
+            return false;
+        }
+        CompoundPredicateOperator cpo = (CompoundPredicateOperator) op;
+        return isAnd ? cpo.isOr() : cpo.isAnd();
+    }
+
+    private static List<ScalarOperator> flatten(ScalarOperator op, boolean isAnd) {
+        return isAnd ? Utils.extractDisjunctive(op) : Utils.extractConjuncts(op);
     }
 
     //

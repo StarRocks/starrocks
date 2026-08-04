@@ -64,5 +64,15 @@ public class SimplifiedPredicateRuleAbsorptionTest {
         // rand() AND (rand() OR b) should NOT be absorbed
         input = CompoundPredicateOperator.and(rand, CompoundPredicateOperator.or(rand, b));
         assertEquals(input, rule.apply(input, null));
+
+        // Compound absorber: (a OR b) AND ((a OR b) OR c) -> a OR b
+        ScalarOperator aOrB = CompoundPredicateOperator.or(a, b);
+        input = CompoundPredicateOperator.and(aOrB, CompoundPredicateOperator.or(aOrB, c));
+        assertEquals(aOrB, rule.apply(input, null));
+
+        // Dual compound absorber: (a AND b) OR ((a AND b) AND c) -> a AND b
+        ScalarOperator aAndB = CompoundPredicateOperator.and(a, b);
+        input = CompoundPredicateOperator.or(aAndB, CompoundPredicateOperator.and(aAndB, c));
+        assertEquals(aAndB, rule.apply(input, null));
     }
 }
