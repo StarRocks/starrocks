@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -48,6 +49,7 @@ import org.apache.commons.lang.text.StrTokenizer;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -337,9 +339,14 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
      * absorbed when the absorber's flattened term set is a (strict) subset of the
      * target's flattened term set, i.e. the target is implied by the absorber.
      *
-     * <p>Terms are partitioned once so each opposite-type target is inspected a
-     * single time (single-term absorbers via a set lookup), avoiding an O(n^2)
-     * pairwise scan over wide predicate trees.
+     * <p>Terms are partitioned once so single-term absorbers resolve via an O(1)
+     * set lookup. Compound absorbers are indexed by an "anchor" element: since
+     * {@code A subset-of T} implies every element of {@code A} (hence its anchor)
+     * appears in {@code T}, a target only needs to probe the buckets keyed by its
+     * own elements instead of scanning every compound absorber. The anchor is the
+     * globally rarest element of the absorber, so disjoint absorbers land in
+     * distinct buckets and the all-pairs comparison is avoided even for wide
+     * predicate trees made of many disjoint OR/AND terms.
      *
      * <p>Skips using an expression as an absorber if it contains a
      * non-deterministic function such as rand()/uuid(), because each evaluation of
@@ -373,6 +380,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             }
         }
 
+        // Index each compound absorber by its rarest element so a target probes
+        // only the absorbers that share an element with it, not the whole list.
+        Map<ScalarOperator, List<Set<ScalarOperator>>> absorberIndex =
+                buildAbsorberIndex(compoundAbsorbers);
+
         Set<Integer> absorbed = Sets.newHashSet();
         for (int j = 0; j < terms.size(); j++) {
             ScalarOperator target = terms.get(j);
@@ -382,13 +394,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             Set<ScalarOperator> targetTerms = Sets.newHashSet(flatten(target, isAnd));
             boolean absorb = targetTerms.stream().anyMatch(singleAbsorbers::contains);
             if (!absorb) {
-                for (Set<ScalarOperator> absorberTerms : compoundAbsorbers) {
-                    // Strict subset so a compound never absorbs an identical sibling.
-                    if (absorberTerms.size() < targetTerms.size() && targetTerms.containsAll(absorberTerms)) {
-                        absorb = true;
-                        break;
-                    }
-                }
+                absorb = absorbedByCompound(targetTerms, absorberIndex);
             }
             if (absorb) {
                 absorbed.add(j);
@@ -417,6 +423,53 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     private static List<ScalarOperator> flatten(ScalarOperator op, boolean isAnd) {
         return isAnd ? Utils.extractDisjunctive(op) : Utils.extractConjuncts(op);
+    }
+
+    /**
+     * Index compound absorbers by an anchor element (the one that occurs in the
+     * fewest absorbers) so that disjoint absorbers spread across distinct buckets.
+     * A target can only be absorbed by absorbers that contain its anchor, so at
+     * probe time we look at a single bucket keyed by each target element.
+     */
+    private static Map<ScalarOperator, List<Set<ScalarOperator>>> buildAbsorberIndex(
+            List<Set<ScalarOperator>> compoundAbsorbers) {
+        Map<ScalarOperator, Integer> elementFreq = Maps.newHashMap();
+        for (Set<ScalarOperator> absorber : compoundAbsorbers) {
+            for (ScalarOperator element : absorber) {
+                elementFreq.merge(element, 1, Integer::sum);
+            }
+        }
+        Map<ScalarOperator, List<Set<ScalarOperator>>> index = Maps.newHashMap();
+        for (Set<ScalarOperator> absorber : compoundAbsorbers) {
+            ScalarOperator anchor = null;
+            int anchorFreq = Integer.MAX_VALUE;
+            for (ScalarOperator element : absorber) {
+                int freq = elementFreq.get(element);
+                if (freq < anchorFreq) {
+                    anchorFreq = freq;
+                    anchor = element;
+                }
+            }
+            index.computeIfAbsent(anchor, k -> Lists.newArrayList()).add(absorber);
+        }
+        return index;
+    }
+
+    private static boolean absorbedByCompound(Set<ScalarOperator> targetTerms,
+                                              Map<ScalarOperator, List<Set<ScalarOperator>>> absorberIndex) {
+        for (ScalarOperator element : targetTerms) {
+            List<Set<ScalarOperator>> candidates = absorberIndex.get(element);
+            if (candidates == null) {
+                continue;
+            }
+            for (Set<ScalarOperator> absorberTerms : candidates) {
+                // Strict subset so a compound never absorbs an identical sibling.
+                if (absorberTerms.size() < targetTerms.size() && targetTerms.containsAll(absorberTerms)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     //
