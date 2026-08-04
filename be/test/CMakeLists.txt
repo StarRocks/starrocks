@@ -29,6 +29,7 @@ set(EXEC_FILES
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/config_test.cpp
+        ./common/crash_watchdog_test.cpp
         ./common/process_exit_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
@@ -139,6 +140,7 @@ set(EXEC_FILES
         ./exec/tablet_sink_sender_range_test.cpp
         ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
+        ./exec/local_pass_through_buffer_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp

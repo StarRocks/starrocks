@@ -1,0 +1,45 @@
+-- name: test_query_cache_topn_filter_stale_entry
+-- PushDownTopNToPreAggRule attaches the TopN of `group by k order by k limit n` to the local
+-- aggregation, which is exactly where the query cache interpolates its cache operator. The
+-- aggregation then builds a TOPN_FILTER that probes the scan feeding it, so the per-tablet results
+-- that get populated only hold the rows below the boundary that filter happened to reach. The
+-- boundary is a property of the whole query's data scope, not of the tablet, and it is not part of
+-- the cache key -- so the entries are only accidentally safe while every later reader's scope is a
+-- superset of the writer's. Dropping the partitions that held the small keys narrows the scope,
+-- and the surviving tablets keep their version and their region, hence their entries are reused.
+CREATE TABLE days (d int) DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+CREATE TABLE ks (k int) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+INSERT INTO days SELECT generate_series FROM TABLE(generate_series(0, 30));
+INSERT INTO ks SELECT generate_series FROM TABLE(generate_series(1, 40));
+
+CREATE TABLE t1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+-- the first 5 days hold the small keys 1..40, the remaining 26 days hold the large keys 100..139
+INSERT INTO t1 SELECT date_add('2022-01-01', interval d day), if(d < 5, k, k + 99), 1 FROM days, ks;
+
+set enable_query_cache = true;
+set query_cache_hot_partition_num = 100;
+
+-- top-10 by key is 1..10, each present in the 5 small-key partitions
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;
+
+alter table t1 drop partition p20220101;
+alter table t1 drop partition p20220102;
+alter table t1 drop partition p20220103;
+alter table t1 drop partition p20220104;
+alter table t1 drop partition p20220105;
+
+-- top-10 by key is now 100..109, each present in the 26 remaining partitions
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;
+set enable_query_cache = false;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;

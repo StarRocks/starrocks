@@ -945,9 +945,16 @@ public class DatabaseTransactionMgr {
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
-                List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                        Config.lake_batch_publish_min_version_num,
-                        Config.lake_batch_publish_max_version_num, txnId);
+                List<Long> txnsWithDependency;
+                if (Config.lake_enable_batch_publish_multi_table) {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
+                            Config.lake_batch_publish_min_version_num,
+                            Config.lake_batch_publish_max_version_num, txnId);
+                } else {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                            Config.lake_batch_publish_min_version_num,
+                            Config.lake_batch_publish_max_version_num, txnId);
+                }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
@@ -959,51 +966,59 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
 
-                // Only single table transactions will be batched together.
-                Preconditions.checkState(states.get(0).getTableIdList().size() == 1);
+                // Without lake_enable_batch_publish_multi_table only single table transactions are
+                // batched together. With it, txns whose dependencies are all inside the batch are
+                // grouped regardless of table set, so the checks below iterate each txn's own
+                // table list.
 
-                long tableId = states.get(0).getTableIdList().get(0);
-
-                // Cut the batch whenever a per-partition invariant breaks: version must stay
+                // Cut the batch whenever a per-(table, partition) invariant breaks: version must stay
                 // consecutive (schema change can occupy a version) and the loaded materialized-index
                 // id snapshot must stay identical (so a SplitTabletJob window does not let one batch
                 // mix old + new tablet ids and produce overlapping PublishTabletInfo tasks on BE).
+                // Partition ids are globally unique, so one map keyed by partition id covers all tables.
                 Map<Long, PartitionCommitState> partitionCommitStates = new HashMap<>();
 
                 outerLoop:
                 for (int i = 0; i < states.size(); i++) {
                     TransactionState state = states.get(i);
-                    TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
-                    // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
                     // Handle special transaction types separately to prevent batching:
                     // 1. Replication transactions: may have non-consecutive versions
                     // 2. DELETE transactions: each delete predicate needs its own version
                     //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
-                    if (tableInfo == null
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    if (state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                             || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
 
-                    Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
-                    for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
-                        PartitionCommitInfo currTxnInfo = item.getValue();
-                        PartitionCommitState previousCommitState = partitionCommitStates.get(item.getKey());
-                        List<Long> currentLoadedIndexIds =
-                                state.getPartitionLoadedIndexIdsWithoutLock(tableId, item.getKey());
-                        if (previousCommitState != null
-                                && (previousCommitState.version() + 1 != currTxnInfo.getVersion()
-                                        || !Objects.equals(previousCommitState.loadedIndexIds(),
-                                                currentLoadedIndexIds))) {
-                            assert i > 0;
-                            states = states.subList(0, i);
+                    for (Long tableId : state.getTableIdList()) {
+                        TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+                        // TableCommitInfo could be null if the table has been dropped
+                        // before this transaction is committed.
+                        if (tableInfo == null) {
+                            states = states.subList(0, Math.max(i, 1));
                             break outerLoop;
                         }
-                        partitionCommitStates.put(item.getKey(),
-                                new PartitionCommitState(currTxnInfo.getVersion(), currentLoadedIndexIds));
+
+                        Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                        for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                            PartitionCommitInfo currTxnInfo = item.getValue();
+                            PartitionCommitState previousCommitState = partitionCommitStates.get(item.getKey());
+                            List<Long> currentLoadedIndexIds =
+                                    state.getPartitionLoadedIndexIdsWithoutLock(tableId, item.getKey());
+                            if (previousCommitState != null
+                                    && (previousCommitState.version() + 1 != currTxnInfo.getVersion()
+                                            || !Objects.equals(previousCommitState.loadedIndexIds(),
+                                                    currentLoadedIndexIds))) {
+                                assert i > 0;
+                                states = states.subList(0, i);
+                                break outerLoop;
+                            }
+                            partitionCommitStates.put(item.getKey(),
+                                    new PartitionCommitState(currTxnInfo.getVersion(), currentLoadedIndexIds));
+                        }
                     }
                 }
 
@@ -2045,13 +2060,16 @@ public class DatabaseTransactionMgr {
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getId(), transactionStateBatch.getTableId());
-        if (table == null) {
-            return true;
+        // one applier per table; a single-table batch loops exactly once
+        for (Long tableId : transactionStateBatch.getTableIdList()) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getId(), tableId);
+            if (table == null) {
+                continue;
+            }
+            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         }
-        TransactionLogApplier applier = txnLogApplierFactory.create(table);
-        ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         return true;
     }
 
@@ -2174,10 +2192,9 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
         // Locks are held to ensure that updates of visible version in the same batch are atomic,
         // so that intermediate versions cannot be seen.
+        List<Long> tableIdList = transactionStateBatch.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
-                List.of(transactionStateBatch.getTableId()),
-                LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(), tableIdList, LockType.WRITE);
         writeLock();
 
         try {
@@ -2192,8 +2209,7 @@ public class DatabaseTransactionMgr {
             unprotectSetTransactionStateBatch(transactionStateBatch);
         } finally {
             writeUnlock();
-            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(),
-                    List.of(transactionStateBatch.getTableId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(transactionStateBatch.getDbId(), tableIdList, LockType.WRITE);
         }
     }
 
@@ -2308,15 +2324,20 @@ public class DatabaseTransactionMgr {
     }
 
     private boolean isTxnStateBatchConsistent(Database db, TransactionStateBatch stateBatch) {
+        // Partition ids are globally unique, so one version map covers all tables of the batch.
         Map<Long, PartitionCommitInfo> versions = new HashMap<>();
         List<TransactionState> states = stateBatch.getTransactionStates();
-        long tableId = stateBatch.getTableId();
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getId(), tableId);
-        if (table != null) {
-            for (int i = 0; i < states.size(); i++) {
-                TransactionState state = states.get(i);
-                TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+        Map<Long, Table> tableCache = new HashMap<>();
+        for (int i = 0; i < states.size(); i++) {
+            TransactionState state = states.get(i);
+            for (TableCommitInfo tableInfo : state.getIdToTableCommitInfos().values()) {
+                long tableId = tableInfo.getTableId();
+                Table table = tableCache.computeIfAbsent(tableId,
+                        id -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), id));
+                if (table == null) {
+                    // table has been dropped
+                    continue;
+                }
 
                 Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                 for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {

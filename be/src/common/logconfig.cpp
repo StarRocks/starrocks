@@ -45,6 +45,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/crash_watchdog.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
@@ -445,6 +446,14 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         // This symbol may be unavailable on macOS builds using system glog.
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
 #endif
+        // Guarantee the process eventually dies if the crash handler stalls, allowing an
+        // orchestrator to restart it instead of leaving a live node reporting SHUTDOWN.
+        // This is opt-in because force-exit can interrupt slow crash cleanup or a core dump.
+        int64_t crash_watchdog_timeout_seconds = config::process_force_exit_after_crash_handler_hang_second;
+        may_start_crash_watchdog(crash_watchdog_timeout_seconds);
+        if (crash_watchdog_timeout_seconds > 0) {
+            LOG(WARNING) << "crash watchdog enabled; may force-exit before a slow core dump completes";
+        }
     }
 
     logging_initialized = true;
