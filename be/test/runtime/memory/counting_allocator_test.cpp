@@ -86,7 +86,7 @@ TEST(STLCountingAllocatorTest, btree) {
     using Map = phmap::btree_map<int, int, std::less<>, MapAllocator>;
 
     int64_t memory_usage = 0;
-    Map map(std::less<>(), MapAllocator(&memory_usage));
+    Map map{std::less<>(), MapAllocator(&memory_usage)};
     ASSERT_EQ(map.bytes_used(), sizeof(map));
     ASSERT_EQ(memory_usage, 0);
 
