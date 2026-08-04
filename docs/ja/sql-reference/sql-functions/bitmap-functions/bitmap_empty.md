@@ -14,7 +14,7 @@ cat data | curl --location-trusted -u user:passwd -T - \
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP BITMAP_EMPTY()
 ```
 

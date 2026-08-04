@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_object(key, value, ...)
 ```
 

@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT weeks_diff(DATETIME expr1,DATETIME expr2);
 ```
 

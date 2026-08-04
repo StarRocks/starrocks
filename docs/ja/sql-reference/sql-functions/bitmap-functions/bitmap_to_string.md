@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR BITMAP_TO_STRING(BITMAP input)
 ```
 

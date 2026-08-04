@@ -10,7 +10,7 @@ StarRocks は、指定された日付部分を抽出するための年、四半�
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME|DATE date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 ```
 

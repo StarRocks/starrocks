@@ -10,7 +10,7 @@ Adds the specified minutes to the date, accurate to the minute.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 ```
 

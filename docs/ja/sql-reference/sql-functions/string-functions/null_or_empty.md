@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)
 BOOLEAN NULL_OR_EMPTY (any_array)
 ```

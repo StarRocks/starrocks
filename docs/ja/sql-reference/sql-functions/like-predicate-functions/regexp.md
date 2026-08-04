@@ -10,7 +10,7 @@ regexp() は [like()](like.md) よりも複雑なマッチング条件をサポ�
 
 ## 構文
 
-```Haskell
+```plaintext
 BOOLEAN regexp(VARCHAR expr, VARCHAR pattern);
 ```
 

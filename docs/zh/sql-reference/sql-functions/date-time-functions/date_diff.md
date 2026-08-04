@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT DATE_DIFF(VARCHAR unit, DATETIME expr1, DATETIME expr2)
 ```
 

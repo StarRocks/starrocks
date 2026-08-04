@@ -808,7 +808,7 @@ FROM test_array_value;
 
 **语法**：
 
-```Haskell
+```plaintext
 LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```

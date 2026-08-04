@@ -10,7 +10,7 @@ Returns the year difference between two date expressions (`expr1` − `expr2`), 
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT years_diff(DATETIME expr1,DATETIME expr2);
 ```
 

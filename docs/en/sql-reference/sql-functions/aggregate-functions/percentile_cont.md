@@ -10,7 +10,7 @@ Computes the percentile value of `expr` with linear interpolation.
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_CONT (expr, percentile) 
 ```
 

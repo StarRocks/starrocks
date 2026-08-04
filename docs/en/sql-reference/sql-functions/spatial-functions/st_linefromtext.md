@@ -10,7 +10,7 @@ Converts a WKT (Well Known Text) to a memory representation in the form of Line.
 
 ## Syntax
 
-```Haskell
+```plaintext
 GEOMETRY ST_LineFromText(VARCHAR wkt)
 ```
 

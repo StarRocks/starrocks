@@ -10,7 +10,7 @@ Indicates whether a column is an aggregate column. If it is an aggregate column,
 
 ## Syntax
 
-```Haskell
+```plaintext
 GROUPING(col_expr)
 ```
 

@@ -10,7 +10,7 @@ Checks whether the intersection of two arrays is empty. The arrays that you spec
 
 ## Syntax
 
-```Haskell
+```plaintext
 arrays_overlap(input0, input1)
 ```
 

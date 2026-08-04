@@ -8,7 +8,7 @@ Calculates the 128-bit checksum of multiple strings. The checksum is represented
 
 ## Syntax
 
-```Haskell
+```plaintext
 LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 

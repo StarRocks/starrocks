@@ -11,7 +11,7 @@ sidebar_position: 0.9
 
 ## 構文
 
-```Haskell
+```plaintext
 cast (input as type)
 ```
 

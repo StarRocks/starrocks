@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 array_position(any_array, any_element)
 ```
 

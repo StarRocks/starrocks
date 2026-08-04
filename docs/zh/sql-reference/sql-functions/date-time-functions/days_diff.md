@@ -15,7 +15,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT days_diff(DATETIME expr1,DATETIME expr2);
 ```
 

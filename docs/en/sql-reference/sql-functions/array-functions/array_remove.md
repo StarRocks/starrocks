@@ -10,7 +10,7 @@ Removes an element from an array.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_remove(any_array, any_element)
 ```
 

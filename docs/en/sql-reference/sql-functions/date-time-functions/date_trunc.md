@@ -12,7 +12,7 @@ StarRocks also provides the year, quarter, month, week, day, and hour functions 
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME|DATE date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 ```
 
