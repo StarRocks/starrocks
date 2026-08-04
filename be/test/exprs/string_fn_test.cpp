@@ -16,7 +16,6 @@
 #include <gtest/gtest.h>
 
 #include <limits>
-
 #include <memory>
 #include <random>
 
@@ -3427,8 +3426,8 @@ PARALLEL_TEST(VecStringFunctionsTest, strposInstanceIntMinTest) {
     auto instance = Int32Column::create();
 
     // "aaa" contains "a" at 1, 2 and 3.
-    std::vector<int32_t> instances = {std::numeric_limits<int32_t>::min(), -4, -3, -1,
-                                      1, 3, std::numeric_limits<int32_t>::max()};
+    std::vector<int32_t> instances = {std::numeric_limits<int32_t>::min(), -4, -3, -1, 1, 3,
+                                      std::numeric_limits<int32_t>::max()};
     std::vector<int64_t> expected = {0, 0, 1, 3, 1, 3, 0};
 
     for (int32_t inst : instances) {
