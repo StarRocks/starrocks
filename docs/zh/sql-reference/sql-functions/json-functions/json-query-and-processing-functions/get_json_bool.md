@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN get_json_bool(VARCHAR json_str, VARCHAR json_path)
 ```
 

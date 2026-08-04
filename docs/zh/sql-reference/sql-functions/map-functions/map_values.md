@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 map_values(any_map)
 ```
 

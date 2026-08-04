@@ -10,7 +10,7 @@ Returns the maximum value of the expr expression.
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAX(expr)
 ```
 

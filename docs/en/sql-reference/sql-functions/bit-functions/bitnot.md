@@ -10,7 +10,7 @@ Returns the bitwise negation of a numeric expression.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITNOT(x);
 ```
 

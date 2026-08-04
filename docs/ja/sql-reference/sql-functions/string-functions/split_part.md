@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
 ```
 

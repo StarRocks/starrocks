@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 cosine_similarity_norm(a, b)
 ```
 

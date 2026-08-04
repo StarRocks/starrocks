@@ -10,7 +10,7 @@ Queries roles that are activated for the current user.
 
 ## Syntax
 
-```Haskell
+```plaintext
 current_role();
 current_role;
 ```

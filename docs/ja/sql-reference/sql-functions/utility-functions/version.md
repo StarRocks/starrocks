@@ -10,7 +10,7 @@ StarRocks のバージョンを照会するには、[current_version](current_ve
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR version();
 ```
 

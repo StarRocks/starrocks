@@ -10,7 +10,7 @@ Obtains the maximum value of a bitmap. If the bitmap is `NULL`, this function re
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_max(bitmap)
 ```
 

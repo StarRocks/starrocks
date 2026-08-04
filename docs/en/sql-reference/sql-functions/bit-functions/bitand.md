@@ -10,7 +10,7 @@ Returns the bitwise AND of two numeric expressions.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITAND(x,y);
 ```
 

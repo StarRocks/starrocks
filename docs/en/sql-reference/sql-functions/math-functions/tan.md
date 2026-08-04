@@ -10,7 +10,7 @@ Returns the tangent of `x`, where `x` is in radians.
 
 ## Syntax
 
-```Haskell
+```plaintext
 TAN(x);
 ```
 

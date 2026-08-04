@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 BIGINT minutes_diff(DATETIME expr1, DATETIME expr2);
 ```
 

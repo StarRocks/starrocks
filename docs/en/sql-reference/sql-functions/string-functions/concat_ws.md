@@ -10,7 +10,7 @@ This function uses the first argument sep as the separator which combines the se
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 ```
 

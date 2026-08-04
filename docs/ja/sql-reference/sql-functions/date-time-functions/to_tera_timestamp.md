@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME to_tera_timestamp(VARCHAR str, VARCHAR format)
 ```
 

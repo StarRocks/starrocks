@@ -10,7 +10,7 @@ Calculates the union of two input bitmaps and return a new bitmap.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_OR(BITMAP lhs, BITMAP rhs)
 ```
 

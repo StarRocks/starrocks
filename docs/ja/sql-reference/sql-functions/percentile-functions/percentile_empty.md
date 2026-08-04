@@ -8,7 +8,7 @@ PERCENTILE 値を構築します。これは、[Stream Load](../../../loading/St
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_EMPTY();
 ```
 

@@ -10,7 +10,7 @@ Returns the standard deviation of an expression. Since v2.5.10, this function ca
 
 ## Syntax
 
-```Haskell
+```plaintext
 STD(expr)
 ```
 

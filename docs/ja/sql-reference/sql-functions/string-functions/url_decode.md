@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```haskell
+```plaintext
 VARCHAR url_decode(VARCHAR str)
 ```
 

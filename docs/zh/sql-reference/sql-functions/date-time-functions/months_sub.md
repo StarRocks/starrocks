@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME months_sub(DATE|DATETIME expr1,INT expr2);
 ```
 

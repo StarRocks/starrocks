@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR JODATIME_FORMAT(DATETIME | DATE date, VARCHAR format)
 ```
 

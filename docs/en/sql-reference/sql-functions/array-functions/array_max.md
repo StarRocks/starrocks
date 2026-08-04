@@ -10,7 +10,7 @@ Obtains the maximum value of all data in an ARRAY and return this result.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_max(array(type))
 ```
 

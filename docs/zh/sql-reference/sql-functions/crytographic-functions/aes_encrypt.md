@@ -12,7 +12,7 @@ AES 全称为 Advanced Encryption Standard。ECB 全称为 Electronic Code Book�
 
 ## 语法
 
-```Haskell
+```plaintext
 aes_encrypt(str,key_str);
 ```
 

@@ -10,7 +10,7 @@ Returns bitmap values that exist in `lhs` but do not exist in `rhs`, and returns
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_andnot(BITMAP lhs, BITMAP rhs)
 ```
 
