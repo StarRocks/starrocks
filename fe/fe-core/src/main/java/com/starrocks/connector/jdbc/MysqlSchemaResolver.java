@@ -22,7 +22,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.jetbrains.annotations.NotNull;
 
@@ -250,7 +249,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ps.setQueryTimeout(getQueryTimeoutSeconds());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
-            long createTime = TimeUtils.getEpochSeconds();
+            long createTime = System.currentTimeMillis();
             if (null != rs) {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").

@@ -24,7 +24,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
-import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -173,7 +172,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     public List<Partition> getPartitions(Connection connection, Table table) {
-        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+        return Lists.newArrayList(new Partition(table.getName(), System.currentTimeMillis()));
     }
 
 }

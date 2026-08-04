@@ -22,7 +22,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -73,7 +72,7 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<Partition> getPartitions(Connection connection, Table table) {
-        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+        return Lists.newArrayList(new Partition(table.getName(), System.currentTimeMillis()));
     }
 
     @Override
