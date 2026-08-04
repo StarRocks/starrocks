@@ -23,15 +23,22 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.type.VarcharType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -110,6 +117,80 @@ public class PartitionsProcDirTest {
                 () -> dir.lookup("no_such_partition"));
         Assertions.assertTrue(ex.getMessage().contains("no_such_partition"),
                 "Expected message to mention the missing partition name, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testGetPartitionInfosThrowsWhenAllRemotesFailedAndNoLocalRecord() {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        olapTable.getIndexNameToMetaId().put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+        db.registerTableUnlocked(olapTable);
+
+        // This FE holds no record for the table and every other FE failed to return a result, so
+        // getAccessTimes raises ERR_GET_PARTITION_ACCESS_TIME rather than returning an empty map that would
+        // look like "never accessed". The read must let that error surface instead of a misleading NULL.
+        new MockUp<PartitionAccessTimeMgr>() {
+            @Mock
+            public Map<Long, Long> getAccessTimes(long dbId, long tableId) {
+                throw ErrorReportException.report(
+                        ErrorCode.ERR_GET_PARTITION_ACCESS_TIME, "127.0.0.2:9020 (Connection refused)");
+            }
+        };
+
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+            ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, dir::getPartitionInfos);
+            Assertions.assertTrue(ex.getMessage().contains("127.0.0.2"),
+                    "Expected the error to name the unreachable FE, got: " + ex.getMessage());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
+    public void testGetPartitionInfosReturnsNullAccessTimeWhenSomeRemoteResponded() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        olapTable.getIndexNameToMetaId().put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+        db.registerTableUnlocked(olapTable);
+
+        // getAccessTimes returns an empty map without raising (a trustworthy "never accessed": at least one
+        // FE answered, or there was no peer to fail), so LastAccessTime renders as NULL rather than throwing.
+        new MockUp<PartitionAccessTimeMgr>() {
+            @Mock
+            public Map<Long, Long> getAccessTimes(long dbId, long tableId) {
+                return new HashMap<>();
+            }
+        };
+
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            List<List<Comparable>> rows = new PartitionsProcDir(db, olapTable, false).getPartitionInfos();
+            // LastAccessTime is the last column; with no record it must render as the NULL placeholder.
+            List<Comparable> row = rows.get(0);
+            Assertions.assertEquals(FeConstants.NULL_STRING, row.get(row.size() - 1));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
     }
 
     @Test
