@@ -211,15 +211,6 @@ if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
 endif ()
 
-# paimon-cpp smoke test, compiled only with --with-paimon-cpp (Linux only).
-# The paimon include path is scoped to this single source file so other test
-# sources cannot include paimon headers.
-if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./connector/paimon/paimon_cpp_test.cpp)
-    set_source_files_properties(./connector/paimon/paimon_cpp_test.cpp
-        PROPERTIES INCLUDE_DIRECTORIES ${PAIMON_CPP_INCLUDE_DIR})
-endif ()
-
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 if (NOT STARROCKS_JIT_ENABLE)
@@ -233,9 +224,6 @@ set(STARROCKS_TEST_LINK_LIBS ${TEST_LINK_LIBS})
 list(REMOVE_ITEM STARROCKS_TEST_LINK_LIBS arrow_testing)
 TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
-if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
-    target_link_libraries(starrocks_test paimon)
-endif ()
 
 
 SET(DW_TEST_FILES
@@ -443,6 +431,16 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
+
+# paimon-cpp smoke test, a standalone binary that exists only with
+# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# The paimon include path is scoped to this target so other test sources
+# cannot include paimon headers.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
+    ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_include_directories(paimon_cpp_test SYSTEM BEFORE PRIVATE ${PAIMON_CPP_INCLUDE_DIR})
+    target_link_libraries(paimon_cpp_test paimon)
+endif ()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
