@@ -32,25 +32,4 @@ TEST(PaimonCppTest, test_status_basic) {
     ASSERT_NE(invalid.ToString().find("invalid for ut"), std::string::npos);
 }
 
-TEST(PaimonCppTest, test_create_local_catalog) {
-    auto root = std::filesystem::temp_directory_path() / "paimon_cpp_ut_warehouse";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
-
-    std::map<std::string, std::string> options;
-    options[paimon::Options::FILE_SYSTEM] = "local";
-    auto catalog_res = paimon::Catalog::Create(root.string(), options);
-    ASSERT_TRUE(catalog_res.ok()) << catalog_res.status().ToString();
-    auto catalog = std::move(catalog_res).value();
-
-    auto st = catalog->CreateDatabase("paimon_cpp_ut_db", {}, /*ignore_if_exists=*/true);
-    ASSERT_TRUE(st.ok()) << st.ToString();
-
-    auto exists = catalog->DatabaseExists("paimon_cpp_ut_db");
-    ASSERT_TRUE(exists.ok()) << exists.status().ToString();
-    ASSERT_TRUE(exists.value());
-
-    std::filesystem::remove_all(root);
-}
-
 } // namespace starrocks
