@@ -70,6 +70,10 @@ logger = logging.getLogger(__name__)
 
 INTEGER_VISIT_NAMES_WITH_DISPLAY_WIDTH = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "LARGEINT"}
 
+# ``context.configure()`` option: schema to host the transient view/MV canonicalization
+# view. When unset, it is created in the compared object's own schema (the prior default).
+TEMP_VIEW_SCHEMA_OPT = "starrocks_temp_view_schema"
+
 
 def _is_integer_with_display_width(type_obj: sqltypes.TypeEngine) -> bool:
     visit_name = getattr(type_obj, "__visit_name__", None)
@@ -535,18 +539,8 @@ def compare_view(
 
         logger.debug(f"Detected changed view attributes ({', '.join(changed_attrs)}) on {view_fqn!r}")
 
-# Alembic ``context.configure()`` option naming the schema in which the transient view
-# used to canonicalize view/MV definitions is created. Setting it lets a locked-down
-# migration user be granted ``CREATE VIEW`` on a single schema (e.g. the same one as
-# ``version_table_schema``) instead of on every schema that contains a view. When unset,
-# the temp view is created in the schema of the object being compared (the prior default).
-TEMP_VIEW_SCHEMA_OPT = "starrocks_temp_view_schema"
-
-
 def _configured_temp_view_schema(autogen_context) -> Optional[str]:
-    """Return the schema configured via
-    ``context.configure(starrocks_temp_view_schema=...)``, or ``None`` when it is not set
-    (callers then default to the compared object's own schema)."""
+    """Return the schema configured by user, or ``None`` when it is not set"""
     migration_context = getattr(autogen_context, "migration_context", None)
     opts = getattr(migration_context, "opts", None) or {}
     return opts.get(TEMP_VIEW_SCHEMA_OPT) or None
@@ -554,9 +548,6 @@ def _configured_temp_view_schema(autogen_context) -> Optional[str]:
 
 def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[str]:
     """Canonicalize SQL by round-tripping it through a temporary VIEW.
-
-    ``schema`` is the schema in which the transient view is created and read back; it may
-    differ from the compared object's schema when ``starrocks_temp_view_schema`` is set.
 
     Returns the reflected canonical SQL, or ``None`` if the temp VIEW could not be
     created (e.g. a referenced table does not exist yet in this migration, or the
