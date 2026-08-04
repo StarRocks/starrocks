@@ -236,6 +236,10 @@ public class AnalyzeStmtAnalyzer {
                             targetColumns.add(realColumn.getName());
                         }
                     }
+                    if (targetColumns.isEmpty()) {
+                        throw new SemanticException("No predicate columns found for external table '%s'",
+                                analyzeTable.getName());
+                    }
                 }
 
                 statement.setColumnNames(targetColumns);

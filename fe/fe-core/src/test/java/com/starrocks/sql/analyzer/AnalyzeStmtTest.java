@@ -242,6 +242,19 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testAnalyzeExternalPredicateColumnsWithoutUsage() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of();
+            }
+        };
+
+        analyzeFail("analyze sample table hive0.tpch.customer predicate columns",
+                "No predicate columns found for external table 'customer'");
+    }
+
+    @Test
     public void testAnalyzeHiveResource() {
         new MockUp<MetaUtils>() {
             @Mock
