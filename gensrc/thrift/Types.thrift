@@ -451,11 +451,8 @@ enum TTableType {
     BENCHMARK_TABLE,
     ICEBERG_PROPERTIES_TABLE,
     LANCE_TABLE,
-<<<<<<< HEAD
+    FLUSS_TABLE,
     STARROCKS_TABLE
-=======
-    FLUSS_TABLE
->>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
 }
 
 enum TKeysType {

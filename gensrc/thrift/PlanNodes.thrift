@@ -508,17 +508,15 @@ struct THdfsScanRange {
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
 
-<<<<<<< HEAD
-    // Enterprise-only fields start at 100, reserve some fields for upstream StarRocks so a sync
-    // never collides on ordinals.
-    100: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
-=======
     // whether to use JNI scanner to read data of fluss table
     41: optional bool use_fluss_jni_reader
 
     // fluss split info
     42: optional string fluss_split_info
->>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
+
+    // Enterprise-only fields start at 100, reserve some fields for upstream StarRocks so a sync
+    // never collides on ordinals.
+    100: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {

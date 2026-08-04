@@ -489,13 +489,13 @@ public class LogicalPlanPrinter {
         }
 
         @Override
-<<<<<<< HEAD
         public OperatorStr visitPhysicalChangesScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "CHANGES SCAN");
-=======
+        }
+
+        @Override
         public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "FLUSS SCAN");
->>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
         }
 
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {

@@ -138,13 +138,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         PAIMON_VIEW,
         @SerializedName("LANCE")
         LANCE,
-<<<<<<< HEAD
+        @SerializedName("FLUSS")
+        FLUSS,
         @SerializedName("STARROCKS")
         STARROCKS;
-=======
-        @SerializedName("FLUSS")
-        FLUSS;
->>>>>>> a2ce0882bea... [Feature] Support reading Fluss tables (#72424)
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
