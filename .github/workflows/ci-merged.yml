@@ -55,10 +55,15 @@ jobs:
     runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged == true &&
+<<<<<<< HEAD
       github.base_ref == 'main' && (
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
       !contains(github.head_ref, '-sync-')) &&
+=======
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks' &&
+>>>>>>> 0d3ceb78645... [Tool] ci-merged: add backport fan-out dry-run shadow job (#77208)
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     continue-on-error: true
