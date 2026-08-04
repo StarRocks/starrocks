@@ -16,6 +16,7 @@
 
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
+#include "runtime/memory/counting_allocator.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 
@@ -94,12 +95,17 @@ public:
     Status flush_status() const;
 
 private:
+    using MapValue = std::pair<const std::string, IndexValueWithVer>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<std::string, IndexValueWithVer, std::less<>, MapAllocator>;
+
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
-    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
+    int64_t _map_node_bytes{0};
+    Map _map;
     int64_t _keys_heap_size{0};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};

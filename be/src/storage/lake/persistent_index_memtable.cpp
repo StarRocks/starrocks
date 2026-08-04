@@ -26,7 +26,10 @@
 namespace starrocks::lake {
 
 PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id, uint64_t max_rss_rowid)
-        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
+        : _map(std::less<>(), MapAllocator(&_map_node_bytes)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_id(tablet_id),
+          _max_rss_rowid(max_rss_rowid) {}
 
 PersistentIndexMemtable::~PersistentIndexMemtable() = default;
 
@@ -191,9 +194,9 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
 
 size_t PersistentIndexMemtable::memory_usage() const {
     // _keys_heap_size is the memory usage of std::string which are heap allocated.
-    // _map.bytes_used() is the memory usage of the btree.
-    // The total memory usage is the sum of these two.
-    return _keys_heap_size + _map.bytes_used();
+    // _map_node_bytes is the memory usage of the btree nodes.
+    DCHECK_GE(_map_node_bytes, 0);
+    return sizeof(_map) + static_cast<size_t>(_map_node_bytes) + _keys_heap_size;
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb) {

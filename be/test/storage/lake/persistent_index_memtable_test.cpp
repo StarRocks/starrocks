@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/string/string_util.h"
 #include "base/testutil/assert.h"
 #include "storage/lake/persistent_index_sstable.h"
 
@@ -147,24 +148,45 @@ TEST(PersistentIndexMemtableTest, test_replace) {
 }
 
 TEST(PersistentIndexMemtableTest, test_memory_usage) {
-    auto memtable = std::make_unique<PersistentIndexMemtable>();
-    {
-        using Key = uint64_t;
-        const int N = 1000;
-        vector<Key> keys;
-        vector<Slice> key_slices;
-        vector<IndexValue> values;
-        vector<size_t> idxes;
-        keys.reserve(N);
-        key_slices.reserve(N);
-        for (int i = 0; i < N; i++) {
-            keys.emplace_back(i);
-            values.emplace_back(i * 2);
-            key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
-        }
-        ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
+    using MapValue = std::pair<const std::string, IndexValueWithVer>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<std::string, IndexValueWithVer, std::less<>, MapAllocator>;
+
+    const int N = 1000;
+    vector<std::string> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    values.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back("persistent-index-key-" + std::to_string(i) + std::string(32, 'x'));
+        values.emplace_back(i * 2);
     }
-    ASSERT_TRUE(memtable->memory_usage() < 100000 && memtable->memory_usage() > 0);
+    for (const auto& key : keys) {
+        key_slices.emplace_back(key);
+    }
+
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
+
+    int64_t expected_map_node_bytes = 0;
+    Map expected_map(std::less<>(), MapAllocator(&expected_map_node_bytes));
+    size_t expected_keys_heap_size = 0;
+    for (int i = 0; i < N; i++) {
+        auto [it, inserted] = expected_map.emplace(keys[i], std::make_pair(-1, values[i]));
+        ASSERT_TRUE(inserted);
+        expected_keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+    }
+
+    EXPECT_EQ(expected_map.bytes_used(), sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes));
+    EXPECT_EQ(sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes) + expected_keys_heap_size,
+              memtable->memory_usage());
+
+    expected_map.clear();
+    memtable->clear();
+    EXPECT_EQ(0, expected_map_node_bytes);
+    EXPECT_EQ(sizeof(expected_map), memtable->memory_usage());
 }
 
 } // namespace starrocks::lake
