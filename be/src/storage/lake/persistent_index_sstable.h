@@ -52,7 +52,8 @@ public:
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
                 TabletManager* tablet_mgr = nullptr);
 
-    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+    template <typename Allocator>
+    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>, Allocator>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
     // multi_get can get multi keys at onces
