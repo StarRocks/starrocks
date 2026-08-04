@@ -154,7 +154,7 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_sc_mod';
 -- result:
 false
 -- !result
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%not active due to base table schema changed%' AS reject
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%is not active due to column schema not compatible%' AS reject
 FROM information_schema.task_runs
 WHERE `DATABASE` = database() AND (EXTRA_MESSAGE LIKE '%mv_sc_mod%' OR DEFINITION LIKE '%mv_sc_mod%')
   AND STATE = 'FAILED';
