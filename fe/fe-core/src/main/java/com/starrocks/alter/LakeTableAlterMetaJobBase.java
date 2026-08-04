@@ -75,11 +75,30 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
-    private AgentBatchTask batchTask = null;
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask batchTask = null;
     private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN is skipped on the live path; RUNNING is the only in-memory-only state
+        // and its durable predecessor is PENDING - the same-state re-log in runPendingJob
+        // already persisted the watershed, and the -1 guard prevents re-allocation on re-run.
+        // replay() throws on RUNNING, so it must never leak into any persisted copy.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
+        batchTask = null;
+        // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
+        // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
+        // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
+        // non-cancellable exception (checkNotNull), sticking the job until its global timeout.
+        physicalPartitionIndexMap.clear();
     }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,

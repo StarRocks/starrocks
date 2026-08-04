@@ -1361,11 +1361,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
-        // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
-            result.setStatus(status);
+        TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
+        if (rejectStatus != null) {
+            result.setStatus(rejectStatus);
             return result;
         }
 
@@ -1474,11 +1472,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
-        // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
-            result.setStatus(status);
+        TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
+        if (rejectStatus != null) {
+            result.setStatus(rejectStatus);
             return result;
         }
 
@@ -1608,11 +1604,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn prepare request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
-        // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
-            result.setStatus(status);
+        TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
+        if (rejectStatus != null) {
+            result.setStatus(rejectStatus);
             return result;
         }
 
@@ -1670,11 +1664,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
-        // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
-            result.setStatus(status);
+        TStatus rejectStatus = rejectIfLeaderLoadTxnAdmissionClosed();
+        if (rejectStatus != null) {
+            result.setStatus(rejectStatus);
             return result;
         }
 
@@ -1698,6 +1690,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return result;
+    }
+
+    private TStatus rejectIfLeaderLoadTxnAdmissionClosed() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.isLeader()) {
+            return buildLoadTxnRejectStatus("current fe is not master");
+        }
+        if (globalStateMgr.isLeaderDemoting()) {
+            return buildLoadTxnRejectStatus("leader is demoting, submit log is not allowed");
+        }
+        if (!globalStateMgr.isLeaderWorkAdmissionOpen()) {
+            return buildLoadTxnRejectStatus("leader work admission is closed");
+        }
+        return null;
+    }
+
+    private TStatus buildLoadTxnRejectStatus(String message) {
+        TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+        status.setError_msgs(Lists.newArrayList(message));
+        return status;
     }
 
     private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws StarRocksException {

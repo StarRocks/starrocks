@@ -1635,6 +1635,9 @@ public class UtFrameUtils {
             assert (fakeJournalWriter == null);
             GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(masterJournalQueue));
             GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+            // A really-activated leader has leader-work admission open (publishLeaderLease does it);
+            // tests on this harness enqueue BE agent tasks and rely on that.
+            GlobalStateMgr.getCurrentState().openLeaderWorkAdmissionForTest();
 
             // simulate the process of master journal synchronizing to the follower
             fakeJournalWriter = new Thread(new Runnable() {
@@ -2000,9 +2003,7 @@ public class UtFrameUtils {
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         // This UT helper only stops the background schema-change loop so tests can drive
-        // schema-change jobs manually. Do not call stopGracefully() here: it runs the
-        // demotion cleanup hook and shuts down AlterHandler's executor, which prevents
-        // subsequent manual job progress in schema-change tests.
+        // schema-change jobs manually via setStop(), then waits for the worker to exit.
         schemaChangeHandler.setStop();
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {
@@ -2015,5 +2016,9 @@ public class UtFrameUtils {
                 throw new Exception("stopping SchemaChangeHandler is interrupted");
             }
         }
+        // setStop() drives the LeaderDaemon worker through onStopped(), which shuts the executor down as
+        // part of the demotion cleanup. Rebuild it so tests can keep submitting AlterReplicaTasks while
+        // driving jobs manually (the pre-LeaderDaemon setStop() left the executor alive).
+        schemaChangeHandler.rebuildExecutorForTest();
     }
 }

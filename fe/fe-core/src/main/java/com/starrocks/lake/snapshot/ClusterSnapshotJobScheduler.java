@@ -16,7 +16,7 @@ package com.starrocks.lake.snapshot;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 // ClusterSnapshotJobScheduler daemon is running on master node. Coordinate two checkpoint controller
 // together to finish image checkpoint one by one and upload image for backup
-public class ClusterSnapshotJobScheduler extends FrontendDaemon implements SnapshotJobContext {
+public class ClusterSnapshotJobScheduler extends LeaderDaemon implements SnapshotJobContext {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJobScheduler.class);
     private static int CAPTURE_ID_RETRY_TIME = 10;
 
@@ -92,7 +92,7 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // skip first run when the scheduler start
         if (lastAutomatedJobStartTimeMs == 0) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
@@ -137,6 +137,7 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
     }
 
     /**
+<<<<<<< HEAD
      * Periodically check for FINISHED ExternalClusterSnapshotJobs whose cleaning was incomplete,
      * and retry delete tasks. This runs outside the exclusive lock since it's independent of
      * the main snapshot job lifecycle.
@@ -183,5 +184,21 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
                 LOG.warn("Failed to retry cleanup for snapshot job: {}", extJob.getId(), e);
             }
         }
+=======
+     * Interrupt-unsafe: the worker calls BDBJE/JE directly (getJournal().getMaxJournalId()) and
+     * drives a full checkpoint (journal maintenance + image push) inline, where an interrupt can
+     * invalidate the BDB environment. It stops cooperatively instead. NOTE the cross-daemon
+     * coupling: the cooperative stop points inside the inline-driven checkpoint are
+     * CheckpointController methods polling the CONTROLLER's stop flag, not this scheduler's - a
+     * stop request against this scheduler alone does not reach them. That is sound today because
+     * both daemons stop together in every reachable scenario (demotion stops both; a lease loss
+     * makes both self-stop), bounded by one controller cycle; and a cycle that outlives demotion
+     * keeps this daemon non-quiesced, so the re-activation cleanliness gate restarts the process
+     * as the backstop.
+     */
+    @Override
+    protected boolean interruptOnStop() {
+        return false;
+>>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
     }
 }
