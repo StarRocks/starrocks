@@ -596,18 +596,12 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
                 try {
-<<<<<<< HEAD
                     // Match PCT by skipping authorization for the trusted refresh INSERT. ColumnPrivilege separately
                     // optimizes the query to identify referenced columns. This runs before InsertPlanner builds the
                     // complete IVM context, so the auxiliary optimizer can fail if it inherits IVM mode; in this case,
                     // aggregate rewrite cannot bind state columns because the target-output mapping is missing. If
                     // refresh authorization is required in the future, this IVM context problem must be solved before
                     // removing the bypass.
-=======
-                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
-                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
-                    // required by the rewrite.
->>>>>>> 2558387696e... [BugFix] Fix IVM refresh with external authorization (#77210)
                     ctx.setBypassAuthorizerCheck(true);
                     ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
                     mvContext.setExecPlan(execPlan);
