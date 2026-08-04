@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -26,6 +27,8 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TransactionStateSnapshot;
+import com.starrocks.transaction.TransactionStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -106,5 +109,43 @@ public class BypassWriteTransactionHandlerTest {
 
         // Should not throw with empty list
         BypassWriteTransactionHandler.registerLoadedIndexes(txnState, new ArrayList<>());
+    }
+
+    // The evicted-path guard must reproduce the live-path source check (getTxnState): a cached terminal
+    // outcome created by a non-bypass source is rejected, so an evicted transaction of another source
+    // cannot be committed/rolled back through the bypass-write handler.
+    @Test
+    public void testAssertCachedOutcomeRejectsNonBypassSource() {
+        TransactionStateSnapshot foreign = new TransactionStateSnapshot(
+                TransactionStatus.VISIBLE, null, LoadJobSourceType.BACKEND_STREAMING);
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class,
+                () -> BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(foreign, "L"));
+        Assertions.assertTrue(e.getMessage().contains("isn't created in " + LoadJobSourceType.BYPASS_WRITE.name()),
+                e.getMessage());
+    }
+
+    // A null/unknown source (e.g. a record loaded from an image that predates source-type persistence)
+    // is fail-closed: treated as "not bypass write" and rejected, matching the live path's strict guard.
+    @Test
+    public void testAssertCachedOutcomeRejectsNullSource() {
+        TransactionStateSnapshot legacy = new TransactionStateSnapshot(TransactionStatus.VISIBLE, null, null);
+        Assertions.assertThrows(StarRocksException.class,
+                () -> BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(legacy, "L"));
+    }
+
+    // A genuine bypass-write cached outcome passes the guard.
+    @Test
+    public void testAssertCachedOutcomeAllowsBypassWrite() throws StarRocksException {
+        TransactionStateSnapshot bypass = new TransactionStateSnapshot(
+                TransactionStatus.VISIBLE, null, LoadJobSourceType.BYPASS_WRITE);
+        BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(bypass, "L"); // no throw
+    }
+
+    // UNKNOWN status means the cache holds no outcome for the label; the guard must NOT fire, leaving the
+    // caller's not-found branch to handle it (a probe for an unseen label must not become a source error).
+    @Test
+    public void testAssertCachedOutcomeUnknownFallsThrough() throws StarRocksException {
+        TransactionStateSnapshot unknown = new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
+        BypassWriteTransactionHandler.assertCachedOutcomeIsBypassWrite(unknown, "L"); // no throw
     }
 }

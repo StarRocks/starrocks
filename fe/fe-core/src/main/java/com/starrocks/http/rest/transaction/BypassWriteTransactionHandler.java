@@ -254,12 +254,31 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
     }
 
+    // Preserve the live-path source-type guard (see getTxnState) after the full state is count-evicted.
+    // While the TransactionState is present, a label whose transaction was not created by BYPASS_WRITE is
+    // rejected; the terminal-state cache/image now retains the source type so the same request cannot
+    // instead succeed off an untyped cached outcome once the state is gone. An UNKNOWN status means no
+    // cached outcome exists, so it is left to each method's not-found branch. Any non-bypass-write source
+    // (including a null/unknown source from a legacy image record) is rejected, matching the live path.
+    @VisibleForTesting
+    static void assertCachedOutcomeIsBypassWrite(TransactionStateSnapshot snapshot, String label)
+            throws StarRocksException {
+        if (snapshot.getStatus() == TransactionStatus.UNKNOWN) {
+            return;
+        }
+        if (!BYPASS_WRITE.equals(snapshot.getSourceType())) {
+            throw new StarRocksException(String.format(
+                    "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
+        }
+    }
+
     // Resolve a commit/prepare for a bypass-write transaction whose full state has been count-evicted,
     // from the terminal-state cache (by label). VISIBLE/COMMITTED -> idempotent success; ABORTED ->
     // cannot commit; otherwise genuinely unknown -> not found. Mirrors the in-map status branches.
     private static TransactionResult commitEvictedByLabel(long dbId, String label) throws StarRocksException {
         TransactionStateSnapshot snapshot =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        assertCachedOutcomeIsBypassWrite(snapshot, label);
         TransactionResult result = new TransactionResult();
         switch (snapshot.getStatus()) {
             case COMMITTED:
@@ -279,6 +298,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     private static TransactionResult rollbackEvictedByLabel(long dbId, String label) throws StarRocksException {
         TransactionStateSnapshot snapshot =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        assertCachedOutcomeIsBypassWrite(snapshot, label);
         TransactionResult result = new TransactionResult();
         switch (snapshot.getStatus()) {
             case ABORTED:

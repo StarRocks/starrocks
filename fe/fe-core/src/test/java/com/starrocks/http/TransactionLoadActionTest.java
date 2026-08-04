@@ -482,6 +482,77 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         }
     }
 
+    // Same as mockEvictedLabel, but the cached terminal outcome carries a source type, so the bypass-write
+    // handler's post-eviction source guard (assertCachedOutcomeIsBypassWrite, P2-a) can be exercised end to
+    // end through routing -> handler -> commitEvictedByLabel, not just as an isolated unit.
+    private void mockEvictedLabelSourced(TransactionStatus terminalStatus, LoadJobSourceType sourceType) {
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getLabelStatus(anyLong, anyString);
+                result = new TransactionStateSnapshot(terminalStatus, null, sourceType);
+                minTimes = 0;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String name) {
+                return new Database(testDbId, DB_NAME);
+            }
+        };
+    }
+
+    // A TXN_COMMIT carrying source_type=BYPASS_WRITE, which routes to BypassWriteTransactionHandler.
+    private Response commitByLabelBypassWrite(String label) throws Exception {
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        Request request = newRequest(TransactionOperation.TXN_COMMIT, (uriBuilder, reqBuilder) -> {
+            uriBuilder.addParameter(SOURCE_TYPE, Objects.toString(LoadJobSourceType.BYPASS_WRITE.getFlag()));
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        return networkClient.newCall(request).execute();
+    }
+
+    @Test
+    public void commitEvictedBypassWriteOutcomeByLabelSucceeds() throws Exception {
+        // The cached outcome was itself a bypass write -> the source guard passes and commit is idempotent.
+        mockEvictedLabelSourced(TransactionStatus.VISIBLE, LoadJobSourceType.BYPASS_WRITE);
+        try (Response response = commitByLabelBypassWrite(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already committed"));
+        }
+    }
+
+    @Test
+    public void commitEvictedNonBypassOutcomeByLabelRejected() throws Exception {
+        // The cached outcome came from a different source -> the guard rejects the bypass-write recommit,
+        // preserving the live-path check across count eviction (P2-a).
+        mockEvictedLabelSourced(TransactionStatus.VISIBLE, LoadJobSourceType.BACKEND_STREAMING);
+        try (Response response = commitByLabelBypassWrite(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                    .contains("isn't created in " + LoadJobSourceType.BYPASS_WRITE.name()));
+        }
+    }
+
+    @Test
+    public void commitEvictedNullSourceOutcomeByLabelRejected() throws Exception {
+        // A null/unknown source (e.g. a legacy image record predating source-type persistence) is
+        // fail-closed: rejected rather than answered off an untyped outcome.
+        mockEvictedLabelSourced(TransactionStatus.VISIBLE, null);
+        try (Response response = commitByLabelBypassWrite(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                    .contains("isn't created in " + LoadJobSourceType.BYPASS_WRITE.name()));
+        }
+    }
+
     @Test
     public void transactionLoadCoordinatorMgrOneBeOnNodeWithoutChannelTest() throws Exception {
 

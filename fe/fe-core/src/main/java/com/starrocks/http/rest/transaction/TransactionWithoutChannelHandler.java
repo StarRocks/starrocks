@@ -91,10 +91,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
 
     // A PREPARE of a live transaction is handled by redirecting to the BE (result stays null). But a
     // PREPARE retry of a count-evicted transaction is routed here even for a bypass-write client
-    // (source_type is omitted on retry, and the cache cannot recover the original source type), and
-    // redirecting it through the now-expired coordinator cache would fail. When the full state is
-    // gone, answer idempotently from the terminal-state cache, exactly like a commit retry: a
-    // VISIBLE/COMMITTED outcome is success, ABORTED fails, and a truly unknown label is not found.
+    // (source_type is omitted on retry), and redirecting it through the now-expired coordinator cache
+    // would fail. Unlike the bypass-write handler this path is source-agnostic on the live path too, so
+    // it answers regardless of the cached source type. When the full state is gone, answer idempotently
+    // from the terminal-state cache, exactly like a commit retry: a VISIBLE/COMMITTED outcome is success,
+    // ABORTED fails, and a truly unknown label is not found.
     private TransactionResult handlePrepareTransaction(Database db, String label) throws StarRocksException {
         long dbId = db.getId();
         // Decide purely from getLabelStatus (do NOT call getLabelTransactionState here: the normal

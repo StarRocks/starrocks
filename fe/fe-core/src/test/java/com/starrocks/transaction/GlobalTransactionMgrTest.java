@@ -1115,7 +1115,7 @@ public class GlobalTransactionMgrTest {
         DatabaseTransactionMgr masterDbMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         // Seed the cache as a real count-eviction would (clearTransactionState -> cache.put).
         masterDbMgr.restoreTerminalStateCacheRecord(987654321L, "evicted_label", TransactionStatus.VISIBLE, null,
-                System.currentTimeMillis());
+                System.currentTimeMillis(), LoadJobSourceType.BYPASS_WRITE);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         masterTransMgr.saveTransactionStateV2(pseudoImage.getImageWriter());
@@ -1131,7 +1131,11 @@ public class GlobalTransactionMgrTest {
         DatabaseTransactionMgr followerDbMgr =
                 followerTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         Assertions.assertEquals(TransactionStatus.VISIBLE, followerDbMgr.getTxnState(987654321L).getStatus());
-        Assertions.assertEquals(TransactionStatus.VISIBLE, followerDbMgr.getLabelState("evicted_label").getStatus());
+        TransactionStateSnapshot byLabel = followerDbMgr.getLabelState("evicted_label");
+        Assertions.assertEquals(TransactionStatus.VISIBLE, byLabel.getStatus());
+        // The source type must survive the image round-trip, so a source-gated handler (BypassWrite)
+        // can still validate the evicted outcome after a checkpoint/restart.
+        Assertions.assertEquals(LoadJobSourceType.BYPASS_WRITE, byLabel.getSourceType());
     }
 
     @Test

@@ -38,8 +38,8 @@ import java.util.Map;
  * <p>Entries are looked up by transaction id and by label. The cache is bounded by
  * {@code transaction_terminal_state_cache_num} (LRU); entries older than
  * {@code label_keep_max_second} are treated as absent so nothing lives forever. Each entry keeps
- * only the id, label, status, reason and finish time, so the heap cost is a small fraction of a
- * full {@link TransactionState} (which carries per-partition commit info).
+ * only the id, label, status, reason, finish time and source type, so the heap cost is a small
+ * fraction of a full {@link TransactionState} (which carries per-partition commit info).
  *
  * <p>This class is self-synchronized and never calls back into {@link DatabaseTransactionMgr}, so
  * it is safe to invoke while holding the database transaction lock.
@@ -54,13 +54,20 @@ class TxnTerminalStateCache {
         final TransactionStatus status; // VISIBLE or ABORTED
         final String reason;
         final long finishTime;
+        // Source type of the originating transaction (e.g. BYPASS_WRITE). Retained so a source-gated
+        // handler can still validate an evicted outcome (see BypassWriteTransactionHandler) after the
+        // full TransactionState is gone. May be null for a record loaded from an image that predates
+        // source-type persistence; callers must treat null as "unknown source", never as a match.
+        final TransactionState.LoadJobSourceType sourceType;
 
-        Record(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
+        Record(long txnId, String label, TransactionStatus status, String reason, long finishTime,
+                TransactionState.LoadJobSourceType sourceType) {
             this.txnId = txnId;
             this.label = label;
             this.status = status;
             this.reason = reason;
             this.finishTime = finishTime;
+            this.sourceType = sourceType;
         }
     }
 
@@ -104,18 +111,20 @@ class TxnTerminalStateCache {
      */
     synchronized void put(TransactionState state) {
         insert(state.getTransactionId(), state.getLabel(), state.getTransactionStatus(), state.getReason(),
-                state.getFinishTime());
+                state.getFinishTime(), state.getSourceType());
     }
 
     /**
      * Restore an entry loaded from the FE image. Applies the same admission rules as {@link #put}
      * (enabled, terminal, not born-dead), so a stale record in an old image is dropped on load.
      */
-    synchronized void restore(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
-        insert(txnId, label, status, reason, finishTime);
+    synchronized void restore(long txnId, String label, TransactionStatus status, String reason, long finishTime,
+            TransactionState.LoadJobSourceType sourceType) {
+        insert(txnId, label, status, reason, finishTime, sourceType);
     }
 
-    private void insert(long txnId, String label, TransactionStatus status, String reason, long finishTime) {
+    private void insert(long txnId, String label, TransactionStatus status, String reason, long finishTime,
+            TransactionState.LoadJobSourceType sourceType) {
         // Apply the current config first: a runtime reduction of the cap only evicts one entry per
         // insert via removeEldestEntry, so drain any excess here; if disabled, clear outright.
         trimToCapacity();
@@ -129,7 +138,7 @@ class TxnTerminalStateCache {
             // Born dead: already older than the read window, so it would never satisfy a read.
             return;
         }
-        Record r = new Record(txnId, label, status, reason, finishTime);
+        Record r = new Record(txnId, label, status, reason, finishTime, sourceType);
         byTxnId.put(txnId, r);
         // Largest txn id wins for a reused label, matching getLabelState()'s "largest id" semantics.
         Long cur = labelToTxnId.get(label);
@@ -146,7 +155,22 @@ class TxnTerminalStateCache {
      */
     synchronized List<Record> snapshot() {
         trimToCapacity(); // never serialize more than the configured cap into the image
-        return new ArrayList<>(byTxnId.values());
+        // Also drop age-expired records. valid()'s age check otherwise runs only when a record is looked
+        // up, so a record that aged past label_keep_max_second but is never queried would be copied into
+        // every FE image. The normal checkpoint runs snapshot() on a throwaway copy of the state, so this
+        // prune keeps aged records out of the image (and off that copy), not out of the live serving map --
+        // there they are reclaimed by capacity pressure and on-access pruning in getBy*. restore() already
+        // drops the same records on load, so this only avoids writing dead weight in the first place (with
+        // the default cap of 50k per db, an inactive db could otherwise bloat every checkpoint it appears in).
+        List<Record> live = new ArrayList<>(byTxnId.size());
+        for (Record r : new ArrayList<>(byTxnId.values())) {
+            if (valid(r)) {
+                live.add(r);
+            } else {
+                removeRecord(r);
+            }
+        }
+        return live;
     }
 
     /**

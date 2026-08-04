@@ -1024,7 +1024,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             reader.readCollection(TerminalStateImageRecord.class, record -> {
                 try {
                     getDatabaseTransactionMgr(record.dbId).restoreTerminalStateCacheRecord(
-                            record.txnId, record.label, record.status, record.reason, record.finishTime);
+                            record.txnId, record.label, record.status, record.reason, record.finishTime,
+                            record.sourceType);
                 } catch (AnalysisException e) {
                     LOG.warn("skip terminal-state cache record for missing db {}: {}", record.dbId, e.getMessage());
                 }
@@ -1099,18 +1100,23 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         String reason;
         @SerializedName("finishTime")
         long finishTime;
+        // Optional: absent (null) in images written before source-type persistence. A null decodes back
+        // to a null Record.sourceType, which source-gated callers treat as "unknown source", never a match.
+        @SerializedName("sourceType")
+        LoadJobSourceType sourceType;
 
         TerminalStateImageRecord() {
         }
 
         TerminalStateImageRecord(long dbId, long txnId, String label, TransactionStatus status, String reason,
-                                 long finishTime) {
+                                 long finishTime, LoadJobSourceType sourceType) {
             this.dbId = dbId;
             this.txnId = txnId;
             this.label = label;
             this.status = status;
             this.reason = reason;
             this.finishTime = finishTime;
+            this.sourceType = sourceType;
         }
     }
 
@@ -1124,8 +1130,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             long dbId = dbTransactionMgr.getDbId();
             for (TxnTerminalStateCache.Record r : dbTransactionMgr.getTerminalStateCacheSnapshot()) {
-                terminalRecords.add(
-                        new TerminalStateImageRecord(dbId, r.txnId, r.label, r.status, r.reason, r.finishTime));
+                terminalRecords.add(new TerminalStateImageRecord(
+                        dbId, r.txnId, r.label, r.status, r.reason, r.finishTime, r.sourceType));
             }
         }
         final int cnt = 2 + txnNum + 1 + terminalRecords.size();

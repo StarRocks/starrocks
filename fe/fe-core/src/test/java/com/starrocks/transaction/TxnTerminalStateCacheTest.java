@@ -121,18 +121,21 @@ public class TxnTerminalStateCacheTest {
 
         TxnTerminalStateCache dst = new TxnTerminalStateCache();
         for (TxnTerminalStateCache.Record r : src.snapshot()) {
-            dst.restore(r.txnId, r.label, r.status, r.reason, r.finishTime);
+            dst.restore(r.txnId, r.label, r.status, r.reason, r.finishTime, r.sourceType);
         }
 
         assertEquals(2, dst.size());
         assertNotNull(dst.getByTxnId(100L));
         assertEquals(TransactionStatus.VISIBLE, dst.getByLabel("v").status);
         assertEquals(TransactionStatus.ABORTED, dst.getByTxnId(200L).status);
+        // The source type round-trips through snapshot()/restore() so a source-gated read stays valid.
+        assertEquals(TransactionState.LoadJobSourceType.BACKEND_STREAMING, dst.getByTxnId(100L).sourceType);
 
         // restore() applies the same admission rules: a born-dead record is dropped on load.
         TxnTerminalStateCache dst2 = new TxnTerminalStateCache();
         Config.label_keep_max_second = 10;
-        dst2.restore(300L, "old", TransactionStatus.VISIBLE, null, now - 20_000L);
+        dst2.restore(300L, "old", TransactionStatus.VISIBLE, null, now - 20_000L,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING);
         assertEquals(0, dst2.size());
     }
 
@@ -227,5 +230,30 @@ public class TxnTerminalStateCacheTest {
         assertNull(cache.getByTxnId(1L));  // expired -> pruned, not just hidden
         assertEquals(0, cache.size());
         assertNull(cache.getByLabel("a")); // label pointer pruned too
+    }
+
+    // luohaha P2: snapshot() must prune age-expired records even when they are never looked up, so an
+    // aged-out outcome neither lingers in memory nor is serialized into every FE image. Unlike
+    // testExpiredRecordPrunedOnAccess (which prunes via a getBy* lookup), here the only interaction with
+    // the expired record is the snapshot itself.
+    @Test
+    public void testSnapshotPrunesExpiredWithoutAccess() {
+        Config.transaction_terminal_state_cache_num = 100;
+        Config.label_keep_max_second = 3600;
+        TxnTerminalStateCache cache = new TxnTerminalStateCache();
+        long now = System.currentTimeMillis();
+        cache.put(terminalTxn(1L, "aged", TransactionStatus.VISIBLE, now - 100_000L)); // valid on admission
+        cache.put(terminalTxn(2L, "fresh", TransactionStatus.VISIBLE, now));
+        assertEquals(2, cache.size());
+
+        Config.label_keep_max_second = 10; // the 100s-old record is now past the read window
+
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        for (TxnTerminalStateCache.Record r : cache.snapshot()) { // no getByTxnId/getByLabel on the aged record
+            ids.add(r.txnId);
+        }
+        assertEquals(java.util.Set.of(2L), ids); // only the fresh record is serialized
+        assertEquals(1, cache.size());           // aged record removed from memory, not just hidden
+        assertNull(cache.getByLabel("aged"));    // its label pointer is gone too
     }
 }
