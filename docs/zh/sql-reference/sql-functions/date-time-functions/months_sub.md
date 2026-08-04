@@ -11,7 +11,7 @@ description: "从日期中减去指定的月数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME months_sub(DATE|DATETIME expr1,INT expr2);
 ```
 

@@ -11,7 +11,7 @@ Converts a bitmap to a Base64-encoded string. This function is supported from v2
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR bitmap_to_base64(BITMAP bitmap)
 ```
 

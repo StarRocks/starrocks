@@ -18,7 +18,7 @@ This function is internally transformed to `COUNT` + `IF`:
 
 ## Syntax
 
-```Haskell
+```plaintext
 COUNT_IF(condition)
 ```
 

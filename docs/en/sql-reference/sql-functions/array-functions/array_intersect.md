@@ -11,7 +11,7 @@ Returns an array of the elements in the intersection of one or more arrays.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_intersect(input0, input1, ...)
 ```
 

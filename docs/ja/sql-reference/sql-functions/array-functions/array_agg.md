@@ -9,7 +9,7 @@ description: "ARRAY_AGG関数は列内の値を配列に集約し、ORDER BYで�
 
 ## 構文
 
-```Haskell
+```plaintext
 ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 

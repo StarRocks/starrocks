@@ -13,7 +13,7 @@ If there is no intersection, 0 is returned.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT INTERSECT_COUNT(bitmap_column, column_to_filter, filter_values)
 ```
 

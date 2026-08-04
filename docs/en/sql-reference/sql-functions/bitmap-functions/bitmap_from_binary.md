@@ -15,7 +15,7 @@ This function is supported from v3.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP bitmap_from_binary(VARBINARY str)
 ```
 

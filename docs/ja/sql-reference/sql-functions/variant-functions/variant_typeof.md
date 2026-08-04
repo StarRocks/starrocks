@@ -11,7 +11,7 @@ VARIANT 値の型名を文字列として返します。
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR variant_typeof(variant_expr)
 ```
 

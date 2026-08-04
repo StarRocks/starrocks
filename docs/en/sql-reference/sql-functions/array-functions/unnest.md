@@ -17,7 +17,7 @@ From v3.2.7, UNNEST can be used with LEFT JOIN ON TRUE, which is to retain all r
 
 ## Syntax
 
-```Haskell
+```plaintext
 unnest(array0[, array1 ...])
 ```
 

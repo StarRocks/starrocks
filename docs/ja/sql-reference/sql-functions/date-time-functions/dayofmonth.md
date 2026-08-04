@@ -11,7 +11,7 @@ description: "日付から日部分を取得し、1から31の範囲の値を返
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DAYOFMONTH(DATETIME date)
 ```
 

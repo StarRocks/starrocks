@@ -13,7 +13,7 @@ This function is a synonym of the [now()](./now.md) function.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME CURRENT_TIMESTAMP()
 DATETIME CURRENT_TIMESTAMP(INT p)
 ```

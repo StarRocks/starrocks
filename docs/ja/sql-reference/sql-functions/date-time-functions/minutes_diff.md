@@ -9,7 +9,7 @@ description: "2つの日付式の分の差を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT minutes_diff(DATETIME expr1,DATETIME expr2);
 ```
 

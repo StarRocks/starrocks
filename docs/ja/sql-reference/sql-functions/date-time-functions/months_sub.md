@@ -9,7 +9,7 @@ description: "指定された月を日付から減算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME months_sub(DATETIME expr1, INT expr2);
 ```
 

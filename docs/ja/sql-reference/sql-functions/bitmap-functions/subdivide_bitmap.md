@@ -13,7 +13,7 @@ description: "大きなビットマップを複数のサブビットマップに
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP subdivide_bitmap(bitmap, length)
 ```
 

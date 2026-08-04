@@ -13,7 +13,7 @@ description: "文字列の32ビット循環冗長検査(CRC)値を返します�
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT crc32(VARCHAR str)
 ```
 

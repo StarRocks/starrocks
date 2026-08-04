@@ -13,7 +13,7 @@ description: "配列内の要素数を返します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 INT cardinality(any_array)
 ```
 

@@ -19,7 +19,7 @@ description: "将DATE或DATETIME类型的值转换为UNIX时间戳。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT UNIX_TIMESTAMP()
 INT UNIX_TIMESTAMP(DATETIME date)
 INT UNIX_TIMESTAMP(DATETIME date, STRING fmt)

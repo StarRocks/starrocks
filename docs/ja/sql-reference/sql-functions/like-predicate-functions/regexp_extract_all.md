@@ -15,7 +15,7 @@ description: "指定された正規表現パターンに一致する文字列内
 
 ## 構文
 
-```Haskell
+```plaintext
 ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ```
 

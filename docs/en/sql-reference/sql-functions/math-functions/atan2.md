@@ -13,7 +13,7 @@ The return value is in the range of [-π, π].
 
 ## Syntax
 
-```Haskell
+```plaintext
 ATAN2(x,y);
 ```
 

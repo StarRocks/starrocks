@@ -9,7 +9,7 @@ description: "値をhll型に変換します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 HLL_HASH(column_name)
 ```
 

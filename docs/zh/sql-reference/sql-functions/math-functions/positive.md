@@ -11,7 +11,7 @@ description: "返回表达式x的结果。"
 
 ## 语法
 
-```Haskell
+```plaintext
 POSITIVE(x);
 ```
 

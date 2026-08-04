@@ -21,7 +21,7 @@ description: "1つ以上のパラメータのリストから最大の値を返�
 
 ## Syntax
 
-```Haskell
+```plaintext
 GREATEST(expr1,...);
 ```
 

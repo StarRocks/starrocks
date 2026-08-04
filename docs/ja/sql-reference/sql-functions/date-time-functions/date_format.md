@@ -9,7 +9,7 @@ description: "指定された単位で 2 つの日付値の差を返します。
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 ```
 

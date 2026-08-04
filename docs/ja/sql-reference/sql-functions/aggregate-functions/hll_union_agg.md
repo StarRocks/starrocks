@@ -15,7 +15,7 @@ HLL に基づく約 1% の誤差を持つ推定結果です。HLL カラムは�
 
 ## 構文
 
-```Haskell
+```plaintext
 HLL_UNION_AGG(hll)
 ```
 

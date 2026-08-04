@@ -13,7 +13,7 @@ It has an alias [cardinality()](cardinality.md).
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT array_length(any_array)
 ```
 

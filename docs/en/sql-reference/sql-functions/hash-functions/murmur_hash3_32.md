@@ -11,7 +11,7 @@ Returns the 32-bit murmur3 hash value of the input string.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT MURMUR_HASH3_32(VARCHAR input, ...)
 ```
 

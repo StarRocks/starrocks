@@ -11,7 +11,7 @@ description: "向日期时间或日期值添加指定年数。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME years_add(DATETIME|DATE expr1,INT expr2);
 ```
 

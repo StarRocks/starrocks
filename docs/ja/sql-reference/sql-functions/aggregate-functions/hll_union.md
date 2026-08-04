@@ -9,7 +9,7 @@ HLL 値のセットを連結して返します。
 
 ## 構文
 
-```Haskell
+```plaintext
 hll_union(hll)
 ```
 
