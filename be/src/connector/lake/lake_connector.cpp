@@ -643,6 +643,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
 
     bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                       thrift_lake_scan_node.enable_global_late_materialization;
+    LakeScanLazyMaterializationContext* glm_ctx = nullptr;
     if (enable_glm) {
         auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
         auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
@@ -650,11 +651,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;
         };
-        auto* glm_ctx =
-                (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
+        glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
-        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
-        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
     }
 
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
@@ -669,6 +667,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    if (glm_ctx != nullptr) {
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets(),
+                                 LakeScanCacheOptions{.use_page_cache = _params.use_page_cache,
+                                                      .fill_data_cache = _params.lake_io_opts.fill_data_cache,
+                                                      .fill_metadata_cache = _params.lake_io_opts.fill_metadata_cache,
+                                                      .skip_disk_cache = _params.lake_io_opts.skip_disk_cache});
+    }
 
     // BM25 Phase-1 tablet-local stats: must run after _params is built (has the search option) and
     // before the reader is created, so bm25_stats travels down with the read options.
