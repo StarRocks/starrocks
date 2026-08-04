@@ -20,11 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.TimeUtils;
-=======
->>>>>>> bdf38028ad4... [BugFix] Use last freshness confirmed time as the MV rewrite staleness baseline (#76758)
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
