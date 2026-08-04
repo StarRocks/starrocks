@@ -19,12 +19,8 @@ import com.starrocks.authentication.LDAPGroupProvider;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
-<<<<<<< HEAD
 import com.starrocks.epack.authorization.AuthorizationMgrEPack;
 import com.starrocks.epack.authorization.AuthorizationProviderEPack;
-import com.starrocks.persist.EditLog;
-=======
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;

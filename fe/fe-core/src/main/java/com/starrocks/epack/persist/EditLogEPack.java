@@ -44,6 +44,10 @@ public class EditLogEPack extends EditLog {
         super(journalQueue);
     }
 
+    public EditLogEPack(BlockingQueue<JournalTask> journalQueue, boolean gateOpen) {
+        super(journalQueue, gateOpen);
+    }
+
     public void logCreateRoleMapping(String name, Map<String, String> propertyMap) {
         RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, propertyMap);
         logJsonObject(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);

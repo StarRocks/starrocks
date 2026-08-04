@@ -137,7 +137,6 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
     }
 
     /**
-<<<<<<< HEAD
      * Periodically check for FINISHED ExternalClusterSnapshotJobs whose cleaning was incomplete,
      * and retry delete tasks. This runs outside the exclusive lock since it's independent of
      * the main snapshot job lifecycle.
@@ -184,7 +183,9 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
                 LOG.warn("Failed to retry cleanup for snapshot job: {}", extJob.getId(), e);
             }
         }
-=======
+    }
+
+    /**
      * Interrupt-unsafe: the worker calls BDBJE/JE directly (getJournal().getMaxJournalId()) and
      * drives a full checkpoint (journal maintenance + image push) inline, where an interrupt can
      * invalidate the BDB environment. It stops cooperatively instead. NOTE the cross-daemon
@@ -199,6 +200,5 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
     @Override
     protected boolean interruptOnStop() {
         return false;
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
     }
 }

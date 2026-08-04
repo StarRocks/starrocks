@@ -1478,17 +1478,6 @@ public class EditLog {
      */
     private JournalTask submitRaw(short op, Writable writable, long maxWaitIntervalMs) throws InterruptedException {
         long startTimeNano = System.nanoTime();
-<<<<<<< HEAD
-
-        // do not check whether global state mgr is leader when writing star mgr
-        // journal,
-        // because starmgr state change happens before global state mgr state change,
-        // it will write log before global state mgr becomes leader
-        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but " +
-                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
-=======
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
         try {
             buffer.writeShort(op);
@@ -1502,27 +1491,6 @@ public class EditLog {
         return task;
     }
 
-<<<<<<< HEAD
-        /*
-         * for historical reasons, logJsonObject is not allowed to raise Exception,
-         * which is really unreasonable to me.
-         * This PR will continue to swallow exception and retry till the end of the
-         * world like before.
-         * Hope some day we'll fix it.
-         */
-        // 2. put to queue
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
-                }
-                this.journalQueue.put(task);
-                break;
-            } catch (InterruptedException e) {
-                // got interrupted while waiting if necessary for space to become available
-                LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
-=======
     /**
      * submitRaw for the no-throw paths: uninterruptible, but never swallows the interrupt - the flag is
      * cleared on entry (a stale flag would make the first put() throw immediately), remembered across
@@ -1543,7 +1511,6 @@ public class EditLog {
         } finally {
             if (interrupted) {
                 Thread.currentThread().interrupt();
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
             }
         }
     }
@@ -1578,26 +1545,6 @@ public class EditLog {
      * settled, EditLogException propagates; apply threw = the write is durable and settled (the torn apply is
      * the caller's exception to surface); serialization failure = nothing was ever enqueued.
      */
-<<<<<<< HEAD
-    public static void waitInfinity(JournalTask task) {
-        long startTimeNano = task.getStartTimeNano();
-        boolean result;
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
-                }
-                // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now
-                // because on such
-                // scenario JournalWriter will simply exit the whole process
-                result = task.get();
-                break;
-            } catch (InterruptedException | ExecutionException e) {
-                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
-                cnt++;
-=======
     private void logEditGated(short op, Writable writable, Runnable applyAction) {
         enterGate();
         try {
@@ -1615,21 +1562,12 @@ public class EditLog {
                             + "apply was torn; this FE's memory may have diverged from its own WAL", op, t);
                     throw t;
                 }
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
             }
         } finally {
             exitGate();
         }
     }
 
-<<<<<<< HEAD
-        // for now if journal writer fails, it will exit directly, so this property
-        // should always be true.
-        Preconditions.checkState(result);
-        if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
-        }
-=======
     /**
      * submit log to queue, wait for JournalWriter
      */
@@ -1661,7 +1599,6 @@ public class EditLog {
             }
         };
         logEditGated(op, writable, applier == null ? null : () -> applier.apply(obj));
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
     }
 
     /**

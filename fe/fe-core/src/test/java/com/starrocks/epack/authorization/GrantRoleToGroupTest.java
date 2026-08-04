@@ -21,9 +21,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.OperationTypeEPack;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -45,25 +43,33 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class GrantRoleToGroupTest {
 
+    @Before
+    public void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory. The old
+        // spy(EditLogEPack).logEdit stub no longer intercepts the WAL-applier write path. Per-test so
+        // testPersist()'s replayNextJournal sees only its own ops on a freshly cleared queue.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @Test
     public void testAlterAndDrop() throws Exception {
-        EditLog editLog = spy(new EditLogEPack(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -122,10 +128,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testSerDer() throws Exception {
-        EditLog editLog = spy(new EditLogEPack(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -169,8 +171,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testPersist() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -229,16 +229,10 @@ public class GrantRoleToGroupTest {
         Assert.assertTrue(roleIds.contains(r1Id));
         roleIds = newObject.getRoleIdListByGroup("g3");
         Assert.assertEquals(0, roleIds.size());
-
-        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testShowGrants() throws Exception {
-        EditLog editLog = spy(new EditLogEPack(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -276,10 +270,6 @@ public class GrantRoleToGroupTest {
     @Test
     public void testPrivilege() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        EditLog editLog = spy(new EditLogEPack(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
-
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -336,9 +326,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsPrivilege() throws Exception {
-        EditLog editLog = spy(new EditLogEPack(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
         ConnectContext ctx = new ConnectContext();
 
         String createUserSql = "create user u_grant";

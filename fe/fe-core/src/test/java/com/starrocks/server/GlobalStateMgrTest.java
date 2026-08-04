@@ -47,11 +47,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-import com.starrocks.connector.iceberg.IcebergMaintenanceProcessor;
-=======
 import com.starrocks.common.StarRocksException;
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+import com.starrocks.connector.iceberg.IcebergMaintenanceProcessor;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;

@@ -15,12 +15,8 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.metric.PipeMetricMgr;
-=======
 import com.starrocks.common.util.LeaderDaemon;
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+import com.starrocks.metric.PipeMetricMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,14 +45,10 @@ public class PipeScheduler extends LeaderDaemon {
     }
 
     @Override
-<<<<<<< HEAD
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // Refresh pipe state gauges on each run (leader only)
         PipeMetricMgr.refreshPipeStateGauges();
 
-=======
-    protected void runAfterLeaseValid() {
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
         try {
             process();
         } catch (Throwable e) {

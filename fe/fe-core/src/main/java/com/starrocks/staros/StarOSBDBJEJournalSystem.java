@@ -61,13 +61,9 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
         journalWriter = new JournalWriter(bdbjeJournal, journalQueue);
 
-<<<<<<< HEAD
-        editLog = new EditLogEPack(journalQueue);
-=======
         // StarMgr writes its own separate journal and is never fenced by leader demotion, so its EditLog's
         // WAL admission gate is always open.
-        editLog = new EditLog(journalQueue, true);
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+        editLog = new EditLogEPack(journalQueue, true);
 
         replayedJournalId = new AtomicLong(0L);
 
@@ -79,11 +75,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(journal);
         journalSystem.journalWriter = new JournalWriter(journalSystem.bdbjeJournal, journalQueue);
-<<<<<<< HEAD
-        journalSystem.editLog = new EditLogEPack(journalQueue);
-=======
-        journalSystem.editLog = new EditLog(journalQueue, true);
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+        journalSystem.editLog = new EditLogEPack(journalQueue, true);
         return journalSystem;
     }
 
@@ -91,11 +83,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public StarOSBDBJEJournalSystem(Journal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
-<<<<<<< HEAD
-        editLog = new EditLogEPack(null);
-=======
-        editLog = new EditLog(null, true);
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+        editLog = new EditLogEPack(null, true);
     }
 
     public long getReplayId() {

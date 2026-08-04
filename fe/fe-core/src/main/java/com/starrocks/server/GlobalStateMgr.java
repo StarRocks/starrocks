@@ -1631,11 +1631,7 @@ public class GlobalStateMgr {
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
-<<<<<<< HEAD
-        editLog = new EditLogEPack(journalQueue);
-=======
-        editLog = new EditLog(journalQueue, false);
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
+        editLog = new EditLogEPack(journalQueue, false);
     }
 
     // wait until FE is ready.
@@ -1745,21 +1741,11 @@ public class GlobalStateMgr {
         try {
             publishLeaderLease(getEpoch());
 
-<<<<<<< HEAD
             if (Config.bdbje_reset_election_group) {
                 licenseMgr.resetSystemInfoIfMachineChanged();
             }
 
-            if (Config.bdbje_reset_election_group || nodeMgr.isFirstTimeStartUp()) {
-                nodeMgr.resetFrontends();
-            }
-
-            if (nodeMgr.isFirstTimeStartUp()) {
-                initCaseInsensitive();
-            }
-=======
             runLeaderBootstrapActions();
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
 
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
@@ -2145,30 +2131,6 @@ public class GlobalStateMgr {
         // in onStopped() and deregisters on exit; the re-activation cleanliness gate then verifies quiescence
         // and exits only if a straggler is still alive when this node is re-elected.
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
-<<<<<<< HEAD
-        if (autovacuumDaemon != null) {
-            stopOne("autovacuumDaemon", () -> autovacuumDaemon.stopGracefully(timeoutMs));
-        }
-        stopOne("tabletCollector", () -> tabletCollector.stopGracefully(timeoutMs));
-        stopOne("reportHandler", () -> reportHandler.stopGracefully(timeoutMs));
-        stopOne("temporaryTableCleaner", () -> temporaryTableCleaner.stopGracefully(timeoutMs));
-        stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopGracefully(timeoutMs));
-        stopOne("replicationMgr", () -> replicationMgr.stopGracefully(timeoutMs));
-        stopOne("safeModeChecker", () -> safeModeChecker.stopGracefully(timeoutMs));
-        if (RunMode.isSharedDataMode()) {
-            stopOne("bookmarkManager", () -> bookmarkManager.stopGracefully(timeoutMs));
-        }
-        stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
-        stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
-        stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
-        stopOne("contextMetaManager", () -> contextMetaManager.stopGracefully(timeoutMs));
-        stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
-        stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
-        stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopGracefully(timeoutMs));
-        stopOne("batchWriteMgr", () -> batchWriteMgr.stopGracefully(timeoutMs));
-        stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopGracefully(timeoutMs));
-        stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopGracefully(timeoutMs));
-=======
         if (RunMode.isSharedDataMode()) {
             stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
         }
@@ -2181,6 +2143,9 @@ public class GlobalStateMgr {
         stopOne("metaRecoveryDaemon", () -> metaRecoveryDaemon.stopBestEffort());
         stopOne("replicationMgr", () -> replicationMgr.stopBestEffort());
         stopOne("safeModeChecker", () -> safeModeChecker.stopBestEffort());
+        if (RunMode.isSharedDataMode()) {
+            stopOne("bookmarkManager", () -> bookmarkManager.stopBestEffort());
+        }
         if (RunMode.isSharedDataMode()) {
             stopOne("vectorIndexBuildScheduler", () -> vectorIndexBuildScheduler.stopBestEffort());
             stopOne("fullVacuumDaemon", () -> fullVacuumDaemon.stopBestEffort());
@@ -2199,13 +2164,13 @@ public class GlobalStateMgr {
         }
         stopOne("taskManager", () -> taskManager.stop(0));
         stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopBestEffort());
+        stopOne("contextMetaManager", () -> contextMetaManager.stopBestEffort());
         stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopBestEffort());
         stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopBestEffort());
         stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopBestEffort());
         stopOne("batchWriteMgr", () -> batchWriteMgr.stopBestEffort());
         stopOne("routineLoadTaskScheduler", () -> routineLoadTaskScheduler.stopBestEffort());
         stopOne("routineLoadScheduler", () -> routineLoadScheduler.stopBestEffort());
->>>>>>> 3a07af03c02... [Enhancement] Safe in-place leader demotion: WAL-apply fence + leader-daemon drain + ALTER SYSTEM TRANSFER LEADER (#75592)
         if (timePrinter != null) {
             stopOne("timePrinter", () -> timePrinter.stopBestEffort());
         }
