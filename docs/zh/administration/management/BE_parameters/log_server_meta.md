@@ -484,6 +484,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
 - 引入版本：-
 
+### process_force_exit_after_crash_handler_hang_second
+
+- 默认值：0
+- 类型：Int
+- 单位：秒
+- 是否动态：否
+- 描述：当致命信号（崩溃）处理函数发生挂起时（例如在生成 core dump 前释放资源时发生 jemalloc 死锁），在该秒数之后强制进程退出，以便编排系统重启该进程。崩溃标记仍会先被设置，因此在该宽限期内 FE 会持续收到 `SHUTDOWN` 心跳；此配置仅限制崩溃进程存活的最长时间。默认禁用（`0`），以便升级后保持原有的崩溃与 core dump 行为不变；如需启用，请根据自身环境设置一个正值并重启节点。该值仅在启动时读取一次，且只有为正值时才会启动看门狗线程；取值小于等于 `0` 时保持该看门狗禁用。
+- 引入版本：v4.0.15, v4.1.5
+
 ### rpc_compress_ratio_threshold
 
 - 默认值：1.1

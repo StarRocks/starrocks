@@ -361,9 +361,20 @@ CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // writer. Samples are consumed by tablet split and range-split parallel
 // compaction to accurately estimate row distribution for overlapping segments.
 // Setting to 0 disables sampling. The per-segment value is persisted in
-// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// SegmentMetadataPB.deprecated_sort_key_sample_row_interval so that a runtime change
 // does not break cross-version readers.
 CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
+// Write-time gate. When true, the segment writer ADDITIONALLY writes a full, untruncated,
+// all-sort-column order-preserving sort key index page (alongside the always-written legacy
+// truncated short key page) and stops writing the metadata sort-key samples. When false, only the
+// legacy short key page + metadata samples are written. Default true.
+CONF_mBool(enable_full_sort_key_index, "true");
+// Read-time gate (rollback valve). When true, query read paths (segment seek + logical split) USE
+// the full sort key index page when a segment has one. When false, they fall back to the legacy
+// truncated short key page for ALL segments (including ones that already carry a full page) --
+// go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
+// this switch (they consume the full page by presence). Default true.
+CONF_mBool(enable_full_sort_key_index_read, "true");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -2110,6 +2121,15 @@ CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor

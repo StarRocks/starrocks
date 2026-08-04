@@ -168,6 +168,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         }
         std::string src_partition_starlet_uri =
                 convert_s3_path_to_starlet_uri(src_partition_full_path, virtual_tablet_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_partition_starlet_uri", &src_partition_starlet_uri);
 
         // Append metadata and segment directory names
         src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);

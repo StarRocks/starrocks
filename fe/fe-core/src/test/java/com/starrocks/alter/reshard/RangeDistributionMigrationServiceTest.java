@@ -297,6 +297,38 @@ class RangeDistributionMigrationServiceTest {
     }
 
     @Test
+    void beCanonicalCharLengthIsCompatibleOnlyWhenBoundaryFitsTarget() throws Exception {
+        useSingleKeyTable("char_boundary", "char(10)");
+        List<Column> columns = MetaUtils.getRangeDistributionColumns(table, latestIndex().getMetaId());
+        ScalarType canonicalChar = TypeFactory.createCharType(255);
+        TabletRange canonicalBeRange = TabletRange.fromEncodedString(
+                "v1:LBkcHBkcFQAcFRoV/gMAAAAYAWEVAAAAEhIA");
+        Tuple finite = canonicalBeRange.getRange().getUpperBound();
+        Variant canonicalBeChar = finite.getValues().get(0);
+
+        Assertions.assertEquals(255, ((ScalarType) canonicalBeChar.getType()).getLength());
+        Assertions.assertDoesNotThrow(() -> RangeDistributionMigrationService.validateRangeSequenceForTest(
+                List.of(canonicalBeRange, range(finite, null)), columns));
+
+        Tuple typedNull = singleValueTuple(Variant.nullVariant(canonicalChar));
+        Assertions.assertDoesNotThrow(() -> RangeDistributionMigrationService.validateRangeSequenceForTest(
+                List.of(range(null, typedNull), range(typedNull, null)), columns));
+
+        Tuple exactlyTenBytes = singleValueTuple(Variant.of(canonicalChar, "a中中中"));
+        Assertions.assertDoesNotThrow(() -> RangeDistributionMigrationService.validateRangeSequenceForTest(
+                List.of(range(null, exactlyTenBytes), range(exactlyTenBytes, null)), columns));
+
+        Tuple tooLong = singleValueTuple(Variant.of(canonicalChar, "01234567890"));
+        assertInvalid(List.of(range(null, tooLong), range(tooLong, null)), columns);
+
+        Tuple tooManyUtf8Bytes = singleValueTuple(Variant.of(canonicalChar, "中中中中"));
+        assertInvalid(List.of(range(null, tooManyUtf8Bytes), range(tooManyUtf8Bytes, null)), columns);
+
+        Tuple varcharBoundary = singleValueTuple(Variant.of(TypeFactory.createVarcharType(255), "a"));
+        assertInvalid(List.of(range(null, varcharBoundary), range(varcharBoundary, null)), columns);
+    }
+
+    @Test
     void malformedSentinelAndDecimalBoundariesFailBeforeSubmission() throws Exception {
         Tuple minimum = new Tuple(List.of(
                 Variant.minVariant(IntegerType.INT),

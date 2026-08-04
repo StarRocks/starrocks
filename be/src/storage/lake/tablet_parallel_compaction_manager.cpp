@@ -20,6 +20,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
+#include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -27,6 +28,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -38,8 +40,10 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
@@ -2415,6 +2419,18 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
     return true;
 }
 
+// Returns true if at least one segment in |rowset_meta| lacks metadata sort-key samples
+// (deprecated_sort_key_samples), i.e. a segment whose short key index the loader below
+// could open to gain precision. Mirrors tablet_splitter.cpp's build_segments_from_rowsets
+// gate: a rowset whose every segment already carries samples needs no segment I/O, since
+// the metadata-only path yields the identical SegmentSplitInfo.
+static bool rowset_has_sampleless_segment(const RowsetMetadataPB& rowset_meta) {
+    for (const auto& segment_meta : rowset_meta.segment_metas()) {
+        if (segment_meta.deprecated_sort_key_samples_size() == 0) return true;
+    }
+    return false;
+}
+
 StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collect_segment_key_bounds(
         const std::vector<RowsetPtr>& rowsets) {
     std::vector<SegmentSplitInfo> segments;
@@ -2425,7 +2441,34 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
         int64_t rowset_data_size = rowset->data_size();
         int64_t rowset_num_rows = rowset->num_rows();
 
-        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+        // Opportunistically open this rowset's segments (already-constructed Rowset --
+        // no schema-resolution risk, unlike tablet_splitter's synthetic-metadata callers)
+        // to read a full-key segment's short key index directly via
+        // SegmentSplitInfo::load_samples_from_short_key_index, gated by
+        // rowset_has_sampleless_segment so a legacy rowset performs zero segment I/O.
+        // A segment whose LoadedSegment is null (skipped/ignored/lost), or whose files
+        // fail to load, or that is not a full-key segment, falls back to
+        // load_sort_key_samples (deprecated_sort_key_samples) exactly as before.
+        std::unordered_map<int32_t, Segment*> opened_by_meta_pos;
+        std::vector<Rowset::LoadedSegment> loaded_segments; // keeps the Segments alive for this rowset's scope
+        Schema rowset_schema;
+        std::vector<uint32_t> sort_key_idxes;
+        if (rowset_has_sampleless_segment(rowset_meta) &&
+            rowset->load_segments(&loaded_segments, /*fill_cache=*/false).ok()) {
+            if (auto tablet_schema = rowset->tablet_schema(); tablet_schema != nullptr) {
+                rowset_schema = ChunkHelper::convert_schema(tablet_schema);
+                const auto& idxes = tablet_schema->sort_key_idxes();
+                sort_key_idxes.assign(idxes.begin(), idxes.end());
+            }
+            for (auto& loaded : loaded_segments) {
+                if (loaded.segment != nullptr) {
+                    opened_by_meta_pos.emplace(loaded.segment_meta_pos, loaded.segment.get());
+                }
+            }
+        }
+
+        for (int meta_pos = 0; meta_pos < num_segments; ++meta_pos) {
+            const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
             SegmentSplitInfo segment;
             RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
             RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
@@ -2435,7 +2478,27 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
             } else if (num_segments > 0) {
                 segment.data_size = rowset_data_size / num_segments;
             }
-            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+
+            Segment* opened_segment = nullptr;
+            if (auto it = opened_by_meta_pos.find(meta_pos); it != opened_by_meta_pos.end()) {
+                opened_segment = it->second;
+            }
+            // Presence + usability (NOT read-config-gated): range-split compaction always consumes the
+            // full page when it exists and validates. ensure_full_sort_key_index_usable() lazily
+            // reads/validates it.
+            if (opened_segment != nullptr && opened_segment->load_index().ok() &&
+                opened_segment->has_full_sort_key_index_page() && opened_segment->ensure_full_sort_key_index_usable()) {
+                ASSIGN_OR_RETURN(const bool loaded, segment.load_samples_from_short_key_index(
+                                                            *opened_segment, rowset_schema, sort_key_idxes));
+                // Data-safe fallback: a full page whose decoded samples fail runtime validation yields
+                // false with empty samples -- load_sort_key_samples is a no-op when no metadata samples
+                // are present, leaving the coarse [min, max] path downstream.
+                if (!loaded) {
+                    RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+                }
+            } else {
+                RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            }
             segments.push_back(std::move(segment));
         }
     }

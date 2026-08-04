@@ -137,7 +137,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("PAIMON_VIEW")
         PAIMON_VIEW,
         @SerializedName("LANCE")
-        LANCE;
+        LANCE,
+        @SerializedName("FLUSS")
+        FLUSS;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -398,7 +400,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isExternalTableWithFileSystem() {
-        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable()
+                || isPaimonTable() || isKuduTable() || isFlussTable();
     }
 
     public boolean isHiveTable() {
@@ -426,6 +429,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isFlussTable() {
+        return type == TableType.FLUSS;
     }
 
     public boolean isOdpsTable() {

@@ -1019,12 +1019,20 @@ public class OlapTable extends Table {
         }
 
         boolean ok = true;
+        boolean allQueued = true;
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
-                AgentTaskQueue.addTask(task);
+                if (!AgentTaskQueue.addTask(task)) {
+                    // Not enqueued (duplicate signature, or this node is demoting / not the leader):
+                    // no BE response will ever arrive, so do not wait for it. This runs inside the
+                    // DROP TABLE WAL applier during a demotion drain - waiting out the full latch
+                    // timeout there would burn the drain budget for nothing.
+                    allQueued = false;
+                    latch.markedCountDown(task.getBackendId(), -1L);
+                }
             }
             AgentTaskExecutor.submit(batchTask);
 
@@ -1033,9 +1041,10 @@ public class OlapTable extends Table {
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
-                ok = latch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = latch.await(timeout, TimeUnit.MILLISECONDS) && allQueued;
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
+                ok = false;
             }
 
             if (!ok) {

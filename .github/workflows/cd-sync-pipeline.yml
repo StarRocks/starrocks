@@ -1,0 +1,319 @@
+name: CD SYNC CI PIPELINE
+
+# CI gate for reverse-sync PRs (title "(cd-sync #N)", label cd-sync) opened on
+# StarRocks main by cd-repo-sync.yml. Mirror of celerdata-enterprise's
+# sync-ci-pipeline.yml, trimmed for v1: BUILD chain only (no UT), auto-merge on
+# green. Runs on [self-hosted, normal] (mirrors ci-pipeline's heavy-job pool;
+# the tiny [sync] pool is reserved for the executor + ci-sync trigger).
+# Requires SR-side secret: PAT.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.event.number }}-cd-sync-checker
+  cancel-in-progress: true
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  pr-label:
+    runs-on: [self-hosted, normal]
+    name: PR LABEL
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      labels: ${{ steps.labels.outputs.LABELS }}
+    steps:
+      - run: sleep 10
+      - name: Get PR labels
+        id: labels
+        run: |
+          set -x
+          labels=`curl -L \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
+                  | jq '.labels[].name'`
+          labels=`echo "$labels" | tr "\"" " " | tr "\n" " "`
+          echo "LABELS=$labels" >> $GITHUB_OUTPUT
+
+  cd-sync-checker:
+    runs-on: [self-hosted, normal]
+    needs: pr-label
+    if: >
+      contains(github.event.pull_request.title, '(cd-sync #') &&
+      contains(needs.pr-label.outputs.labels, 'cd-sync') &&
+      !contains(needs.pr-label.outputs.labels, 'pending') &&
+      !contains(needs.pr-label.outputs.labels, 'force-check')
+    name: RUN CHECKER
+    steps:
+      - run: echo "success"
+
+  code-checker:
+    runs-on: [self-hosted, normal]
+    needs: cd-sync-checker
+    name: CODE FILTER
+    outputs:
+      output1: ${{ steps.changes-info.outputs.be }}
+      output2: ${{ steps.changes-info.outputs.thirdparty }}
+      output3: ${{ steps.changes-info.outputs.fe }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            be:
+              - 'be/**'
+              - 'gensrc/**'
+              - 'run-be-ut.sh'
+              - 'build.sh'
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            fe:
+              - 'fe/**'
+              - 'gensrc/**'
+              - 'run-fe-ut.sh'
+              - 'java-extensions/**'
+              - 'build.sh'
+              - 'test/**'
+
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            thirdparty:
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - name: CHECK INFO
+        id: changes-info
+        run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
+          echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
+          echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
+
+  thirdparty-update:
+    runs-on: [self-hosted, normal]
+    needs: [code-checker]
+    name: Thirdparty Update
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        linux: [centos7, ubuntu]
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      REPO: ${{ github.repository }}
+    if: >
+      (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened') &&
+      (needs.code-checker.outputs.output1 == 'true' ||
+      needs.code-checker.outputs.output2 == 'true' ||
+      needs.code-checker.outputs.output3 == 'true')
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update Image (${{ matrix.linux }})
+        id: update-image
+        if: needs.code-checker.outputs.output2 == 'true'
+        env:
+          linux_distro: ${{ matrix.linux }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-pr-update-image.sh
+
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
+
+      - name: Clean ENV
+        if: always() && needs.code-checker.outputs.output2 == 'true'
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --delete
+          rm -rf ${{ github.workspace }}/*
+
+  thirdparty-info:
+    runs-on: [self-hosted, normal]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Check Result
+        run: |
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error:: Thirdparty Update Error!"
+            exit 1
+          fi
+
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        if: needs.thirdparty-update.result == 'success'
+        run: |
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+
+  build:
+    runs-on: [self-hosted, normal]
+    needs: [thirdparty-info]
+    name: BUILD
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      LINUX_DISTRO: ubuntu
+    outputs:
+      build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+      base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{ github.base_ref }}
+          echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 90
+        env:
+          SKIP_OSS: 'true'
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ "${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}" != '' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
+
+      - name: build result
+        run: |
+          echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_build.outputs.ECI_ID }}
+          eci rm ${{ steps.run_build.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
+
+  result:
+    runs-on: [self-hosted, normal]
+    needs: [pr-label, code-checker, build]
+    name: RESULT
+    if: >
+      always() && (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened')
+    steps:
+      - name: add label
+        uses: actions-ecosystem/action-add-labels@v1
+        if: needs.build.result == 'failure'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ERROR
+
+      - name: remove label
+        uses: actions-ecosystem/action-remove-labels@v1
+        if: needs.build.result != 'failure'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ERROR
+
+  auto-merge:
+    needs: [pr-label, code-checker, build]
+    name: Auto Merge
+    runs-on: [self-hosted, normal]
+    if: >
+      always() &&
+      contains(github.event.pull_request.title, '(cd-sync #') &&
+      contains(needs.pr-label.outputs.labels, 'cd-sync') &&
+      !contains(needs.pr-label.outputs.labels, 'conflict') &&
+      !contains(needs.pr-label.outputs.labels, 'pending') &&
+      !contains(needs.pr-label.outputs.labels, 'ERROR') &&
+      (
+        needs.build.result == 'success' ||
+        (
+          needs.build.result == 'skipped' &&
+          needs.code-checker.result == 'success' &&
+          needs.code-checker.outputs.output1 != 'true' &&
+          needs.code-checker.outputs.output2 != 'true' &&
+          needs.code-checker.outputs.output3 != 'true'
+        )
+      )
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: add automerge label
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: automerge
+
+      # StarRocks pattern (see pr-checker.yml): enable automerge with secrets.PAT,
+      # no separate auto-approve step. merge-method squash to match SR bot merges.
+      - name: automerge
+        uses: peter-evans/enable-pull-request-automerge@v2
+        with:
+          token: ${{ secrets.PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash

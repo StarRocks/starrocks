@@ -31,6 +31,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
   - [Benchmark catalog](../catalog/benchmark_catalog.md): used to query in-flight generated datasets for TPC-H, TPC-DS, and SSB schemas.
   - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
   - [Paimon catalog](../catalog/paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
+  - [Fluss catalog](../catalog/fluss_catalog.md): used to query data from Fluss.
   - [Unified catalog](../catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
   StarRocks interacts with the following two components of external data sources when you query external data:

@@ -2851,6 +2851,17 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         }
         {
+            // A constant aggregated value must not be re-appended to the merge phase args: BE reads
+            // the const args positionally, so approx_top_k(<intermediate>, 1, 3, 10) would make it
+            // read the TINYINT literal 1 as k and abort on the type mismatch.
+            String sql = "select /*+SET_VAR(new_planner_agg_stage=2)*/ L_RETURNFLAG, "
+                    + "approx_top_k(cast(1 as tinyint), 3, 10) from lineitem group by L_RETURNFLAG";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "(merge finalize)");
+            assertContains(plan, ": approx_top_k, 3, 10)");
+            assertNotContains(plan, ": approx_top_k, 1, 3, 10)");
+        }
+        {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
                 String sql = "select approx_top_k(L_LINENUMBER, '111') from lineitem";
                 getFragmentPlan(sql);
@@ -3349,8 +3360,10 @@ public class AggregateTest extends PlanTestBase {
             // distinct group_concat cannot merge two phase agg to one phase agg.
             sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
             plan = getFragmentPlan(sql);
+            // '1' is the aggregated value, so it is not re-appended to the merge phase args --
+            // only the remaining constant args ('2' and the separator) are carried over.
             assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
-                    "  |  output: group_concat(4: group_concat, '1', '2', ',')\n" +
+                    "  |  output: group_concat(4: group_concat, '2', ',')\n" +
                     "  |  group by: 1: v1\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update serialize)\n" +

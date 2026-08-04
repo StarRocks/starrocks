@@ -68,6 +68,10 @@ enum PageTypePB {
     INDEX_PAGE = 2;
     DICTIONARY_PAGE = 3;
     SHORT_KEY_PAGE = 4;
+    // Full, untruncated, order-preserving sort key index page. Same on-disk body layout as
+    // SHORT_KEY_PAGE but a distinct type + footer so the legacy short key page can be retired
+    // independently once the sort key index fully supersedes it.
+    SORT_KEY_PAGE = 5;
 }
 
 enum NullEncodingPB {
@@ -133,6 +137,29 @@ message ShortKeyFooterPB {
     optional uint32 num_segment_rows = 6;
 }
 
+// Footer of a SORT_KEY_PAGE: the full, untruncated, order-preserving sort key index. The body
+// layout (KeyContent^N, KeyOffset(vint)^N) is identical to a SHORT_KEY_PAGE; the separate message
+// and page type keep it fully independent of the legacy short key page so that page can be removed
+// cleanly once the sort key index supersedes it.
+message SortKeyFooterPB {
+    // How many index item in this index.
+    optional uint32 num_items = 1;
+    // The total bytes occupied by the index key
+    optional uint32 key_bytes = 2;
+    // The total bytes occupied by the key offsets
+    optional uint32 offset_bytes = 3;
+    // Segment id which this index is belong to
+    optional uint32 segment_id = 4;
+    // number rows in each block
+    optional uint32 num_rows_per_block = 5;
+    // How many rows in this segment
+    optional uint32 num_segment_rows = 6;
+    // Number of sort-key columns encoded in each index entry (all of them). Records what THIS
+    // segment wrote at flush time; after sort-key schema evolution it may differ from the current
+    // schema, so the decoder must trust this value, not the live schema.
+    optional uint32 num_sort_key_columns = 7;
+}
+
 message PageFooterPB {
     // required: indicates which of the *_footer fields is set
     optional PageTypePB type = 1;
@@ -147,6 +174,8 @@ message PageFooterPB {
     optional DictPageFooterPB dict_page_footer = 9;
     // present only when type == SHORT_KEY_PAGE
     optional ShortKeyFooterPB short_key_page_footer = 10;
+    // present only when type == SORT_KEY_PAGE
+    optional SortKeyFooterPB sort_key_page_footer = 11;
 }
 
 message ZoneMapPB {
@@ -222,10 +251,16 @@ message SegmentFooterPB {
     optional CompressionTypePB compress_type = 7 [default = LZ4_FRAME]; // Deprecated
     repeated MetadataPairPB file_meta_datas = 8;                        // Deprecated
 
-    // Short key index's page
+    // Short key index's page. ALWAYS the legacy truncated short key (num_short_key_columns
+    // columns, fixed-length), for backward/downgrade compatibility.
     optional PagePointerPB short_key_index_page = 9;
     // vector index storage type
     optional VectorIndexStorageTypePB vector_index_storage_type = 10;
+    // Optional additional page holding the full, untruncated, all-sort-column order-preserving
+    // sort key index: a SORT_KEY_PAGE whose SortKeyFooterPB carries num_sort_key_columns. Written
+    // only when enable_full_sort_key_index is on; absent otherwise. Old binaries ignore this field
+    // and read short_key_index_page as before.
+    optional PagePointerPB full_sort_key_index_page = 11;
 }
 
 message BTreeMetaPB {

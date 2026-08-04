@@ -944,22 +944,21 @@ protected:
 };
 
 TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_uses_virtual_shard_uri) {
-    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    std::string src_partition_starlet_uri;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        *fs_st = absl::InternalError("stop after observing the source partition URI");
     });
-    // Seed only the raw-path cache entry for the expected virtual shard, then remove the injection.
-    // The replication call can reach this mock only if it uses virtual_tablet_id as the URI authority.
-    ASSERT_NE(nullptr, new_fs_starlet(_virtual_tablet_id, true));
-    SyncPoint::GetInstance()->ClearCallBack("new_fs_starlet::get_shard_filesystem");
+    SyncPoint::GetInstance()->SetCallBack(
+            "LakeReplicationTxnManager::src_partition_starlet_uri",
+            [&](void* arg) { src_partition_starlet_uri = *static_cast<std::string*>(arg); });
 
     auto request = build_request(true /* with_full_path */);
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
-    ASSERT_FALSE(mock_fs->opened_paths().empty());
-    EXPECT_EQ("path/to/db123/456/789/meta/000000000000C351_0000000000000002.meta", mock_fs->opened_paths().front());
+    EXPECT_EQ("staros://80001/path/to/db123/456/789", src_partition_starlet_uri);
+    EXPECT_NE(_src_tablet_id, _virtual_tablet_id);
 }
 
 // Test Case 1: has_full_path=true, new_fs_starlet returns nullptr
@@ -971,8 +970,6 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
     });
 
     auto request = build_request(true /* with_full_path */);
-    // Use a dedicated shard id so another test's cached raw-path filesystem cannot bypass this failure injection.
-    request.__set_virtual_tablet_id(_virtual_tablet_id + 1);
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
 
     EXPECT_FALSE(status.ok());
@@ -1015,6 +1012,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_meta_build_failure) 
     EXPECT_FALSE(status.ok());
     EXPECT_EQ(std::string::npos, status.message().find("Failed to create virtual starlet filesystem"))
             << "Should have passed the nullptr check, error: " << status;
+    ASSERT_FALSE(mock_fs->opened_paths().empty());
+    EXPECT_EQ("path/to/db123/456/789/meta/000000000000C351_0000000000000002.meta", mock_fs->opened_paths().front());
 }
 
 // Test Case 4: has_full_path=false, new_fs_starlet returns valid fs, meta build fails

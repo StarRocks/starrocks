@@ -293,6 +293,14 @@ public class ConfigBase {
                             + "MBE, CBE, MAX, or MIN. Current value: " + confVal);
                 }
                 break;
+            case "default_mv_refresh_mode":
+                // Must accept exactly what PropertyAnalyzer#analyzeRefreshMode accepts for the
+                // refresh_mode property: AUTO is implemented but deliberately not selectable.
+                if (!confVal.equalsIgnoreCase("PCT") && !confVal.equalsIgnoreCase("INCREMENTAL")) {
+                    throw new InvalidConfException("'default_mv_refresh_mode' must be one of PCT or INCREMENTAL. "
+                            + "Current value: " + confVal);
+                }
+                break;
             case "http_request_security_level":
                 int securityLevel = Integer.parseInt(confVal);
                 if (securityLevel < 1 || securityLevel > 4) {

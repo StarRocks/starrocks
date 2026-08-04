@@ -483,8 +483,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // create wrapped input stream.
     RETURN_IF_ERROR(open_random_access_file());
     if (_input_stream == nullptr) {
-        _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
-                                                            _shared_buffered_input_stream.get());
+        ASSIGN_OR_RETURN(const int64_t file_size, _file->get_size());
+        _input_stream =
+                std::make_unique<ORCHdfsFileStream>(_file.get(), file_size, _shared_buffered_input_stream.get());
         _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx->format_scan_context.lazy_column_coalesce_counter);
         _input_stream->set_app_stats(&_app_stats);
     }
