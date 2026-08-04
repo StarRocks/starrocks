@@ -17,13 +17,19 @@
 #include <string>
 #include <vector>
 
+#include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "gtest/gtest.h"
+// Access NativeLookUpTask's private _late_materialize_by_row_locators() and RowLocators.
+#define private public
+#include "exec/pipeline/lookup_request.h"
+#undef private
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/rowset/rowset.h"
@@ -290,6 +296,49 @@ TEST(LakeScanTabletAdaptorTest, InvalidRssid) {
     auto iter_or = adaptor->get_iterator(-1, std::move(rowids));
     ASSERT_FALSE(iter_or.ok());
     ASSERT_TRUE(iter_or.status().is_internal_error());
+}
+
+// Regression test for a CN SIGSEGV in NativeLookUpTask::_late_materialize_by_row_locators.
+// When the lookup has no row locators to materialize, the ChunkAccumulator stays empty and
+// ChunkAccumulator::pull() returns nullptr. The old code dereferenced it unconditionally
+// (accumulated->schema()), crashing the CN. The fix returns an empty chunk carrying the
+// requested slots for the empty-locators case.
+TEST(NativeLookUpTaskTest, EmptyRowLocatorsReturnsEmptyChunk) {
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+
+    // The late-materialize path requires a non-null GLM context for the scan id.
+    constexpr int64_t kScanId = 42;
+    GlobalLateMaterilizationContextMgr glm_mgr;
+    auto* glm_ctx = glm_mgr.get_or_create_ctx(kScanId, []() { return new DummyGLMContext(); });
+    pipeline::QueryRuntimeState qrs;
+    qrs.set_global_late_materialization_ctx_mgr(&glm_mgr);
+    state.set_query_runtime_state(&qrs);
+
+    auto ctx = std::make_shared<pipeline::LookUpTaskContext>();
+    ctx->scan_id = kScanId;
+
+    auto adaptor_or = create_look_up_tablet_adaptor(RowPositionDescriptor::Type::LAKE_SCAN);
+    ASSERT_TRUE(adaptor_or.ok());
+    pipeline::NativeLookUpTask task(ctx, std::move(adaptor_or.value()));
+
+    ObjectPool pool;
+    auto slots = create_slots(&state, &pool, {"c0", "c1"});
+    ASSERT_EQ(2, slots.size());
+
+    auto request_chunk = std::make_shared<Chunk>();
+    pipeline::NativeLookUpTask::RowLocators empty_locators; // empty -> accumulator empty -> pull() == nullptr
+
+    auto result = task._late_materialize_by_row_locators(&state, slots, empty_locators, request_chunk);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    auto out = result.value();
+    ASSERT_NE(nullptr, out);
+    EXPECT_EQ(0, out->num_rows());
+    EXPECT_EQ(slots.size(), out->num_columns());
+    for (auto* slot : slots) {
+        EXPECT_NE(nullptr, out->get_column_by_slot_id(slot->id()));
+    }
+
+    delete glm_ctx;
 }
 
 } // namespace starrocks
