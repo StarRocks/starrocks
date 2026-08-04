@@ -44,6 +44,9 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                     " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
+    private static final String COLLECT_MCV_ONLY_STATISTIC_TEMPLATE =
+            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName', NULL, $mcv, NOW()";
+
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), " +
                     "cast(column_key as varchar), cast(column_value as varchar) from (" +
@@ -137,10 +140,6 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
 
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Config.histogram_max_sample_row_count);
-
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
             mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
@@ -151,6 +150,15 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         } else {
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
+
+        if (shouldSkipHistogramBuckets(columnType)) {
+            builder.append(build(context, COLLECT_MCV_ONLY_STATISTIC_TEMPLATE));
+            return builder.toString();
+        }
+
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
 
         if (!mostCommonValues.isEmpty()) {
             if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
