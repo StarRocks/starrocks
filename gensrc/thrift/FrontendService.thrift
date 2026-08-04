@@ -1660,6 +1660,8 @@ struct TPartitionMetaInfo {
     // tablets. Only meaningful for tables with an async vector index (shared-data).
     33: optional i64 min_vi_built_version
     34: optional i64 max_vi_built_version
+    // Success watermark: retain floor of the last completed incremental vacuum pass (0 = none yet).
+    35: optional i64 vacuum_version
 }
 
 struct TGetPartitionsMetaResponse {

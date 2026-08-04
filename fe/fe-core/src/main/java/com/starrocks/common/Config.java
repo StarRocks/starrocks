@@ -3642,6 +3642,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
+    @ConfField(mutable = true, comment = "partitions whose incremental vacuum state should be force-reset, a "
+            + "recovery escape hatch for a wedged propose/commit that never advances, format:'id1;id2'")
+    public static String lake_vacuum_reset_partition_ids = "";
+
     @ConfField(mutable = true, comment = "the max number of threads for publishing version",
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
@@ -3711,6 +3715,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment =
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
+
+    @ConfField(mutable = true, comment =
+            "Per-round work cap for the incremental (bounded, resumable) shared-data auto vacuum: the most " +
+                    "metadata versions one AutoVacuum round may commit and propose for a partition. The " +
+                    "incremental protocol is always on and cannot be disabled -- the legacy one-shot path " +
+                    "cannot safely resume after it (it would stop at the chain holes a bounded round leaves " +
+                    "and miss garbage below them), so there is no fall-back. This value only bounds how much " +
+                    "each round does, so a large backlog drains across many rounds instead of timing out one " +
+                    "RPC. Default 500. Values below 100 are clamped up to 100 (a smaller per-round budget " +
+                    "would need too many rounds to drain a backlog). Does not change tablet-to-node routing.")
+    public static long lake_autovacuum_max_versions_per_round = 500;
 
     @ConfField(mutable = true, comment = "the minimum delay between full vacuum runs on any given partition")
     public static long lake_fullvacuum_partition_naptime_seconds = 3600L * 24L;

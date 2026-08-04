@@ -365,6 +365,15 @@ This topic introduces the following types of FE configurations:
 - Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish. The default value has been changed from `5` to `30` since v3.3.0, v3.2.5, and v3.1.10.
 - Introduced in: v3.1.0
 
+### `lake_autovacuum_max_versions_per_round`
+
+- Default: 500
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Per-round work cap for the incremental (bounded, resumable) AutoVacuum in a shared-data cluster: the maximum number of metadata versions a single AutoVacuum round may commit and propose for a partition. The incremental protocol is always on and cannot be disabled, because the legacy one-shot path cannot safely resume after it (it would stop at the chain holes a bounded round leaves and miss the garbage below them). This value only bounds how much work each round does, so that a large backlog of historical versions drains across many rounds instead of repeatedly timing out a single RPC. Values below `100` are clamped up to `100` (a smaller per-round budget would need too many rounds to drain a backlog). It does not change tablet-to-node routing.
+- Introduced in: v4.1.0
+
 ### `lake_autovacuum_parallel_partitions`
 
 - Default: 8

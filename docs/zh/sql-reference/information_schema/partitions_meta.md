@@ -41,4 +41,5 @@ description: "partitions_meta 提供表分区的信息。"
 | STORAGE_PATH                  | 分区的存储路径。                                 |
 | STORAGE_SIZE                  | 分区的存储大小。                                 |
 | METADATA_SWITCH_VERSION       | 分区的元数据切换版本。                           |
+| VACUUM_VERSION                | 分区最近一次完成的 vacuum pass 的版本水位（低于该版本的垃圾已回收；尚无则为 0）。 |
 | TABLET_BALANCED               | 分区的 Tablet 分布是否均衡。                     |

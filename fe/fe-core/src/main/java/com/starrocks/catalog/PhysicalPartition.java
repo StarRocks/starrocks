@@ -153,12 +153,23 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+    // Success watermark: the retain floor of the last completed incremental vacuum pass -- everything below
+    // is reclaimed. Persisted so SHOW PARTITIONS / partitions_meta's VacuumVersion (and the vacuum scheduler)
+    // survive an FE restart / failover instead of resetting to 0.
+    @SerializedName(value = "lastSuccVacuumVersion")
+    private AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
     //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
     // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
     private volatile long lastMinActiveTxnId = 0;
+
+    // Incremental (bounded, resumable) vacuum protocol state, grouped into one object (see
+    // VacuumState). Persisted in the image via @SerializedName, and between snapshots via the
+    // OP_MODIFY_PARTITION_VACUUM_STATE edit log the autovacuum coordinator writes each round, so an
+    // in-flight pass survives an FE restart / failover.
+    @SerializedName(value = "vacuumState")
+    private volatile VacuumState vacuumState = new VacuumState();
 
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
@@ -299,6 +310,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
         this.lastMinActiveTxnId = lastMinActiveTxnId;
+    }
+
+    public VacuumState getVacuumState() {
+        return vacuumState;
+    }
+
+    // Replace the whole state object. Used on edit-log / image replay; the value is null-guarded so an
+    // old image entry without the field cannot null it out.
+    public void setVacuumState(VacuumState vacuumState) {
+        if (vacuumState != null) {
+            this.vacuumState = vacuumState;
+        }
     }
 
     public long getExtraFileSize() {
