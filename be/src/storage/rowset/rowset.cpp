@@ -49,8 +49,12 @@
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
+<<<<<<< HEAD
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+=======
+#include "storage/index/inverted/inverted_index_option.h"
+>>>>>>> 1f4c15a511 ([BugFix] Skip standalone GIN index directory handling for builtin inverted index backend (#77101))
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -362,10 +366,14 @@ Status Rowset::remove() {
         // delete index
         for (const auto& index : *(_schema->indexes())) {
             if (index.index_type() == IndexType::GIN) {
+                if (is_builtin_inverted_index(index)) {
+                    continue;
+                }
                 std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
                         _rowset_path, rowset_id().to_string(), i, index.index_id());
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
-                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                LOG_IF(WARNING, !ist.ok())
+                        << "Fail to delete inverted_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
             } else if (index.index_type() == IndexType::VECTOR) {
                 std::string vector_index_path = IndexDescriptor::vector_index_file_path(
@@ -457,6 +465,9 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -574,11 +585,14 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {
-                        LOG(WARNING) << "Index path already exist: " << dst_path;
-                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_path));
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
                     }
 
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(

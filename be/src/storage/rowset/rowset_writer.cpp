@@ -55,7 +55,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
+<<<<<<< HEAD
 #include "storage/merge_iterator.h"
+=======
+#include "storage/index/inverted/inverted_index_option.h"
+>>>>>>> 1f4c15a511 ([BugFix] Skip standalone GIN index directory handling for builtin inverted index backend (#77101))
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
@@ -547,6 +551,9 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 for (int i = 0; i < _num_segment; i++) {
                     for (const auto& index : indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -1241,6 +1248,9 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
                 if (!indexes->empty()) {
                     for (const auto& index : *indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
