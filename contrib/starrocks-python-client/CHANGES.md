@@ -3,6 +3,10 @@ Version history
 
 **Unreleased**
 
+**1.3.5**
+
+- Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
+
 **1.3.4**
 
 - Add `to_diff_tuple` for Alembic alter operations (#70146 by @arvindKandpal-ksolves)

@@ -20,6 +20,7 @@ import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
+from sqlalchemy import func
 import sqlalchemy.dialects.mysql.types as mysql_types
 from sqlalchemy.engine import Dialect
 from sqlalchemy.sql import sqltypes
@@ -100,6 +101,10 @@ class DATETIME(mysql_types.DATETIME):
                 return value
 
         return process
+
+class TIME(mysql_types.TIME):
+    __visit_name__ = "TIME"
+
 
 class DATE(sqltypes.DATE):
     __visit_name__ = "DATE"
@@ -362,3 +367,40 @@ class STRUCT(StructuredType):
 
 class JSON(sqltypes.JSON):
     __visit_name__ = "JSON"
+
+
+class VARIANT(sqltypes.TypeEngine):
+    """Semi-structured type, available from StarRocks 4.1.
+
+    Supported on Iceberg catalog tables (Iceberg format-version 3), where it
+    maps to Iceberg's ``variant`` type.
+
+    A bound value is serialised to JSON text and parsed back into a VARIANT
+    server-side by ``PARSE_JSON``. That round trip is the reason this does not
+    subclass :class:`sqlalchemy.types.JSON`: JSON suppresses ``bind_expression``
+    on INSERT, so the text would reach the column as a ``VARCHAR`` bind and
+    StarRocks would store the whole document as a VARIANT *string* — indexing
+    into it then yields NULL and reading it back returns JSON text rather than
+    the original structure.
+    """
+
+    __visit_name__ = "VARIANT"
+
+    def bind_expression(self, bindparam):
+        return func.parse_json(bindparam)
+
+    def bind_processor(self, dialect: Dialect):
+        def process(value: Any) -> Optional[str]:
+            return None if value is None else json.dumps(value)
+
+        return process
+
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value: Any) -> Any:
+            if value is None:
+                return None
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("utf-8")
+            return json.loads(value)
+
+        return process
