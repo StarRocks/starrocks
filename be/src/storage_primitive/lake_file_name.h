@@ -40,10 +40,6 @@ inline bool is_txn_slog(std::string_view file_name) {
     return HasSuffixString(file_name, ".slog");
 }
 
-inline bool is_txn_abort(std::string_view file_name) {
-    return HasSuffixString(file_name, ".abort");
-}
-
 inline bool is_txn_vlog(std::string_view file_name) {
     return HasSuffixString(file_name, ".vlog");
 }

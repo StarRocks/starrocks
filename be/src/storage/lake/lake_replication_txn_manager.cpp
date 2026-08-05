@@ -369,12 +369,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             late_abort_detected = true;
             return Status::Aborted("Lake replication transaction has been aborted");
         }
-        ASSIGN_OR_RETURN(bool durable_abort_marker,
-                         _tablet_manager->replication_abort_marker_exists(target_tablet_id, txn_id));
-        if (durable_abort_marker) {
-            late_abort_detected = true;
-            return Status::Aborted("Lake replication transaction has a durable abort marker");
-        }
         return Status::OK();
     };
 
@@ -659,8 +653,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             RETURN_IF_ERROR(task());
         }
     }
-    // A durable marker is visible even when the CN running this task could not acknowledge FE's
-    // fence RPC. Check it after every copy has closed but before publishing a final txn log.
+    // Re-check the local fence and the FE watermark after every copy has closed but before
+    // publishing a final txn log.
     RETURN_IF_ERROR(check_abort_after_writes());
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
     double copy_rate = 0.0;

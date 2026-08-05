@@ -79,10 +79,6 @@ inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("{:016X}_{:016X}.slog", tablet_id, txn_id);
 }
 
-inline std::string txn_abort_filename(int64_t tablet_id, int64_t txn_id) {
-    return fmt::format("{:016X}_{:016X}.abort", tablet_id, txn_id);
-}
-
 inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
@@ -294,16 +290,6 @@ inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_
 }
 
 inline std::pair<int64_t, int64_t> parse_txn_slog_filename(std::string_view file_name) {
-    constexpr static int kBase = 16;
-    StringParser::ParseResult res;
-    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
-    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
-    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 17, 16, kBase, &res);
-    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
-    return {tablet_id, txn_id};
-}
-
-inline std::pair<int64_t, int64_t> parse_txn_abort_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     StringParser::ParseResult res;
     auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);

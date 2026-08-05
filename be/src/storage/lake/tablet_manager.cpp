@@ -184,10 +184,6 @@ std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) 
     return _location_provider->txn_slog_location(tablet_id, txn_id);
 }
 
-std::string TabletManager::txn_abort_location(int64_t tablet_id, int64_t txn_id) const {
-    return _location_provider->txn_abort_location(tablet_id, txn_id);
-}
-
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
     return _location_provider->txn_vlog_location(tablet_id, version);
 }
@@ -1323,27 +1319,6 @@ Status TabletManager::put_txn_slog_if_absent(const TxnLogPtr& log) {
     RETURN_IF_ERROR(save_lake_protobuf(path, *serializable_log, true));
     _metacache->cache_txn_log(path, log);
     return Status::OK();
-}
-
-Status TabletManager::put_replication_abort_marker_if_absent(int64_t tablet_id, int64_t txn_id) {
-    TxnLog marker;
-    marker.set_tablet_id(tablet_id);
-    marker.set_txn_id(txn_id);
-    auto status = save_lake_protobuf(txn_abort_location(tablet_id, txn_id), marker, true);
-    return status.is_already_exist() ? Status::OK() : status;
-}
-
-StatusOr<bool> TabletManager::replication_abort_marker_exists(int64_t tablet_id, int64_t txn_id) const {
-    const auto path = txn_abort_location(tablet_id, txn_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
-    auto status = fs->path_exists(path);
-    if (status.ok()) {
-        return true;
-    }
-    if (status.is_not_found()) {
-        return false;
-    }
-    return status;
 }
 
 Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path) {

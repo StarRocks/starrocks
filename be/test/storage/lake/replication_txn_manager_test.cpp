@@ -370,14 +370,13 @@ TEST_P(LakeReplicationTxnManagerTest, test_lake_replicate_snapshot_respects_txn_
     EXPECT_NE(std::string::npos, status.message().find("active transaction watermark"));
 
     // A transaction at the watermark may enter lake replication. This deliberately uses equal
-    // data/source versions so the lower layer returns before accessing remote storage; the outer
-    // manager must still unregister the transaction through its scope guard.
+    // data/source versions so the lower layer returns before accessing remote storage.
     request.__set_transaction_id(_transaction_id + 1);
     request.__set_src_visible_version(_version);
     status = _replication_txn_manager->replicate_snapshot(request, nullptr);
     EXPECT_TRUE(status.is_corruption()) << status;
 
-    // Prune an idle fence only after the FE watermark makes delayed requests impossible.
+    // Prune a local fence only after the FE watermark makes delayed requests impossible.
     master_info.__set_min_active_txn_id(0);
     ASSERT_TRUE(update_master_info(master_info));
     _replication_txn_manager->abort_replication_txn(_transaction_id - 1);

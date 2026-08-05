@@ -195,14 +195,6 @@ TEST_F(FilenamesTest, gen_vector_index_filename) {
     }
 }
 
-TEST_F(FilenamesTest, replication_abort_marker_filename) {
-    constexpr int64_t kTabletId = 0x1234;
-    constexpr int64_t kTxnId = 0x5678;
-    auto filename = txn_abort_filename(kTabletId, kTxnId);
-    EXPECT_TRUE(is_txn_abort(filename));
-    EXPECT_EQ(std::make_pair(kTabletId, kTxnId), parse_txn_abort_filename(filename));
-}
-
 TEST_F(FilenamesTest, gen_vector_index_path_from_segment_path) {
     // Segment path with a multi-level directory: keep the directory and substitute
     // the .dat suffix on the basename with _{index_id}.vi.

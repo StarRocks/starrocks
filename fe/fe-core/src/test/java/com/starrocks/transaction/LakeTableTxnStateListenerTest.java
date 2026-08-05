@@ -26,7 +26,6 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.AbortTxnRequest;
-import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
@@ -41,9 +40,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -113,10 +109,6 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
                 return nodes;
             }
 
-            @Mock
-            List<ComputeNode> getAllNodes() {
-                return nodes;
-            }
         };
 
         LakeTable table = buildLakeTable();
@@ -130,88 +122,6 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
             finishedTablets = Collections.singletonList(new TabletCommitInfo(tableId, 10001));
         }
         listener.postAbort(txnState, finishedTablets, Collections.emptyList());
-    }
-
-    @Test
-    public void testReplicationPostAbortFencesAllNodesThenCleansEveryLoadedTablet() {
-        List<ComputeNode> nodes = Lists.newArrayList(
-                new ComputeNode(10001, "node-1", 9050), new ComputeNode(10002, "node-2", 9050));
-        List<AbortTxnRequest> requests = new ArrayList<>();
-        List<Long> requestedNodeIds = new ArrayList<>();
-        new MockUp<LakeTableTxnStateListener>() {
-            @Mock
-            List<ComputeNode> getAllAliveNodes() {
-                return nodes;
-            }
-
-            @Mock
-            List<ComputeNode> getAllNodes() {
-                return nodes;
-            }
-
-            @Mock
-            Future<AbortTxnResponse> sendAbortTxnRequest(AbortTxnRequest request, ComputeNode node) {
-                requests.add(request);
-                requestedNodeIds.add(node.getId());
-                return CompletableFuture.completedFuture(new AbortTxnResponse());
-            }
-        };
-
-        LakeTable table = buildLakeTable();
-        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
-        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
-        TransactionState txnState = new TransactionState(
-                dbId, Lists.newArrayList(tableId), nextTxnId++, "replication", null,
-                TransactionState.LoadJobSourceType.REPLICATION, null, 0, 60_000);
-        txnState.setTransactionStatus(TransactionStatus.ABORTED);
-
-        listener.postAbort(txnState, Collections.emptyList(), Collections.emptyList());
-
-        Assertions.assertEquals(3, requests.size());
-        Assertions.assertEquals(Lists.newArrayList(10001L, 10002L, 10001L), requestedNodeIds);
-        Assertions.assertTrue(requests.get(0).skipCleanup);
-        Assertions.assertEquals(Set.of(tabletId[0], tabletId[1]), Set.copyOf(requests.get(0).tabletIds));
-        Assertions.assertTrue(requests.get(1).skipCleanup);
-        Assertions.assertEquals(Set.of(tabletId[0], tabletId[1]), Set.copyOf(requests.get(1).tabletIds));
-        Assertions.assertFalse(requests.get(2).skipCleanup);
-        Assertions.assertEquals(Set.of(tabletId[0], tabletId[1]), Set.copyOf(requests.get(2).tabletIds));
-    }
-
-    @Test
-    public void testReplicationPostAbortDoesNotCleanWhenAnyFenceFails() {
-        List<ComputeNode> nodes = Lists.newArrayList(
-                new ComputeNode(10001, "node-1", 9050), new ComputeNode(10002, "node-2", 9050));
-        List<AbortTxnRequest> requests = new ArrayList<>();
-        new MockUp<LakeTableTxnStateListener>() {
-            @Mock
-            List<ComputeNode> getAllNodes() {
-                return nodes;
-            }
-
-            @Mock
-            Future<AbortTxnResponse> sendAbortTxnRequest(AbortTxnRequest request, ComputeNode node) {
-                requests.add(request);
-                if (node.getId() == 10002) {
-                    AbortTxnResponse response = new AbortTxnResponse();
-                    response.failedTablets = Lists.newArrayList(tabletId[0]);
-                    return CompletableFuture.completedFuture(response);
-                }
-                return CompletableFuture.completedFuture(new AbortTxnResponse());
-            }
-        };
-
-        LakeTable table = buildLakeTable();
-        DatabaseTransactionMgr databaseTransactionMgr = addDatabaseTransactionMgr();
-        LakeTableTxnStateListener listener = new LakeTableTxnStateListener(databaseTransactionMgr, table);
-        TransactionState txnState = new TransactionState(
-                dbId, Lists.newArrayList(tableId), nextTxnId++, "replication", null,
-                TransactionState.LoadJobSourceType.REPLICATION, null, 0, 60_000);
-        txnState.setTransactionStatus(TransactionStatus.ABORTED);
-
-        listener.postAbort(txnState, Collections.emptyList(), Collections.emptyList());
-
-        Assertions.assertEquals(2, requests.size());
-        Assertions.assertTrue(requests.stream().allMatch(request -> request.skipCleanup));
     }
 
     /**

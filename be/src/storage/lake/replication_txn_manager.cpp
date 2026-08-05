@@ -196,8 +196,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
             std::lock_guard lock(_aborted_replication_txns_mu);
             const auto min_active_txn_id = get_master_info().min_active_txn_id;
             std::erase_if(_aborted_replication_txns, [&](int64_t aborted_txn_id) {
-                return min_active_txn_id > 0 && aborted_txn_id < min_active_txn_id &&
-                       !_active_lake_replication_txns.contains(aborted_txn_id);
+                return min_active_txn_id > 0 && aborted_txn_id < min_active_txn_id;
             });
             if (min_active_txn_id > 0 && txn_id < min_active_txn_id) {
                 return Status::Aborted("Lake replication transaction is older than the active transaction watermark");
@@ -205,21 +204,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
             if (_aborted_replication_txns.contains(txn_id)) {
                 return Status::Aborted("Lake replication transaction has been aborted");
             }
-            ++_active_lake_replication_txns[txn_id];
         }
-        DeferOp unregister_active_txn([&, txn_id] {
-            std::lock_guard lock(_aborted_replication_txns_mu);
-            auto active_it = _active_lake_replication_txns.find(txn_id);
-            DCHECK(active_it != _active_lake_replication_txns.end());
-            if (--active_it->second == 0) {
-                _active_lake_replication_txns.erase(active_it);
-                const auto current_min_active_txn_id = get_master_info().min_active_txn_id;
-                if (current_min_active_txn_id > 0 && txn_id < current_min_active_txn_id) {
-                    _aborted_replication_txns.erase(txn_id);
-                }
-                _aborted_replication_txns_cv.notify_all();
-            }
-        });
         auto is_txn_aborted = [&]() {
             std::lock_guard lock(_aborted_replication_txns_mu);
             return _aborted_replication_txns.contains(txn_id);
@@ -262,21 +247,15 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 }
 
 void ReplicationTxnManager::abort_replication_txn(int64_t txn_id) {
-    std::unique_lock lock(_aborted_replication_txns_mu);
+    std::lock_guard lock(_aborted_replication_txns_mu);
     _aborted_replication_txns.emplace(txn_id);
     TEST_SYNC_POINT("ReplicationTxnManager::abort_replication_txn:fenced");
-    // Phase-1 abort is a real drain barrier. Tasks register under the same mutex before
-    // entering shared-data replication, observe the marker while running, clean their late
-    // files/logs on exit, and only then unregister and wake this request.
-    _aborted_replication_txns_cv.wait(lock, [&] { return !_active_lake_replication_txns.contains(txn_id); });
     const auto min_active_txn_id = get_master_info().min_active_txn_id;
     if (min_active_txn_id > 0) {
         std::erase_if(_aborted_replication_txns, [&](int64_t aborted_txn_id) {
-            // Once the FE watermark rejects any delayed request, an idle marker is no longer
-            // needed. Keep markers for in-flight tasks: those tasks may have passed the watermark
-            // check immediately before abort and must still observe the explicit fence on exit.
-            return aborted_txn_id != txn_id && aborted_txn_id < min_active_txn_id &&
-                   !_active_lake_replication_txns.contains(aborted_txn_id);
+            // Once the FE watermark rejects every delayed request, the local marker is redundant.
+            // In-flight tasks also check the watermark before publishing their final txn log.
+            return aborted_txn_id != txn_id && aborted_txn_id < min_active_txn_id;
         });
     }
 }

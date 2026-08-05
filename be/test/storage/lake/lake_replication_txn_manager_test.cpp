@@ -1932,16 +1932,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_shared_bundle_final_log_failure_is
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
     std::vector<TxnInfoPB> txns{txn_info};
-    SyncPoint::GetInstance()->SetCallBack("transactions::abort_replication_txn_sync:delete_data", [&](void* arg) {
-        *static_cast<Status*>(arg) = Status::InternalError("injected cleanup failure");
-    });
-    EXPECT_FALSE(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns).ok());
-    SyncPoint::GetInstance()->ClearCallBack("transactions::abort_replication_txn_sync:delete_data");
-    EXPECT_TRUE(fs::path_exist(target_path));
-    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
-
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), second_target_tablet_id, txns));
+    abort_txn(_tablet_mgr.get(), _target_tablet_id, txns);
+    abort_txn(_tablet_mgr.get(), second_target_tablet_id, txns);
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(fs::path_exist(target_path));
     EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
     EXPECT_TRUE(_tablet_mgr->get_txn_log(second_target_tablet_id, _transaction_id).status().is_not_found());
@@ -2013,12 +2006,13 @@ TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_after_copy_removes_lat
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
     std::vector<TxnInfoPB> txns{txn_info};
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    abort_txn(_tablet_mgr.get(), _target_tablet_id, txns);
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
 }
 
-TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_drains_active_task_before_phase2_cleanup) {
-    const std::string physical_segment = "phase-two-must-wait-for-active-copy";
+TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_is_non_blocking_and_active_task_self_cleans) {
+    const std::string physical_segment = "local-fence-stops-active-copy";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
@@ -2049,13 +2043,13 @@ TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_drains_active_task_bef
 
     CountDownLatch task_before_final_log(1);
     CountDownLatch release_task(1);
-    CountDownLatch abort_marker_installed(1);
+    CountDownLatch abort_fence_installed(1);
     SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log", [&](void*) {
         task_before_final_log.count_down();
         release_task.wait();
     });
     SyncPoint::GetInstance()->SetCallBack("ReplicationTxnManager::abort_replication_txn:fenced",
-                                          [&](void*) { abort_marker_installed.count_down(); });
+                                          [&](void*) { abort_fence_installed.count_down(); });
 
     ReplicationTxnManager txn_manager(_tablet_mgr.get());
     auto request = build_request(false /* with_full_path */);
@@ -2073,13 +2067,13 @@ TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_drains_active_task_bef
         txn_manager.abort_replication_txn(_transaction_id);
         fence_returned.count_down();
     });
-    if (!abort_marker_installed.wait_for(std::chrono::seconds(5))) {
+    if (!abort_fence_installed.wait_for(std::chrono::seconds(5))) {
         release_task.count_down();
         replication.join();
         fence.join();
-        FAIL() << "abort task did not install its fence marker";
+        FAIL() << "abort task did not install its local fence";
     }
-    EXPECT_FALSE(fence_returned.wait_for(std::chrono::milliseconds(100)));
+    EXPECT_TRUE(fence_returned.wait_for(std::chrono::seconds(1)));
     release_task.count_down();
     replication.join();
     fence.join();
@@ -2097,78 +2091,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_abort_fence_drains_active_task_bef
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
     std::vector<TxnInfoPB> txns{txn_info};
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
+    abort_txn(_tablet_mgr.get(), _target_tablet_id, txns);
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
-}
-
-TEST_F(LakeReplicationRemoteStorageTest, test_durable_abort_marker_stops_task_on_unreachable_cn) {
-    const std::string physical_segment = "durable-marker-stops-unfenced-copy";
-    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_segment);
-    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
-    });
-
-    constexpr const char* kSegmentFilename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000018.dat";
-    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
-    src_meta_v2->set_version(2);
-    auto* rowset = src_meta_v2->add_rowsets();
-    rowset->set_id(1);
-    rowset->set_num_rows(10);
-    rowset->set_data_size(physical_segment.size());
-    auto* segment = rowset->add_segment_metas();
-    segment->set_filename(kSegmentFilename);
-    segment->set_size(physical_segment.size());
-    src_meta_v2->set_next_rowset_id(2);
-    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
-                                          [&](void* arg) {
-                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
-                                              *meta_ptr = src_meta_v2;
-                                          });
-
-    auto original_master_info = get_master_info();
-    TMasterInfo info = original_master_info;
-    info.__set_min_active_txn_id(0);
-    ASSERT_TRUE(update_master_info(info));
-
-    CountDownLatch task_before_final_log(1);
-    CountDownLatch release_task(1);
-    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::before_final_txn_log", [&](void*) {
-        task_before_final_log.count_down();
-        release_task.wait();
-    });
-
-    auto request = build_request(false /* with_full_path */);
-    request.__set_virtual_tablet_id(next_id());
-    Status replication_status;
-    std::thread replication(
-            [&]() { replication_status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr); });
-    if (!task_before_final_log.wait_for(std::chrono::seconds(5))) {
-        release_task.count_down();
-        replication.join();
-        FAIL() << "replication task did not reach the final-log barrier";
-    }
-
-    ASSERT_OK(_tablet_mgr->put_replication_abort_marker_if_absent(_target_tablet_id, _transaction_id));
-    release_task.count_down();
-    replication.join();
-    SyncPoint::GetInstance()->ClearCallBack("LakeReplicationTxnManager::before_final_txn_log");
-    (void)update_master_info(original_master_info);
-
-    ASSERT_TRUE(replication_status.is_aborted()) << replication_status;
-    const auto target_filename = gen_filename_from(_transaction_id, kSegmentFilename);
-    EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_target_tablet_id, target_filename)));
-    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
-    ASSERT_OK(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id));
-    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_abort_location(_target_tablet_id, _transaction_id)));
-
-    TxnInfoPB txn_info;
-    txn_info.set_txn_id(_transaction_id);
-    txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
-    std::vector<TxnInfoPB> txns{txn_info};
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
-    EXPECT_TRUE(_tablet_mgr->get_txn_slog(_target_tablet_id, _transaction_id).status().is_not_found());
-    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_abort_location(_target_tablet_id, _transaction_id)));
 }
 
 TEST_F(LakeReplicationRemoteStorageTest, test_singleflight_failure_is_shared_and_retry_recovers) {
@@ -2257,8 +2182,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_singleflight_failure_is_shared_and
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_txn_type(TxnTypePB::TXN_REPLICATION);
     std::vector<TxnInfoPB> txns{txn_info};
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), _target_tablet_id, txns));
-    ASSERT_OK(abort_replication_txn_sync(_tablet_mgr.get(), second_target_tablet_id, txns));
+    abort_txn(_tablet_mgr.get(), _target_tablet_id, txns);
+    abort_txn(_tablet_mgr.get(), second_target_tablet_id, txns);
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // Group::Do removes a failed flight, so retry after abort executes a fresh source read and copy.
     ASSERT_OK(_replication_txn_manager->replicate_lake_remote_storage(first_request, nullptr));

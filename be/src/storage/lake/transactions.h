@@ -92,11 +92,6 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 //
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
 
-// Abort replication with observable, ordered cleanup. Newly-created data files are deleted first;
-// the durable cleanup slog is removed only after data deletion succeeds, so another CN or txn-log
-// vacuum can retry safely after any failure.
-Status abort_replication_txn_sync(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns);
-
 // Collect files to delete for `abort_txn` in transaction log
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
                           std::vector<std::string>* files_to_delete);
