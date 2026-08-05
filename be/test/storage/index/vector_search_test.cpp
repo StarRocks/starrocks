@@ -59,6 +59,7 @@
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -1634,6 +1635,7 @@ protected:
         int result_order = 0;             // 0 = ascending (l2), 1 = descending (cosine)
         int min_filter_col = 4;           // every returned row must satisfy filter_col >= this
         bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
+        bool shared_data = false;         // use the cloud-native .vi path and Segment FileSystem
         bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
         bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
     };
@@ -1706,7 +1708,10 @@ protected:
         static std::atomic<int64_t> rid_seq{2};
         RowsetId rid;
         rid.init(rid_seq.fetch_add(1));
-        std::string vi_path = IndexDescriptor::vector_index_file_path(kDir, rid.to_string(), 0, kIndexId);
+        constexpr int64_t kOwnerTabletId = 12345;
+        std::string vi_path =
+                cfg.shared_data ? lake::gen_vector_index_path_from_segment_path(seg_file, kOwnerTabletId, kIndexId)
+                                : IndexDescriptor::vector_index_file_path(kDir, rid.to_string(), 0, kIndexId);
         if (cfg.build_vi) {
             auto tablet_index = std::make_shared<TabletIndex>();
             TabletIndexPB ipb;
@@ -1741,6 +1746,10 @@ protected:
         seg_opts.tablet_schema = rschema;
         seg_opts.rowset_path = kDir;
         seg_opts.rowsetid = rid;
+        if (cfg.shared_data) {
+            seg_opts.belonged_to_cloud_native = true;
+            seg_opts.segment_vector_index_uid = kOwnerTabletId;
+        }
 
         auto vs = std::make_shared<VectorSearchOption>();
         vs->use_vector_index = true;
@@ -1864,6 +1873,15 @@ TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
     std::unique_ptr<ColumnPredicate> pred;
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+}
+
+TEST_F(VectorResidualPrefilterTest, shared_data_ann_uses_segment_filesystem) {
+    ResidualCaseConfig cfg;
+    cfg.shared_data = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
 }
 
