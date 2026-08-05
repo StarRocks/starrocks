@@ -237,6 +237,13 @@ dependencies {
     implementation("org.apache.parquet:parquet-column")
     implementation("org.apache.parquet:parquet-common")
     implementation("org.apache.parquet:parquet-hadoop")
+    implementation("org.apache.ranger:ranger-audit-dest-solr") {
+        exclude(group = "org.elasticsearch", module = "*")
+        exclude(group = "org.elasticsearch.client", module = "*")
+        // jetty-client resolves to the banned 9.4.58 (ban-vulnerable-dependencies); Solr audit
+        // uses the Apache HttpClient path, not the Jetty HTTP/2 client, so this is runtime-safe.
+        exclude(group = "org.eclipse.jetty", module = "*")
+    }
     implementation("org.apache.ranger:ranger-plugins-common") {
         exclude(group = "org.elasticsearch", module = "*")
         exclude(group = "org.elasticsearch.client", module = "*")
