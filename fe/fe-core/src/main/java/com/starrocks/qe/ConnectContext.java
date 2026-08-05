@@ -292,6 +292,10 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // An OnlineOptimizeJobV2 rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean onlineOptimizeRewrite = false;
+
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
     // Null means no override (normal visible-version path).
@@ -303,6 +307,14 @@ public class ConnectContext {
 
     public Map<Long, Long> getScanVersionOverride() {
         return scanVersionOverride;
+    }
+
+    public void setOnlineOptimizeRewrite(boolean onlineOptimizeRewrite) {
+        this.onlineOptimizeRewrite = onlineOptimizeRewrite;
+    }
+
+    public boolean isOnlineOptimizeRewrite() {
+        return onlineOptimizeRewrite;
     }
 
     public void setTxnId(long txnId) {

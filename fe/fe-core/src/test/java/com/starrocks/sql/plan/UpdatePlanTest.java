@@ -70,7 +70,7 @@ public class UpdatePlanTest extends PlanTestBase {
         starRocksAssert.withTable("CREATE TABLE update_shadow_generated_column (\n" +
                 "  pk bigint NOT NULL,\n" +
                 "  v int NOT NULL,\n" +
-                "  g int NULL AS (v + 1)\n" +
+                "  g bigint NULL AS (v + 1)\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY (pk)\n" +
                 "DISTRIBUTED BY HASH (pk) BUCKETS 1\n" +

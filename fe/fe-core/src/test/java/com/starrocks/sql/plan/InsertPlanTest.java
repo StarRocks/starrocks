@@ -116,11 +116,16 @@ public class InsertPlanTest extends PlanTestBase {
                     "select pk, v, tags from insert_online_optimize_shadow_generated_column";
             InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
                     .get(0);
-            insertStmt.setOnlineOptimizeRewrite(true);
-            ExecPlan execPlan = getInsertExecPlanObject(insertStmt, sql);
-            OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-            Assertions.assertEquals(table.getBaseSchema().size(), sink.getTupleDescriptor().getSlots().size());
-            Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+            boolean originalOnlineOptimizeRewrite = connectContext.isOnlineOptimizeRewrite();
+            connectContext.setOnlineOptimizeRewrite(true);
+            try {
+                ExecPlan execPlan = getInsertExecPlanObject(insertStmt, sql);
+                OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                Assertions.assertEquals(table.getBaseSchema().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+            } finally {
+                connectContext.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
+            }
         } finally {
             table.setNewFullSchema(originalFullSchema);
         }

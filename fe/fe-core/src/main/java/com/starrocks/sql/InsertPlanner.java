@@ -286,7 +286,7 @@ public class InsertPlanner {
             // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
             // Exclude stale schema-change shadow columns from the sink while retaining derived columns
             // of normal synchronous materialized views, which are also kept in fullSchema.
-            outputFullSchema = insertStmt.isOnlineOptimizeRewrite()
+            outputFullSchema = session.isOnlineOptimizeRewrite()
                     ? targetTable.getFullSchema().stream().filter(column -> !column.isShadowColumn()).toList()
                     : targetTable.getFullSchema();
         }

@@ -941,12 +941,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (context == null) {
             context = buildConnectContext();
         }
+        boolean originalOnlineOptimizeRewrite = context.isOnlineOptimizeRewrite();
+        context.setOnlineOptimizeRewrite(true);
         try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 insertStmt.setIsVersionOverwrite(true);
-                insertStmt.setOnlineOptimizeRewrite(true);
             }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
@@ -966,6 +967,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
                 throw new AlterCancelException(context.getState().getErrorMessage());
             }
+        } finally {
+            context.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
         }
     }
 
