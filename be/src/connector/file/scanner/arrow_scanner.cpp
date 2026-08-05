@@ -313,6 +313,12 @@ Status ArrowScanner::next_batch() {
             _parser_buf.reset();
             _arrow_stream.reset();
             if (stream_file) {
+                // Reset conversion plans and mark message boundary so the next
+                // message gets a fresh schema mapping (mirrors the EOF path).
+                for (auto& conv : _conv_funcs) {
+                    conv = std::make_unique<ConvertFuncTree>();
+                }
+                _message_boundary = true;
                 continue;
             }
             return Status::InternalError(error_msg);
