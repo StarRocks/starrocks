@@ -665,6 +665,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
+    timeout-minutes: 30
     needs:
       - info
       - be-ut

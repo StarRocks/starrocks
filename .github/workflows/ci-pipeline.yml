@@ -1448,6 +1448,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, quick]
     name: Teardown
+    timeout-minutes: 30
     needs:
       - deploy
       - SQL-Tester
