@@ -19,11 +19,9 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.sys.SysUsers;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
-import com.starrocks.common.io.Writable;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.PasswordExpiredChecker;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
-import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.metric.MetricRepo;
@@ -31,7 +29,6 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -53,9 +50,12 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TGetUsersRequest;
 import com.starrocks.thrift.TGetUsersResponse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -64,14 +64,22 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class PasswordPolicyTest {
-    private void mockEditLogAndLeader() {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+
+    @BeforeEach
+    public void setUpPersistJournal() {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory. These
+        // tests used to neutralize journaling by faking logEdit(short, Writable) on a null-queue EditLog,
+        // which no longer intercepts the WAL-applier write path (it goes straight to the gated write).
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    private void mockLeader() {
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -82,12 +90,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testCreateUserWithLock() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -128,13 +130,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testLockUser() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -217,12 +212,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testPasswordExpired() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -264,13 +253,6 @@ public class PasswordPolicyTest {
     public void testModifyPassword() throws Exception {
         ConnectContext context = new ConnectContext();
 
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
 
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
@@ -396,13 +378,6 @@ public class PasswordPolicyTest {
     public void testPasswordExpiredThread() throws Exception {
         ConnectContext context = new ConnectContext();
 
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -454,13 +429,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testAutoUnLock() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -532,13 +500,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testQueryHandler() throws IOException, DdlException {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -654,13 +615,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testDuplicatePasswordPolicyCreation() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -708,13 +662,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testSystemPasswordPolicySetAndUnset() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -773,13 +720,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testPasswordPolicyValidationLevels() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -840,13 +780,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testShowPasswordPolicies() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -903,13 +836,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testShowCreatePasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -959,13 +885,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testShowCreatePasswordPolicyNotFound() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -992,13 +911,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testDropPasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -1044,13 +956,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testDropNonExistentPasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -1075,13 +980,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testSystemSetPasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -1124,13 +1022,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testSystemUnsetPasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -1177,13 +1068,6 @@ public class PasswordPolicyTest {
 
     @Test
     public void testSystemSetNonExistentPasswordPolicy() throws Exception {
-        new MockUp<EditLog>() {
-            @Mock
-            public void logEdit(short op, Writable writable) {
-                return;
-            }
-        };
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -1208,7 +1092,7 @@ public class PasswordPolicyTest {
 
     @Test
     public void testCreateUserSupportsPasswordPolicyProperty() throws Exception {
-        mockEditLogAndLeader();
+        mockLeader();
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -1249,7 +1133,7 @@ public class PasswordPolicyTest {
 
     @Test
     public void testCreateUserWithNonexistentPasswordPolicyProperty() {
-        mockEditLogAndLeader();
+        mockLeader();
         GlobalStateMgr.getCurrentState().setSecurityPolicyManager(new SecurityPolicyMgr());
 
         ConnectContext context = new ConnectContext();
@@ -1262,7 +1146,7 @@ public class PasswordPolicyTest {
 
     @Test
     public void testUserPasswordPolicyOverridesGlobalPolicy() throws Exception {
-        mockEditLogAndLeader();
+        mockLeader();
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -1327,7 +1211,7 @@ public class PasswordPolicyTest {
 
     @Test
     public void testUserPasswordPolicyOverridesRetryPolicy() throws Exception {
-        mockEditLogAndLeader();
+        mockLeader();
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
@@ -1383,7 +1267,7 @@ public class PasswordPolicyTest {
 
     @Test
     public void testUserPasswordPolicyShownAndDropBlocked() throws Exception {
-        mockEditLogAndLeader();
+        mockLeader();
 
         AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
