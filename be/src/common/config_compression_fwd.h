@@ -29,4 +29,13 @@ CONF_mDouble(lz4_expected_compression_ratio, "2.1");
 
 CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 
+// Reading a page that references a per-column ZSTD dictionary needs the dictionary
+// loaded into the decompression context. A context borrowed from the shared pool is
+// reset on return, which clears the sticky refDDict and forces the dictionary to be
+// re-loaded once per page; keeping a few dictionary-bound contexts warm in a small
+// thread-local set avoids that. Exposed as a switch so it can be turned off in
+// production without a rollback. Read path only -- this build never WRITES a
+// dictionary page.
+CONF_mBool(enable_zstd_compression_dict_ctx_cache, "true");
+
 } // namespace starrocks::config
