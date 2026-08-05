@@ -122,6 +122,15 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                   << " bytes";
         return Status::OK();
     });
+    registry->register_callback("vector_index_cache_expire_sec", [=]() -> Status {
+        auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+        if (cache == nullptr) {
+            return Status::InternalError("Vector index cache is not initialized");
+        }
+        cache->SetExpireSeconds(config::vector_index_cache_expire_sec);
+        LOG(INFO) << "vector_index_cache_expire_sec updated: " << config::vector_index_cache_expire_sec;
+        return Status::OK();
+    });
 #endif // WITH_TENANN
 #endif
 #ifndef __APPLE__

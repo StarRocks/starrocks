@@ -16,11 +16,29 @@
 
 #ifdef WITH_TENANN
 
+#include <limits>
+
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+int64_t expire_time_ms(int64_t expire_seconds) {
+    if (expire_seconds <= 0) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    const int64_t now = MonotonicMillis();
+    constexpr int64_t kMillisPerSecond = 1000;
+    if (expire_seconds > (std::numeric_limits<int64_t>::max() - now) / kMillisPerSecond) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return now + expire_seconds * kMillisPerSecond;
+}
+
+} // namespace
 
 VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics)
         : _cache(capacity), _metrics(metrics == nullptr ? VectorIndexCacheMetrics::instance() : metrics) {
@@ -36,7 +54,7 @@ VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorI
 
 // Drain IndexRefs outside _cache._lock before ~DynamicCache acquires it.
 // IVF-PQ entries hold nested IndexCacheHandles whose deleters call back into
-// _cache.release(); freeing them under ~DynamicCache's lock self-deadlocks
+// this cache; freeing them under ~DynamicCache's lock self-deadlocks
 // (std::mutex isn't recursive) and stalls BE shutdown.
 VectorIndexCache::~VectorIndexCache() {
     auto entries = _cache.get_all_entries();
@@ -71,6 +89,19 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
 
 void VectorIndexCache::SetCapacity(size_t new_capacity) {
     _cache.set_capacity(new_capacity);
+    _update_metrics();
+}
+
+void VectorIndexCache::SetExpireSeconds(int64_t expire_seconds) {
+    _expire_seconds.store(expire_seconds, std::memory_order_relaxed);
+    _cache.set_expire_time_for_all(expire_time_ms(expire_seconds));
+}
+
+void VectorIndexCache::ClearExpired(int64_t now) {
+    if (expire_seconds() <= 0) {
+        return;
+    }
+    _cache.clear_expired(now);
     _update_metrics();
 }
 
@@ -126,12 +157,26 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
     return true;
 }
 
-// Deleter captures _cache as a raw pointer; handles MUST be released before
+// Deleter captures this as a raw pointer; handles MUST be released before
 // StorageEnv::destroy_vector_index_cache() runs after query/vector users drain.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
-    Cache* cache = &_cache;
-    return tenann::IndexCacheHandle(
-            std::move(ref), std::shared_ptr<void>(entry, [cache](void* p) { cache->release(static_cast<Entry*>(p)); }));
+    const bool is_ivfpq_list = ref != nullptr && ref->index_type() == tenann::IndexType::kFaissIvfPqOneInvertedList;
+    return tenann::IndexCacheHandle(std::move(ref), std::shared_ptr<void>(entry, [this, is_ivfpq_list](void* p) {
+                                        _release(static_cast<Entry*>(p), is_ivfpq_list);
+                                    }));
+}
+
+void VectorIndexCache::_release(Entry* entry, bool is_ivfpq_list) {
+    if (is_ivfpq_list) {
+        // List blocks belong to the outer IVF-PQ entry. When that entry goes
+        // away, release its blocks as a group instead of giving each list an
+        // independent TTL.
+        _cache.remove(entry);
+        _update_metrics();
+        return;
+    }
+
+    _cache.release_with_expire_time(entry, expire_time_ms(expire_seconds()));
 }
 
 void VectorIndexCache::_update_metrics() const {

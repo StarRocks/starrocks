@@ -57,6 +57,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
@@ -671,12 +672,19 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #if defined(USE_STAROS) && !defined(BE_TEST)
         StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
-        int32_t sleep_sec = std::max(1, expire_sec / 2);
+        int64_t sleep_sec = std::max(1, expire_sec / 2);
+        auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+        if (vector_index_cache != nullptr && vector_index_cache->expire_seconds() > 0) {
+            sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, vector_index_cache->expire_seconds() / 2));
+        }
         SLEEP_IN_BG_WORKER(sleep_sec);
         _update_manager->expire_cache();
 #if defined(USE_STAROS) && !defined(BE_TEST)
         StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
 #endif
+        if (vector_index_cache != nullptr) {
+            vector_index_cache->ClearExpired();
+        }
     }
 
     return nullptr;

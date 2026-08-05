@@ -27,6 +27,7 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
 #include "runtime/current_thread.h"
@@ -47,10 +48,10 @@ namespace starrocks {
 namespace {
 constexpr size_t kDummyBytes = 1024;
 
-tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes) {
+tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes, tenann::IndexType type = tenann::IndexType::kFaissHnsw) {
     void* buf = std::malloc(bytes);
     return std::make_shared<tenann::Index>(
-            buf, tenann::IndexType::kFaissIvfPqOneInvertedList, [](void* v) { std::free(v); },
+            buf, type, [](void* v) { std::free(v); },
             /*explicit_bytes=*/bytes);
 }
 
@@ -315,6 +316,100 @@ TEST_F(VectorIndexCacheTest, SetCapacity_Shrink_EvictsImmediately) {
     EXPECT_FALSE(c->Lookup(tenann::CacheKey("/s2.vi"), &probe));
 }
 
+TEST_F(VectorIndexCacheTest, TTL_StartsAfterLastHandleRelease) {
+    cache_->SetExpireSeconds(900);
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/ttl.vi"), make_dummy_ref(), &handle);
+
+    // A pinned entry survives even if the sweep time is beyond its TTL.
+    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    handle = tenann::IndexCacheHandle{};
+    const int64_t released_at = MonotonicMillis();
+    cache_->ClearExpired(released_at + 899 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    cache_->ClearExpired(released_at + 901 * 1000L);
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
+    cache_->SetExpireSeconds(900);
+
+    tenann::IndexCacheHandle inserted;
+    cache_->Insert(tenann::CacheKey("/refresh.vi"), make_dummy_ref(), &inserted);
+    inserted = tenann::IndexCacheHandle{};
+
+    tenann::IndexCacheHandle hit;
+    ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/refresh.vi"), &hit));
+    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    hit = tenann::IndexCacheHandle{};
+    const int64_t refreshed_at = MonotonicMillis();
+    cache_->ClearExpired(refreshed_at + 899 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    cache_->ClearExpired(refreshed_at + 901 * 1000L);
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
+    cache_->SetExpireSeconds(0);
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/no-ttl.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    cache_->ClearExpired(MonotonicMillis() + 24 * 60 * 60 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateResetsExistingDeadline) {
+    cache_->SetExpireSeconds(900);
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/updated-ttl.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    cache_->SetExpireSeconds(10);
+    const int64_t updated_at = MonotonicMillis();
+    cache_->ClearExpired(updated_at + 9 * 1000L);
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    cache_->ClearExpired(updated_at + 11 * 1000L);
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_IVFPQExpiresOuterEntryAndAllListBlocksTogether) {
+    cache_->SetExpireSeconds(900);
+
+    tenann::IndexCacheHandle list_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi#list-0"),
+                   make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &list_handle);
+
+    struct IvfPqPayload {
+        tenann::IndexCacheHandle list_handle;
+        std::vector<char> bytes;
+    };
+    auto* payload = new IvfPqPayload{std::move(list_handle), std::vector<char>(2048)};
+    auto outer_ref = std::make_shared<tenann::Index>(
+            payload, tenann::IndexType::kFaissIvfPq, [](void* p) { delete static_cast<IvfPqPayload*>(p); },
+            /*explicit_bytes=*/2048);
+
+    tenann::IndexCacheHandle outer_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi"), outer_ref, &outer_handle);
+    outer_ref.reset();
+    outer_handle = tenann::IndexCacheHandle{};
+
+    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    EXPECT_EQ(0, cache_->memory_usage());
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi"), &probe));
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi#list-0"), &probe));
+}
+
 TEST_F(VectorIndexCacheTest, MemTracker_Consume_AfterInsert) {
     int64_t before = tracker_->consumption();
     tenann::IndexCacheHandle h;
@@ -374,7 +469,8 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // Seed an "inner" entry plus a pinning handle that the outer ref will
     // hold and release on destruction — the BlockCacheInvertedLists pattern.
     tenann::IndexCacheHandle inner;
-    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024), &inner);
+    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024, tenann::IndexType::kFaissIvfPqOneInvertedList),
+              &inner);
 
     // Outer Index whose deleter consumes the inner handle. Moving the handle
     // into the deleter lambda is the same shape as faiss owning a
@@ -397,8 +493,7 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // which must not deadlock when the chained release runs.
     c->SetCapacity(0);
 
-    // Shutdown safety: destructing the cache must drain the remaining inner
-    // entry without re-locking _cache._lock.
+    // Shutdown safety remains covered after the cascading list-handle release.
     c.reset();
 }
 
