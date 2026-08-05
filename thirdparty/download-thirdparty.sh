@@ -487,6 +487,10 @@ if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14-extra.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-7.10.2" ]; then
+    touch $PATCHED_MARK
+    patch -p1 < $TP_PATCH_DIR/rocksdb-7.10.2-gcc15.patch
+fi
 cd -
 echo "Finished patching $ROCKSDB_SOURCE"
 
@@ -634,6 +638,15 @@ if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
 fi
 cd -
 echo "Finished patching $JEMALLOC_SOURCE"
+
+# patch llvm
+cd $TP_SOURCE_DIR/$LLVM_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $LLVM_SOURCE = "llvm-project-16.0.6.src" ]; then
+    patch -p1 < $TP_PATCH_DIR/llvm-16.0.6-gcc15.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $LLVM_SOURCE"
 
 # patch streamvbyte
 cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
