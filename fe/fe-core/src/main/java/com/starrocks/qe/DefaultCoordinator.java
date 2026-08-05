@@ -1447,17 +1447,6 @@ public class DefaultCoordinator extends Coordinator {
                 return true;
             }
 
-<<<<<<< HEAD
-=======
-            // The wait was interrupted (e.g. a leader-demotion shutdownNow() on the loading/export pool
-            // that runs this coordinator). Stop re-looping so the pool task unwinds promptly instead of
-            // waiting out the remaining query/load timeout; the interrupt flag is preserved for the caller.
-            if (Thread.currentThread().isInterrupted()) {
-                LOG.warn("interrupted while joining, stop waiting for profile after {} seconds",
-                        TimeUnit.MILLISECONDS.toSeconds(timeoutS * 1000L - leftTimeoutMs));
-                return false;
-            }
-
             leftTimeoutMs -= waitTimeMs;
 
             if (cancelledAtMs >= 0) {
@@ -1465,7 +1454,6 @@ public class DefaultCoordinator extends Coordinator {
                 continue;
             }
 
->>>>>>> 28bbee0ab0 ([Enhancement] Bound how long a cancelled query waits for unreported instances (#76909))
             if (!checkBackendState()) {
                 return true;
             }
