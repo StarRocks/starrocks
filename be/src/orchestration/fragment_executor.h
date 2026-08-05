@@ -27,17 +27,23 @@
 #include "runtime/exec_env_fwd.h"
 
 namespace starrocks {
+class BatchWriteMgr;
 class RuntimeState;
 
 namespace orchestration {
 
 class FragmentExecutor {
 public:
-    FragmentExecutor();
+    explicit FragmentExecutor(BatchWriteMgr* batch_write_mgr = nullptr);
+    void set_batch_write_mgr(BatchWriteMgr* batch_write_mgr) { _batch_write_mgr = batch_write_mgr; }
 
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
+
+    // Exposes the prepared FragmentContext so a BE-local caller (stream load) can
+    // install a finish callback before execute(). Valid only after prepare() succeeds.
+    pipeline::FragmentContextPtr fragment_ctx() const { return _fragment_ctx; }
 
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
@@ -82,6 +88,7 @@ private:
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
 
     int64_t _fragment_start_time = 0;
+    BatchWriteMgr* _batch_write_mgr = nullptr;
     pipeline::QueryContextManager* _query_ctx_mgr = nullptr;
     pipeline::QueryContext* _query_ctx = nullptr;
     // Pin the QueryContext alive for at least as long as `_fragment_ctx`.

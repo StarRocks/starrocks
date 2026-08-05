@@ -60,10 +60,10 @@ subprojects {
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
-        set("io.netty.version", "4.1.135.Final")
+        set("io.netty.version", "4.1.136.Final")
         set("jackson.version", "2.21.4")
         set("jackson-annotations.version", "2.21")
-        set("jetty.version", "9.4.57.v20241219")
+        set("jetty.version", "9.4.58.v20250814")
         set("jprotobuf-starrocks.version", "1.0.0")
         set("junit.version", "5.8.2")
         set("kafka-clients.version", "3.9.1")
@@ -73,12 +73,13 @@ subprojects {
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.16.0")
+        set("ranger.version", "2.8.0")
         set("orc.version", "1.9.1")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
         set("staros.version", "4.2-rc2")
-        set("thrift.version", "0.23.0")
+        set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
         // var sync end
@@ -221,7 +222,8 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
-            implementation("org.apache.ranger:ranger-plugins-common:2.8.0")
+            implementation("org.apache.ranger:ranger-audit-dest-solr:${project.ext["ranger.version"]}")
+            implementation("org.apache.ranger:ranger-plugins-common:${project.ext["ranger.version"]}")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")
@@ -249,7 +251,7 @@ subprojects {
             implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
-            implementation("org.postgresql:postgresql:42.7.11")
+            implementation("org.postgresql:postgresql:42.7.12")
             implementation("org.roaringbitmap:RoaringBitmap:0.8.13")
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
@@ -282,6 +284,13 @@ subprojects {
         // ships jquery 1.4.2 (CVE-2011-4969 etc.); only avro-mapred's unused tether feature references it
         exclude(group = "org.apache.avro", module = "avro-ipc")
         exclude(group = "org.apache.avro", module = "avro-ipc-jetty")
+        // CVE-2026-10050 (jetty-client/jetty-security: Digest auth bypass) and
+        // CVE-2026-2332 (jetty-http): only reachable via Hadoop's embedded
+        // HttpServer2 and the YARN websocket timeline client, neither of which
+        // StarRocks ever instantiates (Hadoop is used purely as an FS client).
+        exclude(group = "org.eclipse.jetty", module = "jetty-client")
+        exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        exclude(group = "org.eclipse.jetty", module = "jetty-http")
     }
 
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java

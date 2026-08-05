@@ -403,6 +403,9 @@ struct TFunction {
   35: optional string input_type
   36: optional string content
   37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+  // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
+  // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
+  38: optional string service_url
 }
 
 enum TLoadJobState {
@@ -448,7 +451,8 @@ enum TTableType {
     ICEBERG_PARTITIONS_TABLE,
     BENCHMARK_TABLE,
     ICEBERG_PROPERTIES_TABLE,
-    LANCE_TABLE
+    LANCE_TABLE,
+    FLUSS_TABLE
 }
 
 enum TKeysType {

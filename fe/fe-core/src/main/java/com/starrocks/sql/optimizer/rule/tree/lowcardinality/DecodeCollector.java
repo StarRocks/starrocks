@@ -34,6 +34,7 @@ import com.starrocks.common.util.UnionFind;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -201,12 +202,39 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // check if there is a blocking node in plan
     private boolean canBlockingOutput = false;
 
+    // Populated only in query-dump capture mode: the per-column global dicts accepted at OLAP scan level. The
+    // rule commits these to the dump after the rewrite is confirmed to apply, so the captured dict is exactly
+    // the one the plan uses (see LowCardinalityRewriteRule).
+    private final boolean captureGlobalDictForDump;
+    private final List<CapturedGlobalDict> capturedGlobalDicts = Lists.newArrayList();
+
+    public static class CapturedGlobalDict {
+        public final OlapTable table;
+        public final String columnName;
+        public final ColumnDict dict;
+
+        public CapturedGlobalDict(OlapTable table, String columnName, ColumnDict dict) {
+            this.table = table;
+            this.columnName = columnName;
+            this.dict = dict;
+        }
+    }
+
     public DecodeCollector(SessionVariable session, boolean isQuery) {
+        this(session, isQuery, false);
+    }
+
+    public DecodeCollector(SessionVariable session, boolean isQuery, boolean captureGlobalDictForDump) {
         this.sessionVariable = session;
         this.isQuery = isQuery;
+        this.captureGlobalDictForDump = captureGlobalDictForDump;
         unionDictionaryManager = new UnionDictionaryManager(
                 sessionVariable, stringRefToDefineExprMap, globalDicts, joinEqColumnGroupIds);
         structManager = new StructManager(sessionVariable.isEnableStructLowCardinalityOptimize());
+    }
+
+    public List<CapturedGlobalDict> getCapturedGlobalDicts() {
+        return capturedGlobalDicts;
     }
 
     public void collect(OptExpression root, DecodeContext context) {
@@ -1128,6 +1156,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
+            // Condition 1.2: an aggregate-state column stores a serialized aggregate state, not the
+            // values its type describes. The BE reads it through the agg state descriptor rather than
+            // through the column type, so it would decode dictionary codes as if they were still the
+            // original values.
+            if (isAggStateColumn(scan, column)) {
+                continue;
+            }
+
             // If it's not an extended column, we have to check the cardinality of the column.
             // TODO(murphy) support collect cardinality of extended column
             if (!checkExtendedColumn(scan, column)) {
@@ -1161,6 +1197,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             markedAsGlobalDictOpt(info, column, dict.get());
+            if (captureGlobalDictForDump) {
+                capturedGlobalDicts.add(new CapturedGlobalDict(table, column.getName(), dict.get()));
+            }
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -1168,6 +1207,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    private boolean isAggStateColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        Column columnMeta = scan.getColRefToColumnMetaMap().get(column);
+        return columnMeta != null && columnMeta.getAggregationType() == AggregateType.AGG_STATE_UNION;
     }
 
     private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {

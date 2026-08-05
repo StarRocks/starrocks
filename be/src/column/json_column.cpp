@@ -19,6 +19,7 @@
 #include <sstream>
 
 #include "base/hash/hash_util.hpp"
+#include "column/flat_json/json_merger.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -260,9 +261,8 @@ void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, ui
         return;
     }
     const auto* other_json = down_cast<const JsonColumn*>(&src);
-    if (other_json->is_flat_json() && !is_flat_json()) {
+    if (other_json->is_flat_json() && !is_flat_json() && this->size() == 0) {
         // only hit in AggregateIterator (Aggregate mode in storage)
-        DCHECK_EQ(0, this->size());
         MutableColumns copy;
         copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
@@ -271,27 +271,25 @@ void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, ui
         set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
-    if (is_flat_json()) {
-        DCHECK(src.is_object());
-        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
-        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
-        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
-
-        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
-
-        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
-            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+    if (LIKELY(is_equallity_schema(other_json))) {
+        if (is_flat_json()) {
+            for (size_t i = 0; i < _flat_columns.size(); i++) {
+                _flat_columns[i]->append_selective(*other_json->get_flat_field(i), indexes, from, size);
+            }
+        } else {
+            SuperClass::append_selective(src, indexes, from, size);
         }
-
-        for (size_t i = 0; i < _flat_columns.size(); i++) {
-            _flat_columns[i]->append_selective(*other_json->get_flat_field(i), indexes, from, size);
-        }
-    } else {
-        DCHECK(!this->is_flat_json());
-        DCHECK(!other_json->is_flat_json());
-        SuperClass::append_selective(src, indexes, from, size);
+        return;
     }
+
+    // Appending nothing must not cost this column its flat representation.
+    if (size == 0) {
+        return;
+    }
+
+    ColumnPtr plain_src = other_json->unflatten();
+    _degrade_to_plain_json(*other_json);
+    SuperClass::append_selective(plain_src != nullptr ? *plain_src : src, indexes, from, size);
 }
 
 void JsonColumn::append_default(size_t count) {
@@ -342,35 +340,35 @@ void JsonColumn::append(const JsonValue& object) {
 
 void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     const auto* other_json = down_cast<const JsonColumn*>(&src);
-    if (other_json->is_flat_json() && !is_flat_json()) {
+    if (other_json->is_flat_json() && !is_flat_json() && this->size() == 0) {
         // only hit in AggregateIterator (Aggregate mode in storage)
-        DCHECK_EQ(0, this->size());
         MutableColumns copy;
+        copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
         set_flat_columns(other_json->flat_column_paths(), other_json->flat_column_types(), std::move(copy));
     }
 
-    if (is_flat_json()) {
-        DCHECK(src.is_object());
-        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_paths.size());
-        DCHECK_EQ(_flat_column_paths.size(), other_json->_flat_column_types.size());
-        DCHECK_EQ(_flat_column_types.size(), other_json->_flat_column_paths.size());
-
-        DCHECK_EQ(_flat_columns.size(), other_json->_flat_columns.size());
-
-        for (size_t i = 0; i < _flat_column_paths.size(); i++) {
-            DCHECK_EQ(_flat_column_paths[i], other_json->_flat_column_paths[i]);
-            DCHECK_EQ(_flat_column_types[i], other_json->_flat_column_types[i]);
+    if (LIKELY(is_equallity_schema(other_json))) {
+        if (is_flat_json()) {
+            for (size_t i = 0; i < _flat_columns.size(); i++) {
+                _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
+            }
+        } else {
+            SuperClass::append(src, offset, count);
         }
-
-        for (size_t i = 0; i < _flat_columns.size(); i++) {
-            _flat_columns[i]->append(*other_json->get_flat_field(i), offset, count);
-        }
-    } else {
-        SuperClass::append(src, offset, count);
+        return;
     }
+
+    // Appending nothing must not cost this column its flat representation.
+    if (count == 0) {
+        return;
+    }
+
+    ColumnPtr plain_src = other_json->unflatten();
+    _degrade_to_plain_json(*other_json);
+    SuperClass::append(plain_src != nullptr ? *plain_src : src, offset, count);
 }
 
 size_t JsonColumn::filter_range(const Filter& filter, size_t from, size_t to) {
@@ -485,6 +483,44 @@ bool JsonColumn::is_equallity_schema(const Column* other) const {
         return _flat_columns.size() == other_json->_flat_columns.size();
     }
     return !this->is_flat_json() && !other_json->is_flat_json();
+}
+
+ColumnPtr JsonColumn::unflatten() const {
+    if (!is_flat_json()) {
+        return nullptr;
+    }
+    JsonMerger merger(_flat_column_paths, _flat_column_types, has_remain());
+    // merge() keeps the result alive through the returned ColumnPtr, so it outlives `merger`.
+    return merger.merge(get_flat_fields());
+}
+
+void JsonColumn::_clear_flat_schema() {
+    _flat_columns.clear();
+    _flat_column_paths.clear();
+    _flat_column_types.clear();
+    _path_to_index.clear();
+}
+
+void JsonColumn::to_plain_json() {
+    if (!is_flat_json()) {
+        return;
+    }
+    // While a column is flat every row lives in the flat sub-columns, so the object storage
+    // of the base class must be empty and can simply take over the merged values. Report it
+    // in release builds too: silently ending up with more rows than the sub-columns held is
+    // far harder to diagnose than the mismatch itself.
+    LOG_IF(WARNING, BaseClass::size() != 0)
+            << "flat JSON column also holds " << BaseClass::size() << " plain rows, row count will not match";
+    DCHECK_EQ(0, BaseClass::size());
+    ColumnPtr plain = unflatten();
+    _clear_flat_schema();
+    SuperClass::append(*plain, 0, plain->size());
+}
+
+void JsonColumn::_degrade_to_plain_json(const JsonColumn& src) {
+    LOG_FIRST_N(WARNING, 10) << "flat JSON schema mismatch while appending, falling back to plain JSON. dest="
+                             << debug_flat_paths() << ", src=" << src.debug_flat_paths();
+    to_plain_json();
 }
 
 std::string JsonColumn::debug_flat_paths() const {

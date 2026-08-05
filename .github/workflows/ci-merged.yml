@@ -44,6 +44,60 @@ jobs:
         with:
           labels: ${{ matrix.version }}
 
+  # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
+  # job above and only PRINTS the computed target set (never posts @Mergifyio), for
+  # reconciliation against the manual matrix before cutover. continue-on-error so it
+  # can never affect the merge. Depends on ci-tool #4910/#4911 being on the runner.
+  backport-fanout-shadow:
+    name: Backport Fan-out (dry-run shadow)
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks' &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: fan-out dry-run
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+
+  # Decision-10 phase B shadow: checkbox x AI-affected reconciliation, DRY-RUN.
+  # Runs on [self-hosted, ubuntu, ai] — that pool has BOTH /var/lib/ci-tool AND
+  # `claude` + the github-bugfix-versions plugin (see bugfix-version-index.yml).
+  # `claude` returns this [BugFix]'s affected release lines (branches still
+  # carrying the bug); backport_reconcile.py then prints the matrix (window /
+  # affected / checked / auto / notify) and posts NOTHING. continue-on-error so
+  # it can never affect the merge. Needs ci-tool #4934 on the runner.
+  backport-reconcile-shadow:
+    name: Backport Reconcile (dry-run shadow)
+    runs-on: [ self-hosted, ubuntu, ai ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks' &&
+      startsWith(github.event.pull_request.title, '[BugFix]') &&
+      !contains(github.event.pull_request.title, '(sync #') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      !contains(github.head_ref, '-sync-') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: reconcile dry-run (checkbox x AI affected)
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+
   thirdparty-filter:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true

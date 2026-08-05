@@ -49,9 +49,8 @@
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
-#include "exec/batch_write/batch_write_mgr.h"
-#include "exec/batch_write/txn_state_cache.h"
 #include "exec/exec_env.h"
 #include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
@@ -79,7 +78,8 @@
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr) {
+void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr,
+                                  BatchWriteMgr* batch_write_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* runtime_env_ptr = &runtime_env;
 
@@ -471,9 +471,8 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("load_spill_memory_usage_per_merge", refresh_load_spill_block_merge_executor);
     registry->register_callback("merge_commit_txn_state_cache_capacity", [=]() -> Status {
         LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
-        auto batch_write_mgr = exec_env->batch_write_mgr();
         if (batch_write_mgr) {
-            batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
+            batch_write_mgr->set_txn_state_cache_capacity(config::merge_commit_txn_state_cache_capacity);
         }
         return Status::OK();
     });

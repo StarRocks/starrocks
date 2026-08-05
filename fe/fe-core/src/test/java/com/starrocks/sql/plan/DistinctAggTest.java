@@ -76,7 +76,8 @@ public class DistinctAggTest extends PlanTestBase {
         sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(4: count, 1, 2, 3, 4)");
+                // The aggregated value (the leading constant 1) is not re-appended to the merge args.
+                "  |  output: multi_distinct_count(4: count, 2, 3, 4)");
 
         sql = "select count(distinct v3, 1) from t0 group by v2";
         plan = getFragmentPlan(sql);
@@ -199,7 +200,8 @@ public class DistinctAggTest extends PlanTestBase {
         argumentsList.add(Arguments.of("select group_concat(distinct 1), array_agg(distinct 2), sum(v3) from t0 " +
                         "group by v2, v3",
                 "3:AGGREGATE (merge finalize)\n" +
-                        "  |  output: group_concat(4: group_concat, '1', ','), array_agg_distinct(5: array_agg), sum(6: sum)"));
+                        // '1' is the aggregated value, so only the separator is carried into merge.
+                        "  |  output: group_concat(4: group_concat, ','), array_agg_distinct(5: array_agg), sum(6: sum)"));
 
         return argumentsList.stream();
     }

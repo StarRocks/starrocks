@@ -571,4 +571,138 @@ TEST_F(NoOpPublishTest, mid_batch_missing_txnlog_without_force_publish_errors) {
     ASSERT_FALSE(result.ok());
 }
 
+// ===========================================================================
+// Tests for cal_new_base_version — the helper that decides which version a
+// (possibly retried) publish uses as its base when the in-memory primary
+// index is ahead of the durable base version.
+//
+// Regression scenario (file bundling): an aggregate publish caches each
+// tablet's metadata in the metacache and only writes one durable bundle at
+// the batch's final version. If a batch publish is retried after a prior
+// attempt advanced the primary index but before the bundle was written, the
+// index version exists ONLY in the metacache. cal_new_base_version must not
+// adopt such a cache-only version as the publish base — it would be recorded
+// as prev_garbage_version and dangle (NotFound) once the cache evicts,
+// permanently breaking the vacuum version walk below it.
+// ===========================================================================
+
+int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t base_version, int64_t new_version,
+                             const std::span<const TxnInfoPB>& txns);
+
+class CalNewBaseVersionTest : public TestBase {
+public:
+    CalNewBaseVersionTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        // Durable base: version 1.
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_cal_new_base_version";
+
+    // Simulate a prior publish attempt that advanced the primary index to |version|.
+    void set_primary_index_data_version(int64_t tablet_id, int64_t version) {
+        auto& index_cache = _update_mgr->index_cache();
+        auto* entry = index_cache.get_or_create(tablet_id);
+        entry->value().update_data_version(version);
+        index_cache.release(entry);
+    }
+
+    // Two-txn batch matching the base_version=1 -> new_version=3 retry scenario.
+    std::vector<TxnInfoPB> make_txns() {
+        return {TEST_txn_info(next_id(), time(nullptr)), TEST_txn_info(next_id(), time(nullptr))};
+    }
+
+    std::shared_ptr<TabletMetadataPB> _tablet_metadata;
+};
+
+// Core regression: the index version's metadata sits in the metacache but was
+// never durably written. cal_new_base_version must keep the durable base and
+// drop the stale index instead of adopting the cache-only version.
+TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
+    meta_v2->set_version(2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    set_primary_index_data_version(tablet_id, 2);
+
+    auto txns = make_txns();
+    ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
+    // The index referencing the non-durable version must have been removed so
+    // it gets rebuilt from the durable base.
+    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+}
+
+// Same as above but with the partition marked as an aggregation (file
+// bundling) partition, so the read goes through get_single_tablet_metadata
+// first — the exact metacache lookup the original bug hit.
+TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_aggregation_partition) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
+    meta_v2->set_version(2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    _tablet_mgr->metacache()->cache_aggregation_partition(_tablet_mgr->tablet_metadata_root_location(tablet_id), true);
+    set_primary_index_data_version(tablet_id, 2);
+
+    auto txns = make_txns();
+    ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
+    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+}
+
+// Counterpart: when the index version IS durably persisted (plain metadata
+// file), it remains a valid publish base and the index is kept.
+TEST_F(CalNewBaseVersionTest, durable_version_adopted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
+    meta_v2->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*meta_v2));
+    // Evict the metacache so only the durable copy can satisfy the read.
+    _tablet_mgr->metacache()->prune();
+    set_primary_index_data_version(tablet_id, 2);
+
+    auto txns = make_txns();
+    ASSERT_EQ(2, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
+    ASSERT_EQ(2, _update_mgr->get_primary_index_data_version(tablet_id));
+}
+
+// Counterpart on the file-bundling path: a durable BUNDLE at the index
+// version must still be adopted with the metacache fully evicted — the
+// skip_meta_cache read reaches durable storage, not just the cache.
+TEST_F(CalNewBaseVersionTest, durable_bundle_version_adopted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    TabletMetadataPB meta_v2(*_tablet_metadata);
+    meta_v2.set_version(2);
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(tablet_id, meta_v2);
+    CHECK_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+    _tablet_mgr->metacache()->prune();
+    _tablet_mgr->metacache()->cache_aggregation_partition(_tablet_mgr->tablet_metadata_root_location(tablet_id), true);
+    set_primary_index_data_version(tablet_id, 2);
+
+    auto txns = make_txns();
+    ASSERT_EQ(2, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
+    ASSERT_EQ(2, _update_mgr->get_primary_index_data_version(tablet_id));
+}
+
+// Pre-existing contract: an index version beyond new_version is unusable for
+// this publish; the index is dropped and the base version kept.
+TEST_F(CalNewBaseVersionTest, index_version_beyond_new_version_unloads_index) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    set_primary_index_data_version(tablet_id, 5);
+
+    auto txns = make_txns();
+    ASSERT_EQ(1, cal_new_base_version(tablet_id, _tablet_mgr.get(), 1, 3, txns));
+    ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
+}
+
 } // namespace starrocks::lake

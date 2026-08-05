@@ -54,9 +54,9 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     auto schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(schema->init(pschema));
     auto chunk = std::make_unique<Chunk>();
-    RowDescriptor row_desc(schema->tuple_desc());
+    RecordDescriptor record_desc(schema->tuple_desc());
     RETURN_IF_ERROR(DictionaryCacheChunkUtil::uncompress_and_deserialize_chunk(pchunk, *chunk.get(),
-                                                                               &uncompressed_buffer, row_desc));
+                                                                               &uncompressed_buffer, record_desc));
     RETURN_IF_ERROR(DictionaryCacheChunkUtil::check_chunk_has_null(*chunk.get()));
 
     // 2. split into key chunk and value chunk in ordered

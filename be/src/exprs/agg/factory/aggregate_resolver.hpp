@@ -60,8 +60,14 @@ public:
     }
 
     void register_avg();
+    void register_sum_map1();
+    void register_sum_map2();
+    void register_sum_map3();
     void register_bitmap();
     void register_minmaxany();
+    void register_maxminby1();
+    void register_maxminby2();
+    void register_maxminby3();
     void register_sumcount();
     void register_distinct();
     void register_variance();

@@ -17,12 +17,15 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -39,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -196,6 +200,127 @@ public class LakeTableIndexFastPathJobTest {
         when(table.getIndexes()).thenReturn(existing);
         job.applyCatalogMutation(table);
         assertEquals(1, existing.size());
+    }
+
+    @Test
+    public void testAddIndexJob_ApplyCatalogMutation_BumpsPerIndexSchema() {
+        // The durability fix bumps EACH affected index meta's schema id/version
+        // (per-index, so rollup / sync-MV index metas stay consistent with their
+        // BE-stamped tablets). Assert the per-index map drives a shallowCopy ->
+        // setSchemaId/setSchemaVersion -> put -> rebuildFullSchema for each entry.
+        Index ix = new Index(101L, "ix_a", Collections.singletonList(ColumnId.create("c1")),
+                IndexDef.IndexType.BITMAP, "", new java.util.HashMap<>());
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                Collections.singletonList(ix), Collections.emptyList());
+        job.putNewSchema(500L, 900L, 7); // base index meta
+        job.putNewSchema(501L, 901L, 4); // a rollup / MV index meta
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        MaterializedIndexMeta meta500 = mock(MaterializedIndexMeta.class);
+        MaterializedIndexMeta copy500 = mock(MaterializedIndexMeta.class);
+        when(meta500.shallowCopy()).thenReturn(copy500);
+        when(table.getIndexMetaByMetaId(500L)).thenReturn(meta500);
+        MaterializedIndexMeta meta501 = mock(MaterializedIndexMeta.class);
+        MaterializedIndexMeta copy501 = mock(MaterializedIndexMeta.class);
+        when(meta501.shallowCopy()).thenReturn(copy501);
+        when(table.getIndexMetaByMetaId(501L)).thenReturn(meta501);
+        java.util.Map<Long, MaterializedIndexMeta> metaMap = new java.util.HashMap<>();
+        when(table.getIndexMetaIdToMeta()).thenReturn(metaMap);
+
+        job.applyCatalogMutation(table);
+
+        verify(copy500).setSchemaId(900L);
+        verify(copy500).setSchemaVersion(7);
+        verify(copy501).setSchemaId(901L);
+        verify(copy501).setSchemaVersion(4);
+        assertEquals(copy500, metaMap.get(500L));
+        assertEquals(copy501, metaMap.get(501L));
+        verify(table).rebuildFullSchema();
+    }
+
+    @Test
+    public void testAddIndexJob_PopulateAlterRequest_StampsPerIndexSchema() {
+        // Each tablet's task is stamped with ITS index meta's new schema id (so BE
+        // bumps that index's schema); a tablet whose index has no allocated entry
+        // gets no stamp.
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                Collections.emptyList(), Collections.emptyList());
+        job.putNewSchema(500L, 900L, 7);
+
+        AlterReplicaTask stamped = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(stamped, 500L, null, null);
+        verify(stamped).setOnlyAddIndex(any());
+        verify(stamped).setNewIndexSchema(900L, 7L);
+
+        AlterReplicaTask unstamped = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(unstamped, 999L, null, null); // no per-index entry
+        verify(unstamped).setOnlyAddIndex(any());
+        verify(unstamped, never()).setNewIndexSchema(anyLong(), anyLong());
+    }
+
+    @Test
+    public void testAddIndexJob_PopulateAlterRequest_SkipsProjectingRollup() {
+        // A rollup / sync-MV whose schema projects away the indexed column must
+        // receive an EMPTY index set (BE then writes a no-op txn log) and no
+        // schema-id stamp; the base meta receives the full set + its stamp.
+        TOlapTableIndex thrift = new TOlapTableIndex();
+        thrift.setIndex_type(TIndexType.BITMAP);
+        thrift.setColumns(Collections.singletonList("c1"));
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
+                Collections.emptyList(), Collections.singletonList(thrift));
+        job.putNewSchema(500L, 900L, 7); // base meta only; rollup meta 501 gets no bump
+
+        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
+        when(baseMeta.getSchema()).thenReturn(List.of(new Column("c1", IntegerType.BIGINT)));
+        AlterReplicaTask baseTask = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(baseTask, 500L, baseMeta, null);
+        ArgumentCaptor<List<TOlapTableIndex>> baseCap = ArgumentCaptor.forClass(List.class);
+        verify(baseTask).setOnlyAddIndex(baseCap.capture());
+        assertEquals(1, baseCap.getValue().size());
+        verify(baseTask).setNewIndexSchema(900L, 7L);
+
+        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
+        when(rollupMeta.getSchema()).thenReturn(List.of(new Column("k9", IntegerType.BIGINT)));
+        AlterReplicaTask rollupTask = mock(AlterReplicaTask.class);
+        job.populateAlterRequest(rollupTask, 501L, rollupMeta, null);
+        ArgumentCaptor<List<TOlapTableIndex>> rollupCap = ArgumentCaptor.forClass(List.class);
+        verify(rollupTask).setOnlyAddIndex(rollupCap.capture());
+        assertTrue(rollupCap.getValue().isEmpty());
+        verify(rollupTask, never()).setNewIndexSchema(anyLong(), anyLong());
+    }
+
+    @Test
+    public void testApplicableIndexes_MatchesByColumnIdNotName() {
+        // A rollup / sync-MV that carries the indexed column under a RENAMED
+        // output but the SAME ColumnId must still be considered applicable —
+        // applicableIndexes matches by ColumnId (via the base table), not by
+        // name, mirroring OlapTable.getIndexesBySchema. A name-based check would
+        // wrongly skip it and leave the FE/BE schema id diverged.
+        TOlapTableIndex thrift = new TOlapTableIndex();
+        thrift.setIndex_type(TIndexType.BITMAP);
+        thrift.setColumns(Collections.singletonList("v")); // base column name
+
+        OlapTable table = mock(OlapTable.class);
+        Column baseV = new Column("v", IntegerType.BIGINT); // ColumnId = "v"
+        when(table.getColumn("v")).thenReturn(baseV);
+
+        // Meta carries the same column id "v" but under a renamed output "w".
+        Column renamed = new Column("w", IntegerType.BIGINT);
+        renamed.setColumnId(ColumnId.create("v"));
+        MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+        when(meta.getSchema()).thenReturn(List.of(renamed));
+
+        List<TOlapTableIndex> applicable = LakeTableAddIndexJob.applicableIndexes(
+                Collections.singletonList(thrift), meta, table);
+        assertEquals(1, applicable.size()); // matched by id despite the name differing
+
+        // Sanity: a meta that carries neither the id nor the name is excluded.
+        Column other = new Column("k9", IntegerType.BIGINT);
+        MaterializedIndexMeta otherMeta = mock(MaterializedIndexMeta.class);
+        when(otherMeta.getSchema()).thenReturn(List.of(other));
+        assertTrue(LakeTableAddIndexJob.applicableIndexes(
+                Collections.singletonList(thrift), otherMeta, table).isEmpty());
     }
 
     // -----------------------------------------------------------------

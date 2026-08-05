@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -50,10 +51,12 @@
 #include "gutil/stl_util.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
@@ -117,14 +120,75 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     return 0;
 }
 
-static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
+// |is_full_sort_key| selects the row re-encode codec: true for a full-key segment
+// (|short_key_schema| is then the segment's full, untruncated sort-key schema), false
+// for the legacy truncated short-key prefix.
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema,
+                   bool is_full_sort_key) {
     DCHECK_GE(rhs_chunk.num_rows(), 1u);
 
     SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
-    std::string rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    std::string rhs_index_key;
+    if (is_full_sort_key) {
+        // |lhs_index_key| is a short-key-index boundary, written with the physical
+        // full_sort_key_encode overload (segment_writer), which NUL-truncates CHAR to its
+        // visible prefix. Re-encode the stored row with the same physical overload so CHAR
+        // bytes match the index exactly regardless of any NUL the page read carries.
+        // |short_key_schema| is already in sort-key order, so the physical column indexes
+        // are 0..num_fields-1.
+        std::vector<uint32_t> sort_key_idxes(short_key_schema.num_fields());
+        for (uint32_t i = 0; i < sort_key_idxes.size(); i++) {
+            sort_key_idxes[i] = i;
+        }
+        rhs_index_key = tuple.full_sort_key_encode(sort_key_idxes, 0);
+    } else {
+        rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    }
     auto rhs = Slice(rhs_index_key);
 
     return lhs_index_key.compare(rhs);
+}
+
+// Returns true iff, for the first |n| columns, |query_schema|'s field logical types are
+// byte-compatible with |segment_schema|'s (same type at the same position, so the same
+// composite codec produces order-preserving, comparable bytes). A drifted sort-key type
+// cannot be safely bracketed by the segment's own full sort key index.
+// Note: this only compares LogicalType, not DECIMAL precision/scale, so a same-logical-type
+// scale drift would pass this check; that is acceptable because a sort-key type change forces
+// a full rewrite (uniform segments), and the non-bypass path encodes under the segment's own
+// field anyway.
+static bool full_sort_key_types_compatible(const Schema& query_schema, const Schema& segment_schema, size_t n) {
+    if (n > query_schema.num_fields() || n > segment_schema.num_fields()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (query_schema.field(i)->type()->type() != segment_schema.field(i)->type()->type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Builds the coarse short-key-index search key bytes for |key| against a full-key
+// |segment|, encoded with the segment's OWN sort-key schema (so the bytes match the
+// segment's index even if the query's schema drifted). Returns std::nullopt if the
+// query's sort-key column types are not byte-compatible with the segment's own schema;
+// the caller must then bypass the coarse prune (use the full candidate range and let
+// the typed fine search, if any, decide).
+static std::optional<std::string> encode_full_sort_key_search_key(Segment* segment, const SeekTuple& key, bool lower) {
+    Schema segment_schema = ChunkHelper::get_full_sort_key_schema(segment->tablet_schema_share_ptr());
+    const size_t n = std::min<size_t>(key.columns(), segment->num_sort_key_columns());
+    if (!full_sort_key_types_compatible(key.schema(), segment_schema, n)) {
+        return std::nullopt;
+    }
+    std::vector<Datum> values;
+    values.reserve(key.columns());
+    for (size_t i = 0; i < key.columns(); i++) {
+        values.push_back(key.get(i));
+    }
+    SeekTuple segment_key(std::move(segment_schema), std::move(values));
+    return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
+                                            lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 }
 
 class SegmentIterator final : public ChunkIterator {
@@ -390,7 +454,7 @@ private:
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                           rowid_t* rowid);
+                           rowid_t* rowid, bool is_full_sort_key);
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
@@ -459,6 +523,10 @@ private:
     StatusOr<RowIdSparseRange> _sample_by_page();
 
     Status _apply_del_vector();
+    // Fold the non-PK delete survivors into _scan_range BEFORE _rewrite_predicates, so a rank-truncating
+    // ANN search ranks live rows only. Evaluates the original (un-rewritten) predicates over decoded values
+    // -- no global-dict-code wrapping, no dict/raw mismatch. Vector queries only (_del_predicate_preapplied).
+    Status _apply_del_predicate();
 
     Status _init_inverted_index_iterators();
 
@@ -540,6 +608,11 @@ private:
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
+    // True for a vector (ANN) query on a table carrying non-PK delete predicates: the delete survivors are
+    // folded into _scan_range up front by _apply_del_predicate, so the ANN search, the PRE gates and the
+    // exact rescan see live rows only. It also tells the read loop to skip its (now redundant) per-chunk
+    // delete evaluation. False for non-vector scans (they rely on the read loop's per-chunk filter).
+    bool _del_predicate_preapplied = false;
 
     Status _get_del_vec_st;
     Status _get_dcg_st;
@@ -865,6 +938,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
+    // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
+    // before the search. For the lake split-child path (precomputed scan range) this stays true because
+    // the seed already applied it to the range the child inherits.
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
     // Initialize vector index context only when needed
     if (_opts.use_vector_index) {
         _vector_index_ctx = std::make_unique<VectorIndexContext>();
@@ -883,6 +960,9 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         } else {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->k_factor;
         }
+        // Clamp to >= 1: k * a fractional k_factor/pq_refine_factor can truncate to 0, and the top-k
+        // heap in _exact_search_over_candidates would then admit no row and return an empty result set.
+        _vector_index_ctx->k = std::max<int64_t>(1, _vector_index_ctx->k);
 #ifdef WITH_TENANN
         _vector_index_ctx->query_view = tenann::PrimitiveSeqView{
                 .data = reinterpret_cast<uint8_t*>(_opts.vector_search_option->query_vector.data()),
@@ -963,6 +1043,10 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _chunk_size = options.chunk_size;
     _predicate_columns = _opts.pred_tree.num_columns();
     _enable_predicate_col_late_materialize = _opts.enable_predicate_col_late_materialize;
+    // Recompute from the reuse-time options: this flag licenses skipping the read loop's per-chunk delete
+    // filter, so it must track the current delete_predicates, not the ctor-time ones (a reuse with a
+    // different delete-predicate set would otherwise skip filtering on a non-delete-narrowed range).
+    _del_predicate_preapplied = _opts.use_vector_index && !_opts.delete_predicates.empty();
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
@@ -1039,6 +1123,11 @@ Status SegmentIterator::_init_scan_range_and_context() {
         if (apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
+        // After the index filters (smallest candidate) and before _rewrite_predicates (predicates still
+        // original-typed). ANN queries only.
+        if (_del_predicate_preapplied) {
+            RETURN_IF_ERROR(_apply_del_predicate());
+        }
     }
 
     // rewrite stage
@@ -1092,6 +1181,10 @@ Status SegmentIterator::_init_reused_scan() {
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
     }
+    // Rebuilt from the reuse-time delete predicates by _get_row_ranges_by_zone_map; that population uses
+    // map::insert (no overwrite), so a stale entry would make _apply_del_predicate's prune use the old
+    // predicate values. Clear it so the reused scan re-groups against the current predicates.
+    _del_predicates.clear();
     _bitmap_index_evaluator.close();
     // Release per-scan objects appended via _obj_pool.add() during _init_scan_range_and_context (rewritten
     // predicate iterators, dict-decode column iterators, ...). They are otherwise only freed by close(),
@@ -1142,6 +1235,11 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     RETURN_IF_ERROR(_apply_inverted_index());
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
+    }
+    // Fold non-PK delete survivors into the prepared range so split children inherit a delete-free range
+    // (ANN only). No _rewrite_predicates runs on this path, so the predicates are already original-typed.
+    if (_del_predicate_preapplied) {
+        RETURN_IF_ERROR(_apply_del_predicate());
     }
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     RETURN_IF_ERROR(_apply_data_sampling());
@@ -1358,6 +1456,13 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         matched_cardinality = matched.cardinality();
         RETURN_IF(_scan_range.empty(), Status::OK());
         pre_narrowed = true;
+    } else if (_del_predicate_preapplied) {
+        // Deletes already folded into _scan_range by _apply_del_predicate. Treat the live set as
+        // pre-narrowed so the short-circuit / count gates still guard a filtered-HNSW under-return on a
+        // small or sparse live set. (With a residual, the branch above already ran over the live range.)
+        matched = range2roaring(_scan_range);
+        matched_cardinality = matched.cardinality();
+        pre_narrowed = true;
     }
 
     // Short-circuit (PRE only): score candidates exactly when the search cannot pay for itself --
@@ -1570,6 +1675,82 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     return result;
 }
 
+// Evaluate the tablet's delete predicates over `candidate`, returning the SURVIVORS (rows NOT deleted).
+// Called from _apply_del_predicate BEFORE _rewrite_predicates, so the predicates are still original-typed
+// and columns read as decoded values -- no global-dict-code wrapping, no raw/dict mismatch. An unreadable
+// delete column is a hard error, not a silent skip (an over-wide survivor set would under-return the top-k).
+StatusOr<roaring::Roaring> evaluate_delete_survivors_to_bitmap(
+        const DisjunctivePredicates& delete_predicates, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        const roaring::Roaring& candidate) {
+    if (candidate.isEmpty() || delete_predicates.empty()) {
+        return candidate;
+    }
+
+    std::set<ColumnId> del_cids;
+    delete_predicates.get_column_ids(&del_cids);
+    if (del_cids.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    struct PredColumn {
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : del_cids) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("delete-survivor bitmap: delete predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        pred_columns.emplace_back(PredColumn{field, column_iterators_by_cid[cid].get()});
+        pred_schema->append(field);
+    }
+
+    // DisjunctivePredicates::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring survivors;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [field, cit] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(cit->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(cit->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Seed 0 = not deleted; evaluate sets 1 for deleted rows, so a survivor stays 0.
+        selection.assign(bn, 0);
+        RETURN_IF_ERROR(delete_predicates.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i] == 0) {
+                survivors.add(r.begin() + i);
+            }
+        }
+    }
+    return survivors;
+}
+
 // Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
 // inverted-index fallback predicates are present (a MATCH inside an OR), the rowid buffer they
 // resolve chunk rows through (their bitmaps are ready -- _apply_inverted_index ran earlier).
@@ -1593,6 +1774,67 @@ StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
     // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
     _opts.pred_tree = PredicateTree();
     return matched;
+}
+
+Status SegmentIterator::_apply_del_predicate() {
+    // Evaluate the still-original-typed delete predicates over the (index-narrowed) _scan_range and keep
+    // the survivors. Runs before _rewrite_predicates; precondition _del_predicate_preapplied. Timed into
+    // del_filter_ns / rows_del_filtered so this work shows in the DeleteFilter profile section, since the
+    // read loop's per-chunk delete filter is skipped on this path.
+    if (_opts.delete_predicates.empty() || _scan_range.empty()) {
+        return Status::OK();
+    }
+    SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
+
+    // Zone-map page prune: only pages whose zone map overlaps a delete column's predicate can hold a
+    // deleted row, so rows elsewhere survive without a read. The per-column OR groups (_del_predicates,
+    // built earlier by _get_row_ranges_by_zone_map) are a conservative superset -- safe for any delete
+    // shape (a deleted row's page always overlaps; multi-column conjuncts just prune less). Empty when
+    // page-level zone-map filtering is off or no delete column has a zone map -> evaluate everything.
+    // Runs before materializing the candidate bitmap: it needs only the range bound, so a segment whose
+    // deletes touch nothing here (the common case on a multi-segment table) returns without any bitmap
+    // work or a byte-identical _scan_range rebuild.
+    roaring::Roaring maybe_deleted;
+    bool pruned = !_del_predicates.empty();
+    if (pruned) {
+        const Range<> bound{_scan_range.begin(), _scan_range.end()};
+        for (const auto& [cid, or_pred] : _del_predicates) {
+            if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+                pruned = false; // unreadable delete column -> no pruning, evaluate the whole candidate
+                break;
+            }
+            SparseRange<> col_pages; // must be empty: get_row_ranges_by_zone_map DCHECKs it
+            std::vector<const ColumnPredicate*> preds{&or_pred};
+            RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(
+                    preds, /*del_predicate=*/nullptr, &col_pages, CompoundNodeType::OR, &bound));
+            maybe_deleted |= range2roaring(col_pages);
+        }
+    }
+    if (pruned && maybe_deleted.isEmpty()) {
+        // No page can hold a deleted row: every candidate survives and _scan_range is already correct.
+        _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(_scan_range.span_size());
+        return Status::OK();
+    }
+
+    const roaring::Roaring candidate = range2roaring(_scan_range);
+    // Rows in delete-clean pages survive without a read; only the maybe-deleted rows are evaluated exactly.
+    const roaring::Roaring to_eval = pruned ? (candidate & maybe_deleted) : candidate;
+    roaring::Roaring survivors = pruned ? (candidate - maybe_deleted) : roaring::Roaring();
+    _opts.stats->rows_del_predicate_zone_map_pruned += static_cast<int64_t>(survivors.cardinality());
+    if (!to_eval.isEmpty()) {
+        ASSIGN_OR_RETURN(auto live, evaluate_delete_survivors_to_bitmap(_opts.delete_predicates, _schema,
+                                                                        _column_iterators, to_eval));
+        survivors |= live;
+    }
+    const size_t deleted = candidate.cardinality() - survivors.cardinality();
+    if (deleted == 0) {
+        // Zone-map false positive (value within a page's min/max but no row matches) or predicate matched
+        // nothing: _scan_range is already correct, skip the O(cardinality) roaring2range rebuild.
+        return Status::OK();
+    }
+    _opts.stats->rows_del_filtered += static_cast<int64_t>(deleted);
+    _scan_range = roaring2range(survivors);
+    return Status::OK();
 }
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
@@ -1818,6 +2060,19 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // create delta column iterator
         // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
+        // The column is served from a Delta Column Group (.cols) for this query
+        // version (column-mode partial update overlay). A fast-path IDG index
+        // (.idx sidecar) is keyed by the BASE segment id and was built over the
+        // BASE column values; it does NOT describe the overlaid DCG values and
+        // is not rebuilt on a column-mode update. Probing it here would let the
+        // DCG column iterator surface the STALE base index via
+        // has_{original,ngram}_bloom_filter_index(), and the pruning gate would
+        // filter rows against values the column no longer holds -> silently
+        // wrong results. Drop the IDG context so the DCG column falls back to an
+        // unindexed (correct) scan, matching footer-index behavior (a footer
+        // index lives on the base ColumnReader, which the DCG reader does not
+        // inherit, so it is never consulted for DCG-overlaid columns).
+        iter_opts.idg_loader = nullptr;
         opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
@@ -2220,7 +2475,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         } else if (!upper->short_key.empty()) {
             RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
-                                            &upper_rowid));
+                                            &upper_rowid, upper->use_full_sort_key));
         }
 
         if (upper_rowid > 0) {
@@ -2231,7 +2486,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
             } else if (!lower->short_key.empty()) {
                 RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
-                                                upper_rowid, &lower_rowid));
+                                                upper_rowid, &lower_rowid, lower->use_full_sort_key));
             }
         }
 
@@ -2365,30 +2620,56 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
 Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
+    // Coarse prune via the short key index. For a full-key segment, encode the search
+    // key with the segment's OWN sort-key schema so the bytes match its index even if
+    // the query's schema drifted; if the query's sort-key types are not byte-compatible
+    // with the segment's, bypass the coarse prune entirely (start=0, keep the given
+    // |end|) rather than emit a mismatched bracket -- the typed binary search below
+    // (unchanged) still finds the exact answer over the full candidate range.
+    // Live read gate: this seek's producer and consumer are the same query with no time gap, so it is
+    // safe to read use_full_sort_key_index() directly (go-forward rollback: a newly-started query
+    // seeks off the legacy page whenever the read config is off or the full page is unusable). A true
+    // return guarantees the full decoder is published, so lower_bound_full/upper_bound_full are valid.
+    const bool use_full_sort_key = _segment->use_full_sort_key_index();
+    bool use_index = true;
     std::string index_key;
-    index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
-
-    uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
-    if (start_iter.valid()) {
-        // Because previous block may contain this key, so we should set rowid to
-        // last block's first row.
-        start_block_id = start_iter.ordinal();
-        if (start_block_id > 0) {
-            start_block_id--;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(_segment.get(), key, lower);
+        if (encoded.has_value()) {
+            index_key = std::move(encoded.value());
+        } else {
+            use_index = false;
         }
     } else {
-        // When we don't find a valid index item, which means all short key is
-        // smaller than input key, this means that this key may exist in the last
-        // row block. so we set the rowid to first row of last row block.
-        start_block_id = _segment->last_block();
+        index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
+                          : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
     }
-    rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
-    if (end_iter.valid()) {
-        end = end_iter.ordinal() * _segment->num_rows_per_block();
+    rowid_t start = 0;
+    if (use_index) {
+        uint32_t start_block_id;
+        auto start_iter = use_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
+        if (start_iter.valid()) {
+            // Because previous block may contain this key, so we should set rowid to
+            // last block's first row.
+            start_block_id = start_iter.ordinal();
+            if (start_block_id > 0) {
+                start_block_id--;
+            }
+        } else {
+            // When we don't find a valid index item, which means all short key is
+            // smaller than input key, this means that this key may exist in the last
+            // row block. so we set the rowid to first row of last row block.
+            start_block_id = _segment->last_block();
+        }
+        // Both pages share one block geometry (num_rows_per_block/num_items), so the block count and
+        // rows-per-block always come from the legacy decoder regardless of which page was seeked.
+        start = start_block_id * _segment->num_rows_per_block();
+
+        auto end_iter = use_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
+        if (end_iter.valid()) {
+            end = end_iter.ordinal() * _segment->num_rows_per_block();
+        }
     }
 
     // binary search to find the exact key
@@ -2423,9 +2704,19 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
 }
 
 Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                                        rowid_t* rowid) {
+                                        rowid_t* rowid, bool is_full_sort_key) {
+    // |index_key| was already encoded upstream with the codec the logical-split producer pinned into
+    // ShortKeyOption::use_full_sort_key (short_key_encode vs. full_sort_key_encode); |is_full_sort_key|
+    // is that pin. It selects BOTH the short key decoder and the row re-encode below -- never a fresh
+    // read-config read -- so a mid-flight config flip cannot desync the producer from this consumer.
+    if (is_full_sort_key && !_segment->ensure_full_sort_key_index_usable()) {
+        // The producer only pins FULL after a usability request succeeded; if the full page is
+        // unexpectedly unusable now, never reinterpret full-key bytes with the legacy decoder.
+        return Status::InternalError("full sort key index page is not usable for a full-key pinned boundary");
+    }
+
     uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
+    auto start_iter = is_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
     if (start_iter.valid()) {
         // Because previous block may contain this key, so we should set rowid to
         // last block's first row.
@@ -2439,9 +2730,10 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
         // row block. so we set the rowid to first row of last row block.
         start_block_id = _segment->last_block();
     }
+    // Both pages share one block geometry, so rows-per-block always comes from the legacy decoder.
     rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
+    auto end_iter = is_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * _segment->num_rows_per_block();
     }
@@ -2454,7 +2746,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) > 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) > 0) {
                 start = mid + 1;
             } else {
                 end = mid;
@@ -2466,7 +2758,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) < 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) < 0) {
                 end = mid;
             } else {
                 start = mid + 1;
@@ -2739,8 +3031,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         _context_switch_count++;
     }
 
-    // remove (logical) deleted rows.
-    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    // remove (logical) deleted rows. Skipped when _apply_del_predicate already folded the delete
+    // survivors into _scan_range (ANN path): the rows reaching here are live by construction, so
+    // re-evaluating the delete predicates would read the delete columns again only to delete nothing.
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty() &&
+        !_del_predicate_preapplied) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         // NOTE: risk of using _selection.data() without initialization
@@ -3144,7 +3439,10 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
                 norm_v += vec[j] * vec[j];
             }
             float denom = query_norm * std::sqrt(norm_v);
-            distance_column->append(denom > 0 ? dot / denom : 0.0f);
+            float sim = denom > 0 ? dot / denom : 0.0f;
+            // Non-finite (NaN/Inf from Inf inputs) would break the top-k heap's ordering (NaN compares
+            // false both ways), so map it to the sentinel -- ranked worst, like a null vector.
+            distance_column->append(std::isfinite(sim) ? sim : sentinel);
         } else {
             // l2_distance = sum((q[j] - v[j])^2)
             float dist = 0;
@@ -3152,7 +3450,7 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
                 float diff = query_vec[j] - vec[j];
                 dist += diff * diff;
             }
-            distance_column->append(dist);
+            distance_column->append(std::isfinite(dist) ? dist : sentinel);
         }
     }
 
@@ -3204,6 +3502,23 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     const bool has_range = _vector_index_ctx->vector_range >= 0;
     const auto range = static_cast<float>(_vector_index_ctx->vector_range);
     const bool ascending = _vector_index_ctx->result_order == 0;
+
+    // Top-k mode keeps only the k best rows (bounded heap), matching the HNSW path's per-segment contract
+    // -- the upper TopN merges into the global top-k. Keeping every candidate would size id2distance_map
+    // and _scan_range to the whole live set (a memory cliff on a large delete-narrowed rescan). Range
+    // search cannot bound to k: it returns every row within the radius.
+    struct Cand {
+        float dist;
+        rowid_t rid;
+    };
+    // Heap top is the WORST kept row (evicted first): the largest distance when ascending (smaller is
+    // nearer), the smallest when descending (larger is nearer).
+    auto worse_on_top = [ascending](const Cand& a, const Cand& b) {
+        return ascending ? (a.dist < b.dist) : (a.dist > b.dist);
+    };
+    std::priority_queue<Cand, std::vector<Cand>, decltype(worse_on_top)> topk(worse_on_top);
+    const size_t k = static_cast<size_t>(_vector_index_ctx->k);
+
     roaring::Roaring survivors;
     SparseRange<> rows = roaring2range(candidates);
     for (auto it = rows.new_iterator(); it.has_more();) {
@@ -3219,17 +3534,30 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
         const uint32_t bn = r.end() - r.begin();
         for (uint32_t i = 0; i < bn; i++) {
             const float d = dvals[i];
-            if (has_range && !within_vector_range(d, range, ascending)) {
-                continue;
-            }
-            _vector_index_ctx->id2distance_map[r.begin() + i] = d;
+            const rowid_t rid = r.begin() + i;
             if (has_range) {
-                survivors.add(r.begin() + i);
+                if (!within_vector_range(d, range, ascending)) {
+                    continue;
+                }
+                _vector_index_ctx->id2distance_map[rid] = d;
+                survivors.add(rid);
+            } else if (k > 0) {
+                topk.push(Cand{d, rid});
+                if (topk.size() > k) {
+                    topk.pop();
+                }
             }
         }
     }
-    // Without a radius every candidate survives; skip the bitmap rebuild.
-    _scan_range = has_range ? roaring2range(survivors) : roaring2range(candidates);
+    if (!has_range) {
+        while (!topk.empty()) {
+            const Cand& c = topk.top();
+            _vector_index_ctx->id2distance_map[c.rid] = c.dist;
+            survivors.add(c.rid);
+            topk.pop();
+        }
+    }
+    _scan_range = roaring2range(survivors);
     return Status::OK();
 }
 
@@ -4129,6 +4457,9 @@ Status SegmentIterator::_apply_bitmap_index() {
             const ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            // Non-null => the column is served from a Delta Column Group (.cols)
+            // for this query version (column-mode partial update overlay).
+            const bool served_from_dcg = (segment_ptr != nullptr);
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
@@ -4144,7 +4475,20 @@ Status SegmentIterator::_apply_bitmap_index() {
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files
             // would be invisible to the pruning gate.
-            opts.idg_loader = _opts.idg_loader;
+            //
+            // But the fast-path IDG .idx is keyed by the BASE segment id and was
+            // built over the BASE column values. A column-mode partial update
+            // overlays new values into a DCG (.cols) WITHOUT rebuilding the
+            // index. Attaching the base .idx to a DCG-overlaid column would
+            // prune rows against values the column no longer holds -> silently
+            // wrong results. So only wire the IDG loader when the column is
+            // served from the base segment; for a DCG-overlaid column leave it
+            // unset so new_bitmap_index_iterator falls back to the (absent)
+            // footer bitmap index -> correct unindexed scan, matching the footer
+            // index behavior.
+            if (!served_from_dcg) {
+                opts.idg_loader = _opts.idg_loader;
+            }
             opts.tablet_id = _opts.tablet_id;
             opts.segment_id = _opts.rowset_id + segment_id();
             opts.query_version = _opts.version;
@@ -4212,7 +4556,33 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.segment_rows = num_rows();
 
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
+            // Column-mode partial update rewrites a column into a delta column group
+            // (.cols) file and leaves the base segment untouched, so the base segment's
+            // inverted index still reflects pre-update values. Mirror _apply_bitmap_index:
+            // take the index from the DCG segment when the column has been rewritten, so
+            // the index stays consistent with the data actually returned.
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+            } else {
+                std::shared_ptr<TabletIndex> index_meta;
+                RETURN_IF_ERROR(segment_ptr->tablet_schema().get_indexes_for_column(ucid, GIN, index_meta));
+                if (index_meta != nullptr) {
+                    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                    if (imp_type != InvertedImplementType::BUILTIN) {
+                        // Standalone (CLucene) inverted indexes are not produced by the DCG
+                        // writer, and the base segment's copy is stale for this column, so no
+                        // index is served. Ordinary predicates (e.g. equality) then evaluate
+                        // on the fresh column data. MATCH predicates cannot be evaluated
+                        // without an index and fail with an explicit error -- preferable to
+                        // silently filtering on pre-update values. Compaction rewrites the
+                        // base segment and restores index acceleration.
+                        continue;
+                    }
+                }
+            }
+            RETURN_IF_ERROR(segment_ptr->new_inverted_index_iterator(
                     ucid, &_inverted_index_ctx->inverted_index_iterators[cid], _opts, index_opts));
             _inverted_index_ctx->has_inverted_index |= (_inverted_index_ctx->inverted_index_iterators[cid] != nullptr);
         }
@@ -4641,9 +5011,23 @@ StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Seg
 }
 
 static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower) {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    auto start_iter = segment->lower_bound(index_key);
+    // Live read gate (physical split producer==consumer, no time gap): a true return guarantees the
+    // full decoder is published, so lower_bound_full is valid; read off => legacy page (rollback).
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: the query's sort-key types drifted from this segment's own
+            // schema and cannot be safely bracketed. Never emit a mismatched coarse
+            // bracket -- return the start of the full candidate range.
+            return 0;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto start_iter = use_full_sort_key ? segment->lower_bound_full(index_key) : segment->lower_bound(index_key);
     uint32_t start_block_id = 0;
     if (start_iter.valid()) {
         // Previous block may contain this key, so start from its first row.
@@ -4659,9 +5043,21 @@ static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple
 }
 
 static rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    auto end_iter = segment->upper_bound(index_key);
+    // Live read gate (physical split producer==consumer, no time gap); read off => legacy page.
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: never emit a mismatched coarse bracket -- return the full
+            // candidate range unmodified.
+            return end;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto end_iter = use_full_sort_key ? segment->upper_bound_full(index_key) : segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * segment->num_rows_per_block();
     }

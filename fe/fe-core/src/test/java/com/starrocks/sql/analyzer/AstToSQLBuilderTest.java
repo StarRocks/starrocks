@@ -220,4 +220,147 @@ public class AstToSQLBuilderTest {
             Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT));
         }
     }
+
+    @Test
+    public void testInsertValuesRoundTrip() {
+        // The INSERT source takes a bare VALUES list. Emitting the parenthesized derived-table form
+        // `INSERT INTO t (cols) (VALUES ...)` produces SQL the parser rejects.
+        String[][] cases = {
+                {"insert into t0 (v1, v2) values (1, 111)", "INSERT INTO `t0` (`v1`,`v2`) VALUES(1, 111)"},
+                {"insert into t0 values (1, 2), (3, 4)", "INSERT INTO `t0` VALUES(1, 2), (3, 4)"},
+                {"insert into t0 values (1, null)", "INSERT INTO `t0` VALUES(1, NULL)"},
+                {"insert overwrite t0 (v1) values (1)", "INSERT OVERWRITE `t0` (`v1`) VALUES(1)"},
+                {"insert into t0 with label lb (v1) values (1)", "INSERT INTO `t0` WITH LABEL `lb` (`v1`) VALUES(1)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT),
+                    c[0]);
+            // Deparsing is a fixpoint: re-serializing the output must not change it again.
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
+    }
+
+    @Test
+    public void testValuesInDerivedTablePositionKeepsParentheses() {
+        // Counterpart to testInsertValuesRoundTrip: outside the INSERT source, a VALUES relation sits in
+        // derived-table position and *must* stay parenthesized.
+        String[][] cases = {
+                // explicit column names
+                {"select * from (values (1, 'a'), (2, 'b')) tt(x, y)",
+                        "SELECT *\nFROM (VALUES(1, 'a'), (2, 'b')) tt(x,y)"},
+                // alias without column names: the deparser supplies the generated column_0
+                {"select cast(column_0 as datetime) from (values ('2020.02.29')) as tmp",
+                        "SELECT CAST(`column_0` AS DATETIME)\nFROM (VALUES('2020.02.29')) tmp(column_0)"},
+                // VALUES nested under an INSERT ... SELECT: the INSERT source is the SELECT, not the
+                // VALUES, so the inner relation must still be parenthesized
+                {"insert into t0 select cast(column_0 as int) from (values ('1')) as tmp",
+                        "INSERT INTO `t0` SELECT CAST(`column_0` AS INT)\nFROM (VALUES('1')) tmp(column_0)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT),
+                    c[0]);
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
+    }
+
+    @Test
+    public void testInsertValuesWithDefaultKeyword() {
+        // DefaultValueExpr used to serialize to null, so joining the row's child strings threw NPE.
+        String[][] cases = {
+                {"insert into t0 (v1, v2) values (DEFAULT, 3)", "INSERT INTO `t0` (`v1`,`v2`) VALUES(DEFAULT, 3)"},
+                {"insert into t0 values (DEFAULT)", "INSERT INTO `t0` VALUES(DEFAULT)"},
+                {"insert into t0 (v1, v2) values (1, DEFAULT), (2, 3)",
+                        "INSERT INTO `t0` (`v1`,`v2`) VALUES(1, DEFAULT), (2, 3)"},
+                {"insert into t0 (v1, v2) values (DEFAULT, DEFAULT)",
+                        "INSERT INTO `t0` (`v1`,`v2`) VALUES(DEFAULT, DEFAULT)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = Assertions.assertDoesNotThrow(() -> AstToSQLBuilder.toSQL(stmt), c[0]);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
+    }
+
+    @Test
+    public void testInsertValuesDigestUnaffected() {
+        // The digest form stays unparenthesized and keeps only the first row.
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "insert into t0 (v1, v2) values (1, 111), (2, 222)", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("INSERT INTO `t0` (`v1`,`v2`) VALUES(?, ?)", AstToSQLBuilder.toDigest(stmt));
+    }
+
+    /** Deparses in the production shape: the deparser is only used on an analyzed AST. */
+    private static String deparseAnalyzed(String sql) {
+        StatementBase stmt = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Analyzer.analyze(stmt, AnalyzeTestUtil.getConnectContext());
+        return AstToSQLBuilder.toSQL(stmt);
+    }
+
+    /** What a view persists is the deparsed text, so that text must analyze again. */
+    private static void assertReanalyzable(String sql) {
+        String out = deparseAnalyzed(sql);
+        StatementBase again = SqlParser.parse(out, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Assertions.assertDoesNotThrow(() -> Analyzer.analyze(again, AnalyzeTestUtil.getConnectContext()),
+                () -> "deparsed form no longer analyzes: " + out);
+    }
+
+    @Test
+    public void testUntypedArrayLiteralKeepsNoTypePrefix() {
+        // ARRAY<NULL> has no printable form, so the prefix used to come out as the BOOLEAN stand-in. That
+        // froze a type the literal never had, and the frozen type then failed function overload matching.
+        Assertions.assertTrue(deparseAnalyzed("select [NULL] from t0").contains("[NULL]"));
+        Assertions.assertFalse(deparseAnalyzed("select [NULL] from t0").contains("ARRAY<BOOLEAN>"));
+        assertReanalyzable("select array_contains_all(v3, [NULL]) from tarray");
+
+        // A literal that does carry an element type still prints it, or the type would be lost on the
+        // way back in.
+        Assertions.assertTrue(deparseAnalyzed("select [1, 2] from t0").contains("ARRAY<TINYINT>[1, 2]"));
+        assertReanalyzable("select [1, 2] from t0");
+        assertReanalyzable("select array_length([]) from t0");
+    }
+    @Test
+    public void testTemporaryPartitionQualifierIsPreserved() throws Exception {
+        // Temporary and formal partitions are separate namespaces. Dropping TEMPORARY on the way out
+        // makes the text name a different partition, and a view stores exactly this text: creating a
+        // view over a temporary partition used to succeed and then never resolve again.
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE tp_tbl (k date, v int)\n"
+                + "DUPLICATE KEY(k)\n"
+                + "PARTITION BY RANGE(k) (PARTITION p1 VALUES LESS THAN ('2020-01-01'))\n"
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        AnalyzeTestUtil.getStarRocksAssert()
+                .ddl("ALTER TABLE tp_tbl ADD TEMPORARY PARTITION tp1 VALUES LESS THAN ('2020-01-01')");
+
+        String temp = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("select * from tp_tbl temporary partition(tp1)",
+                        SqlModeHelper.MODE_DEFAULT));
+        String formal = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("select * from tp_tbl partition(p1)",
+                        SqlModeHelper.MODE_DEFAULT));
+        Assertions.assertTrue(temp.contains("TEMPORARY PARTITION (`tp1`)"), temp);
+        Assertions.assertFalse(formal.contains("TEMPORARY"), formal);
+
+        // The INSERT target carries the same qualifier, and losing it would redirect the write.
+        String insert = AstToSQLBuilder.toSQL(
+                SqlParser.parseSingleStatement("insert into tp_tbl temporary partition(tp1) select * from tp_tbl",
+                        SqlModeHelper.MODE_DEFAULT));
+        Assertions.assertTrue(insert.contains("TEMPORARY PARTITION (tp1)"), insert);
+
+        // Round trip: the serialized form must still resolve to the temporary partition.
+        StatementBase again = SqlParser.parse(temp, AnalyzeTestUtil.getConnectContext().getSessionVariable()).get(0);
+        Assertions.assertDoesNotThrow(() -> Analyzer.analyze(again, AnalyzeTestUtil.getConnectContext()),
+                () -> "deparsed form no longer analyzes: " + temp);
+    }
 }

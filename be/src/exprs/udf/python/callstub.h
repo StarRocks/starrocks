@@ -47,6 +47,12 @@ struct PyFunctionDescriptor {
     std::string location;
     std::string content;
     std::string input_type;
+    // When non-empty, connect to this user-provided Arrow Flight worker service URL
+    // (from the CREATE FUNCTION "service_url" property) instead of spawning a local worker.
+    std::string service_url;
+    // md5 of the UDF zip (from TFunction.checksum); lets an external worker verify a zip it
+    // downloads itself. Empty for inline UDFs.
+    std::string checksum;
     TypeDescriptor return_type;
     std::vector<TypeDescriptor> input_types;
     StatusOr<std::string> to_json_string() const;

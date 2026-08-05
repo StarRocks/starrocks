@@ -689,6 +689,18 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TFlussTable {
+    // Encoded scan-time configuration. FE merges catalog-level options and table properties;
+    // BE forwards this to the Java reader for Fluss connection and lake-source setup.
+    1: optional string runtime_conf
+
+    // timezone
+    2: optional string time_zone
+
+    // StarRocks catalog name, used by BE Java reader to reuse Fluss connections.
+    3: optional string catalog_name
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -763,6 +775,9 @@ struct TTableDescriptor {
 
   // Lance Table
   37: optional TLanceTable lanceTable
+
+  // Fluss Table schema
+  38: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

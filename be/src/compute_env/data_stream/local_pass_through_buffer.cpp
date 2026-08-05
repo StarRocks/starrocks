@@ -59,6 +59,22 @@ public:
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }
+    // Drop everything buffered without handing it to a consumer. Used when the receiver is
+    // cancelled/closed: nobody will ever pull these chunks, so free them now instead of
+    // holding the memory until query teardown. The accounting mirrors the destructor:
+    // pre-charge the physical bytes to the current MemTracker so the immediate _buffer.clear()
+    // frees net-zero on it, and release them from the global passthrough tracker.
+    void clear() {
+        std::unique_lock lock(_mutex);
+        if (_physical_bytes > 0) {
+            CurrentThread::current().mem_consume(_physical_bytes);
+            RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(_physical_bytes);
+            _total_bytes -= _physical_bytes;
+            _physical_bytes = 0;
+        }
+        _buffer.clear();
+        _bytes.clear();
+    }
 
 private:
     std::mutex _mutex; // lock-step to push/pull chunks
@@ -91,10 +107,24 @@ public:
 
     int64_t get_total_bytes() const { return _total_bytes; }
 
+    // Marked once the receiver (DataStreamRecvr) is cancelled or closed. The sink and
+    // receiver share the same PassThroughChannel, so this is how the append side learns
+    // that the peer is gone and it should stop buffering chunks. It also drops whatever is
+    // already buffered, since the cancelled receiver will never pull it.
+    void set_cancelled() {
+        _cancelled.store(true, std::memory_order_release);
+        std::unique_lock lock(_mutex);
+        for (auto& [_, sender_channel] : _sender_id_to_channel) {
+            sender_channel->clear();
+        }
+    }
+    bool is_cancelled() const { return _cancelled.load(std::memory_order_acquire); }
+
 private:
     std::mutex _mutex;
     std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
     std::atomic_int64_t _total_bytes = 0;
+    std::atomic<bool> _cancelled{false};
 };
 
 PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id) : _mutex(), _query_id(query_id) {}
@@ -104,17 +134,17 @@ PassThroughChunkBuffer::~PassThroughChunkBuffer() {
         LOG(WARNING) << "PassThroughChunkBuffer reference leak detected! query_id=" << print_id(_query_id)
                      << ", _ref_count=" << _ref_count;
     }
-    for (auto& it : _key_to_channel) {
-        delete it.second;
-    }
+    // Channels are shared with the PassThroughContexts that resolved them; dropping the map only
+    // drops this buffer's reference. A channel still referenced by a sink or a receiver stays
+    // alive until that side is destroyed too.
     _key_to_channel.clear();
 }
 
-PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
+PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
     std::unique_lock lock(_mutex);
     auto it = _key_to_channel.find(key);
     if (it == _key_to_channel.end()) {
-        auto* channel = new PassThroughChannel();
+        auto channel = std::make_shared<PassThroughChannel>();
         _key_to_channel.emplace(key, channel);
         return channel;
     } else {
@@ -123,10 +153,23 @@ PassThroughChannel* PassThroughChunkBuffer::get_or_create_channel(const Key& key
 }
 
 void PassThroughContext::init() {
+    if (_channel != nullptr) {
+        return;
+    }
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
+    // From here on the context owns the channel, so every later use of it is safe regardless of
+    // when the PassThroughChunkBuffer is released.
+    _chunk_buffer = nullptr;
 }
 
 void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+    // The receiver has been cancelled/closed; drop the chunk instead of buffering it forever.
+    // This mirrors the RPC path, where PipelineSenderQueue::add_chunks returns early once the
+    // receiver queue is cancelled. Without this, the sink keeps cloning chunks into the shared
+    // pass-through buffer that nobody will ever pull, holding the memory until query teardown.
+    if (_channel->is_cancelled()) {
+        return;
+    }
     PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
     sender_channel->append_chunk(chunk, chunk_size, driver_sequence);
 }
@@ -137,6 +180,14 @@ void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks
 
 int64_t PassThroughContext::total_bytes() const {
     return _channel->get_total_bytes();
+}
+
+void PassThroughContext::set_cancelled() {
+    _channel->set_cancelled();
+}
+
+bool PassThroughContext::is_cancelled() const {
+    return _channel->is_cancelled();
 }
 
 void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id) {

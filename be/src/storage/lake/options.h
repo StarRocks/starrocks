@@ -19,6 +19,10 @@ namespace starrocks::lake {
 struct CacheOptions {
     bool fill_meta_cache = true;
     bool fill_data_cache = true;
+    // When true, bypass the tablet-metadata metacache lookup and read straight from durable storage.
+    // Lets a caller tell "durably persisted in remote storage" apart from "only in the metacache"
+    // (cached during publish but not yet durably flushed).
+    bool skip_meta_cache = false;
 };
 
 } // namespace starrocks::lake

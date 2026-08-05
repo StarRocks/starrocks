@@ -242,8 +242,8 @@ public final class RangeColocateScanDispatch {
 
     /**
      * Converts the canonical-boundary list returned by {@link #computeForcedAlignmentBoundaries}
-     * into the per-new-tablet {@link TabletRange} list that the external boundaries
-     * {@code SplitTabletJobFactory.forExternalBoundaries} family of entries consumes
+     * into the per-new-tablet {@link TabletRange} list that the external-boundaries
+     * {@code SplitTabletJobFactory.forExternalBoundaries} entry point consumes
      * (or, for colocate alignment, the checker's per-new-tablet PACK assignment path).
      *
      * <p>For an old tablet with range {@code [lower, upper)} and K-1 canonical boundaries

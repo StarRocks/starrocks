@@ -80,7 +80,7 @@ protected:
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
-                   is_idx(name)) {
+                   is_idx(name) || is_lcrm(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -273,6 +273,54 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
     EXPECT_FALSE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_TRUE(file_exist("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// Production full-vacuum path: an orphan .lcrm from a finalized txn (txn_id <
+// min_active_txn_id) is reclaimed, while an in-flight .lcrm (txn_id >=
+// min_active_txn_id) is protected by the same txn-id gate that guards output
+// segments. This exercises the real vacuum_orphaned_datafiles path (runs the
+// orphan scan with expired_seconds=0 + the txn-id filter), complementing the
+// mtime-window offline datafile_gc test above. .lcrm is never referenced by any
+// live metadata, so it relies entirely on that txn-id gate for safety.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
+    // txn 2 < min_active(10), unreferenced -> reclaimed.
+    const std::string orphan_lcrm = "0000000000000002_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    // txn 0xFFFF >= min_active(10) -> in-flight, protected.
+    const std::string inflight_lcrm = "000000000000FFFF_bff53950-a542-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+    create_data_file(inflight_lcrm);
+
+    // A retained metadata (version above max_check_version) that references neither
+    // .lcrm -- metadata never references .lcrm, so check_reference_files protects
+    // nothing here and the txn-id gate is the only guard.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66610,
+        "version": 6,
+        "rowsets": [],
+        "commit_time": 99
+        }
+        )DEL")));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66610);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    ASSERT_TRUE(file_exist(orphan_lcrm));
+    ASSERT_TRUE(file_exist(inflight_lcrm));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
+    EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
@@ -4107,6 +4155,30 @@ TEST_P(LakeVacuumTest, idg_idx_files_unreferenced_are_orphaned) {
     EXPECT_FALSE(file_exist(stranded_idx));
 }
 
+// .lcrm (Lake Compaction Rows Mapper) files are referenced only from the transaction
+// log, never from any live TabletMetadataPB field: on a successful publish they are
+// consumed and deleted by RowsMapperIterator, and superseded ones enter orphan_files.
+// One left behind by an aborted/failed/crashed PK compaction is therefore referenced
+// by nothing durable -- before .lcrm was added to the orphan-file candidate filter it
+// could not be reclaimed by any GC path (the reference-driven vacuum never sees it and
+// the datafile GC skipped its extension), a permanent storage leak. datafile_gc must
+// now treat such an unreferenced .lcrm as an orphan, while still protecting an
+// in-flight .lcrm via the same expire window that guards the segments written by the
+// same compaction.
+TEST_P(LakeVacuumTest, lcrm_files_unreferenced_are_orphaned) {
+    const std::string orphan_lcrm = "0000000000abc020_a542395a-bff5-48a7-a3a7-2ed05691b58c.lcrm";
+    create_data_file(orphan_lcrm);
+
+    // Safety: within the expire window an .lcrm is never a candidate, even when it is
+    // unreferenced -- an in-flight compaction's mapper must survive until publish.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/3600, /*do_delete=*/true));
+    EXPECT_TRUE(file_exist(orphan_lcrm));
+
+    // Past the expire window, an unreferenced .lcrm is reclaimed as an orphan.
+    ASSERT_OK(datafile_gc(kTestDir, "", /*expired_seconds=*/0, /*do_delete=*/true));
+    EXPECT_FALSE(file_exist(orphan_lcrm));
+}
+
 // Drop tablet local cache evicts active IDG .idx files (vacuum.cpp 1524-1528).
 TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
     constexpr int64_t kTabletId = 8003;
@@ -5785,7 +5857,106 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
+// The reported data loss: a reshard-consumed tablet whose own metadata has already been vacuumed away
+// keeps only a txn log, so BE cannot tell it was range-distributed and used to delete the data files that
+// log references -- files the split children are still reading. FE knows from the table definition and
+// says so, which is what has to stop the deletion now.
 // NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_keeps_txnlog_data_when_fe_says_range) {
+    const std::string shared = "00000000011259e4_33dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared);
+
+    // Tablet 900 has NO metadata left -- only a lingering split txn log referencing the shared file.
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 7000,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {"filename": "00000000011259e4_33dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}
+                    ]
+                }
+            }
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    request.set_is_range_distribution(true);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // The data file survives; the txn log itself belongs to the dropped tablet and goes.
+    EXPECT_TRUE(file_exist(shared));
+    EXPECT_FALSE(file_exist(txn_log_filename(900, 7000)));
+}
+
+// Same shape, but the table is not range-distributed: the data must still be deleted, so the new flag
+// cannot be a blanket "keep everything".
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_deletes_txnlog_data_when_fe_says_not_range) {
+    const std::string owned = "00000000011459e4_77dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(owned);
+
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 900,
+            "txn_id": 7001,
+            "op_write": {
+                "rowset": {
+                    "segment_metas": [
+                        {"filename": "00000000011459e4_77dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}
+                    ]
+                }
+            }
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    request.set_is_range_distribution(false);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_FALSE(file_exist(owned));
+    EXPECT_FALSE(file_exist(txn_log_filename(900, 7001)));
+}
+
+// An older FE does not send the field at all. BE then falls back to what it did before: the answer comes
+// from the dropped tablet's own metadata, and a tablet that still carries a range keeps its data.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_absent_flag_falls_back_to_metadata) {
+    const std::string shared = "00000000011559e4_88dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    create_data_file(shared);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 2,
+            "range": {},
+            "rowsets": [
+                {"segment_metas": [{"filename": "00000000011559e4_88dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"}]}
+            ]
+        }
+        )DEL")));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(900);
+    // is_range_distribution deliberately not set.
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_TRUE(file_exist(shared));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(900, 2)));
+}
+
 TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_metadata_data_files) {
     // Simulate deleting old range distribution tablets after tablet split.
     // The latest metadata contains data files (segments, delvecs, sstables, del files, dcg files)

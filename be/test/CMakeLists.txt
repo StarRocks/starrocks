@@ -1,6 +1,7 @@
 add_subdirectory(testutil)
 
 set(EXEC_FILES
+        ./exec/aggregator_limited_mem_state_test.cpp
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
@@ -29,6 +30,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
@@ -38,6 +40,8 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -116,6 +120,7 @@ set(EXEC_FILES
         ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
@@ -128,16 +133,14 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
-        ./runtime/batch_write/batch_write_mgr_test.cpp
-        ./runtime/batch_write/batch_write_util_test.cpp
-        ./runtime/batch_write/isomorphic_batch_write_test.cpp
-        ./runtime/batch_write/txn_state_cache_test.cpp
         ./compute_env/load/stream_load_context_handle_test.cpp
         #./orchestration/routine_load_task_executor_test.cpp
         ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
+        ./storage/seek_tuple_test.cpp
+        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -366,6 +369,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
@@ -382,6 +386,7 @@ SET(DW_TEST_FILES
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp

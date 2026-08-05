@@ -24,6 +24,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.DmlType;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.PartitionCommitInfo;
@@ -166,6 +167,11 @@ public class LoadJobMVListener implements LoadJobListener {
             }
             // It's fine to no lock here, since it's not a critical operation and can be retried.
             if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
+                if (!materializedView.isActive()
+                        && MVActiveChecker.isNonAutoActivatableReason(materializedView.getInactiveReason())) {
+                    // Won't self-heal via retry; skip instead of resubmitting a doomed refresh on every write.
+                    continue;
+                }
                 LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
                         materializedView.getName());

@@ -91,6 +91,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：プランフラグメントを送信する前に BRPC TalkTimeoutController に適用されるタイムアウト (ミリ秒単位)。`BackendServiceClient.sendPlanFragmentAsync` は、バックエンド `execPlanFragmentAsync` を呼び出す前にこの値を設定します。これは、BRPC がアイドル接続を接続プールから借りる際や送信を実行する際に待機する期間を管理します。超過した場合、RPC は失敗し、メソッドの再試行ロジックをトリガーする可能性があります。競合時に迅速に失敗させるにはこれを低く設定し、一時的なプール枯渇や低速ネットワークを許容するには高く設定します。注意: 非常に大きな値は、失敗検出を遅延させ、要求スレッドをブロックする可能性があります。
 - 導入時期：v3.3.11, v3.4.1, v3.5.0
 
+### `connector_table_analyze_scan_bytes_cap`
+
+- デフォルト：2147483648（2 GB）
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における主要なスキャンごとのバイト予算です。(パーティション, 列) ごとの各統計スキャンは、開いた split のバイトサイズを累積し、この予算に達すると早期に停止します（ソフト上限：最後の split は予算を超過する場合があります）。これにより、過大な単一パーティションや非パーティションテーブルは、失敗やタイムアウトの代わりに、上限付きの劣化サンプルとして収集されます。`0` 以下の値はこの次元が無制限であることを意味します。1 パーティションは列ごとに独立したスキャンを実行するため、収集する列数に合わせて調整してください。このパラメータと `connector_table_analyze_scan_files_cap`、`connector_table_analyze_scan_rows_cap` をすべて `0` 以下に設定すると、上限付きコスト収集が完全に無効化され、フルスキャンにフォールバックします。`ANALYZE TABLE ... PROPERTIES("scan_bytes_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
+### `connector_table_analyze_scan_files_cap`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における副次的なスキャンごとのファイル数予算です。統計スキャンは、この数のファイルを開いた時点で早期に停止し、非常に多数の小さなファイルで構成されるパーティションの収集コストを抑えます。`0` 以下の値はこの次元が無制限であることを意味します。`ANALYZE TABLE ... PROPERTIES("scan_files_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
+### `connector_table_analyze_scan_rows_cap`
+
+- デフォルト：10000000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：外部テーブル（Iceberg）の統計情報収集における補助的なスキャンごとの推定行数予算です。統計スキャンは、スキャンした推定行数がこの予算に達した時点で早期に停止します。split ごとの行数は推定しかできない（レコード数はファイル単位で記録され、split 単位ではない）ため、これは主要な制御ではなく補助的なソフト予算です。デフォルト値は `connector_table_query_trigger_analyze_small_table_rows` と揃えられています。`0` 以下の値はこの次元が無制限であることを意味します。`ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` によりステートメント単位で上書きできます。
+- 導入時期：v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - デフォルト：12 * 3600
@@ -450,6 +477,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：統計情報を同期的に待機するタイムアウト（`enable_sync_statistics_load` が有効な場合）。この時間内に統計情報が利用できない場合、クエリは統計情報なしで処理を進めますが、最適でないプランになる可能性があります。クラスターのパフォーマンスとワークロードの特性に基づいて、この値を適切な時間に設定してください。
 - 導入時期：-
 
+### `sync_statistics_load_per_query_budget_ms`
+
+- デフォルト：-1
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：`enable_sync_statistics_load` が有効な場合に、1 つのクエリが統計情報を同期的に待機する合計予算。`-1` は `sync_statistics_load_timeout_ms` を合計予算として使用します。`0` は統計情報の同期待機を無効にします。正の値は明示的な合計予算を設定します。個々の統計情報待機は引き続き `sync_statistics_load_timeout_ms` によって制限され、予算を使い切ると、クエリは利用できない統計情報なしで処理を続行します。
+- 導入時期：-
+
 ### `enable_udf`
 
 - デフォルト：false
@@ -672,11 +708,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- デフォルト：MAX
+- デフォルト：PBE
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は、MBE (メモリベース)、PBE (並行性ベース)、MAX (MBE と PBE の最大値を取る)、MIN (MBE と PBE の最小値を取る) です。MBE は、予測されたメモリまたは計画コストをスロットあたりのメモリターゲットで割ってスロットを推定し、`totalSlots` で上限が設定されます。PBE は、フラグメントの並行性 (スキャン範囲のカウントまたはカーディナリティ / スロットあたりの行数) と CPU コストベースの計算 (スロットあたりの CPU コストを使用) からスロットを導出し、結果を [numSlots/2, numSlots] の範囲内に制限します。MAX と MIN は、MBE と PBE の最大値または最小値を取ることによってそれらを結合します。設定された値が無効な場合、デフォルト (`MAX`) が使用されます。
+- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は `PBE` (並行性ベース、デフォルト)、`MBE` (メモリコストベース)、`CBE` (CPU コストベース) です。PBE はスキャン並行性(ワーカー数を上限)からクエリのスロットを推定します。OLAP テーブルでは剪定後に残ったスキャン範囲数を使うため、非常に小さいクエリのみワーカー数を下回ります。connector/外部スキャンは単一スロットではなくフルパラレルスキャン(ワーカー数)として扱われます。MBE はクエリのメモリコストを `query_queue_v2_mem_bytes_per_slot` で割ってスロットを推定します。CBE は計画 CPU コストを `query_queue_v2_cpu_costs_per_slot` で割ってスロットを推定します。MBE と CBE のクエリごとのスロットは、さらに `number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。後方互換性のため、レガシー値 `MAX` と `MIN` は引き続き受け入れられ、デフォルトの推定器として扱われます。それ以外の値は構成検証で拒否されます。
 - 導入時期：v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -685,7 +721,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：システムの総クエリスロットを計算する際に使用される論理的な並行性「レイヤー」の数を制御します。Shared-nothing モードでは、総スロット = `query_queue_v2_concurrency_level` * BE の数 * BE ごとのコア数 (BackendResourceStat から派生)。マルチウェアハウスモードでは、実効並行性は max(1, `query_queue_v2_concurrency_level` / 4) にスケーリングされます。設定値が非正の場合、`4` として扱われます。この値を変更すると、totalSlots (したがって同時クエリ容量) が増減し、スロットごとのリソースに影響します。memBytesPerSlot はワーカーごとのメモリを (ワーカーごとのコア数 * 並行性) で割って導出され、CPU アカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスターサイズに比例して設定してください。非常に大きな値はスロットごとのメモリを減らし、リソースの断片化を引き起こす可能性があります。
+- 説明：デフォルトレベル `4` を基準とした容量レベルとして解釈されます。デフォルト (PBE) および CPU コストベース (CBE) の推定器では、システムの総クエリスロットは `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)` (BackendResourceStat から派生) として計算されます。メモリコストベース (MBE) の推定器では、総スロットは代わりにウェアハウスのメモリ予算から導出されます。設定値が非正の場合、`4` として扱われます。totalSlots は少なくとも `number_of_workers` になるようにクランプされます。この値を増やすと totalSlots (したがって同時クエリ容量) が増加します。デフォルト `4` では、総容量は `number_of_workers * cores_per_worker` に等しくなります。クラスターに必要な並行性に比例して設定してください。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -694,8 +730,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：planner CPU cost units
 - 変更可能：Yes
-- 説明：プランナー CPU コストからクエリが必要とするスロット数を推定するために使用されるスロットごとの CPU コストしきい値。スケジューラーは、スロットを整数 (`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) として計算し、結果を [1, totalSlots] の範囲にクランプします (totalSlots はクエリキュー V2 `V2` パラメーターから派生)。V2 コードは非正の設定を 1 に正規化するため (Math.max(1, value))、非正の値は事実上 `1` になります。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。並行性対リソースの粒度を制御するために、`query_queue_v2_num_rows_per_slot` および並行性設定と合わせて調整してください。
+- 説明：CPU コストベースの推定器 (CBE) が計画 CPU コストからクエリの必要スロット数を推定するために使用するスロットごとの CPU コストしきい値。スケジューラーはスロットを `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` として計算し、結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲にクランプします。非正の値は `1` に正規化されます。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：バイト
+- 変更可能：Yes
+- 説明：メモリコストベースの推定器 (MBE) が使用するスロットごとのメモリターゲット。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロットはウェアハウスのメモリ予算から導出され、クエリのスロットはその総メモリコストをこの値で割って推定され、`number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。非正の場合、Query Queue V2 はコアあたりの平均ワーカーメモリを使用します。
+- 導入時期：-
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -703,7 +748,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Rows
 - 変更可能：Yes
-- 説明：クエリごとのスロット数を推定する際に、単一のスケジューリングスロットに割り当てられるターゲットのソース行レコード数。StarRocks は、`estimated_slots` = (ソースノードのカーディナリティ) / `query_queue_v2_num_rows_per_slot` を計算し、その結果を [1, totalSlots] の範囲にクランプし、計算された値が非正の場合は最低 1 を強制します。totalSlots は利用可能なリソース (おおよそ DOP * `query_queue_v2_concurrency_level` * ワーカー/BE の数) から導出され、したがってクラスター/コア数に依存します。この値を増やすと、スロット数が減少し (各スロットがより多くの行を処理)、スケジューリングオーバーヘッドが減少します。減らすと、並行性が増加し (より多くの、より小さいスロット)、リソース制限まで増加します。
+- 説明：Query Queue V2 の既存のシリアライズ / デバッグ出力との後方互換性のために保持されています。PBE、MBE、CBE のスロット推定器では使用されなくなりました。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`
@@ -794,6 +839,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：No
 - 説明：統計キャッシュを更新するために使用されるスレッドプールのサイズ。
+- 導入時期：-
+
+### `enable_statistic_cache_metrics`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：`CachedStatisticStorage` が保持する統計キャッシュ（列、テーブル、パーティション、ヒストグラム、コネクタ、およびマルチカラム統計）で統計記録を有効にするかどうか。
 - 導入時期：-
 
 ### `statistic_collect_interval_sec`
@@ -925,6 +979,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、CREATE TABLE を参照してください。
 - 導入時期：v4.0
+
+### `enable_pipeline_routine_load`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Routine Load タスクをパイプラインエンジンで実行するかどうか。有効にすると、各タスクは割り当てられた BE 上でインプロセス実行されます（その BE が Kafka/Pulsar からデータを消費します）。従来の非パイプラインエンジンではありません。`false`（デフォルト）の場合、Routine Load は従来の実行パスを使用し、動作は従来と同一です。すべての BE ノードがパイプラインロードをサポートするバージョンにアップグレードされた後にのみ有効にしてください。一部の BE が古いバージョンのままで有効にすると、ロードが暗黙的に 0 行でコミットされる可能性があります(古い BE はパイプラインのスキャン範囲を無視します)。
+- 導入時期：-
+
+### `enable_pipeline_stream_load`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：従来の同期 Stream Load を、従来の非パイプラインエンジンではなくパイプラインエンジンで実行するかどうか。`false`（デフォルト）の場合、Stream Load は従来の実行パスを使用し、動作は従来と同一です。（Routine Load には `enable_pipeline_routine_load` を使用してください。）すべての BE ノードがパイプラインロードをサポートするバージョンにアップグレードされた後にのみ有効にしてください。一部の BE が古いバージョンのままで有効にすると、ロードが暗黙的に 0 行でコミットされる可能性があります(古い BE はパイプラインのスキャン範囲を無視します)。
+- 導入時期：-
 
 ### `enable_routine_load_lag_metrics`
 

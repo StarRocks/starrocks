@@ -25,6 +25,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -141,7 +142,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                         mv.getName());
                 // No base-table change means the MV is confirmed fresh as of this run's start.
                 confirmFreshness();
-                return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+                // Every delta here is a point range (from == to): the window records that the
+                // bookmark had caught up with the base table head.
+                recordImvSourceRangesOnTaskRun();
+                // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
+                return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
             }
         }
 
@@ -163,14 +168,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             insertStmt = prepareRefreshPlan();
         }
         recordImvSourceRangesOnTaskRun();
-        return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
+        return ProcessExecPlan.success(mvContext.getExecPlan(), insertStmt);
     }
 
     /**
      * Record the staged TVR version range and snapshot commit times per base table on the task
      * run's extra message, surfaced via information_schema.task_runs.EXTRA_MESSAGE.
-     * Must stay after prepareRefreshPlan(): recording earlier leaves stale ranges on the task
-     * run when the hybrid processor falls back to PCT on an IVM planning failure.
+     * Only call this where IVM planning can no longer fail: a planning failure makes the hybrid
+     * processor fall back to PCT, and a range recorded before that point is left behind stale. So
+     * either after prepareRefreshPlan(), or on the skip path, which returns without planning.
      */
     private void recordImvSourceRangesOnTaskRun() {
         updateTaskRunStatus(status -> {
@@ -284,7 +290,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
             if (isAncestryBrokenError(e)) {
-                throw new SemanticException(formatPartitionShapeChangeError(
+                throw new SemanticException(formatNonAppendOnlyBreakingError(
                         String.format("snapshot ancestry broken for base table %s.%s (%s)",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
                         e);
@@ -294,7 +300,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
-            throw new SemanticException(formatPartitionShapeChangeError(
+            throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("no tvr delta traits found for base table %s.%s",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
@@ -304,7 +310,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
             logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
-            throw new SemanticException(formatPartitionShapeChangeError(
+            throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("tvr delta lineage inconsistent for base table %s.%s "
                                     + "(last delta snapshot %s != max delta snapshot %s)",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName(),
@@ -313,7 +319,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
-                    throw new SemanticException(formatPartitionShapeChangeError(
+                    throw new SemanticException(formatNonAppendOnlyBreakingError(
                             String.format("non-append-only change on base table %s.%s (delta: %s)",
                                     baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
                 } else {
@@ -337,13 +343,13 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return message != null && message.contains("is not a parent ancestor");
     }
 
-    private String formatPartitionShapeChangeError(String reasonFragment) {
+    private String formatNonAppendOnlyBreakingError(String reasonFragment) {
         return String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "
-                        + "INCREMENTAL materialized views do not support partition-shape changes "
+                        + "INCREMENTAL materialized views %s "
                         + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
                         + "Drop and recreate the materialized view to recover.",
-                mv.getName(), reasonFragment);
+                mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,
@@ -498,6 +504,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             long processStartTime = mvContext.getStatus().getProcessStartTime();
             newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
         // warehouse
@@ -587,8 +594,17 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-                mvContext.setExecPlan(execPlan);
+                boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
+                try {
+                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
+                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
+                    // required by the rewrite.
+                    ctx.setBypassAuthorizerCheck(true);
+                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                    mvContext.setExecPlan(execPlan);
+                } finally {
+                    ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
+                }
             }
             return insertStmt;
         } finally {

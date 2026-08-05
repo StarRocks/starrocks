@@ -7,6 +7,12 @@ description: "在 Ubuntu 操作系统上编译 StarRocks 源代码。"
 
 本文介绍如何基于 Ubuntu 操作系统编译 StarRocks。StarRocks 支持基于 x86_64 和 AArch64 架构编译。
 
+:::note
+
+StarRocks v4.1 及更早版本请基于 Ubuntu 22.04 编译，v4.2 及更高版本请基于 Ubuntu 24.04 编译。
+
+:::
+
 ## 前提条件
 
 ### 安装依赖

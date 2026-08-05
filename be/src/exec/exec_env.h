@@ -59,7 +59,6 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
-class BatchWriteMgr;
 class ProcessMetricsRegistry;
 class StorageEngine;
 class TableMetricsManager;
@@ -129,8 +128,6 @@ public:
     BaseLoadPathMgr* load_path_mgr();
     LoadStreamMgr* load_stream_mgr();
     StreamContextMgr* stream_context_mgr();
-    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
-
     const ExecutionEnv& execution_services() const { return _execution_services; }
     const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
@@ -175,8 +172,6 @@ private:
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     ComputeEnv* _compute_env = nullptr;
     std::unique_ptr<SchemaScannerFactory> _schema_scanner_factory;
-
-    BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 

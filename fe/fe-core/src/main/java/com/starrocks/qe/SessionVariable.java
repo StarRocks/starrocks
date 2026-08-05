@@ -421,6 +421,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
             "lake_tablet_internal_parallel_skew_split_ratio";
 
+    public static final String ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN =
+            "enable_lake_prepared_split_on_dup_table_scan";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -708,6 +711,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_META_COLLECT_PARALLEL = "statistic_meta_collect_parallel";
 
+    // Bounded-cost external-table statistics-scan budgets. Set by the external ANALYZE job (from Config or
+    // ANALYZE ... PROPERTIES) and read by IcebergScanNode when building connector scan params; INVISIBLE
+    // because they are an internal transport channel, not a user-tunable knob.
+    public static final String EXTERNAL_STATS_SCAN_BYTES_CAP = "external_stats_scan_bytes_cap";
+    public static final String EXTERNAL_STATS_SCAN_FILES_CAP = "external_stats_scan_files_cap";
+    public static final String EXTERNAL_STATS_SCAN_ROWS_CAP = "external_stats_scan_rows_cap";
+
     public static final String ENABLE_ANALYZE_PHASE_PRUNE_COLUMNS = "enable_analyze_phase_prune_columns";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
@@ -986,6 +996,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FORCE_GROUP_BY_SKEW_ELIMINATE_WHEN_SKEWED =
             "enable_force_group_by_skew_eliminate_when_skewed";
     public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
+    public static final String ENABLE_WINDOW_SKEW_MERGE_SORT = "enable_window_skew_merge_sort";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -1344,6 +1355,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // already reaches pipeline_dop. Only affects enable_lake_prepared_physical_split_scan.
     @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
     private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
+
+    // When false (default), a lake table scanned by >=2 scan operators in the same query (self-join /
+    // multi-scan) does NOT use the prepared-physical-split scan: its per-scan reuse of a shared prepared
+    // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
+    private boolean enableLakePreparedSplitOnDupTableScan = false;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -2123,6 +2140,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticCollectParallelism = 1;
+
+    // Bounded-cost external-table statistics-scan budgets (see design 2.4). <= 0 means the dimension is
+    // unlimited; all three <= 0 disables early stop, so a plain query never inherits a budget by accident.
+    @VarAttr(name = EXTERNAL_STATS_SCAN_BYTES_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanBytesCap = -1;
+
+    @VarAttr(name = EXTERNAL_STATS_SCAN_FILES_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanFilesCap = -1;
+
+    @VarAttr(name = EXTERNAL_STATS_SCAN_ROWS_CAP, flag = VariableMgr.INVISIBLE)
+    private long externalStatsScanRowsCap = -1;
 
     @VarAttr(name = STATISTIC_META_COLLECT_PARALLEL, flag = VariableMgr.INVISIBLE)
     private int statisticMetaCollectParallelism = 10;
@@ -3113,6 +3141,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
     private boolean enableSplitWindowSkewToUnion = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_WINDOW_SKEW_MERGE_SORT, flag = VariableMgr.INVISIBLE)
+    private boolean enableWindowSkewMergeSort = false;
+
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
@@ -3734,6 +3765,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
     }
 
+    public boolean isEnableWindowSkewMergeSort() {
+        return enableWindowSkewMergeSort;
+    }
+
+    public void setEnableWindowSkewMergeSort(boolean enableWindowSkewMergeSort) {
+        this.enableWindowSkewMergeSort = enableWindowSkewMergeSort;
+    }
+
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
@@ -3914,6 +3953,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setStatisticCollectParallelism(int parallelism) {
         this.statisticCollectParallelism = parallelism;
+    }
+
+    public long getExternalStatsScanBytesCap() {
+        return externalStatsScanBytesCap;
+    }
+
+    public void setExternalStatsScanBytesCap(long externalStatsScanBytesCap) {
+        this.externalStatsScanBytesCap = externalStatsScanBytesCap;
+    }
+
+    public long getExternalStatsScanFilesCap() {
+        return externalStatsScanFilesCap;
+    }
+
+    public void setExternalStatsScanFilesCap(long externalStatsScanFilesCap) {
+        this.externalStatsScanFilesCap = externalStatsScanFilesCap;
+    }
+
+    public long getExternalStatsScanRowsCap() {
+        return externalStatsScanRowsCap;
+    }
+
+    public void setExternalStatsScanRowsCap(long externalStatsScanRowsCap) {
+        this.externalStatsScanRowsCap = externalStatsScanRowsCap;
     }
 
     public int getStatisticMetaCollectParallelism() {
@@ -4786,6 +4849,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return lakeTabletInternalParallelSkewSplitRatio;
     }
 
+    public boolean isEnableLakePreparedSplitOnDupTableScan() {
+        return enableLakePreparedSplitOnDupTableScan;
+    }
+
+    public void setEnableLakePreparedSplitOnDupTableScan(boolean enableLakePreparedSplitOnDupTableScan) {
+        this.enableLakePreparedSplitOnDupTableScan = enableLakePreparedSplitOnDupTableScan;
+    }
+
     public void setLakeTabletInternalParallelSkewSplitRatio(double ratio) {
         // The BE multiplies the per-driver ideal share by this ratio to decide has_skewed_big_tablet;
         // a non-positive value would flag every sufficiently large tablet as skewed (over-splitting),
@@ -4866,10 +4937,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
-    // TODO(murphy) support this variable
-    // It's always false since version 3.5, due to incompatibility with event-based scheduling
+    // Shared scan was hard-disabled in 3.5 (#63543) because the shared round-robin chunk
+    // buffer could drop driver wakeups under event-based scheduling: a chunk produced by one
+    // scan driver lands in a sibling driver's buffer slot, but only the producer's own
+    // observer was notified, so the slot owner could hang. The BE scan operators now notify
+    // all sibling drivers whenever shared scan is active (see {Olap,Connector}ScanOperator::
+    // need_notify_all), making shared scan compatible with event scheduling again. Honor the
+    // session variable. (Query cache still forces shared scan off in the BE; see
+    // fragment_executor.cpp.)
     public boolean isEnableSharedScan() {
-        return false;
+        return enableSharedScan;
     }
 
     public int getResourceGroupId() {

@@ -46,6 +46,7 @@
 namespace starrocks {
 
 class ExecEnv;
+class BatchWriteMgr;
 class Status;
 class StreamLoadContext;
 class StreamLoadExecutor;
@@ -58,7 +59,8 @@ class StreamLoadOrchestrator;
 class StreamLoadAction : public HttpHandler {
 public:
     StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
-                     StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter);
+                     StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter,
+                     BatchWriteMgr* batch_write_mgr = nullptr);
     ~StreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -87,6 +89,7 @@ private:
     ExecEnv* _exec_env;
     orchestration::StreamLoadOrchestrator* _stream_load_orchestrator;
     StreamLoadExecutor* _stream_load_executor;
+    BatchWriteMgr* _batch_write_mgr;
     ConcurrentLimiter* _http_concurrent_limiter = nullptr;
 };
 

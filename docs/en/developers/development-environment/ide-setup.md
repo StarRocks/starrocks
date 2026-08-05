@@ -67,7 +67,7 @@ export JAVA_HOME=xxxxx
 export PYTHON=/usr/bin/python3
 ```
 
-### Ubuntu22 server setup
+### Ubuntu server setup
 
 #### Clone StarRocks code
 

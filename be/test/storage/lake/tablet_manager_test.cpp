@@ -1136,6 +1136,70 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
+// skip_meta_cache=true must distinguish "durably persisted" from "only in the
+// metacache": a version whose metadata was cached (e.g. during an aggregate
+// publish) but never durably written reads as NotFound.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+
+    // Cache-only: present in the metacache, no durable file.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, metadata);
+
+    // A cache-hitting read sees it...
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    EXPECT_TRUE(res.ok());
+
+    // ...but a skip_meta_cache read reports NotFound.
+    lake::CacheOptions skip_cache_opts{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true};
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+
+    // Same contract on the single-tablet (bundle) read path.
+    res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// With a durable copy present, skip_meta_cache reads it from storage (not the
+// cached copy) and, with fill_meta_cache=true, refreshes the cache with it.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_reads_durable) {
+    constexpr int64_t kDurableCommitTime = 100;
+    constexpr int64_t kStaleCommitTime = 999999;
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    metadata->set_commit_time(kDurableCommitTime);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    // Overwrite the cache entry with a deliberately-different stale copy.
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+    auto stale = std::make_shared<TabletMetadata>(*metadata);
+    stale->set_commit_time(kStaleCommitTime);
+    _tablet_manager->metacache()->cache_tablet_metadata(path, stale);
+
+    // A cache-hitting read returns the stale copy.
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kStaleCommitTime, res.value()->commit_time());
+
+    // skip_meta_cache returns the durable copy...
+    res = _tablet_manager->get_tablet_metadata(
+            tablet_id, 2,
+            lake::CacheOptions{.fill_meta_cache = true, .fill_data_cache = true, .skip_meta_cache = true});
+    ASSERT_TRUE(res.ok());
+    EXPECT_EQ(kDurableCommitTime, res.value()->commit_time());
+
+    // ...and fill_meta_cache=true refreshed the cache with it.
+    auto cached = _tablet_manager->metacache()->lookup_tablet_metadata(path);
+    ASSERT_TRUE(cached != nullptr);
+    EXPECT_EQ(kDurableCommitTime, cached->commit_time());
+}
+
 TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     // Create a corrupted bundle metadata file with bundle_metadata_size = 0
     std::string serialized_string;
@@ -1146,6 +1210,78 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
     EXPECT_FALSE(res.ok());
     EXPECT_TRUE(res.status().is_corruption());
+}
+
+// The bundle file is the complete metadata of one version and is written with truncate semantics,
+// so persisting a map that is short a tablet corrupts that version permanently: FE makes it
+// visible, and every later publish must read exactly that version as its base, so no retry can
+// ever repair it. Refuse the write instead; the version stays unpublished and the publish is
+// retryable.
+TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_rejects_incomplete_bundle) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    const int64_t t1 = next_id();
+    const int64_t t2 = next_id();
+    const int64_t t3 = next_id();
+    const std::set<int64_t> expected{t1, t2, t3};
+
+    auto make_meta = [&](int64_t tablet_id) {
+        TabletMetadataPB meta;
+        meta.set_id(tablet_id);
+        meta.set_version(2);
+        meta.mutable_schema()->CopyFrom(schema_pb);
+        return meta;
+    };
+    auto fs = FileSystem::Default();
+    // All three ids live in the same partition directory, so any of them names the same bundle file.
+    auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(t1, 2);
+
+    // Short by one tablet: rejected, and nothing is left on disk.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(t1, make_meta(t1));
+        metadatas.emplace(t2, make_meta(t2));
+        auto st = _tablet_manager->put_bundle_tablet_metadata(metadatas, expected);
+        ASSERT_FALSE(st.ok());
+        EXPECT_TRUE(MatchPattern(st.message(), fmt::format("*missing 1 of 3 tablets*{}*", t3))) << st.message();
+        EXPECT_TRUE(fs->path_exists(bundle_path).is_not_found());
+    }
+
+    // An empty expected set skips the check: callers that cannot state the tablet set up front still
+    // get their bundle written.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(t1, make_meta(t1));
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+        EXPECT_TRUE(fs->path_exists(bundle_path).ok());
+        ASSERT_OK(fs->delete_file(bundle_path));
+        _tablet_manager->metacache()->prune();
+    }
+
+    // Complete: written, and every expected tablet is readable at that version.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        for (int64_t tablet_id : expected) {
+            metadatas.emplace(tablet_id, make_meta(tablet_id));
+        }
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas, expected));
+        EXPECT_TRUE(fs->path_exists(bundle_path).ok());
+        for (int64_t tablet_id : expected) {
+            ASSIGN_OR_ABORT(auto metadata, _tablet_manager->get_single_tablet_metadata(tablet_id, 2));
+            EXPECT_EQ(tablet_id, metadata->id());
+            EXPECT_EQ(2, metadata->version());
+        }
+    }
 }
 
 // Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas

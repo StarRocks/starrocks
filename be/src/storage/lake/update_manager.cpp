@@ -412,7 +412,29 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         rowset_segment_ids.push_back(global_segment_id);
         uint32_t rssid = rowset_id + global_segment_id;
         new_rowset_rssids.insert(rssid);
-        new_deletes[rssid] = {};
+        // Seed this segment's deletes with the unsort SST writer's per-segment dedup losers
+        // (separate-sort-key PK), if any. The unsort writer already resolved duplicate primary keys
+        // within the segment (the SST points at the winner); the losing rows remain in the segment and
+        // must be masked by its delete vector. The index update below appends historical-duplicate
+        // deletes on top via push_back, so this seed is preserved. Absent/empty (the sort-key==PK path,
+        // or a pre-feature writer) -> the legacy empty init below, i.e. no behavior change.
+        if (local_id < op_write.seg_delvecs_size() && !op_write.seg_delvecs(local_id).data().empty()) {
+            const auto& seg_delvec_pb = op_write.seg_delvecs(local_id);
+            DelVector writer_dv;
+            RETURN_IF_ERROR(
+                    writer_dv.load(metadata->version(), seg_delvec_pb.data().data(), seg_delvec_pb.data().size()));
+            auto& seg_deletes = new_deletes[rssid];
+            // A serialized *empty* DelVector has non-empty bytes but loads to a null roaring (empty()),
+            // so guard before dereferencing: an empty entry (a no-loser segment) is treated as empty,
+            // not a null deref. The index update below still appends historical-duplicate deletes.
+            if (!writer_dv.empty()) {
+                for (const auto rowid : *writer_dv.roaring()) {
+                    seg_deletes.push_back(rowid);
+                }
+            }
+        } else {
+            new_deletes[rssid] = {};
+        }
     }
     // A delete file's rssid is `rowset_id + op_offset`, where op_offset is the in-transaction segment
     // index the delete logically follows (delete sorts after that segment via the reserved UINT32_MAX
@@ -618,8 +640,26 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     size_t new_del = 0;
     size_t total_del = 0;
     std::map<uint32_t, size_t> segment_id_to_add_dels;
+    // Separate-sort-key spill (the unsort SST writer, signalled by op_write.seg_delvecs) is the only
+    // path that can leave duplicate primary keys in one incoming segment: the writer dedups the PK
+    // INDEX (SST points at the winner), but the segment DATA file still physically holds the loser
+    // rows -- they are only masked by a delete vector, not removed. A read-only index lookup over that
+    // segment's PK column (duplicates included) can push a historical rowid into new_deletes once per
+    // occurrence, so cur_add (the raw vector size) would exceed the deduplicated bitmap cardinality and
+    // trip the "cur_old + cur_add != cur_new" consistency check below. Deduplicate the rowids here so
+    // the count matches the bitmap; the delvec content is unchanged (a roaring bitmap dedups anyway).
+    // Gated on the load carrying any seg_delvecs at all: the common sort-key==PK path (and any
+    // pre-feature writer) emits none, so seg_delvecs_size() == 0 and this stays a no-op -- unchanged
+    // behavior. (When seg_delvecs are present, deduping every entry is harmless: the new-segment entries
+    // come from a roaring bitmap and are already unique.)
+    const bool dedupe_new_deletes = op_write.seg_delvecs_size() > 0;
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
+        if (dedupe_new_deletes) {
+            auto& del_ids = new_delete.second;
+            std::sort(del_ids.begin(), del_ids.end());
+            del_ids.erase(std::unique(del_ids.begin(), del_ids.end()), del_ids.end());
+        }
         if (new_rowset_rssids.contains(rssid)) {
             // it's newly added rowset's segment, do not have latest delvec yet
             new_del_vecs[idx].first = rssid;
@@ -940,6 +980,14 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     // premature deletion by vacuum on sibling split tablets.
     for (const auto& del_meta : op_write.dels_meta()) {
         new_rows_op.add_dels_meta()->CopyFrom(del_meta);
+    }
+    // Carry the per-del tombstone count (parallel to dels_meta) so column-upsert / partial-update
+    // delete-heavy loads still contribute their tombstone rows to need_rebuild_counts()'s
+    // rebuild-rows threshold. Unlike del_op_offsets (dropped below because column mode re-derives
+    // delete ordering), the count is path-independent and dels_meta was copied 1:1 just above, so
+    // the parallel array is copied verbatim. An absent array (size 0) stays absent, counting as 0.
+    for (int del_id = 0; del_id < op_write.del_num_rows_size(); ++del_id) {
+        new_rows_op.add_del_num_rows(op_write.del_num_rows(del_id));
     }
     // Column-upsert mode applies these deletes after all synthesized new-row segments
     // (new_del_rebuild_rssid below), not interleaved by op_offset. new_rows_op intentionally carries
@@ -2034,10 +2082,13 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
             metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
             &segment_id_to_add_dels, &delvecs);
-    if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
-        RETURN_IF_ERROR(resolver->execute_without_update_index());
-    } else {
-        RETURN_IF_ERROR(resolver->execute());
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
+        if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            RETURN_IF_ERROR(resolver->execute_without_update_index());
+        } else {
+            RETURN_IF_ERROR(resolver->execute());
+        }
     }
     // A lost output segment (experimental_lake_ignore_lost_segment) has no data and its SST must not be
     // ingested, otherwise the PK index would reference an rssid that scans skip. The resolver reports
@@ -2065,10 +2116,14 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                          delvec_page_pb, delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
-    // 5. update TabletMeta
+    // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total)
     RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    {
+        // index.apply_opcompaction opens the output index sstable(s) (footer + bloom filter), so it can do I/O.
+        TRACE_COUNTER_SCOPE_LATENCY_US("index_apply_opcompaction_us");
+        RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    }
 
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);

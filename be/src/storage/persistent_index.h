@@ -352,8 +352,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    // |check_l1_key_sizes|: a set of key size need to be checked in l1.
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& check_l1_key_sizes);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values);
 
     // batch erase(delete)
     // |n|: size of key/value array
@@ -452,8 +451,9 @@ public:
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
                size_t key_size, IOStat* stat = nullptr);
 
-    // batch check key existence
-    Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
+    // batch check that none of |keys| already exist in this immutable index. Keys are grouped
+    // internally by the index's own shard layout (_shard_info_by_length)
+    Status check_not_exist(size_t n, const Slice* keys);
 
     // get Immutable index file size;
     uint64_t file_size() {

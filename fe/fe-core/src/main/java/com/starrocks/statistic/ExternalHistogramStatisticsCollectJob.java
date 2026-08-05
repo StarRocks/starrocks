@@ -48,6 +48,15 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
                     " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
+    // For char-family columns we skip the histogram() bucket aggregate, but we still need
+    // Histogram.getTotalRows() to reflect the column's real cardinality. So instead of storing
+    // NULL buckets we store a single placeholder bucket that represents "all values excluding
+    // the MCVs".
+    private static final String COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE =
+            "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
+                    " $bucketExpr, $mcv, NOW()" +
+                    " FROM `$catalogName`.`$dbName`.`$tableName`";
+
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), " +
                     "cast(column_key as varchar), cast(column_value as varchar) from (" +
@@ -148,10 +157,6 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
 
-        context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Config.histogram_max_sample_row_count);
-
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
             mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
@@ -163,6 +168,27 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
 
+        putMcvExclude(context, mostCommonValues, quoteColumName, columnType);
+
+        if (shouldSkipHistogramBuckets(columnType)) {
+            long mcvSum = mostCommonValues.values().stream().mapToLong(Long::parseLong).sum();
+            context.put("bucketExpr",
+                    "concat('[[\"Infinity\",\"Infinity\",', cast(greatest(0, count(" + quoteColumName +
+                            ") - " + mcvSum + ") as varchar), ',0]]')");
+            builder.append(build(context, COLLECT_DEFAULT_BUCKET_STATISTIC_TEMPLATE));
+            return builder.toString();
+        }
+
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
+
+        builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
+        return builder.toString();
+    }
+
+    private void putMcvExclude(VelocityContext context, Map<String, String> mostCommonValues, String quoteColumName,
+                               Type columnType) {
         if (!mostCommonValues.isEmpty()) {
             if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
                 context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
@@ -174,8 +200,5 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         } else {
             context.put("MCVExclude", "");
         }
-
-        builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
-        return builder.toString();
     }
 }

@@ -525,6 +525,10 @@ public class StatisticUtils {
         return columns;
     }
 
+    public static boolean isUnsupportedHistogramColumnType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
+    }
+
     public static double multiplyRowCount(double left, double right) {
         left = Math.min(left, StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT);
         right = Math.min(right, StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT);

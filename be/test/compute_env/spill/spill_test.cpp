@@ -295,7 +295,7 @@ StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState*
     //
     if (!order_bys.empty()) {
         RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state));
         RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
     }
 
@@ -1181,7 +1181,7 @@ TEST_F(SpillTest, file_group_test) {
     auto order_bys = order_by_slots_builder.get_res();
 
     ASSERT_OK(sort_exprs.init(order_bys, nullptr, &pool, &dummy_rt_st));
-    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st, {}, {}));
+    ASSERT_OK(sort_exprs.prepare(&dummy_rt_st));
     ASSERT_OK(sort_exprs.open(&dummy_rt_st));
 
     SortDescs descs = SortDescs::asc_null_first(1);

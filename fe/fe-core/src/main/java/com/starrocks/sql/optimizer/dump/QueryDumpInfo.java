@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.dump;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
@@ -28,7 +29,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,11 +56,32 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
     private final Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    // dbName.tableName -> columnName -> low-cardinality global dictionary captured for the query. Keyed by name
+    // (not the numeric column id) so it survives replay, where the table is recreated with a new id.
+    private final Map<String, Map<String, ColumnDict>> tableGlobalDictMap = new HashMap<>();
+    // dbName.tableName -> columnName -> column min/max captured for the query. Same name-keying rationale as
+    // tableGlobalDictMap. Drives the meta-scan / group-by-compressed-key rewrites on replay.
+    private final Map<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> tableColumnMinMaxMap = new HashMap<>();
     // tableName->representative partition values (one tuple per concrete partition). Only populated for tables
     // whose CREATE TABLE omits partition definitions (automatic/expression partitioning), so replay can
     // recreate those partitions and match the per-partition row counts. Each inner list is one partition's
     // value tuple (a single element for single-column partitioning).
     private final Map<String, List<List<String>>> tableToAutomaticPartitionValues = new HashMap<>();
+    // db.table -> external catalog name, captured for connector (iceberg/hive/...) tables so replay can
+    // recreate the real external catalog directly instead of inferring it from the "resource" DDL property or
+    // the catalog.db.table references in the SQL. Only emitted by newer dumps; absent for older ones (replay
+    // then falls back to recovering the catalog from the SQL, keeping backward compatibility).
+    private final Map<String, String> externalTableCatalogMap = new LinkedHashMap<>();
+    // db.table -> total row count the connector reported for an external table. Iceberg has no other place to
+    // record it (unlike hive's hms scanRowCount), and without it replay falls back to a tiny default that
+    // clamps every column NDV and cardinality. Only emitted by newer dumps.
+    private final Map<String, Long> externalTableRowCountMap = new LinkedHashMap<>();
+    // db.table -> iceberg partition-spec transforms (e.g. "lo_orderdate" for identity, "day(dt)"), so replay
+    // rebuilds a real PartitionSpec instead of an empty (unpartitioned) one.
+    private final Map<String, List<String>> externalTablePartitionSpecMap = new LinkedHashMap<>();
+    // db.table -> iceberg partition names ("col=value"), so replay recreates the partitions and reproduces
+    // partition pruning (partitions=X/Y). Only emitted by newer dumps for partitioned iceberg tables.
+    private final Map<String, List<String>> externalTablePartitionNameMap = new LinkedHashMap<>();
     // tableName->createTableStmt
     private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
@@ -207,6 +231,8 @@ public class QueryDumpInfo implements DumpInfo {
         this.tableMap.clear();
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
+        this.tableGlobalDictMap.clear();
+        this.tableColumnMinMaxMap.clear();
         this.createTableStmtMap.clear();
         this.numCoresPerBe.clear();
         this.numCoresPerWarehouse.clear();
@@ -264,6 +290,45 @@ public class QueryDumpInfo implements DumpInfo {
         tableStatisticsMap.get(tableName).put(column, columnStatistic);
     }
 
+    @Override
+    public void addTableGlobalDict(Table table, String column, ColumnDict columnDict) {
+        addTableGlobalDict(getTableName(table.getId()), column, columnDict);
+    }
+
+    public void addTableGlobalDict(String tableName, String column, ColumnDict columnDict) {
+        tableGlobalDictMap.computeIfAbsent(tableName, k -> new HashMap<>()).put(column, columnDict);
+    }
+
+    public Map<String, Map<String, ColumnDict>> getTableGlobalDictMap() {
+        return tableGlobalDictMap;
+    }
+
+    @Override
+    public void addColumnMinMax(Table table, String column, IMinMaxStatsMgr.ColumnMinMax minMax) {
+        addColumnMinMax(getTableName(table.getId()), column, minMax);
+    }
+
+    public void addColumnMinMax(String tableName, String column, IMinMaxStatsMgr.ColumnMinMax minMax) {
+        tableColumnMinMaxMap.computeIfAbsent(tableName, k -> new HashMap<>()).put(column, minMax);
+    }
+
+    public Map<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> getTableColumnMinMaxMap() {
+        return tableColumnMinMaxMap;
+    }
+
+    // Shared capture entry for the optimizer rules that consume IMinMaxStatsMgr (meta-scan / group-by
+    // compressed-key / monotonic-function rewrites). Records the accepted min/max iff this query is being
+    // dumped -- gated on a real QueryDumpInfo (also covers the failure/virtual dump), inert otherwise.
+    public static void captureColumnMinMax(ConnectContext connectContext, Table table, String column,
+                                           IMinMaxStatsMgr.ColumnMinMax minMax) {
+        // Only internal OLAP tables are supported (replay seeds ColumnMinMaxMgr). External/iceberg min/max
+        // (IcebergColumnMinMaxMgr) is not captured, so a non-OlapTable is skipped here rather than dumped.
+        if (table instanceof OlapTable && connectContext != null
+                && connectContext.getDumpInfo() instanceof QueryDumpInfo dumpInfo) {
+            dumpInfo.addColumnMinMax(table, column, minMax);
+        }
+    }
+
     public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {
         return tableStatisticsMap;
     }
@@ -282,6 +347,44 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<Long, Pair<String, View>> getViewMap() {
         return viewMap;
+    }
+
+    public void addExternalTableCatalog(String dbAndTable, String catalogName) {
+        externalTableCatalogMap.put(dbAndTable, catalogName);
+    }
+
+    public Map<String, String> getExternalTableCatalogMap() {
+        return externalTableCatalogMap;
+    }
+
+    public void addExternalTableRowCount(Table table, long rowCount) {
+        externalTableRowCountMap.put(getTableName(table.getId()), rowCount);
+    }
+
+    public void addExternalTableRowCount(String dbAndTable, long rowCount) {
+        externalTableRowCountMap.put(dbAndTable, rowCount);
+    }
+
+    public Map<String, Long> getExternalTableRowCountMap() {
+        return externalTableRowCountMap;
+    }
+
+    public void addExternalTablePartitions(Table table, List<String> partitionSpec, List<String> partitionNames) {
+        addExternalTablePartitions(getTableName(table.getId()), partitionSpec, partitionNames);
+    }
+
+    public void addExternalTablePartitions(String dbAndTable, List<String> partitionSpec,
+                                           List<String> partitionNames) {
+        externalTablePartitionSpecMap.put(dbAndTable, partitionSpec);
+        externalTablePartitionNameMap.put(dbAndTable, partitionNames);
+    }
+
+    public Map<String, List<String>> getExternalTablePartitionSpecMap() {
+        return externalTablePartitionSpecMap;
+    }
+
+    public Map<String, List<String>> getExternalTablePartitionNameMap() {
+        return externalTablePartitionNameMap;
     }
 
     public Map<String, String> getCreateTableStmtMap() {

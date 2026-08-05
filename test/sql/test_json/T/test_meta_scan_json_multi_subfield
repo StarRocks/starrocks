@@ -1,0 +1,39 @@
+-- name: test_meta_scan_json_multi_subfield
+-- Regression for the meta-scan multi-child access-path crash: a dict_merge([_META_]) meta scan
+-- over >=2 subfields of the SAME json column makes cbo_prune_subfield build one merged multi-child
+-- access path (json_col -> {a, b}). The meta scanner used to feed every access path through
+-- ColumnAccessPath::linear_path(), which assumes a single-child chain and aborted the BE
+-- (column_access_path.cpp: Check failed: iter->_children.size() <= 1) / silently produced a wrong
+-- path in release. The meta scanner must skip non-extended paths (consumed by the reader's leaf
+-- iterator, not the schema), matching extend_schema_by_access_paths(). This is independent of
+-- subfield-name case (json_v2 rewrite is off here), so it isolates the meta-scan fix.
+drop database if exists test_meta_scan_json_multi_subfield;
+create database test_meta_scan_json_multi_subfield;
+use test_meta_scan_json_multi_subfield;
+
+CREATE TABLE t (
+  id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t VALUES
+ (1, parse_json('{"Campaign":"CapA","campaign":"lowa","title":"t1"}')),
+ (2, parse_json('{"Campaign":"CapB","campaign":"lowb","title":"t2"}'));
+
+set cbo_json_v2_rewrite = false;
+set cbo_prune_subfield = true;
+
+-- Two subfields of one json column through a meta scan: previously aborted the BE, must now complete.
+SELECT length(dict_merge(get_json_string(fields, 'Campaign'), 255)) a,
+       length(dict_merge(get_json_string(fields, 'campaign'), 255)) b
+FROM t [_META_];
+
+-- Three subfields (still a multi-child tree): must also complete.
+SELECT length(dict_merge(get_json_string(fields, 'Campaign'), 255)) a,
+       length(dict_merge(get_json_string(fields, 'campaign'), 255)) b,
+       length(dict_merge(get_json_string(fields, 'title'), 255)) c
+FROM t [_META_];
+
+drop database test_meta_scan_json_multi_subfield;

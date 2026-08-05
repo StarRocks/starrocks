@@ -61,6 +61,29 @@ class AbstractSqlSampleSubqueryExecutorTest {
         inOrder.verify(sessionVariable).setQueryTimeoutS(137);
     }
 
+    /**
+     * The sample sub-query must read the BASE index, not a sibling rollup. Both async and sync
+     * MV/rollup rewrite must be disabled, and (like the timeout) applied AFTER the warehouse switch that
+     * re-clones the session variable — otherwise a coarser sibling rollup could be sampled once the
+     * table carries rollups, skewing the tablet boundaries.
+     */
+    @Test
+    void materializedViewRewriteDisabledAfterWarehouseSwitchSoItSurvives() {
+        ConnectContext context = mock(ConnectContext.class);
+        SessionVariable sessionVariable = mock(SessionVariable.class);
+        when(context.getSessionVariable()).thenReturn(sessionVariable);
+        ComputeResource computeResource = mock(ComputeResource.class);
+        when(computeResource.getWarehouseId()).thenReturn(9L);
+
+        AbstractSqlSampleSubqueryExecutor.configureSampleContext(
+                context, computeResource, /*queryTimeoutSeconds=*/ 0);
+
+        InOrder inOrder = inOrder(context, sessionVariable);
+        inOrder.verify(context).setCurrentWarehouseId(9L);
+        inOrder.verify(sessionVariable).setEnableMaterializedViewRewrite(false);
+        inOrder.verify(sessionVariable).setEnableSyncMaterializedViewRewrite(false);
+    }
+
     @Test
     void nonPositiveQueryTimeoutLeavesSessionTimeoutUntouched() {
         ConnectContext context = mock(ConnectContext.class);

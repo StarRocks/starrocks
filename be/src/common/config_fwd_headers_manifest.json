@@ -283,7 +283,8 @@
     {
       "path": "be/src/common/config_thread_fwd.h",
       "configs": [
-        "priority_queue_remaining_tasks_increased_frequency"
+        "priority_queue_remaining_tasks_increased_frequency",
+        "enable_threadpool_catch_task_exception"
       ]
     },
     {
@@ -385,7 +386,8 @@
         "create_child_worker_timeout_ms",
         "report_python_worker_error",
         "python_worker_reuse",
-        "python_worker_expire_time_sec"
+        "python_worker_expire_time_sec",
+        "python_udf_rpc_timeout_ms"
       ]
     },
     {
@@ -496,6 +498,7 @@
         "metric_late_materialization_ratio",
         "pre_aggregate_factor",
         "use_default_dop_when_shared_scan",
+        "shared_scan_output_chunk_batch_size",
         "tablet_internal_parallel_min_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_rows",
         "lake_prepared_split_max_splitted_scan_rows",
@@ -718,6 +721,8 @@
         "lake_enable_compaction_async_write",
         "lake_pk_compaction_max_input_rowsets",
         "lake_pk_compaction_min_input_segments",
+        "lake_pk_compaction_base_delete_ratio_threshold",
+        "lake_pk_compaction_base_delete_rows_threshold",
         "enable_lake_pk_compaction_score_gate",
         "lake_pk_compaction_min_level_score",
         "lake_pk_compaction_min_benefit_cost_ratio",
@@ -740,7 +745,6 @@
         "transaction_apply_worker_idle_time_ms",
         "update_compaction_per_tablet_min_interval_seconds",
         "partial_update_memory_limit_per_worker",
-        "enable_pk_index_eager_build",
         "pk_index_eager_build_threshold_bytes",
         "pk_index_parallel_compaction_threadpool_max_threads",
         "pk_index_parallel_compaction_threadpool_size",
@@ -813,6 +817,8 @@
       "path": "be/src/common/config_rowset_fwd.h",
       "configs": [
         "segment_sort_key_sample_row_interval",
+        "enable_full_sort_key_index",
+        "enable_full_sort_key_index_read",
         "enable_transparent_data_encryption",
         "default_num_rows_per_column_file_block",
         "data_page_size",
@@ -955,6 +961,7 @@
         "pipeline_gcore_timeout_threshold_sec",
         "pipeline_gcore_output_dir",
         "enable_core_file_size_optimization",
+        "process_force_exit_after_crash_handler_hang_second",
         "try_release_resource_before_core_dump",
         "sys_mlock_modules",
         "exception_stack_black_list",

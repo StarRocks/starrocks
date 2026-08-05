@@ -24,8 +24,6 @@
 
 namespace starrocks {
 
-class RowDescriptor;
-
 namespace pipeline {
 
 class ExportSinkIOBuffer;

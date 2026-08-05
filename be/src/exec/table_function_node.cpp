@@ -72,11 +72,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status TableFunctionNode::reset(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::reset(state));
-    return Status::OK();
-}
-
 void TableFunctionNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

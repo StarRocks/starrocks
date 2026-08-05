@@ -90,7 +90,7 @@ private:
     struct RowsetVersionInfo {
         int64_t version;
         bool has_vi;    // true if rowset has vector_index_ids in segment_metas
-        bool processed; // true if work items were created for this version (within batch_limit)
+        bool processed; // true once this version's rowset was handled: work items emitted, or its .vi already existed
     };
     std::vector<RowsetVersionInfo> _rowset_versions;
 };

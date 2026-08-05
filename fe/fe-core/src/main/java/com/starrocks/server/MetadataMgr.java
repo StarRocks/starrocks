@@ -65,6 +65,7 @@ import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
@@ -754,6 +755,73 @@ public class MetadataMgr {
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
+                                         String catalogName,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit,
+                                         TvrVersionRange versionRange) {
+        Statistics statistics = computeTableStatistics(session, catalogName, table, columns, partitionKeys,
+                predicate, limit, versionRange);
+        captureExternalTableStatisticsToDump(session, catalogName, table, statistics);
+        return statistics;
+    }
+
+    // Capture external-table statistics into the query dump at this single choke point -- it covers both the
+    // connector branch and the internal/ANALYZE early-return, iceberg and hive alike -- so replay can feed them
+    // back exactly as internal-table statistics are. Only fires while a dump is being taken.
+    private void captureExternalTableStatisticsToDump(OptimizerContext session, String catalogName, Table table,
+                                                      Statistics statistics) {
+        if (statistics == null || session == null || session.getDumpInfo() == null
+                || CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> e : statistics.getColumnStatistics().entrySet()) {
+            session.getDumpInfo().addTableStatistics(table, e.getKey().getName(), e.getValue());
+        }
+        // Also record the total row count. Iceberg has no hms scanRowCount to carry it, and replay needs it so
+        // column NDVs/cardinality are not clamped by a tiny fallback row count. Zero is a valid finite count
+        // (an empty external table) and must be recorded too, otherwise replay substitutes its nonzero fallback
+        // (100 for iceberg / 1 for hive) and plans an empty table with the wrong cardinality.
+        if (statistics.getOutputRowCount() >= 0 && !Double.isInfinite(statistics.getOutputRowCount())) {
+            session.getDumpInfo().addExternalTableRowCount(table, (long) statistics.getOutputRowCount());
+        }
+        // For a partitioned iceberg table also record its partition spec + names + per-partition counts (hive
+        // captures the same via OptExternalPartitionPruner) so replay can reproduce partition pruning.
+        if (table instanceof IcebergTable && !((IcebergTable) table).isUnPartitioned()) {
+            captureIcebergPartitionsToDump(session, catalogName, (IcebergTable) table);
+        }
+    }
+
+    // Record a partitioned iceberg table's partition spec, partition names, and real per-partition record
+    // counts into the dump. Guarded so a metadata hiccup never fails the query being dumped.
+    private void captureIcebergPartitionsToDump(OptimizerContext session, String catalogName, IcebergTable table) {
+        try {
+            List<String> transforms = table.getPartitionColumnNamesWithTransform();
+            List<String> partitionNames = listPartitionNames(catalogName, table.getCatalogDBName(),
+                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+            session.getDumpInfo().addExternalTablePartitions(table, transforms, partitionNames);
+            // Real per-partition record count (Iceberg $partitions.record_count, no data scan), reusing the
+            // existing table_row_count section, so replay reconstructs each partition's DataFile with its true
+            // row count instead of an even total/partitionCount split. getPartitions returns infos positionally
+            // aligned to partitionNames.
+            List<PartitionInfo> partitions = getPartitions(catalogName, table, partitionNames);
+            for (int i = 0; i < partitionNames.size() && i < partitions.size(); i++) {
+                if (partitions.get(i) instanceof Partition) {
+                    long recordCount = ((Partition) partitions.get(i)).getRecordCount();
+                    if (recordCount > 0) {
+                        session.getDumpInfo().addPartitionRowCount(table, partitionNames.get(i), recordCount);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to capture iceberg partitions for dump: {}.{}",
+                    table.getCatalogDBName(), table.getCatalogTableName(), e);
+        }
+    }
+
+    private Statistics computeTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,

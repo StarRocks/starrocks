@@ -44,8 +44,13 @@ public:
     DISALLOW_COPY(HorizontalPkTabletWriter);
 
     Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override;
+    Status append_pk_index_deletes(const Chunk& data, const std::vector<uint64_t>& rssid_rowids) override;
 
     Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
+
+    Status write_single_flush(const Chunk& data, SegmentPB* segment, bool eos) override;
+
+    Status write_single_flush_with_op(const Chunk& chunk_with_op, SegmentPB* segment, bool eos) override;
 
     Status flush_del_file(const Column& deletes, uint32_t op_offset) override;
 

@@ -15,11 +15,15 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -28,6 +32,7 @@ import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -36,8 +41,11 @@ import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -52,6 +60,8 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @TestMethodOrder(MethodName.class)
 public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase {
@@ -62,6 +72,70 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         starRocksAssert.useDatabase("test");
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
+    }
+
+    @Test
+    public void testExternalAuthorizationDoesNotReplanInternalIvmRefresh() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('refresh_mode' = 'incremental')\n" +
+                "AS SELECT id, count(*) AS row_count " +
+                "FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl);
+        MaterializedView mv = getMv("test_mv1");
+        seedTvrBaselineAtVersionZero(mv);
+
+        String catalog = MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME;
+        AccessControlProvider provider = Authorizer.getInstance();
+        AccessController previousController =
+                provider.catalogToAccessControl.put(catalog, new AllowAllAccessController());
+        try {
+            TaskRun taskRun = buildMVTaskRun(mv, "test");
+            ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
+            String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertContains(plan, "state_union", "TABLE: test_mv1");
+            Assertions.assertFalse(taskRun.getRunCtx().isBypassAuthorizerCheck());
+        } finally {
+            if (previousController == null) {
+                provider.catalogToAccessControl.remove(catalog);
+            } else {
+                provider.catalogToAccessControl.put(catalog, previousController);
+            }
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+    }
+
+    @Test
+    public void testPlannerFailureRestoresInternalAuthorizationBypass() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW `test`.`test_mv1` " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('refresh_mode' = 'incremental')\n" +
+                "AS SELECT id, count(*) AS row_count " +
+                "FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl);
+        MaterializedView mv = getMv("test_mv1");
+        seedTvrBaselineAtVersionZero(mv);
+
+        AtomicBoolean bypassDuringPlanning = new AtomicBoolean();
+        AtomicReference<ConnectContext> plannerContext = new AtomicReference<>();
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase ignoredStmt, ConnectContext ctx) {
+                bypassDuringPlanning.set(ctx.isBypassAuthorizerCheck());
+                plannerContext.set(ctx);
+                throw new RuntimeException("mock planner failure");
+            }
+        };
+
+        try {
+            TaskRun taskRun = buildMVTaskRun(mv, "test");
+            Assertions.assertThrows(RuntimeException.class, () -> getMVRefreshExecPlan(taskRun));
+            Assertions.assertTrue(bypassDuringPlanning.get());
+            Assertions.assertSame(taskRun.getRunCtx(), plannerContext.get());
+            Assertions.assertFalse(plannerContext.get().isBypassAuthorizerCheck());
+        } finally {
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
     }
 
     @Test
@@ -1489,6 +1563,29 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     /**
+     * A run skipped because no base table changed must still record the window: every delta is a
+     * point range, which is the evidence that the bookmark had caught up with the base table head.
+     */
+    @Test
+    public void testImvSourceVersionRangeRecordedOnSkippedRun() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        // Live version equal to the seeded baseline, so the delta is (0, 0] and the run is skipped.
+        advanceTableVersionTo(0L);
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        Assertions.assertEquals(Map.of("start", "0", "end", "0"),
+                extraMessage.getImvSourceVersionRange().get("iceberg0.unpartitioned_db.t0"),
+                "a skipped run should record start == end, got: "
+                        + extraMessage.getImvSourceVersionRange());
+    }
+
+    /**
      * When IVM planning fails after the TVR deltas were staged and the hybrid processor falls
      * back to PCT, the task run must not keep source ranges from the abandoned IVM attempt.
      */
@@ -1702,7 +1799,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "drop-and-recreate hint must not apply to non-ancestry connector failures, got: " + chain);
         Assertions.assertFalse(chain.contains("snapshot ancestry broken"),
                 "ancestry-broken framing must not apply to non-ancestry connector failures, got: " + chain);
-        Assertions.assertFalse(chain.contains("INCREMENTAL materialized views do not support partition-shape"),
-                "partition-shape framing must not apply to non-ancestry connector failures, got: " + chain);
+        Assertions.assertFalse(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER),
+                "non-append-only breaking framing must not apply to non-ancestry connector failures, got: " + chain);
     }
 }

@@ -50,9 +50,8 @@ import java.util.stream.Collectors;
 /**
  * Production {@link PreSplitPipeline} composing the FE-side sampler tiers,
  * {@link BoundaryPlanner}, and {@link TabletReshardJobMgr}. The job itself comes
- * from {@link SplitTabletJobFactory#forExternalBoundaries} when a single visible
- * index is split, or {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet}
- * when multiple visible indexes are split together. Constructor-injected
+ * from {@link SplitTabletJobFactory#forExternalBoundaries}, which builds one job
+ * spanning every split tablet (one or many visible indexes). Constructor-injected
  * dependencies keep the class testable without static mocking.
  *
  * <p>Tier routing: meta tier ({@link ParquetMetadataSampler#tryPlan}) is invoked
@@ -101,8 +100,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     private final long fileTotalBytes;
     private final Duration pollInterval;
     private final Clock clock;
-    // The triggering load's compute resource, carried into the SplitTabletJobFactory job (forExternalBoundaries
-    // or forExternalBoundariesMultiTablet) so pre-split shards are scheduled in the load's warehouse.
+    // The triggering load's compute resource, carried into the SplitTabletJobFactory job
+    // (forExternalBoundaries) so pre-split shards are scheduled in the load's warehouse.
     // May be null (falls back to default).
     private final ComputeResource loadComputeResource;
 
@@ -253,13 +252,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         if (!currentVisibleIndexMetaIds(database, table).equals(expectedIndexMetaIds)) {
             return Optional.empty();
         }
-        TabletReshardJob job;
-        if (oldTabletIdToRanges.size() == 1) {
-            Map.Entry<Long, List<TabletRange>> only = oldTabletIdToRanges.entrySet().iterator().next();
-            job = SplitTabletJobFactory.forExternalBoundaries(database, table, only.getKey(), only.getValue());
-        } else {
-            job = SplitTabletJobFactory.forExternalBoundariesMultiTablet(database, table, oldTabletIdToRanges);
-        }
+        TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(database, table, oldTabletIdToRanges);
         // Carry the triggering load's warehouse so the job's shard creation + publish run there.
         if (loadComputeResource != null) {
             job.setWarehouseId(loadComputeResource.getWarehouseId());
