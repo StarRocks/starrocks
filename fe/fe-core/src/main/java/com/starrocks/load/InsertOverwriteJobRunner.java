@@ -447,6 +447,16 @@ public class InsertOverwriteJobRunner {
                 LOG.warn("database id:{} does not exist when replaying insert overwrite job:{} to FAILED, skip gc",
                         dbId, job.getJobId());
                 return;
+<<<<<<< HEAD
+=======
+            }
+            // the dynamic overwrite transaction needs only dbId and txnId to abort;
+            // clean it up even when the database is gone, otherwise it lingers until
+            // the transaction timeout checker reaps it. Skip on replay: the transaction
+            // was already aborted when the job originally ran.
+            if (!isReplay) {
+                abortDynamicOverwriteTxnQuietly();
+>>>>>>> a8c0f4c ([BugFix] Do not journal an insert overwrite failure for a dropped table (#77212))
             }
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -460,6 +470,12 @@ public class InsertOverwriteJobRunner {
                 LOG.warn("table:{} does not exist in database:{} when replaying insert overwrite job:{} to FAILED, "
                         + "skip gc", tableId, db.getFullName(), job.getJobId());
                 return;
+<<<<<<< HEAD
+=======
+            }
+            if (!isReplay) {
+                abortDynamicOverwriteTxnQuietly();
+>>>>>>> a8c0f4c ([BugFix] Do not journal an insert overwrite failure for a dropped table (#77212))
             }
             throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
         }
