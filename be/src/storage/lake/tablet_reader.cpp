@@ -825,6 +825,7 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
     _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
     _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+    _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
     _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns += prepare_stats.get_row_ranges_by_vector_index_timer;
     _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
     _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;

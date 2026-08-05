@@ -40,8 +40,7 @@ public:
                          OlapReaderStatistics* stats = nullptr) override;
 
     Status init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file, size_t segment_num_rows, int query_k,
-                         bool user_set_ef,
-                         OlapReaderStatistics* stats = nullptr) override;
+                         bool user_set_ef, OlapReaderStatistics* stats = nullptr) override;
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override;

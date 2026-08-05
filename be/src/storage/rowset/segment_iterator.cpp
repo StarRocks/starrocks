@@ -1396,7 +1396,10 @@ Status SegmentIterator::_init_ann_reader() {
             vi_file.fs = _segment->shared_file_system();
         }
         // Turns off use_vector_index on a runtime NotFound / not-supported.
-        RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->vector_index_load_ns);
+            RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
+        }
 #else
         _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif

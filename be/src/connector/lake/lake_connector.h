@@ -224,6 +224,8 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
@@ -268,6 +270,8 @@ private:
     RuntimeProfile::Counter* _lake_seed_io_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_io_count_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_segment_init_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_get_row_ranges_by_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_cache_lookup_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_file_open_timer = nullptr;

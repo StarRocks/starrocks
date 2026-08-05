@@ -1760,7 +1760,10 @@ public class ExplainAnalyzer {
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",
                 "CreateSegmentIter", "GetDelVec", "GetDeltaColumnGroup", "GetRowsets", "ReadPKIndex",
-                "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
+                "VectorIndex", "VectorIndexLoad", "VectorIndexCacheLookup", "VectorIndexFileOpenAndGetSize",
+                "VectorIndexFileRead", "VectorIndexDeserialize", "VectorIndexSearcherCreate",
+                "VectorIndexCacheHit", "VectorIndexCacheMiss", "VectorIndexSearch", "VectorANNSearch",
+                "VectorResultProcess", "ProcessVectorDistanceAndIdTime", "VectorSearchTime",
                 "PushdownAccessPaths", "PushdownPredicates"
         );
     }

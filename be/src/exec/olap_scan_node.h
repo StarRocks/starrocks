@@ -260,6 +260,8 @@ private:
     RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
 
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;

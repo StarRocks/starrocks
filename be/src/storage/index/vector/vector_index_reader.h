@@ -67,8 +67,7 @@ public:
     // Per-segment context for apply_adaptive_ef_search(). Default forwards
     // to the row-count-unaware form for readers without adaptive scaling.
     virtual Status init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file, size_t segment_num_rows,
-                                 int query_k, bool user_set_ef,
-                                 OlapReaderStatistics* stats = nullptr) {
+                                 int query_k, bool user_set_ef, OlapReaderStatistics* stats = nullptr) {
         return init_searcher(meta, vi_file, stats);
     }
 
