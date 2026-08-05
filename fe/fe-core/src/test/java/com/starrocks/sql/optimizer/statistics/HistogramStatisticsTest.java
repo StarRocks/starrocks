@@ -283,6 +283,105 @@ public class HistogramStatisticsTest {
     }
 
     @Test
+    public void testStringPlaceholderBucketJoinFallsBackToNdv() {
+        ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, Type.VARCHAR, "s1", true);
+        List<Bucket> leftBucketList = new ArrayList<>();
+        leftBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 153L, 0L));
+        HashMap<String, Long> leftMcv = new HashMap<>();
+        leftMcv.put("a", 100L);
+        leftMcv.put("b", 50L);
+        Histogram leftHistogram = new Histogram(leftBucketList, leftMcv);
+
+        ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "s2", true);
+        List<Bucket> rightBucketList = new ArrayList<>();
+        rightBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 200L, 0L));
+        HashMap<String, Long> rightMcv = new HashMap<>();
+        rightMcv.put("x", 80L);
+        rightMcv.put("y", 40L);
+        Histogram rightHistogram = new Histogram(rightBucketList, rightMcv);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(2000 * 2000);
+        builder.addColumnStatistic(leftColumnRefOperator, ColumnStatistic.builder()
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(10)
+                .setHistogram(leftHistogram)
+                .build());
+        builder.addColumnStatistic(rightColumnRefOperator, ColumnStatistic.builder()
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(20)
+                .setHistogram(rightHistogram)
+                .build());
+        Statistics statistics = builder.build();
+        BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.EQ,
+                leftColumnRefOperator, rightColumnRefOperator);
+
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
+        Statistics off = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assertions.assertEquals(200000, off.getOutputRowCount(), 0.1);
+
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+        Statistics on = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assertions.assertEquals(200000, on.getOutputRowCount(), 0.1);
+
+        // The bucket-based join estimator must decline for char-family placeholders.
+        Optional<Histogram> joined = BinaryPredicateStatisticCalculator.updateHistWithJoin(
+                builder.build().getColumnStatistic(leftColumnRefOperator), Type.VARCHAR,
+                builder.build().getColumnStatistic(rightColumnRefOperator), Type.VARCHAR);
+        Assertions.assertTrue(joined.isEmpty());
+    }
+
+    @Test
+    public void testStringPlaceholderBucketJoinWithOverlappingMcvFallsBackToNdv() {
+        ColumnRefOperator leftColumnRefOperator = new ColumnRefOperator(0, Type.VARCHAR, "s1", true);
+        List<Bucket> leftBucketList = new ArrayList<>();
+        leftBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 1_000_000L, 0L));
+        HashMap<String, Long> leftMcv = new HashMap<>();
+        leftMcv.put("a", 100L);
+        leftMcv.put("b", 50L);
+        Histogram leftHistogram = new Histogram(leftBucketList, leftMcv);
+
+        ColumnRefOperator rightColumnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "s2", true);
+        List<Bucket> rightBucketList = new ArrayList<>();
+        rightBucketList.add(new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 1_000_000L, 0L));
+        HashMap<String, Long> rightMcv = new HashMap<>();
+        rightMcv.put("a", 80L);
+        rightMcv.put("y", 40L);
+        Histogram rightHistogram = new Histogram(rightBucketList, rightMcv);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(2000 * 2000);
+        builder.addColumnStatistic(leftColumnRefOperator, ColumnStatistic.builder()
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(10)
+                .setHistogram(leftHistogram)
+                .build());
+        builder.addColumnStatistic(rightColumnRefOperator, ColumnStatistic.builder()
+                .setNullsFraction(0)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(20)
+                .setHistogram(rightHistogram)
+                .build());
+        Statistics statistics = builder.build();
+        BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(BinaryType.EQ,
+                leftColumnRefOperator, rightColumnRefOperator);
+
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+        Statistics on = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assertions.assertEquals(200000, on.getOutputRowCount(), 0.1);
+
+        Optional<Histogram> joined = BinaryPredicateStatisticCalculator.updateHistWithJoin(
+                builder.build().getColumnStatistic(leftColumnRefOperator), Type.VARCHAR,
+                builder.build().getColumnStatistic(rightColumnRefOperator), Type.VARCHAR);
+        Assertions.assertTrue(joined.isEmpty());
+    }
+
+    @Test
     public void testNotHitBucketInHist() {
         List<Bucket> bucketList = new ArrayList<>();
         bucketList.add(new Bucket(1D, 10D, 100L, 20L));
@@ -646,5 +745,23 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(joinBucket.getUpper(), 9D, 0.001);
         Assertions.assertEquals(joinBucket.getCount().longValue(), 833);
         Assertions.assertEquals(joinBucket.getUpperRepeats().longValue(), 20L * 14L);
+    }
+
+    @Test
+    public void testDefaultPlaceholderBucketRoundTripTotalRows() throws Exception {
+        String histogramJson =
+                "{\"buckets\":[[\"Infinity\",\"Infinity\",153,0]],\"mcv\":[[\"1\",\"100\"],[\"2\",\"50\"]]}";
+
+        List<Bucket> buckets = HistogramUtils.convertBuckets(histogramJson, Type.VARCHAR);
+        Map<String, Long> mcv = HistogramUtils.convertMCV(histogramJson);
+        Histogram histogram = new Histogram(buckets, mcv);
+
+        Assertions.assertEquals(1, buckets.size());
+        Assertions.assertEquals(153L, buckets.get(0).getCount().longValue());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, buckets.get(0).getLower());
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, buckets.get(0).getUpper());
+        Assertions.assertTrue(buckets.get(0).getRowCountInBucket(0D, 0L, 10D, false).isEmpty());
+        Assertions.assertTrue(buckets.get(0).getRowCountInBucket(42D, 0L, 10D, false).isEmpty());
+        Assertions.assertEquals(303L, histogram.getTotalRows());
     }
 }
