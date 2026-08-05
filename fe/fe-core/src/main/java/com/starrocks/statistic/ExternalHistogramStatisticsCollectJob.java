@@ -351,7 +351,8 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         // in the variables named below.
         String minValue = sampled.get(0).columnName;
         String maxValue = sampled.get(0).histogram;
-        if (!isUsableBucketBound(minValue, columnType) || !isUsableBucketBound(maxValue, columnType)) {
+
+        if (StringUtils.isBlank(minValue) || StringUtils.isBlank(maxValue)) {
             LOG.info("[ExternalStats] unusable sampled bounds, falling back to placeholder bucket | catalog={} db={} " +
                             "table={} column={} min={} max={}", catalogName, db.getOriginName(), table.getName(), columnName,
                     minValue, maxValue);
@@ -362,12 +363,6 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
     private static boolean canCarrySampledBounds(Type columnType) {
         return columnType.getPrimitiveType().isNumericType() || columnType.getPrimitiveType().isDateType();
-    }
-
-    private static boolean isUsableBucketBound(String value, Type columnType) {
-        return canCarrySampledBounds(columnType)
-                && !StringUtils.isBlank(value)
-                && !StringUtils.containsAny(value, '"', '\'', '\\');
     }
 
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
