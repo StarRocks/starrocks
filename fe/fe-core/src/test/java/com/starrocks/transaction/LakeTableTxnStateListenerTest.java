@@ -236,7 +236,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
     private void makeCompactionScoreExceedSlowdownThreshold() {
         long currentTimeMs = System.currentTimeMillis();
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
-        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, physicalPartitionId), 3, currentTimeMs,
                 Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)));
     }
 

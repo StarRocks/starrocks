@@ -174,7 +174,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPhysicalPartitionId());
             if (partition != null) {
-                partitionIds.add(partition.getParentId());
+                partitionIds.add(partition.getId());
             }
         }
         new CommitRateLimiter(compactionMgr, txnState, table.getId())
