@@ -27,7 +27,9 @@
 #include <functional>
 
 #include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
 #include "common/shutdown_hook.h"
+#include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 
@@ -100,6 +102,33 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
 
     EXPECT_TRUE(worker->remove_shard(2).ok());
     EXPECT_EQ(0, shard_count_metric.value());
+}
+
+TEST_F(StarOSWorkerTest, test_table_metrics_for_virtual_shard) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+
+    TableMetricsManager table_metrics_mgr;
+    StarOSWorker worker(&table_metrics_mgr);
+
+    // Virtual shards used by shared-data cluster replication are associated with a
+    // storage volume, not a table, so they intentionally have no tableId property.
+    StarOSWorker::ShardInfo virtual_shard;
+    virtual_shard.id = 1;
+    EXPECT_TRUE(worker.add_shard(virtual_shard).ok());
+    EXPECT_EQ(0, table_metrics_mgr.size());
+    EXPECT_TRUE(worker.remove_shard(virtual_shard.id).ok());
+    EXPECT_EQ(0, table_metrics_mgr.size());
+
+    StarOSWorker::ShardInfo table_shard;
+    table_shard.id = 2;
+    table_shard.properties.emplace("tableId", "42");
+    EXPECT_TRUE(worker.add_shard(table_shard).ok());
+    EXPECT_EQ(1, table_metrics_mgr.size());
+    EXPECT_EQ(1, table_metrics_mgr.get_table_metrics(42)->ref_count);
+    EXPECT_TRUE(worker.remove_shard(table_shard.id).ok());
+    EXPECT_EQ(0, table_metrics_mgr.get_table_metrics(42)->ref_count);
 }
 
 TEST_F(StarOSWorkerTest, test_fs_cache) {
