@@ -1014,6 +1014,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
                                                                       int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
     auto tablet_path = tablet_metadata_location(tablet_id, version);
+    if (!cache_opts.skip_meta_cache) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
+            return ptr;
+        }
+    }
     if (version == kInitialVersion) {
         return get_single_tablet_metadata_from_paths(tablet_id, version, cache_opts, expected_gtid, fs, tablet_path, {},
                                                      {}, tablet_path, nullptr);

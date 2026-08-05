@@ -124,6 +124,20 @@ public:
 
 namespace {
 
+class FailingRealLocationProvider : public lake::LocationProvider {
+public:
+    explicit FailingRealLocationProvider(std::string root) : _root(std::move(root)) {}
+
+    std::string root_location(int64_t tablet_id) const override { return _root; }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return Status::InternalError("real location is unavailable");
+    }
+
+private:
+    std::string _root;
+};
+
 TabletMetadataPB make_remote_test_metadata(int64_t tablet_id, int64_t version, int64_t gtid) {
     TabletMetadataPB metadata;
     metadata.set_id(tablet_id);
@@ -1795,6 +1809,19 @@ TEST_F(LakeTabletManagerTest, local_bundle_lookup_regression) {
     EXPECT_EQ(tablet_id, result.value()->id());
     EXPECT_EQ(kVersion, result.value()->version());
     EXPECT_EQ(101, result.value()->gtid());
+}
+
+TEST_F(LakeTabletManagerTest, local_metacache_hit_does_not_resolve_bundle_location) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    auto metadata = std::make_shared<TabletMetadata>(make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const auto tablet_path = _tablet_manager->tablet_metadata_location(tablet_id, kVersion);
+    _tablet_manager->metacache()->cache_tablet_metadata(tablet_path, metadata);
+    _tablet_manager->TEST_set_location_provider(std::make_shared<FailingRealLocationProvider>(_test_dir));
+
+    auto result = _tablet_manager->get_single_tablet_metadata(tablet_id, kVersion);
+    ASSERT_OK(result);
+    EXPECT_EQ(metadata, result.value());
 }
 
 // Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
