@@ -48,6 +48,7 @@
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "exec/exec_env.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "platform/key_cache.h"
@@ -757,6 +758,47 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
 }
 
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
+    _replication_txn_manager.reset();
+    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+    _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
+
+    const std::string meta_dir = "/remote/source/meta";
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    auto stale_metadata = std::make_shared<TabletMetadata>();
+    stale_metadata->set_id(_src_tablet_id);
+    stale_metadata->set_version(_version);
+    stale_metadata->set_gtid(101);
+    _tablet_mgr->metacache()->cache_tablet_metadata(metadata_path, stale_metadata);
+    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
+    ASSERT_NE(nullptr, cached);
+    ASSERT_EQ(101, cached->gtid());
+
+    auto source_fs_a = std::make_shared<MemoryFileSystem>();
+    auto source_fs_b = std::make_shared<MemoryFileSystem>();
+    auto write_source_metadata = [&](const std::shared_ptr<MemoryFileSystem>& source_fs, int64_t gtid) {
+        auto source_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        source_metadata->set_gtid(gtid);
+        std::string content;
+        CHECK(source_metadata->SerializeToString(&content));
+        CHECK_OK(source_fs->create_dir_recursive(meta_dir));
+        CHECK_OK(source_fs->create_file(metadata_path));
+        CHECK_OK(source_fs->append_file(metadata_path, Slice(content)));
+    };
+    write_source_metadata(source_fs_a, 202);
+    write_source_metadata(source_fs_b, 303);
+
+    auto result_a = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs_a);
+    auto result_b = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs_b);
+    ASSERT_OK(result_a);
+    ASSERT_OK(result_b);
+    EXPECT_EQ(202, result_a.value()->gtid());
+    EXPECT_EQ(303, result_b.value()->gtid());
+    cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(101, cached->gtid());
+}
+
 #ifdef USE_STAROS
 // Mock staros::starlet::fslib::FileSystem for SyncPoint injection
 class MockStarletFileSystemForReplication : public staros::starlet::fslib::FileSystem {
@@ -951,6 +993,23 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_NE(std::string::npos, status.message().find("Failed to create virtual starlet filesystem"));
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, raw_s3_uses_virtual_shard_uri) {
+    std::string captured_uri;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_partition_starlet_uri",
+                                          [&](void* arg) { captured_uri = *static_cast<std::string*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("stop after URI construction");
+    });
+
+    auto request = build_request(true /* with_full_path */);
+    ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.virtual_tablet_id), captured_uri);
+    EXPECT_NE(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.src_tablet_id), captured_uri);
 }
 
 // Test Case 2: has_full_path=false, new_fs_starlet returns nullptr
