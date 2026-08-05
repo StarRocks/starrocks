@@ -159,8 +159,7 @@ private:
 // segments; private segments in a mixed rowset are already child-local.
 class DeshardCompactionPolicy final : public CompactionPolicy {
 public:
-    explicit DeshardCompactionPolicy(TabletManager* tablet_mgr,
-                                     std::shared_ptr<const TabletMetadataPB> tablet_metadata)
+    explicit DeshardCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
             : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), false) {}
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;

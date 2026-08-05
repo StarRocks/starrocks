@@ -5062,8 +5062,7 @@ TEST_F(LakeServiceTest, test_aggregate_publish_builds_query_parent_in_same_bundl
     EXPECT_EQ(kVersion, parent->version());
     EXPECT_EQ(0, parent->range().lower_bound().values(0).value().compare("0"));
     EXPECT_EQ(0, parent->range().upper_bound().values(0).value().compare("20"));
-    ASSIGN_OR_ABORT(auto identical_parent,
-                    _tablet_mgr->get_single_tablet_metadata(kIdenticalParentTabletId, kVersion));
+    ASSIGN_OR_ABORT(auto identical_parent, _tablet_mgr->get_single_tablet_metadata(kIdenticalParentTabletId, kVersion));
     EXPECT_EQ(kIdenticalParentTabletId, identical_parent->id());
     EXPECT_EQ(0, identical_parent->range().lower_bound().values(0).value().compare("30"));
     EXPECT_EQ(0, identical_parent->range().upper_bound().values(0).value().compare("40"));

@@ -379,10 +379,9 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
                 VLOG(1) << "Parallel compaction not applicable for tablet " << tablet_id
                         << ", falling back to normal compaction";
             }
-            auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                                   request->force_base_compaction(),
-                                                                   request->skip_write_txnlog(), callback, 0, 0,
-                                                                   request->mode());
+            auto context = std::make_unique<CompactionTaskContext>(
+                    request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
+                    request->skip_write_txnlog(), callback, 0, 0, request->mode());
             context->enqueue_time_sec = ::time(nullptr);
 
             {

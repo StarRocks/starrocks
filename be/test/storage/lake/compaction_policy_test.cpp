@@ -761,8 +761,7 @@ TEST_F(LakeCompactionPolicyTest, test_deshard_picks_complete_shared_rowsets_only
     add_rowset(3, {false, true, false});
     add_rowset(4, {false, false});
 
-    ASSIGN_OR_ABORT(auto policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), metadata, false, COMPACTION_MODE_DESHARD));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, COMPACTION_MODE_DESHARD));
     ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
     ASSERT_EQ(2, rowsets.size());
     EXPECT_EQ(2, rowsets[0]->id());

@@ -52,8 +52,8 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_merger.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/transactions.h"
@@ -1675,13 +1675,11 @@ struct AggregateCompactContext {
 
     Status validate_deshard_result(TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
         const bool has_deshard_request =
-                std::any_of(request.requests().begin(), request.requests().end(), [](const CompactRequest& req) {
-                    return req.mode() == COMPACTION_MODE_DESHARD;
-                });
+                std::any_of(request.requests().begin(), request.requests().end(),
+                            [](const CompactRequest& req) { return req.mode() == COMPACTION_MODE_DESHARD; });
         const bool has_default_request =
-                std::any_of(request.requests().begin(), request.requests().end(), [](const CompactRequest& req) {
-                    return req.mode() != COMPACTION_MODE_DESHARD;
-                });
+                std::any_of(request.requests().begin(), request.requests().end(),
+                            [](const CompactRequest& req) { return req.mode() != COMPACTION_MODE_DESHARD; });
         if (has_deshard_request && has_default_request) {
             return Status::InvalidArgument("aggregate compaction cannot mix DESHARD and default modes");
         }
@@ -1708,7 +1706,8 @@ struct AggregateCompactContext {
                 }
                 const auto* txn_log = log_it->second;
                 if (!txn_log->has_op_compaction()) {
-                    return Status::Corruption(fmt::format("deshard txn log for tablet {} has no op_compaction", tablet_id));
+                    return Status::Corruption(
+                            fmt::format("deshard txn log for tablet {} has no op_compaction", tablet_id));
                 }
                 for (const auto& segment : txn_log->op_compaction().output_rowset().segment_metas()) {
                     if (segment.shared()) {
@@ -1725,8 +1724,9 @@ struct AggregateCompactContext {
                             std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
                                         [](const SegmentMetadataPB& segment) { return segment.shared(); });
                     if (contains_shared && !selected.contains(rowset.id())) {
-                        return Status::Corruption(fmt::format(
-                                "deshard result for tablet {} did not rewrite shared rowset {}", tablet_id, rowset.id()));
+                        return Status::Corruption(
+                                fmt::format("deshard result for tablet {} did not rewrite shared rowset {}", tablet_id,
+                                            rowset.id()));
                     }
                 }
             }

@@ -76,8 +76,7 @@ public:
     // intentionally a row filter (rather than a segment seek): a tablet with ORDER BY != PK has
     // segments ordered by the sort key, so its PK range cannot be mapped to a contiguous rowid span.
     static StatusOr<Filter> create_primary_key_range_filter(const TabletRangePB& tablet_range_pb,
-                                                            const TabletSchemaCSPtr& tablet_schema,
-                                                            const Chunk& chunk);
+                                                            const TabletSchemaCSPtr& tablet_schema, const Chunk& chunk);
 
     static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 

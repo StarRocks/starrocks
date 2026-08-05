@@ -21,8 +21,8 @@
 
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
-#include "column/column_helper.h"
 #include "column/chunk_factory.h"
+#include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
@@ -229,8 +229,7 @@ TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key
         chunk->get_column_by_index(2)->append_datum(Datum(100));
     }
 
-    ASSIGN_OR_ABORT(auto filter,
-                    TabletRangeHelper::create_primary_key_range_filter(range, tablet_schema, *chunk));
+    ASSIGN_OR_ABORT(auto filter, TabletRangeHelper::create_primary_key_range_filter(range, tablet_schema, *chunk));
     ASSERT_EQ(4, filter.size());
     EXPECT_EQ(0, filter[0]);
     EXPECT_EQ(1, filter[1]);
