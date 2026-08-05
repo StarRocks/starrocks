@@ -31,11 +31,11 @@ on:
         type: choice
         options: [ubuntu, centos7]
       CLUSTER_MODE:
-        description: "Deploy mode (shared_nothing = ci-admit, shared_data = ci-admit-cloud)"
+        description: "Deploy mode (shared_data = ci-admit-cloud, shared_nothing = ci-admit)"
         required: true
-        default: shared_nothing
+        default: shared_data
         type: choice
-        options: [shared_nothing, shared_data]
+        options: [shared_data, shared_nothing]
       KEEP_HOURS:
         description: "Extra hours to keep the cluster alive after deploy (0 = no renew)"
         required: false
@@ -154,7 +154,12 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-cluster.sh --template "${CLUSTER_NAME}" --linuxdistro "${LINUX_DISTRO}"
+          # Always apply the `ci-admit` ECS template. `ci-admit-cloud` is a *deploy*
+          # config, not an ECS-apply template — applying it fails with
+          # `NoOptionError: 'RegionID' in section 'ci-admit-cloud'`. shared-data is
+          # handled by deploying with CLUSTER_NAME=ci-admit-cloud below, mirroring
+          # the ci-pipeline / branch pipeline (apply ci-admit → deploy cloud).
+          ./bin/elastic-cluster.sh --template ci-admit --linuxdistro "${LINUX_DISTRO}"
           {
             echo "## ECS cluster"
             echo '```ini'
