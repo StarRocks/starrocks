@@ -980,7 +980,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 Status status = coord.getExecStatus();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    // A load that was cancelled never reports its counters, so reaching this without an
+                    // OK status means the load stopped for a reason the user needs to see. Reporting
+                    // "no rows imported" here would hide it behind what looks like a data problem.
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -988,7 +991,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
 
                 if (coord.isEnableLoadProfile()) {
