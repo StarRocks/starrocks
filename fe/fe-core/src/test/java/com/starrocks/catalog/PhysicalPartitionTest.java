@@ -29,6 +29,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PhysicalPartitionTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
@@ -477,5 +479,34 @@ public class PhysicalPartitionTest {
 
         partition.deleteMaterializedIndexByIndexId(baseIndexId2);
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
+    }
+
+    @Test
+    public void testQueryableIndexPinnedUntilDeshardFinishes() {
+        long baseMetaId = 3100L;
+        MaterializedIndex parent = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
+        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, parent);
+        MaterializedIndex children = new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L);
+
+        partition.pinQueryableIndex(baseMetaId, parent.getId());
+        partition.addMaterializedIndex(children, true);
+
+        Assertions.assertTrue(partition.isDesharding());
+        Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
+        Assertions.assertEquals(children, partition.getLatestBaseIndex());
+        Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
+        Assertions.assertEquals(Set.of(parent.getId(), children.getId()),
+                partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE).stream()
+                        .map(MaterializedIndex::getId).collect(Collectors.toSet()));
+
+        String json = GsonUtils.GSON.toJson(partition);
+        PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
+        Assertions.assertTrue(restored.isDesharding());
+        Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
+
+        Assertions.assertTrue(partition.finishDeshard());
+        Assertions.assertFalse(partition.finishDeshard());
+        Assertions.assertFalse(partition.isDesharding());
+        Assertions.assertEquals(children, partition.getQueryableBaseIndex());
     }
 }

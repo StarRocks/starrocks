@@ -28,6 +28,11 @@
 namespace starrocks::lake {
 class TabletRangeHelper {
 public:
+    // Returns the schema column indexes used to encode tablet boundaries. Range-distributed
+    // primary-key tablets always route in primary-key space, even when their physical sort key
+    // is different. Other key models retain the historical sort-key boundary semantics.
+    static std::vector<ColumnId> range_key_idxes(const TabletSchema& tablet_schema);
+
     /**
      * @brief Create a SeekRange from TabletRangePB.
      *
@@ -66,6 +71,13 @@ public:
 
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
+
+    // Build a row selection for |chunk| using the tablet's PK-space half-open range. This is
+    // intentionally a row filter (rather than a segment seek): a tablet with ORDER BY != PK has
+    // segments ordered by the sort key, so its PK range cannot be mapped to a contiguous rowid span.
+    static StatusOr<Filter> create_primary_key_range_filter(const TabletRangePB& tablet_range_pb,
+                                                            const TabletSchemaCSPtr& tablet_schema,
+                                                            const Chunk& chunk);
 
     static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 

@@ -27,6 +27,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
@@ -124,6 +125,27 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
             }
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+
+        if (_context->mode == COMPACTION_MODE_DESHARD && _tablet_schema->has_separate_sort_key()) {
+            ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
+                                                  _tablet.metadata()->range(), _tablet_schema, *chunk));
+            if (!rssid_rowids.empty()) {
+                DCHECK_EQ(rssid_rowids.size(), filter.size());
+                size_t output_index = 0;
+                for (size_t i = 0; i < rssid_rowids.size(); ++i) {
+                    if (filter[i]) {
+                        rssid_rowids[output_index++] = rssid_rowids[i];
+                    }
+                }
+                rssid_rowids.resize(output_index);
+            }
+            chunk->filter(filter);
+        }
+        if (chunk->num_rows() == 0) {
+            chunk->reset();
+            rssid_rowids.clear();
+            continue;
+        }
         if (rssid_rowids.empty()) {
             RETURN_IF_ERROR(writer->write(*chunk));
         } else {

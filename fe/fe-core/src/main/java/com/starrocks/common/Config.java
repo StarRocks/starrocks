@@ -4826,6 +4826,11 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
+    @ConfField(mutable = true, comment = "Whether range-distributed primary-key tables may use an ORDER BY key "
+            + "different from the primary key. The initial implementation requires file_bundling=true and rejects "
+            + "DCG/IDG sidecars during tablet resharding.")
+    public static boolean tablet_reshard_enable_pk_order_by = false;
+
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
             + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
             + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "

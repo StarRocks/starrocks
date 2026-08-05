@@ -139,6 +139,29 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
+StatusOr<std::vector<RowsetPtr>> DeshardCompactionPolicy::pick_rowsets() {
+    std::vector<RowsetPtr> input_rowsets;
+    for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
+        const auto& rowset = _tablet_metadata->rowsets(i);
+        const bool contains_shared_segment =
+                std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                            [](const SegmentMetadataPB& segment) { return segment.shared(); });
+        if (contains_shared_segment) {
+            input_rowsets.emplace_back(
+                    std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
+        }
+    }
+    return input_rowsets;
+}
+
+StatusOr<CompactionAlgorithm> DeshardCompactionPolicy::choose_compaction_algorithm(
+        const std::vector<RowsetPtr>& rowsets) {
+    // Row-level PK-range routing must use one mask across every output column and its
+    // rssid/rowid vector. Keep the first implementation horizontal; an empty sibling
+    // still uses the index-only no-op task.
+    return rowsets.empty() ? CLOUD_NATIVE_INDEX_COMPACTION : HORIZONTAL_COMPACTION;
+}
+
 // Return true if segment number meet the requirement of min input
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
     int64_t total_segment_cnt = 0;

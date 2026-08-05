@@ -1696,7 +1696,7 @@ public class OlapTable extends Table {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                rowCount += partition.getLatestBaseIndex().getRowCount();
+                rowCount += partition.getQueryableBaseIndex().getRowCount();
             }
         }
         return rowCount;

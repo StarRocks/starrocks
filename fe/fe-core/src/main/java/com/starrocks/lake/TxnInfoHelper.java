@@ -33,8 +33,10 @@ public class TxnInfoHelper {
                 state.getTxnCommitAttachment() != null) {
             CompactionTxnCommitAttachment attachment = (CompactionTxnCommitAttachment) state.getTxnCommitAttachment();
             infoPB.forcePublish = attachment.getForceCommit();
+            infoPB.deshardCompaction = attachment.isDeshard();
         } else {
             infoPB.forcePublish = false;
+            infoPB.deshardCompaction = false;
         }
         infoPB.setGtid(state.getGlobalTransactionId());
         // Admin-issued no-op publish flag. BE will bypass txn-log loading + apply

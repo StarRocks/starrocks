@@ -44,8 +44,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -114,6 +117,49 @@ public class SplitTabletJob extends TabletReshardJob {
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    /**
+     * Returns complete parent/child families whose query layout is still pinned to the parent.
+     * The caller supplies the tablets in one aggregate-publish batch; incomplete families are
+     * deliberately omitted because synthesizing a parent from only some siblings would lose rows.
+     */
+    public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
+        List<ParentTabletPublishInfoPB> parentInfos = new ArrayList<>();
+        if (jobState.isFinalState()) {
+            return parentInfos;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (!(table instanceof OlapTable olapTable)) {
+            return parentInfos;
+        }
+        for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition =
+                    olapTable.getPhysicalPartition(reshardingPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
+            for (ReshardingMaterializedIndex reshardingIndex :
+                    reshardingPartition.getReshardingIndexes().values()) {
+                long indexMetaId = reshardingIndex.getMaterializedIndex().getMetaId();
+                if (!physicalPartition.isQueryableIndexPinned(indexMetaId)) {
+                    continue;
+                }
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    // A SplitTabletJob contains one-old-to-many-new split families and one-old-to-one-new
+                    // IdenticalTablet siblings. Both belong to the pinned old index and therefore both
+                    // need a query-parent metadata page at every ordinary publish version.
+                    if (reshardingTablet.getOldTabletIds().size() == 1
+                            && publishedTabletIds.containsAll(reshardingTablet.getNewTabletIds())) {
+                        ParentTabletPublishInfoPB parentInfo = new ParentTabletPublishInfoPB();
+                        parentInfo.parentTabletId = reshardingTablet.getFirstOldTabletId();
+                        parentInfo.childTabletIds = new ArrayList<>(reshardingTablet.getNewTabletIds());
+                        parentInfos.add(parentInfo);
+                    }
+                }
+            }
+        }
+        return parentInfos;
     }
 
     @Override
@@ -338,6 +384,28 @@ public class SplitTabletJob extends TabletReshardJob {
             }
         } catch (AnalysisException e) { // Db is dropped, ignore exception
             LOG.warn("Ignore exception when waiting previous transactions finished. " + this, e);
+        }
+
+        // ORDER BY != PK children inherit complete shared rowsets. Keep queries on the parent layout
+        // until one partition-wide, non-partial DESHARD transaction has rewritten every sibling.
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean waitingForDeshard = false;
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            OlapTable olapTable = lockedTable.get();
+            for (Long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null || !physicalPartition.isDesharding()) {
+                    continue;
+                }
+                waitingForDeshard = true;
+                PartitionIdentifier identifier = new PartitionIdentifier(dbId, tableId, physicalPartitionId);
+                if (!compactionMgr.isPartitionCompacting(identifier)) {
+                    compactionMgr.triggerDeshardCompaction(identifier);
+                }
+            }
+        }
+        if (waitingForDeshard) {
+            return;
         }
 
         // 2. Remove old versions of materialized index
@@ -781,6 +849,10 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    if (MetaUtils.hasSeparateSortKey(olapTable, newIndex.getMetaId())) {
+                        physicalPartition.pinQueryableIndex(
+                                newIndex.getMetaId(), reshardingIndex.getMaterializedIndexId());
+                    }
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }

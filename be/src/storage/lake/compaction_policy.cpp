@@ -613,7 +613,23 @@ StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(cons
 
 StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr,
                                                        std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                                       bool force_base_compaction) {
+                                                       bool force_base_compaction, CompactionModePB mode) {
+    if (mode == COMPACTION_MODE_DESHARD) {
+        if (tablet_metadata->schema().keys_type() != PRIMARY_KEYS) {
+            return Status::NotSupported("deshard compaction only supports primary-key tablets");
+        }
+        if (!tablet_metadata->has_range()) {
+            return Status::InvalidArgument("deshard compaction requires a tablet range");
+        }
+        if ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
+            (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty())) {
+            return Status::NotSupported("deshard compaction does not support DCG or IDG metadata yet");
+        }
+        return std::make_shared<DeshardCompactionPolicy>(tablet_mgr, std::move(tablet_metadata));
+    }
+    if (mode != COMPACTION_MODE_DEFAULT) {
+        return Status::InvalidArgument(fmt::format("unknown compaction mode {}", static_cast<int>(mode)));
+    }
     if (tablet_metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_shared<PrimaryCompactionPolicy>(tablet_mgr, std::move(tablet_metadata), force_base_compaction);
     } else if (config::enable_size_tiered_compaction_strategy) {

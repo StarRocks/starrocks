@@ -37,7 +37,9 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,6 +76,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     @Override
     public TabletReshardJob createTabletReshardJob() throws StarRocksException {
         validateTableLevel(db, table);
+        if (hasSeparatePrimaryKeySortKey(table)) {
+            throw new StarRocksException("Tablet split with ORDER BY different from the primary key requires "
+                    + "FE-supplied primary-key boundaries in the initial implementation");
+        }
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
         if (reshardingPhysicalPartitions.isEmpty()) {
@@ -227,6 +233,19 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     private static void validateTableLevel(Database db, OlapTable table) throws StarRocksException {
         validateTableDistribution(db, table);
+        if (hasSeparatePrimaryKeySortKey(table)) {
+            if (!Config.tablet_reshard_enable_pk_order_by) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key is disabled");
+            }
+            if (!table.isFileBundling()) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key requires "
+                        + "file_bundling=true");
+            }
+            if (table.getIndexMetaIdToMeta().size() != 1) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key does not "
+                        + "support rollup indexes in the initial implementation");
+            }
+        }
         // Refuse to start a split while any peer GroupId is unstable: range-colocate group
         // membership is shared across DBs, so a still-unaligned split compounds the unaligned state.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -235,6 +254,11 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             throw new StarRocksException("Cannot split tablets for range-colocate group "
                     + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
         }
+    }
+
+    private static boolean hasSeparatePrimaryKeySortKey(OlapTable table) {
+        return table.getKeysType() == KeysType.PRIMARY_KEYS
+                && MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
     }
 
     /**

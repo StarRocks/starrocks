@@ -21,6 +21,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage_primitive/olap_tuple.h"
 
@@ -79,12 +80,14 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     // Constructor for normal compaction
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
                                    bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_,
-                                   int64_t table_id_ = 0, int64_t partition_id_ = 0)
+                                   int64_t table_id_ = 0, int64_t partition_id_ = 0,
+                                   CompactionModePB mode_ = COMPACTION_MODE_DEFAULT)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
               skip_write_txnlog(skip_write_txnlog_),
+              mode(mode_),
               callback(std::move(cb_)),
               table_id(table_id_),
               partition_id(partition_id_) {}
@@ -112,6 +115,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t version;
     const bool force_base_compaction;
     const bool skip_write_txnlog;
+    const CompactionModePB mode;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};

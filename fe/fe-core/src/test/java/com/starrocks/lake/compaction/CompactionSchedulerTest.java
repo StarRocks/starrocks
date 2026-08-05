@@ -32,6 +32,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactionModePB;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -835,6 +836,7 @@ public class CompactionSchedulerTest {
             {
                 BrpcProxy.getLakeService("192.168.0.3", 9050);
                 result = lakeService;
+                times = 2;
             }
         };
 
@@ -871,8 +873,19 @@ public class CompactionSchedulerTest {
             Assertions.assertNotNull(req.parallelConfig, "parallelConfig should be set when enabled");
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            Assertions.assertEquals(CompactionModePB.COMPACTION_MODE_DEFAULT, req.mode);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
+        }
+
+        CompactionTask deshardTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                PartitionStatistics.CompactionPriority.DESHARD,
+                WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+        AggregateCompactRequest deshardRequest = (AggregateCompactRequest) requestField.get(deshardTask);
+        for (CompactRequest req : deshardRequest.requests) {
+            Assertions.assertEquals(CompactionModePB.COMPACTION_MODE_DESHARD, req.mode);
+            Assertions.assertNull(req.parallelConfig);
+            Assertions.assertFalse(req.allowPartialSuccess);
         }
     }
 

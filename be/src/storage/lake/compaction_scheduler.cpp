@@ -287,7 +287,8 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
     // Check if parallel compaction is enabled
     bool has_parallel_config = request->has_parallel_config();
-    bool enable_parallel = has_parallel_config && request->parallel_config().enable_parallel();
+    bool enable_parallel = has_parallel_config && request->parallel_config().enable_parallel() &&
+                           request->mode() == COMPACTION_MODE_DEFAULT;
 
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
@@ -298,7 +299,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                request->force_base_compaction(),
-                                                               request->skip_write_txnlog(), cb);
+                                                               request->skip_write_txnlog(), cb, 0, 0, request->mode());
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -380,7 +381,8 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             }
             auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                    request->force_base_compaction(),
-                                                                   request->skip_write_txnlog(), callback);
+                                                                   request->skip_write_txnlog(), callback, 0, 0,
+                                                                   request->mode());
             context->enqueue_time_sec = ::time(nullptr);
 
             {

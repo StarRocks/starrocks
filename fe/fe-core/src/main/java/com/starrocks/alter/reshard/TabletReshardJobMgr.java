@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.hash.Hashing;
 import com.google.gson.annotations.SerializedName;
@@ -33,6 +34,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
@@ -44,7 +46,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcessable {
@@ -131,6 +135,16 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         }
 
         return reshardingTabletInfo.getReshardingTablet();
+    }
+
+    public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
+        List<ParentTabletPublishInfoPB> parentInfos = Lists.newArrayList();
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob splitJob) {
+                parentInfos.addAll(splitJob.collectParentPublishInfos(publishedTabletIds));
+            }
+        }
+        return parentInfos;
     }
 
     public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)

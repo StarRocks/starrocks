@@ -998,6 +998,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
 - 引入版本: v4.0
 
+### `tablet_reshard_enable_pk_order_by`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许按范围分桶的云原生主键表使用与主键不同的 `ORDER BY` 键。该实验性路径要求启用 File Bundling，并且只能在所有 BE 都升级到支持该功能的版本后开启。第一期在 tablet split、过渡期 publish 和 DESHARD compaction 中均不支持 DCG 或 IDG 元数据，检测到任一元数据时会拒绝执行。
+- 引入版本: -
+
 ### `enable_pipeline_routine_load`
 
 - 默认值: false

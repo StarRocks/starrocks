@@ -120,11 +120,19 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                 boolean isPartialSuccess = false;
-                if (txnState.getTxnCommitAttachment() != null) {
-                    isPartialSuccess = ((CompactionTxnCommitAttachment) txnState.getTxnCommitAttachment()).getForceCommit();
+                boolean isDeshard = false;
+                if (txnState.getTxnCommitAttachment() instanceof CompactionTxnCommitAttachment attachment) {
+                    isPartialSuccess = attachment.getForceCommit();
+                    isDeshard = attachment.isDeshard();
                 }
                 compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore,
                         txnState.getTransactionId(), isPartialSuccess);
+                if (isDeshard && partition.finishDeshard()) {
+                    // This method runs under the transaction-visible table write lock. Make the query-layout
+                    // cutover part of the same catalog mutation as the DESHARD version, then invalidate any
+                    // optimistic plan that captured the parent layout before this point.
+                    table.lastSchemaUpdateTime.set(System.nanoTime());
+                }
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }

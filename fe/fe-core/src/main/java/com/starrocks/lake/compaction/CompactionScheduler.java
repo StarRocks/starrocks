@@ -37,6 +37,7 @@ import com.starrocks.lake.LakeAggregator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactionModePB;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -330,6 +331,7 @@ public class CompactionScheduler extends Daemon {
     protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
             CompactionWarehouseInfo info) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        boolean deshard = partitionStatisticsSnapshot.getPriority() == PartitionStatistics.CompactionPriority.DESHARD;
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
@@ -375,6 +377,16 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
             }
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD && !deshard) {
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
+                return null;
+            }
+            if (deshard && (table.getState() != OlapTable.OlapTableState.TABLET_RESHARD
+                    || !partition.isDesharding() || !table.isFileBundling())) {
+                LOG.warn("Ignore stale DESHARD compaction request for partition {}", partitionIdentifier);
+                return null;
+            }
 
             currentVersion = partition.getVisibleVersion();
 
@@ -401,9 +413,10 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
+        boolean allowPartialSuccess = !deshard && Config.lake_compaction_allow_partial_success;
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, allowPartialSuccess,
                                               info.computeResource, info.warehouseName,
-                                              partitionStatisticsSnapshot.getCompactionScore());
+                                              partitionStatisticsSnapshot.getCompactionScore(), deshard);
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
@@ -461,6 +474,8 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.mode = priority == PartitionStatistics.CompactionPriority.DESHARD
+                    ? CompactionModePB.COMPACTION_MODE_DESHARD : CompactionModePB.COMPACTION_MODE_DEFAULT;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
@@ -520,10 +535,12 @@ public class CompactionScheduler extends Daemon {
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
+            request.mode = priority == PartitionStatistics.CompactionPriority.DESHARD
+                    ? CompactionModePB.COMPACTION_MODE_DESHARD : CompactionModePB.COMPACTION_MODE_DEFAULT;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
-            if (maxParallel > 0) {
+            if (maxParallel > 0 && priority != PartitionStatistics.CompactionPriority.DESHARD) {
                 com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
                 parallelConfig.enableParallel = true;
                 parallelConfig.maxParallelPerTablet = maxParallel;
@@ -616,8 +633,8 @@ public class CompactionScheduler extends Daemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
-            if (forceCommit) { // do not write extra info if no need to force commit
-                attachment = new CompactionTxnCommitAttachment(true /* forceCommit */);
+            if (forceCommit || job.isDeshard()) {
+                attachment = new CompactionTxnCommitAttachment(forceCommit, job.isDeshard());
             }
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);

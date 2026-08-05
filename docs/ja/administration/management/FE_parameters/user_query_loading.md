@@ -980,6 +980,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、CREATE TABLE を参照してください。
 - 導入時期：v4.0
 
+### `tablet_reshard_enable_pk_order_by`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：範囲分散されたクラウドネイティブ主キーテーブルで、主キーと異なる `ORDER BY` キーを使用できるようにするかどうか。この実験的なパスには File Bundling が必要で、すべての BE を対応バージョンへアップグレードした後にのみ有効化できます。第 1 フェーズでは tablet split、移行中の publish、DESHARD compaction における DCG または IDG メタデータをサポートせず、いずれかが存在する場合は処理を拒否します。
+- 導入時期：-
+
 ### `enable_pipeline_routine_load`
 
 - デフォルト：false

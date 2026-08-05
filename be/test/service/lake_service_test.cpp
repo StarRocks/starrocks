@@ -4998,6 +4998,80 @@ TEST_F(LakeServiceTest, test_aggregate_publish_version_normal) {
     server.Join();
 }
 
+TEST_F(LakeServiceTest, test_aggregate_publish_builds_query_parent_in_same_bundle) {
+    brpc::Server server;
+    MockLakeServiceImpl mock_service;
+    int port = 0;
+    init_server_with_mock(&mock_service, &server, &port);
+
+    constexpr int64_t kParentTabletId = 9201;
+    constexpr int64_t kChildTabletId1 = 9202;
+    constexpr int64_t kChildTabletId2 = 9203;
+    constexpr int64_t kIdenticalParentTabletId = 9204;
+    constexpr int64_t kIdenticalChildTabletId = 9205;
+    constexpr int64_t kVersion = 79;
+    auto request = build_default_agg_request(port);
+    auto* publish_req = request.mutable_publish_reqs(0);
+    publish_req->set_new_version(kVersion);
+    publish_req->add_tablet_ids(kChildTabletId1);
+    publish_req->add_tablet_ids(kChildTabletId2);
+    publish_req->add_tablet_ids(kIdenticalChildTabletId);
+    publish_req->add_txn_infos()->set_txn_id(12345);
+    auto* parent_info = request.add_parent_tablet_publish_infos();
+    parent_info->set_parent_tablet_id(kParentTabletId);
+    parent_info->add_child_tablet_ids(kChildTabletId1);
+    parent_info->add_child_tablet_ids(kChildTabletId2);
+    auto* identical_parent_info = request.add_parent_tablet_publish_infos();
+    identical_parent_info->set_parent_tablet_id(kIdenticalParentTabletId);
+    identical_parent_info->add_child_tablet_ids(kIdenticalChildTabletId);
+
+    auto child1 = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+    child1->set_id(kChildTabletId1);
+    child1->set_version(kVersion);
+    child1->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    child1->mutable_range()->set_lower_bound_included(true);
+    child1->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(10));
+    child1->mutable_range()->set_upper_bound_included(false);
+    auto child2 = std::make_shared<TabletMetadataPB>(*child1);
+    child2->set_id(kChildTabletId2);
+    child2->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    child2->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    auto identical_child = std::make_shared<TabletMetadataPB>(*child1);
+    identical_child->set_id(kIdenticalChildTabletId);
+    identical_child->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(30));
+    identical_child->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(40));
+
+    EXPECT_CALL(mock_service, publish_version(_, _, _, _))
+            .WillOnce(Invoke([&](::google::protobuf::RpcController*, const PublishVersionRequest*,
+                                 PublishVersionResponse* resp, ::google::protobuf::Closure* done) {
+                resp->mutable_status()->set_status_code(0);
+                (*resp->mutable_tablet_metas())[kChildTabletId1].CopyFrom(*child1);
+                (*resp->mutable_tablet_metas())[kChildTabletId2].CopyFrom(*child2);
+                (*resp->mutable_tablet_metas())[kIdenticalChildTabletId].CopyFrom(*identical_child);
+                done->Run();
+            }));
+
+    PublishVersionResponse response;
+    brpc::Controller cntl;
+    google::protobuf::Closure* done = brpc::NewCallback([]() {});
+    _lake_service.aggregate_publish_version(&cntl, &request, &response, done);
+
+    ASSERT_EQ(0, response.status().status_code());
+    ASSIGN_OR_ABORT(auto parent, _tablet_mgr->get_single_tablet_metadata(kParentTabletId, kVersion));
+    EXPECT_EQ(kParentTabletId, parent->id());
+    EXPECT_EQ(kVersion, parent->version());
+    EXPECT_EQ(0, parent->range().lower_bound().values(0).value().compare("0"));
+    EXPECT_EQ(0, parent->range().upper_bound().values(0).value().compare("20"));
+    ASSIGN_OR_ABORT(auto identical_parent,
+                    _tablet_mgr->get_single_tablet_metadata(kIdenticalParentTabletId, kVersion));
+    EXPECT_EQ(kIdenticalParentTabletId, identical_parent->id());
+    EXPECT_EQ(0, identical_parent->range().lower_bound().values(0).value().compare("30"));
+    EXPECT_EQ(0, identical_parent->range().upper_bound().values(0).value().compare("40"));
+
+    server.Stop(0);
+    server.Join();
+}
+
 TEST_F(LakeServiceTest, test_aggregate_publish_version_failed) {
     brpc::Server server;
     MockLakeServiceImpl mock_service;

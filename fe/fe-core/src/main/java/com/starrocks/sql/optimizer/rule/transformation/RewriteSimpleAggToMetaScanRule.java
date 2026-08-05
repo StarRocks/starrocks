@@ -367,7 +367,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     .workTimeIsMustAfter(lastUpdateTime)) {
                 long count = table.getVisiblePartitions().stream()
                         .flatMap(partition -> partition.getSubPartitions().stream())
-                        .mapToLong(physicalPartition -> physicalPartition.getLatestBaseIndex().getRowCount())
+                        .mapToLong(physicalPartition -> physicalPartition.getQueryableBaseIndex().getRowCount())
                         .sum();
                 constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
             } else {
