@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
 ```
 

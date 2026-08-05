@@ -12,7 +12,7 @@ This function is supported from v3.2.0.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT XX_HASH3_64(VARCHAR input, ...)
 ```
 

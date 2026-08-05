@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT YEARWEEK(DATETIME|DATE date[, INT mode])
 ```
 

@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 

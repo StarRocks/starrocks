@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 LARGEINT XX_HASH3_128(VARCHAR input, ...)
 ```
 

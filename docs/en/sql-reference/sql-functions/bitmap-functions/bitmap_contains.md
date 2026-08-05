@@ -10,7 +10,7 @@ Calculates whether the input value is in the bitmap column, and returns a Boolea
 
 ## Syntax
 
-```Haskell
+```plaintext
 B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)
 ```
 

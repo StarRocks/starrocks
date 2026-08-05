@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 

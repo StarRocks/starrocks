@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR format_bytes(BIGINT bytes)
 ```
 

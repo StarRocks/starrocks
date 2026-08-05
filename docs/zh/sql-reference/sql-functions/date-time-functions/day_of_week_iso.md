@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 

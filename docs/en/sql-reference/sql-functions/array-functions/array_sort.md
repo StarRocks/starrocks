@@ -10,7 +10,7 @@ Sorts the elements of an array in ascending order.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_sort(array)
 ```
 

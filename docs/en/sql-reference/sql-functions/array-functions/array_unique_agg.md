@@ -12,7 +12,7 @@ This function is supported from v3.2.
 
 ## Syntax
 
-```Haskell
+```plaintext
 ARRAY_UNIQUE_AGG(col)
 ```
 

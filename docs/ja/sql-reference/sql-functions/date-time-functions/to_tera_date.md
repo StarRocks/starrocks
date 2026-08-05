@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE to_tera_date(VARCHAR str, VARCHAR format)
 ```
 

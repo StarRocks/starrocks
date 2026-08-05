@@ -10,7 +10,7 @@ Returns the sine of `x`, where `x` is in radians.
 
 ## Syntax
 
-```Haskell
+```plaintext
 SIN(x);
 ```
 

@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME timestamp(DATETIME|DATE expr);
 ```
 

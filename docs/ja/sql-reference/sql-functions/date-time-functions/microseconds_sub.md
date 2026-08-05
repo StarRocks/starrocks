@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME microseconds_sub(DATETIME expr1,INT expr2);
 ```
 

@@ -10,7 +10,7 @@ Returns the ISO standard day of the week for the specified date as an integer wi
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT DAY_OF_WEEK_ISO(DATETIME date)
 ```
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT dayofweek(DATETIME date)
 ```
 

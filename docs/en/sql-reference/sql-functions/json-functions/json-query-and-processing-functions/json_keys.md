@@ -14,7 +14,7 @@ Accelerate your queries with [generated columns](../../../sql-statements/generat
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_keys(json_doc[, path])
 ```
 

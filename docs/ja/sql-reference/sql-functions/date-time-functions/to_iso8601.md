@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TO_ISO8601(DATETIME | DATE date)
 ```
 

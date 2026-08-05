@@ -10,7 +10,7 @@ StarRocks にビットマップデータをインポートする前に、デー�
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 

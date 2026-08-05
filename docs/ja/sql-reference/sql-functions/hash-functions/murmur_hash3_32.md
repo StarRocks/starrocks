@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT MURMUR_HASH3_32(VARCHAR input, ...)
 ```
 

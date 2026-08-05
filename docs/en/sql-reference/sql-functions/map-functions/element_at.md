@@ -14,7 +14,7 @@ This function is supported from v3.0 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 element_at(any_map, any_key)
 ```
 

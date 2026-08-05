@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_from_arrays(ARRAY keys, ARRAY values)
 ```
 

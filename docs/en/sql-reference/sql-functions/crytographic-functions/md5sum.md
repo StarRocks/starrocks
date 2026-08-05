@@ -12,7 +12,7 @@ Compared to md5(), md5sum() accepts more parameters and therefore, is more effic
 
 ## Syntax
 
-```Haskell
+```plaintext
 md5sum(expr,...);
 ```
 

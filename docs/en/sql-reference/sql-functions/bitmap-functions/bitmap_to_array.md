@@ -10,7 +10,7 @@ Converts a BITMAP into a BIGINT array.
 
 ## Syntax
 
-```Haskell
+```plaintext
  ARRAY<BIGINT> BITMAP_TO_ARRAY (bitmap)
 ```
 

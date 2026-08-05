@@ -10,7 +10,7 @@ Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 
 ## Syntax
 
-```Haskell
+```plaintext
 nullif(expr1,expr2);
 ```
 

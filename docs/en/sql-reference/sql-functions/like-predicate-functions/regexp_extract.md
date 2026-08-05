@@ -12,7 +12,7 @@ This function returns the first matching substring in the target value which mat
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
 ```
 

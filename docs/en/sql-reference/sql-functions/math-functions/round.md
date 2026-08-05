@@ -13,7 +13,7 @@ Rounds a number to a specified number of digits.
 
 ## Syntax
 
-```Haskell
+```plaintext
 ROUND(x [,n]);
 ```
 

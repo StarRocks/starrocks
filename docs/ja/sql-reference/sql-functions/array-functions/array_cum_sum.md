@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_cum_sum(array(bigint))
 array_cum_sum(array(double))
 ```

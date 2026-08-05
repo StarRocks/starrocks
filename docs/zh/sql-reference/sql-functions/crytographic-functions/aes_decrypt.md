@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 aes_decrypt(str,key_str);
 ```
 

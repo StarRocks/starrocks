@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ```
 
