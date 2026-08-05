@@ -44,6 +44,7 @@ public:
 
 private:
     Status _load_update_state(const RowsetUpdateStateParams& params);
+    StatusOr<int64_t> _calc_upt_memory_usage_per_row(const TabletSchema& tablet_schema);
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
@@ -75,6 +76,7 @@ private:
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
+    int64_t _upt_memory_usage_per_row = 0;
 };
 
 class CompactionUpdateConflictChecker {

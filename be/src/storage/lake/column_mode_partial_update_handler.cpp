@@ -41,6 +41,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
@@ -91,6 +92,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
         return Status::OK();
     }
 
+    ASSIGN_OR_RETURN(_upt_memory_usage_per_row, _calc_upt_memory_usage_per_row(*params.tablet_schema));
+
     // Build PK schema
     vector<uint32_t> pk_columns;
     pk_columns.reserve(params.tablet_schema->num_key_columns());
@@ -134,6 +137,41 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     }
 
     return Status::OK();
+}
+
+StatusOr<int64_t> ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row(const TabletSchema& tablet_schema) {
+    // RowsetMetadataPB only exposes compressed file sizes. The segment footer's per-column
+    // total_mem_footprint is accumulated from Column::byte_size() by SegmentWriter, which matches
+    // the total_update_row_size accounting used by the shared-nothing update rowset writer.
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
+    ASSIGN_OR_RETURN(auto segments, _rowset_ptr->segments(lake_io_opts));
+
+    int64_t total_update_row_size = 0;
+    int64_t num_rows_upt = 0;
+    for (const auto& segment : segments) {
+        if (segment == nullptr) {
+            continue;
+        }
+        num_rows_upt += segment->num_rows();
+        // Sum every column that is actually present in the partial-update segment, including PK
+        // columns. This intentionally retains the conservative shared-nothing accounting even when
+        // the source segment is processed one update-column group at a time.
+        for (size_t cid = 0; cid < tablet_schema.num_columns(); ++cid) {
+            const auto* column_reader = segment->column_with_uid(tablet_schema.column(cid).unique_id());
+            if (column_reader == nullptr) {
+                continue;
+            }
+            const uint64_t column_size = column_reader->total_mem_footprint();
+            if (column_size > static_cast<uint64_t>(INT64_MAX - total_update_row_size)) {
+                return Status::Corruption("partial update row memory footprint overflows int64");
+            }
+            total_update_row_size += static_cast<int64_t>(column_size);
+        }
+    }
+
+    int64_t result = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(total_update_row_size, num_rows_upt);
+    TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row", &result);
+    return result;
 }
 
 // this function build delta writer for delta column group's file.(end with `.col`)
@@ -201,7 +239,6 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
     auto source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
     auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
-    const int64_t upt_memory_usage_per_row = RowsetColumnUpdateState::calc_upt_memory_usage_per_row(_rowset_ptr.get());
     uint32_t start_rowid = 0;
     // Accumulate the source bytes incrementally. bytes_usage() may walk every value for
     // object-backed columns, while appending a batch adds exactly that batch's bytes.
@@ -238,7 +275,7 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
             const int64_t rows_after = static_cast<int64_t>(source_chunk_ptr->num_rows()) +
                                        static_cast<int64_t>(tmp_chunk_ptr->num_rows());
             if (!source_chunk_ptr->is_empty() &&
-                (rows_after >= INT32_MAX || source_chunk_bytes + batch_bytes + rows_after * upt_memory_usage_per_row >
+                (rows_after >= INT32_MAX || source_chunk_bytes + batch_bytes + rows_after * _upt_memory_usage_per_row >
                                                     config::partial_update_memory_limit_per_worker)) {
                 RETURN_IF_ERROR(emit_container());
             }

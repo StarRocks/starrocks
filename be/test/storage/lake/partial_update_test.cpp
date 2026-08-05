@@ -329,9 +329,12 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
     delta_writer->close();
 
     ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
-    ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 0);
+    ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
     ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    int64_t upt_memory_usage_per_row = 0;
     std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row",
+                                          [&](void* arg) { upt_memory_usage_per_row = *static_cast<int64_t*>(arg); });
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit",
                                           [&](void* arg) {
                                               const auto* container = static_cast<StreamChunkContainer*>(arg);
@@ -339,12 +342,14 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
                                           });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row");
         SyncPoint::GetInstance()->ClearCallBack(
                 "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit");
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
     ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    EXPECT_GE(upt_memory_usage_per_row, static_cast<int64_t>(sizeof(int32_t) * 2));
     EXPECT_EQ((std::vector<std::pair<uint32_t, uint32_t>>{{0, 4}, {4, 8}, {8, 12}}), emitted_ranges);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
