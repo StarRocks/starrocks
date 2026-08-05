@@ -1453,6 +1453,34 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
             EXPECT_EQ(c->value(), 0) << name;
         }
     }
+    for (const auto* name : {"GetVectorRowRangesTime",
+                             "VectorIndexCacheLookupTime",
+                             "VectorIndexFileOpenTime",
+                             "VectorIndexReadFileTime",
+                             "VectorIndexInitIndexTime",
+                             "VectorIndexSearcherInitTime",
+                             "VectorIndexCacheHitCount",
+                             "VectorIndexCacheMissCount",
+                             "VectorSearchTime",
+                             "ProcessVectorDistanceAndIdTime",
+                             "VectorIndexFilterRows",
+                             "SeedGetVectorRowRangesTime",
+                             "SeedVectorIndexCacheLookupTime",
+                             "SeedVectorIndexFileOpenTime",
+                             "SeedVectorIndexReadFileTime",
+                             "SeedVectorIndexInitIndexTime",
+                             "SeedVectorIndexSearcherInitTime",
+                             "SeedVectorIndexCacheHitCount",
+                             "SeedVectorIndexCacheMissCount",
+                             "SeedVectorSearchTime",
+                             "SeedProcessVectorDistanceAndIdTime",
+                             "SeedVectorIndexFilterRows"}) {
+        auto* c = profile->get_counter(name);
+        EXPECT_NE(c, nullptr) << name;
+        if (c != nullptr) {
+            EXPECT_EQ(c->value(), 0) << name;
+        }
+    }
 }
 
 TEST_F(LakeDataSourceTest, reopen_reader_requires_initialized_reader) {

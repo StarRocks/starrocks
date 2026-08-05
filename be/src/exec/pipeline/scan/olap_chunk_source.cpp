@@ -179,6 +179,17 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _get_row_ranges_by_vector_index_timer =
             ADD_CHILD_TIMER(_runtime_profile, "GetVectorRowRangesTime", segment_init_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexCacheLookupTime", segment_init_name);
+    _vector_index_file_open_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileOpenTime", segment_init_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexReadFileTime", segment_init_name);
+    _vector_index_init_index_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexInitIndexTime", segment_init_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexSearcherInitTime", segment_init_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheHitCount", TUnit::UNIT, segment_init_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheMissCount", TUnit::UNIT, segment_init_name);
     _vector_search_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorSearchTime", segment_init_name);
     _process_vector_distance_and_id_timer =
             ADD_CHILD_TIMER(_runtime_profile, "ProcessVectorDistanceAndIdTime", segment_init_name);
@@ -832,6 +843,13 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
     COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
     COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
