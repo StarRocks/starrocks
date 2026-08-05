@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -395,7 +396,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         String minValue = sampled.get(0).columnName;
         String maxValue = sampled.get(0).histogram;
-        if (!isUsableBucketBound(minValue, columnType) || !isUsableBucketBound(maxValue, columnType)) {
+        if (StringUtils.isBlank(minValue) || StringUtils.isBlank(maxValue)) {
             LOG.info("[Stats] unusable sampled bounds, falling back to placeholder bucket | db={} table={} " +
                     "column={} min={} max={}", db.getOriginName(), table.getName(), columnName, minValue, maxValue);
             return Optional.empty();
@@ -405,12 +406,6 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
     private static boolean canCarrySampledBounds(Type columnType) {
         return columnType.getPrimitiveType().isNumericType() || columnType.getPrimitiveType().isDateType();
-    }
-
-    private static boolean isUsableBucketBound(String value, Type columnType) {
-        return canCarrySampledBounds(columnType)
-                && !StringUtils.isBlank(value)
-                && !StringUtils.containsAny(value, '"', '\'', '\\');
     }
 
     private String buildSampleMinMax(Database database, Table table, String columnName, Type columnType,
@@ -553,7 +548,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             context.put("sampleClause", sampleClause);
             context.put("randFilter", "TRUE");
         } else {
-            String randFilter = String.format(" rand() <= %f", sampleRatio);
+            String randFilter = String.format(Locale.ROOT, " rand() <= %f", sampleRatio);
             context.put("randFilter", randFilter);
             context.put("sampleClause", "");
         }
