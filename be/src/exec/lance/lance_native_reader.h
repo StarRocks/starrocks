@@ -14,11 +14,11 @@
 
 #pragma once
 
-#include "column/arrow/arrow_to_starrocks_converter.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
-
 #include <memory>
 #include <vector>
+
+#include "column/arrow/arrow_to_starrocks_converter.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 
 namespace arrow {
 class RecordBatch;
