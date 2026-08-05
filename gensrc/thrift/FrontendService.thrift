@@ -1687,6 +1687,22 @@ struct TGetPartitionAccessTimesResponse {
     2: optional map<i64, i64> partition_id_to_access_time_ms // logicalPartitionId -> lastAccessTime(ms)
 }
 
+// One partition's durable access-time record, dumped from a single FE's in-memory map for the
+// leader's periodic flush into the internal _statistics_.partition_access_time table.
+struct TPartitionAccessTimeEntry {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 access_time_ms
+}
+
+struct TDumpPartitionAccessTimesRequest {
+}
+
+struct TDumpPartitionAccessTimesResponse {
+    1: optional list<TPartitionAccessTimeEntry> entries
+}
+
 struct TGetPartitionsMetaResponse {
     1: optional list<TPartitionMetaInfo> partitions_meta_infos
     // max table id in partitions_meta_infos + 1, if set to 0, it means reaches end
@@ -2600,6 +2616,10 @@ service FrontendService {
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
     TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
+
+    // Leader-only flush RPC: drains a peer FE's in-memory partition access-time map for durable
+    // persistence into the internal _statistics_.partition_access_time table.
+    TDumpPartitionAccessTimesResponse dumpPartitionAccessTimes(1: optional TDumpPartitionAccessTimesRequest request)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 

@@ -1517,11 +1517,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_collect_partition_access_time`
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否采集并展示每个分区的 `LAST_ACCESS_TIME`（分区最近一次被用户查询扫描的时间），展示在 `SHOW PARTITIONS` 和 `information_schema.partitions_meta` 中。禁用后，访问时间既不会被记录，也不会跨 FE 聚合，`LAST_ACCESS_TIME` 列显示为 `NULL`。此项不影响 `LAST_UPDATE_TIME`。
+- 引入版本: v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Leader FE 将采集到的每个分区的 `LAST_ACCESS_TIME` 刷新到内部表 `_statistics_.partition_access_time` 的时间间隔，用于在 FE 重启或 Failover 后保证数据持久化。仅当 `enable_collect_partition_access_time` 为 `true` 时生效。
 - 引入版本: v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`

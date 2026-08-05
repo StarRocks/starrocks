@@ -26,6 +26,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TGetPartitionAccessTimesRequest;
 import com.starrocks.thrift.TGetPartitionAccessTimesResponse;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeEntry;
 import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,21 +42,17 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Tracks the last time each partition was scanned by a user query (lastAccessTime).
  * <p>
- * Pure in-memory: the timestamps live in {@link #partitionAccessTimes} on this FE and are NOT persisted
- * (no {@code @SerializedName}, no edit log), so they reset on FE restart/failover. Keyed by
- * {@code dbId -> tableId -> (logicalPartitionId -> ms)}; all three ids are globally unique. The query hot path
- * records with a single lock-free, catalog-free {@code merge} (monotonic max) via {@link #recordAccess},
- * and reads are lock-free too: the read path just snapshots the relevant tables' inner maps without
- * touching the catalog or walking the partition structure.
+ * In-memory, keyed by {@code dbId -> tableId -> (logicalPartitionId -> ms)} (all three ids are globally
+ * unique). The query hot path records with a single lock-free, catalog-free {@code merge} (monotonic max)
+ * via {@link #recordAccess}, and reads are lock-free too: the read path just snapshots the relevant tables'
+ * inner maps without touching the catalog.
  * <p>
- * A cluster-consistent value is assembled entirely inside {@link #getAccessTimes}: each FE only records the
- * queries it coordinates, so it folds this FE's own records together with the other FEs' (a best-effort
- * cross-FE RPC that lands in each peer's {@link #getLocalAccessTimes}), all keyed by logical partition id,
- * and raises {@link ErrorCode#ERR_GET_PARTITION_ACCESS_TIME} when there is nothing to show and every peer
- * failed. The read paths (SHOW PARTITIONS and information_schema.partitions_meta) just call it and map each
- * logical timestamp onto its physical sub-partition rows using the logical parent already in scope during
- * their {@code for (logical) for (physical)} row-building loop -- no reverse lookup, and no lock is needed
- * for the access-time column.
+ * Durability across restart/failover is provided out-of-band by {@link PartitionAccessTimePersister}, which
+ * runs only on the leader.
+ * <p>
+ * The read paths (SHOW PARTITIONS and information_schema.partitions_meta) just call {@link #getAccessTimes}
+ * and map each logical timestamp onto its physical sub-partition rows using the logical parent already in
+ * scope during their {@code for (logical) for (physical)} row-building loop.
  */
 public class PartitionAccessTimeMgr {
     private static final Logger LOG = LogManager.getLogger(PartitionAccessTimeMgr.class);
@@ -95,6 +92,10 @@ public class PartitionAccessTimeMgr {
     /**
      * Cluster-aggregated access times for a batch of tables (logicalPartitionId -&gt; ms), keyed by logical
      * partition id across all tables (ids are globally unique).
+     * <p>
+     * Assembled purely from memory -- this FE's own records plus a best-effort RPC to every alive peer's
+     * {@link #getLocalAccessTimes}; the leader's reply carries the full persisted baseline, so no FE ever
+     * queries the internal table on this path.
      * <p>
      * When the merged result is empty AND every peer we actually contacted failed, an empty result would be
      * indistinguishable from "genuinely never accessed", so this raises {@link ErrorCode#ERR_GET_PARTITION_ACCESS_TIME}
@@ -180,5 +181,124 @@ public class PartitionAccessTimeMgr {
         }
         ConcurrentHashMap<Long, Long> perTable = perDb.get(tableId);
         return perTable == null ? 0L : perTable.getOrDefault(logicalPartitionId, 0L);
+    }
+
+    /**
+     * Snapshot every in-memory access time as flat entries and clear them from the map in the same pass. Only
+     * a <b>follower</b> is drained this way (via the leader's flush RPC): its map is a transient increment
+     * buffer, so the leader collects and clears it each cycle. The leader's own authoritative map is never
+     * drained -- it exposes its increment through {@link #snapshotNewerThan} instead.
+     * <p>A conditional remove keeps a concurrent {@link #recordAccess} that bumped the ts after it was read.
+     */
+    public synchronized List<TPartitionAccessTimeEntry> dumpAccessTimes() {
+        List<TPartitionAccessTimeEntry> entries = new ArrayList<>();
+        for (Map.Entry<Long, ConcurrentHashMap<Long, ConcurrentHashMap<Long, Long>>> dbE : partitionAccessTimes.entrySet()) {
+            ConcurrentHashMap<Long, ConcurrentHashMap<Long, Long>> perDb = dbE.getValue();
+            for (Map.Entry<Long, ConcurrentHashMap<Long, Long>> tblE : perDb.entrySet()) {
+                ConcurrentHashMap<Long, Long> perTable = tblE.getValue();
+                for (Map.Entry<Long, Long> pE : perTable.entrySet()) {
+                    Long ts = pE.getValue();
+                    entries.add(entry(dbE.getKey(), tblE.getKey(), pE.getKey(), ts));
+                    // Conditional remove: an access recorded after we read `ts` has a larger value and is kept.
+                    perTable.remove(pE.getKey(), ts);
+                }
+                // Drop the now-empty inner map. A lock-free recordAccess that resolved this (empty) perTable just
+                // before this trim and merges afterwards lands in a detached map, losing that one update -- a
+                // bounded, self-healing window within the best-effort tolerance, not worth locking the hot path.
+                perDb.computeIfPresent(tblE.getKey(), (k, v) -> v.isEmpty() ? null : v);
+            }
+            partitionAccessTimes.computeIfPresent(dbE.getKey(), (k, v) -> v.isEmpty() ? null : v);
+        }
+        return entries;
+    }
+
+    /**
+     * Max-merge flat entries into the map without clearing anything. The leader uses this both to fold each
+     * drained follower's increment into its authoritative map and to seed that map from the persisted table
+     * when it becomes leader. Uses the same lock-free {@code merge(max)} as {@link #recordAccess}.
+     */
+    public void mergeEntries(List<TPartitionAccessTimeEntry> entries) {
+        if (entries == null) {
+            return;
+        }
+        for (TPartitionAccessTimeEntry e : entries) {
+            partitionAccessTimes
+                    .computeIfAbsent(e.getDb_id(), k -> new ConcurrentHashMap<>())
+                    .computeIfAbsent(e.getTable_id(), k -> new ConcurrentHashMap<>())
+                    .merge(e.getPartition_id(), e.getAccess_time_ms(), Math::max);
+        }
+    }
+
+    /**
+     * Snapshot the map entries whose access time is strictly greater than {@code sinceExclusiveMs} (no clear).
+     * The leader flush uses this with the last persisted max time to persist only the increment. Weakly
+     * consistent iteration over the concurrent map -- safe against a concurrent {@link #recordAccess}.
+     */
+    public List<TPartitionAccessTimeEntry> snapshotNewerThan(long sinceExclusiveMs) {
+        List<TPartitionAccessTimeEntry> out = new ArrayList<>();
+        for (Map.Entry<Long, ConcurrentHashMap<Long, ConcurrentHashMap<Long, Long>>> dbE : partitionAccessTimes.entrySet()) {
+            for (Map.Entry<Long, ConcurrentHashMap<Long, Long>> tblE : dbE.getValue().entrySet()) {
+                for (Map.Entry<Long, Long> pE : tblE.getValue().entrySet()) {
+                    if (pE.getValue() > sinceExclusiveMs) {
+                        out.add(entry(dbE.getKey(), tblE.getKey(), pE.getKey(), pE.getValue()));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Snapshot every {@code (dbId, tableId, logicalPartitionId)} key currently in the map (no clear). The
+     * leader cleanup walks these to find rows whose partition was dropped from the live catalog.
+     */
+    public List<long[]> collectAllKeys() {
+        List<long[]> out = new ArrayList<>();
+        for (Map.Entry<Long, ConcurrentHashMap<Long, ConcurrentHashMap<Long, Long>>> dbE : partitionAccessTimes.entrySet()) {
+            for (Map.Entry<Long, ConcurrentHashMap<Long, Long>> tblE : dbE.getValue().entrySet()) {
+                for (Long pid : tblE.getValue().keySet()) {
+                    out.add(new long[] {dbE.getKey(), tblE.getKey(), pid});
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Remove the given {@code (dbId, tableId, logicalPartitionId)} keys from the map (leader cleanup, in step
+     * with the corresponding table DELETE). Empty inner maps are trimmed. A concurrent {@link #recordAccess}
+     * that re-adds a just-dropped partition is harmless -- the next cleanup cycle prunes it again.
+     */
+    public void removePartitions(Collection<long[]> keys) {
+        if (keys == null) {
+            return;
+        }
+        for (long[] key : keys) {
+            if (key.length < 3) {
+                continue;
+            }
+            long dbId = key[0];
+            long tableId = key[1];
+            ConcurrentHashMap<Long, ConcurrentHashMap<Long, Long>> perDb = partitionAccessTimes.get(dbId);
+            if (perDb == null) {
+                continue;
+            }
+            ConcurrentHashMap<Long, Long> perTable = perDb.get(tableId);
+            if (perTable == null) {
+                continue;
+            }
+            perTable.remove(key[2]);
+            perDb.computeIfPresent(tableId, (k, v) -> v.isEmpty() ? null : v);
+            partitionAccessTimes.computeIfPresent(dbId, (k, v) -> v.isEmpty() ? null : v);
+        }
+    }
+
+    private static TPartitionAccessTimeEntry entry(long dbId, long tableId, long partitionId, long ts) {
+        TPartitionAccessTimeEntry e = new TPartitionAccessTimeEntry();
+        e.setDb_id(dbId);
+        e.setTable_id(tableId);
+        e.setPartition_id(partitionId);
+        e.setAccess_time_ms(ts);
+        return e;
     }
 }

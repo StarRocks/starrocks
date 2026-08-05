@@ -33,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -65,6 +66,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.PARTITION_ACCESS_TIME_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
@@ -146,6 +148,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
 
     private static final List<String> MULTI_COLUMN_STATISTICS_KEY_COLUMNS = ImmutableList.of(
             "table_id", "column_ids"
+    );
+
+    private static final List<String> PARTITION_ACCESS_TIME_KEY_COLUMNS = ImmutableList.of(
+            "db_id", "table_id", "partition_id"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
@@ -432,6 +438,43 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(QUERY_HISTORY_TABLE_NAME);
     }
 
+    private boolean createPartitionAccessTimeTable(ConnectContext context) {
+        LOG.info("create partition_access_time table start");
+        // Aggregate table with last_access_time_ms MAX-aggregated: the periodic flush is a blind INSERT, so
+        // letting the storage engine keep the larger value on write makes the persisted timestamp monotonic --
+        // a late/stale batch from a rejoining FE can never move it backwards. Works in both run modes.
+        KeysType keysType = KeysType.AGG_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            List<ColumnDef> columns = ImmutableList.of(
+                    new ColumnDef("db_id", new TypeDef(BIGINT)),
+                    new ColumnDef("table_id", new TypeDef(BIGINT)),
+                    new ColumnDef("partition_id", new TypeDef(BIGINT)),
+                    new ColumnDef("last_access_time_ms", new TypeDef(BIGINT), false, AggregateType.MAX, null,
+                            false, ColumnDef.DefaultValueDef.NOT_SET, "")
+            );
+
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, PARTITION_ACCESS_TIME_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableRef, columns, EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, PARTITION_ACCESS_TIME_KEY_COLUMNS), null,
+                    new HashDistributionDesc(10, PARTITION_ACCESS_TIME_KEY_COLUMNS),
+                    properties, null, "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create partition_access_time table", e);
+            return false;
+        }
+        LOG.info("create partition_access_time table done");
+        return checkTableExist(PARTITION_ACCESS_TIME_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -476,6 +519,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 return createSPMBaselinesTable(context);
             } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
                 return createQueryHistoryTable(context);
+            } else if (PARTITION_ACCESS_TIME_TABLE_NAME.equals(tableName)) {
+                return createPartitionAccessTimeTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -597,6 +642,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        refreshStatisticsTable(PARTITION_ACCESS_TIME_TABLE_NAME);
         if (isStopRequested()) {
             return;
         }

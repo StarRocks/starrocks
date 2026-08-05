@@ -69,6 +69,8 @@ import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TDumpPartitionAccessTimesRequest;
+import com.starrocks.thrift.TDumpPartitionAccessTimesResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
@@ -108,6 +110,7 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeEntry;
 import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
@@ -2465,42 +2468,66 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testGetPartitionAccessTimes() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), "site_access_auto");
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_auto");
 
-        // Record a query access on every (logical) partition of the table on this (local) FE.
-        List<Long> partitionIds = table.getPartitions().stream()
-                .map(Partition::getId).collect(Collectors.toList());
-        GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
-                .recordAccess(db.getId(), table.getId(), partitionIds);
+            // Record a query access on every (logical) partition of the table on this (local) FE.
+            List<Long> partitionIds = table.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+            GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                    .recordAccess(db.getId(), table.getId(), partitionIds);
 
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
-        // Batch request carrying this table; the handler is lock-free and returns logicalPartitionId -> ms.
-        TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
-        TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
-        ref.setDb_id(db.getId());
-        ref.setTable_id(table.getId());
-        request.setTables(Lists.newArrayList(ref));
+            // Batch request carrying this table; the handler is lock-free and returns logicalPartitionId -> ms.
+            TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
+            ref.setDb_id(db.getId());
+            ref.setTable_id(table.getId());
+            request.setTables(Lists.newArrayList(ref));
 
-        TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
-        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
-        Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
-        Assertions.assertNotNull(accessTimes);
-        Assertions.assertEquals(partitionIds.size(), accessTimes.size());
-        for (Long pid : partitionIds) {
-            Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+            TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
+            Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+            Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
+            Assertions.assertNotNull(accessTimes);
+            Assertions.assertEquals(partitionIds.size(), accessTimes.size());
+            for (Long pid : partitionIds) {
+                Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+            }
+
+            // A table absent on this FE (bogus id) must not fail: the lock-free snapshot returns empty.
+            TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
+            missingRef.setDb_id(db.getId());
+            missingRef.setTable_id(-1L);
+            missingReq.setTables(Lists.newArrayList(missingRef));
+            TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
+            Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
+            Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
         }
+    }
 
-        // A table absent on this FE (bogus id) must not fail: the lock-free snapshot returns empty.
-        TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
-        TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
-        missingRef.setDb_id(db.getId());
-        missingRef.setTable_id(-1L);
-        missingReq.setTables(Lists.newArrayList(missingRef));
-        TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
-        Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
-        Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
+    @Test
+    public void testDumpPartitionAccessTimesReturnsEntries() throws Exception {
+        // record on the local mgr, then dump via the handler
+        GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                .recordAccess(1L, 2L, Lists.newArrayList(3L));
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TDumpPartitionAccessTimesRequest request = new TDumpPartitionAccessTimesRequest();
+            TDumpPartitionAccessTimesResponse response = impl.dumpPartitionAccessTimes(request);
+            Assertions.assertTrue(response.getEntries().stream()
+                    .anyMatch((TPartitionAccessTimeEntry e) -> e.getPartition_id() == 3L));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
     }
 }

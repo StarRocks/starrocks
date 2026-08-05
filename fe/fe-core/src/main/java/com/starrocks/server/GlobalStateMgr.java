@@ -69,6 +69,7 @@ import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.PartitionAccessTimeMgr;
+import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
@@ -414,6 +415,7 @@ public class GlobalStateMgr {
     private final TabletStatMgr tabletStatMgr;
 
     private final PartitionAccessTimeMgr partitionAccessTimeMgr;
+    private final PartitionAccessTimePersister partitionAccessTimePersister;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -762,6 +764,7 @@ public class GlobalStateMgr {
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
         this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
+        this.partitionAccessTimePersister = new PartitionAccessTimePersister();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -1692,6 +1695,7 @@ public class GlobalStateMgr {
         loadJobScheduler.start();
         loadTimeoutChecker.start();
         loadsHistorySyncer.start();
+        partitionAccessTimePersister.start();
         tabletWriteLogHistorySyncer.start();
         loadEtlChecker.start();
         loadLoadingChecker.start();
@@ -1843,6 +1847,7 @@ public class GlobalStateMgr {
         stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopBestEffort());
         stopOne("loadEtlChecker", () -> loadEtlChecker.stopBestEffort());
         stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopBestEffort());
+        stopOne("partitionAccessTimePersister", () -> partitionAccessTimePersister.stopBestEffort());
         stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopBestEffort());
         stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopBestEffort());
         stopOne("loadJobScheduler", () -> loadJobScheduler.stopBestEffort());
