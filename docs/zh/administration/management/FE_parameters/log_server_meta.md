@@ -416,7 +416,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 天
 - 是否可变: Yes
-- 描述: 保留 `sys_log_dir/proc_profile` 下生成的进程分析文件（CPU 和内存）的天数。ProcProfileCollector 通过将 `proc_profile_file_retained_days` 天数从当前时间（格式为 yyyyMMdd-HHmmss）中减去来计算截止时间，并删除时间戳部分在字典序上早于该截止时间的分析文件（即 `timePart.compareTo(timeToDelete) < 0`）。文件删除还遵循由 `proc_profile_file_retained_size_bytes` 控制的基于大小的截止时间。分析文件使用 `cpu-profile-` 和 `mem-profile-` 前缀，并在收集后进行压缩。
+- 描述: 保留 `sys_log_dir/proc_profile` 下生成的进程分析文件（CPU 和内存）的天数。`proc-profile-cleaner` 守护进程通过将 `proc_profile_file_retained_days` 天数从当前时间（格式为 yyyyMMdd-HHmmss）中减去来计算截止时间，并删除时间戳部分在字典序上早于该截止时间的分析文件（即 `timePart.compareTo(timeToDelete) < 0`）。文件删除还遵循由 `proc_profile_file_retained_size_bytes` 控制的基于大小的截止时间。分析文件使用 `cpu-profile-` 和 `mem-profile-` 前缀，并在收集后进行压缩。
 - 引入版本: v3.2.12
 
 ### `proc_profile_cleanup_interval_s`
@@ -434,7 +434,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 字节
 - 是否可变: Yes
-- 描述: 在分析目录下保留的收集到的 CPU 和内存分析文件（文件名前缀为 `cpu-profile-` 和 `mem-profile-`）的最大总字节数。当有效分析文件的总和超过 `proc_profile_file_retained_size_bytes` 时，收集器将删除最旧的分析文件，直到剩余总大小小于或等于 `proc_profile_file_retained_size_bytes`。早于 `proc_profile_file_retained_days` 的文件也将被删除，无论大小如何。此设置控制分析归档的磁盘使用情况，并与 `proc_profile_file_retained_days` 交互以确定删除顺序和保留。
+- 描述: 在分析目录下保留的收集到的 CPU 和内存分析文件（文件名前缀为 `cpu-profile-` 和 `mem-profile-`）的最大总字节数。当有效分析文件的总和超过 `proc_profile_file_retained_size_bytes` 时，`proc-profile-cleaner` 守护进程将删除最旧的分析文件，直到剩余总大小小于或等于 `proc_profile_file_retained_size_bytes`。早于 `proc_profile_file_retained_days` 的文件也将被删除，无论大小如何。此设置控制分析归档的磁盘使用情况，并与 `proc_profile_file_retained_days` 交互以确定删除顺序和保留。
 - 引入版本: v3.2.12
 
 ### `profile_log_delete_age`
