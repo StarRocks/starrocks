@@ -703,7 +703,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：キャンセルされたクエリが、まだ報告していないフラグメントインスタンスを待ち続ける時間です。キャンセルされたクエリは最終的に失敗するため、この待機は失敗したフラグメントのプロファイルを収集するためだけに存在します。猶予期間が経過すると、Coordinator は待機を停止し、`query_timeout` や `insert_timeout` の期限まで待たずに、キャンセルの原因となったエラーでステートメントを終了します。`0` に設定すると、クエリがキャンセルされた時点で待機を停止します。
+- 説明：`Coordinator.join()` で完了を待つ実行パスがキャンセルされた後、まだ報告していないフラグメントインスタンスを待ち続ける時間です。このパラメータは主に、`INSERT INTO` などのロードおよび DML タスクに適用されます。`Coordinator.getNext()` を使用する通常のクエリには影響しません。通常のクエリはキャンセルされると直ちに戻ります。`enable_async_profile` が `true` の場合、Profile の収集はバックグラウンドで非同期に続行されます。`enable_async_profile` が `false` の場合、Profile は同期的に収集され、最大 `profile_timeout` まで待機することがあります。`Coordinator.join()` を使用する実行パスでは、この待機は失敗したフラグメントの Profile を収集するためだけに存在します。猶予期間が経過すると、Coordinator は待機を停止し、`query_timeout` や `insert_timeout` の期限まで待たずに、キャンセルの原因となったエラーでタスクを終了します。このパラメータを `0` に設定すると、タスクがキャンセルされた時点で待機を停止します。
 - 導入時期：v4.2
 
 ### `publish_version_interval_ms`
