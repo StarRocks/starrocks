@@ -28,10 +28,10 @@ description: "materialized_view_refresh_jobs はマテリアライズドビュ�
 | FINISH_TIME                        | ジョブが終了した時間。ジョブが終了していない場合は `NULL`。 |
 | DURATION_TIME                      | ジョブの実時間での所要時間（秒単位。最後の task run の終了時間から最初の task run の処理開始時間を引いた値）。ジョブが終了していない場合は `NULL`。 |
 | REFRESH_TRIGGER                    | このジョブがトリガーされた方法。手動で `REFRESH MATERIALIZED VIEW` を発行した場合は `MANUAL`（マテリアライズドビューのスキームが定期または自動であっても）。それ以外の場合はマテリアライズドビューに設定されたスキーム。有効な値: `MANUAL`、`SCHEDULED`、`ON_BASE_TABLE_CHANGE`、`NONE`。マテリアライズドビューが削除されていてジョブが手動でなかった場合は `UNKNOWN`。 |
-| REFRESH_MODE                       | マテリアライズドビューに設定されたリフレッシュモード。有効な値: `AUTO`、`PCT`、`INCREMENTAL`。マテリアライズドビューが削除されている場合は `NULL`。 |
-| IMV_SOURCE_VERSION_RANGE           | インクリメンタルリフレッシュが消費したソースバージョン範囲の JSON。非インクリメンタル（PCT）リフレッシュの場合、またはソース範囲が消費されなかった場合は `NULL` を返します。 |
-| IMV_SOURCE_TIMESTAMP_RANGE         | インクリメンタルリフレッシュが消費したソースタイムスタンプ範囲の JSON。非インクリメンタル（PCT）リフレッシュの場合、またはソース範囲が消費されなかった場合は `NULL` を返します。 |
-| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | 固定されたソーススナップショット ID の JSON。その JSON キーは connector のテーブル識別子（Iceberg の場合は `<table>:<uuid>`）であり、IMV_SOURCE_VERSION_RANGE および IMV_SOURCE_TIMESTAMP_RANGE が使用する `<catalog>.<db>.<table>` キーとは異なります。baseline/PCT パスのリフレッシュで設定され、純粋なインクリメンタル実行の場合、またはスナップショットが固定されなかった場合は `NULL` を返します。 |
+| REFRESH_MODE                       | マテリアライズドビューに設定されたリフレッシュモード。有効な値: `PCT`、`INCREMENTAL`。マテリアライズドビューが削除されている場合は `NULL`。これは*設定された*モードであり、個々のリフレッシュが実際に実行したモードではないことに注意してください。ブートストラップの初回リフレッシュ時、および INCREMENTAL のプラン作成が失敗して PCT にフォールバックした場合には両者が異なります。実際に実行されたモードは `information_schema.task_runs` の `get_json_string(EXTRA_MESSAGE, '$.refreshMode')` で確認してください。 |
+| IMV_SOURCE_VERSION_RANGE           | インクリメンタルリフレッシュが基準としたソースバージョン範囲の JSON で、ベーステーブルごとに 1 エントリです。ある範囲の `start` が `end` と等しい場合、そのベーステーブルに変更がなかったことを示すため、変更がなくスキップされたリフレッシュはすべてのベーステーブルについてそのような範囲を報告します。非インクリメンタル（PCT）リフレッシュの場合は `NULL` を返します。 |
+| IMV_SOURCE_TIMESTAMP_RANGE         | IMV_SOURCE_VERSION_RANGE と同じ範囲の両端点に対応するコミット時刻の JSON。非インクリメンタル（PCT）リフレッシュの場合、およびインクリメンタルリフレッシュで端点のコミット時刻を解決できなかった場合は `NULL` を返します。 |
+| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | 固定されたソーススナップショット ID の JSON。キーはベーステーブルの `<catalog>.<db>.<table>` 名で、IMV_SOURCE_VERSION_RANGE および IMV_SOURCE_TIMESTAMP_RANGE と同じキーであるため、3 つの列をベーステーブル単位で結合できます。baseline/PCT パスのリフレッシュで設定され、純粋なインクリメンタル実行の場合、またはスナップショットが固定されなかった場合は `NULL` を返します。 |
 | FAILED_TASK_RUN_ID                 | ジョブ内で失敗した task run の ID。失敗した task run がない場合は `NULL`。`task_runs` にドリルダウンするには、`FAILED_QUERY_ID = task_runs.QUERY_ID`（または `JOB_ID`）で join してください。`task_runs` には task-run-id 列はありません。 |
 | FAILED_QUERY_ID                    | 失敗した task run のクエリ ID。失敗した task run がない場合は `NULL`。 |
 | ERROR_CODE                         | 失敗した task run のエラーコード。失敗した task run がない場合は `NULL`。 |

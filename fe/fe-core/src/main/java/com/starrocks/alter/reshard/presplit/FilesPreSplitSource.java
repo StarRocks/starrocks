@@ -16,7 +16,6 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -34,7 +33,6 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -82,30 +80,9 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        List<SecondaryIndexSpec> secondaryIndexSpecs = buildSecondaryIndexSpecs(target);
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
-                sumFileBytes(sourceTable), context.getCurrentComputeResource(), secondaryIndexSpecs);
-    }
-
-    /**
-     * Builds one {@link SecondaryIndexSpec} per visible rollup index of {@code target}
-     * (every visible index except the base), each carrying its own sort key, so the
-     * multi-partition data-tier sampler can project and sample every visible index
-     * alongside the base sort key.
-     *
-     * <p>Package-private (not private) so the unit test can drive it directly without
-     * mocking the full FILES resolution chain that precedes it.
-     */
-    static List<SecondaryIndexSpec> buildSecondaryIndexSpecs(OlapTable target) {
-        List<SecondaryIndexSpec> specs = new ArrayList<>();
-        for (MaterializedIndexMeta meta : target.getVisibleIndexMetas()) {
-            if (meta.getIndexMetaId() == target.getBaseIndexMetaId()) {
-                continue;
-            }
-            specs.add(new SecondaryIndexSpec(meta.getIndexMetaId(),
-                    MetaUtils.getRangeDistributionColumns(target, meta.getIndexMetaId())));
-        }
-        return specs;
+                sumFileBytes(sourceTable), context.getCurrentComputeResource(),
+                SecondaryIndexSpec.forVisibleRollups(target));
     }
 
     /**

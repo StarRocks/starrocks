@@ -24,7 +24,9 @@
 #include "base/testutil/parallel_test.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/mysql_row_buffer.h"
+#include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -491,6 +493,257 @@ PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
     ondemand::object double_overflow_obj = double_overflow_doc.get_object();
     auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
     ASSERT_FALSE(double_overflow_json.ok());
+}
+
+// Flat-JSON schemas are decided per segment, so a single scan can hand the same JsonColumn
+// chunks with different flat schemas (or with no flat schema at all). The append paths must
+// reconcile that instead of indexing the flat sub-columns out of range.
+namespace {
+
+MutableColumnPtr make_plain_json(const std::vector<std::string>& jsons) {
+    auto column = JsonColumn::create();
+    for (const auto& str : jsons) {
+        JsonValue value;
+        CHECK(JsonValue::parse(str, &value).ok());
+        column->append(&value);
+    }
+    return column;
+}
+
+MutableColumnPtr make_flat_json(const std::vector<std::string>& jsons, const std::vector<std::string>& paths,
+                                const std::vector<LogicalType>& types, bool has_remain) {
+    auto plain = make_plain_json(jsons);
+    JsonFlattener flattener(paths, types, has_remain);
+    flattener.flatten(plain.get());
+
+    auto column = JsonColumn::create();
+    column->set_flat_columns(paths, types, flattener.mutable_result());
+    return column;
+}
+
+std::vector<std::string> dump_json(const Column& column) {
+    std::vector<std::string> result;
+    for (size_t i = 0; i < column.size(); i++) {
+        result.emplace_back(column.debug_item(i));
+    }
+    return result;
+}
+
+// The plain rendering of a (possibly flat) column, i.e. what a degraded destination must hold.
+std::vector<std::string> plain_dump(const MutableColumnPtr& column) {
+    auto* json = down_cast<JsonColumn*>(column.get());
+    auto plain = json->unflatten();
+    return plain != nullptr ? dump_json(*plain) : dump_json(*column);
+}
+
+} // namespace
+
+PARALLEL_TEST(JsonColumnTest, test_unflatten_roundtrip) {
+    auto flat = make_flat_json({R"({"a": 1, "b": "x"})", R"({"a": 2, "b": "y"})"}, {"a", "b"},
+                               {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto* flat_ptr = down_cast<JsonColumn*>(flat.get());
+    ASSERT_TRUE(flat_ptr->is_flat_json());
+
+    auto plain = flat_ptr->unflatten();
+    ASSERT_TRUE(plain != nullptr);
+    ASSERT_FALSE(down_cast<const JsonColumn*>(plain.get())->is_flat_json());
+    ASSERT_EQ(2, plain->size());
+
+    flat_ptr->to_plain_json();
+    ASSERT_FALSE(flat_ptr->is_flat_json());
+    ASSERT_EQ(2, flat_ptr->size());
+    ASSERT_EQ(dump_json(*plain), dump_json(*flat_ptr));
+
+    // to_plain_json() on a plain column is a no-op
+    flat_ptr->to_plain_json();
+    ASSERT_EQ(2, flat_ptr->size());
+    ASSERT_TRUE(flat_ptr->unflatten() == nullptr);
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_keeps_flat_on_identical_schema) {
+    auto dst = make_flat_json({R"({"a": 1, "b": "x"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto src = make_flat_json({R"({"a": 2, "b": "y"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+
+    dst_ptr->append(*src, 0, src->size());
+    ASSERT_TRUE(dst_ptr->is_flat_json());
+    ASSERT_EQ(2, dst_ptr->size());
+    dst_ptr->check_or_die();
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_narrower_flat_schema) {
+    auto dst = make_flat_json({R"({"a": 1, "b": "x"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    // a second segment flattened only "a": appending it used to read _flat_columns out of range
+    auto src = make_flat_json({R"({"a": 2})", R"({"a": 3})"}, {"a"}, {TYPE_BIGINT}, false);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+    auto expected_head = plain_dump(dst);
+    auto expected_tail = plain_dump(src);
+
+    dst_ptr->append(*src, 0, src->size());
+    ASSERT_FALSE(dst_ptr->is_flat_json());
+    ASSERT_EQ(3, dst_ptr->size());
+    ASSERT_EQ(expected_head[0], dst_ptr->debug_item(0));
+    ASSERT_EQ(expected_tail[0], dst_ptr->debug_item(1));
+    ASSERT_EQ(expected_tail[1], dst_ptr->debug_item(2));
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_plain_source_into_flat_dest) {
+    auto dst = make_flat_json({R"({"a": 1, "b": "x"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto src = make_plain_json({R"({"c": true})"});
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+
+    dst_ptr->append(*src, 0, src->size());
+    ASSERT_FALSE(dst_ptr->is_flat_json());
+    ASSERT_EQ(2, dst_ptr->size());
+    ASSERT_EQ(src->debug_item(0), dst_ptr->debug_item(1));
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_flat_source_into_non_empty_plain_dest) {
+    auto dst = make_plain_json({R"({"c": true})"});
+    auto src = make_flat_json({R"({"a": 2})"}, {"a"}, {TYPE_BIGINT}, false);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+    auto expected_tail = plain_dump(src);
+
+    // the destination already has rows, so it must not adopt the source's flat schema
+    dst_ptr->append(*src, 0, src->size());
+    ASSERT_FALSE(dst_ptr->is_flat_json());
+    ASSERT_EQ(2, dst_ptr->size());
+    ASSERT_EQ(expected_tail[0], dst_ptr->debug_item(1));
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_selective_flat_schema_mismatch) {
+    auto dst = make_flat_json({R"({"a": 1, "b": "x"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto src = make_flat_json({R"({"a": 2})", R"({"a": 3})", R"({"a": 4})"}, {"a"}, {TYPE_BIGINT}, false);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+    auto expected = plain_dump(src);
+
+    std::vector<uint32_t> indexes{2, 0};
+    dst_ptr->append_selective(*src, indexes.data(), 0, indexes.size());
+    ASSERT_FALSE(dst_ptr->is_flat_json());
+    ASSERT_EQ(3, dst_ptr->size());
+    ASSERT_EQ(expected[2], dst_ptr->debug_item(1));
+    ASSERT_EQ(expected[0], dst_ptr->debug_item(2));
+}
+
+PARALLEL_TEST(JsonColumnTest, test_append_with_remain_column) {
+    auto dst = make_flat_json({R"({"a": 1, "z": [1, 2]})"}, {"a"}, {TYPE_BIGINT}, true);
+    auto src = make_flat_json({R"({"a": 2, "b": "y", "z": {"k": 1}})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, true);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+    ASSERT_TRUE(dst_ptr->has_remain());
+    auto expected_head = plain_dump(dst);
+    auto expected_tail = plain_dump(src);
+
+    // different schemas, both with a remain column: the merged values must survive
+    dst_ptr->append(*src, 0, src->size());
+    ASSERT_FALSE(dst_ptr->is_flat_json());
+    ASSERT_EQ(2, dst_ptr->size());
+    ASSERT_EQ(expected_head[0], dst_ptr->debug_item(0));
+    ASSERT_EQ(expected_tail[0], dst_ptr->debug_item(1));
+}
+
+PARALLEL_TEST(JsonColumnTest, test_empty_append_keeps_flat_schema) {
+    auto dst = make_flat_json({R"({"a": 1, "b": "x"})"}, {"a", "b"}, {TYPE_BIGINT, TYPE_VARCHAR}, false);
+    auto src = make_flat_json({R"({"a": 2})"}, {"a"}, {TYPE_BIGINT}, false);
+    auto* dst_ptr = down_cast<JsonColumn*>(dst.get());
+
+    dst_ptr->append(*src, 0, 0);
+    ASSERT_TRUE(dst_ptr->is_flat_json());
+    ASSERT_EQ(1, dst_ptr->size());
+
+    dst_ptr->append_selective(*src, nullptr, 0, 0);
+    ASSERT_TRUE(dst_ptr->is_flat_json());
+    ASSERT_EQ(1, dst_ptr->size());
+}
+
+PARALLEL_TEST(JsonColumnTest, test_nullable_wrapper_survives_degrade) {
+    // the flat sub-columns carry their own nulls; the outer null column must stay in sync
+    auto dst_data = make_flat_json({R"({"a": 1})", R"({"a": 2})"}, {"a"}, {TYPE_BIGINT}, false);
+    auto dst_nulls = NullColumn::create();
+    dst_nulls->append(0);
+    dst_nulls->append(1);
+    auto dst = NullableColumn::create(std::move(dst_data), std::move(dst_nulls));
+
+    auto src_data = make_flat_json({R"({"b": "y"})"}, {"b"}, {TYPE_VARCHAR}, false);
+    auto src_nulls = NullColumn::create();
+    src_nulls->append(0);
+    auto src = NullableColumn::create(std::move(src_data), std::move(src_nulls));
+
+    dst->append(*src, 0, 1);
+    ASSERT_EQ(3, dst->size());
+    dst->check_or_die();
+    ASSERT_FALSE(down_cast<const JsonColumn*>(dst->data_column().get())->is_flat_json());
+    ASSERT_FALSE(dst->is_null(0));
+    ASSERT_TRUE(dst->is_null(1));
+    ASSERT_FALSE(dst->is_null(2));
+}
+
+// Regression test for the crash in
+//   ObjectColumn<JsonValue>::byte_size() <- Chunk::bytes_usage() <- PipelineDriver::process().
+//
+// INTERSECT/EXCEPT rebuild their output rows by serializing every key column into one row-major
+// buffer and then deserializing that buffer back into freshly created destination columns
+// (IntersectHashSet::deserialize_to_columns / ExceptHashSet::deserialize_to_columns). When the key
+// expression is non-nullable the destination is a bare JsonColumn, which used to inherit
+// ObjectColumn::deserialize_and_append_batch() - a DCHECK-only stub that appends nothing in a
+// release build. The JSON column then stayed empty while the sibling key column held `chunk_size`
+// rows, and the first reader that trusted Chunk::num_rows() walked off the end of the JSON pool.
+//
+// This reproduces that flow without a cluster: it must leave every destination column with the
+// same number of rows, and the JSON values must round-trip.
+// NOLINTNEXTLINE
+PARALLEL_TEST(JsonColumnTest, test_deserialize_and_append_batch_set_operation_keys) {
+    constexpr size_t kChunkSize = 4;
+
+    // The two key columns of `SELECT v1, js FROM js7 INTERSECT ...`, both NOT NULL.
+    auto src_int = Int32Column::create();
+    auto src_json = JsonColumn::create();
+    std::vector<std::string> json_strs = {R"({"a": 1})", R"({"b": [1, 2, 3]})", R"("plain string")", R"(42)"};
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        src_int->append(static_cast<int32_t>(i));
+        ASSIGN_OR_ABORT(auto json, JsonValue::parse(json_strs[i]));
+        src_json->append(std::move(json));
+    }
+
+    // 1. Serialize the keys exactly like IntersectHashSet::_serialize_columns() does for
+    //    non-nullable key columns: a leading null byte followed by the value.
+    uint32_t max_one_row_size = 0;
+    max_one_row_size += src_int->max_one_element_serialize_size() + sizeof(bool);
+    max_one_row_size += src_json->max_one_element_serialize_size() + sizeof(bool);
+
+    std::vector<uint8_t> buffer(max_one_row_size * kChunkSize, 0);
+    Buffer<uint32_t> slice_sizes(kChunkSize, 0);
+    src_int->serialize_batch_with_null_masks(buffer.data(), slice_sizes, kChunkSize, max_one_row_size, nullptr, false);
+    src_json->serialize_batch_with_null_masks(buffer.data(), slice_sizes, kChunkSize, max_one_row_size, nullptr, false);
+
+    Buffer<Slice> keys(kChunkSize);
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        keys[i] = Slice(reinterpret_cast<char*>(buffer.data()) + i * max_one_row_size, slice_sizes[i]);
+    }
+
+    // 2. Rebuild the destination columns the way *HashSet::deserialize_to_columns() does. Both
+    //    destinations are non-nullable, so the serialized null byte is skipped by hand.
+    MutableColumns dst_columns;
+    dst_columns.emplace_back(Int32Column::create());
+    dst_columns.emplace_back(JsonColumn::create());
+    for (auto& dst_column : dst_columns) {
+        for (auto& key : keys) {
+            key.data += sizeof(bool);
+        }
+        dst_column->deserialize_and_append_batch(keys, kChunkSize);
+    }
+
+    // 3. A chunk built out of these columns must be self consistent: every column has to report
+    //    the same size, otherwise Chunk::num_rows() lies about the JSON column and any range
+    //    accessor (Chunk::bytes_usage() -> ObjectColumn::byte_size(0, num_rows)) reads out of bounds.
+    ASSERT_EQ(kChunkSize, dst_columns[0]->size());
+    ASSERT_EQ(kChunkSize, dst_columns[1]->size());
+    ASSERT_EQ(dst_columns[0]->size(), dst_columns[1]->size());
+
+    auto* dst_json = down_cast<JsonColumn*>(dst_columns[1].get());
+    ASSERT_EQ(src_json->byte_size(0, kChunkSize), dst_json->byte_size(0, kChunkSize));
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        ASSERT_EQ(0, src_json->get_object(i)->compare(*dst_json->get_object(i))) << "row " << i;
+    }
 }
 
 } // namespace starrocks

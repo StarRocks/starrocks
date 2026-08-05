@@ -472,7 +472,7 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAllNULL) {
             ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
             ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             // corner test
-            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->only_null());
         }

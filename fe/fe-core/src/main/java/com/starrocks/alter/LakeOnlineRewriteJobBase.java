@@ -124,6 +124,16 @@ public abstract class LakeOnlineRewriteJobBase
     // stable for the job's lifetime. Not serialized; re-resolved after replay on first tick.
     private transient String cachedDbName;
 
+    @Override
+    protected void resetTransientState() {
+        // Intentionally empty for now: this job family is shared-data only, and a shared-data
+        // leader demotion exits the process (StateChangeExecutor), so an in-place reset is
+        // unreachable today - a restart reloads the job from image + journal instead. Before
+        // enabling graceful in-place demotion for shared-data mode, audit the transient state
+        // here (cachedDbName is self-healing, but the per-partition rewrite bookkeeping in
+        // partitionStates and any unlogged state transitions need the OptimizeJobV2-style reset).
+    }
+
     /**
      * Durable per-partition state of the rewrite, journaled inside {@link #partitionStates}. Built
      * incrementally: shadowIndex/tabletCount/boundaries in PENDING, watershedVersion in WAITING_TXN,
@@ -1083,6 +1093,12 @@ public abstract class LakeOnlineRewriteJobBase
             SessionVariable sessionVariable = context.getSessionVariable();
             sessionVariable.setUsePageCache(false);
             sessionVariable.setEnableMaterializedViewRewrite(false);
+            // Force the rewrite scan to read the base index. Once a table carries sibling rollups, the
+            // synchronous-MV/rollup rewrite (enabled by default) could otherwise substitute a sibling
+            // rollup as the scan source; for AGG/UNIQUE a sibling is pre-aggregated to a different grain,
+            // which would build the new rollup from already-aggregated data. Disabling it keeps the
+            // SELECT reading the base deterministically (no-op for single-index rewrite jobs).
+            sessionVariable.setEnableSyncMaterializedViewRewrite(false);
             sessionVariable.setInsertTimeoutS((int) (timeoutMs / 2000));
 
             // Journal the rewrite txn id BEFORE executing: peekNextTransactionId() is the id the

@@ -671,6 +671,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
+### enable_vector_index_block_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否按倒排列表 Block 缓存 IVFPQ 索引。开启后，StarRocks 仅加载并缓存查询需要的 IVFPQ Block；关闭后缓存整个 IVFPQ 索引文件。该配置不改变 HNSW 的缓存方式。
+- 引入版本：-
+
+### config_vector_index_build_concurrency
+
+- 默认值：8
+- 类型：Int
+- 单位：线程
+- 是否动态：是
+- 描述：每个向量索引构建任务使用的 OpenMP 线程数。StarRocks 会将实际值限制为至少 `1`。该配置还会与 `vector_index_build_max_cpu_ratio` 一起决定异步向量索引构建线程池的大小。
+- 引入版本：-
+
+### config_vector_index_default_build_threshold
+
+- 默认值：10000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：构建向量索引所需的默认 Segment 最小行数。索引属性 `index_build_threshold` 可以覆盖该值。对于 IVFPQ，有效阈值至少为 `nlist`，以确保索引训练有足够的数据。
+- 引入版本：-
+
+### vector_index_build_max_cpu_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：比例
+- 是否动态：是
+- 描述：异步向量索引构建可使用的 BE/CN CPU 核数目标比例。构建 CPU 预算为 `max(2, floor(cpu_cores * value))`，构建线程池大小由该预算和 `config_vector_index_build_concurrency` 共同决定。由于最小预算为 `2`，小规格机器或较小的比例可能使实际值超过配置比例。
+- 引入版本：-
+
 ### enable_vector_adaptive_search
 
 - 默认值：true
@@ -687,6 +723,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
 - 引入版本：v3.4.0
+
+### enable_vector_index_cache_on_build
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：构建向量索引时，是否把刚构建出的索引一并写入由 `vector_query_cache_capacity` 控制的向量索引缓存。默认关闭：该缓存是按查询工作集容量规划的，如果允许导入和 Compaction 把新构建的索引不断写入缓存，会淘汰正在被查询使用的条目，换来的却是一批可能永远不会被查询的索引。查询路径仍会在首次读取索引时按需填充缓存。仅当索引构建与查询在同一节点上执行、且新写入的数据会被立即查询时，才建议开启该项，以省去首次从索引文件回读的开销。修改后对之后启动的索引构建生效。
+- 引入版本：v4.2.0
 
 ### vector_adaptive_ef_alpha
 
@@ -713,6 +758,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：自适应 `ef_search` 倍率上限。即使 segment 极大也将放大倍率限制在该上限内，避免 CPU 与延迟在极端情况下失控。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_index_brute_selectivity_threshold
+
+- 默认值：0.01
+- 类型：Double
+- 单位：比例
+- 是否动态：是
+- 描述：带残余标量过滤条件的向量查询从过滤式 HNSW 遍历切换为精确计算的选择率阈值。如果匹配行数不超过 Segment 总行数的该比例，StarRocks 会直接对过滤后的候选项计算距离。设置为 `0` 可禁用该比例判断；候选数量不大于查询 `k` 时的独立短路仍然生效。
+- 引入版本：-
+
+### vector_index_build_flush_threshold_rows
+
+- 默认值：262144
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：每个向量索引构建器的暂存 Buffer 在将数据加入内存索引前最多保留的行数。该配置可以限制构建 HNSW Flat 索引时的暂存 Buffer 内存，但不限制训练后索引本身的大小。设置为 `0` 可禁用中间 Flush，并缓存整个 Segment。
 - 引入版本：-
 
 ### vector_chunk_size

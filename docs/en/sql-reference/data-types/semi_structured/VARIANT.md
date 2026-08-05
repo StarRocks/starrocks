@@ -133,7 +133,7 @@ You can cast SQL values to VARIANT. Supported input types include BOOLEAN, integ
 SELECT
     CAST(123 AS VARIANT) AS v_int,
     CAST(3.14 AS VARIANT) AS v_double,
-    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST(CAST('12.34' AS DECIMAL(10, 2)) AS VARIANT) AS v_decimal,
     CAST('hello' AS VARIANT) AS v_string,
     CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
 ```

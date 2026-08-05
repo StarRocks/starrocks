@@ -39,6 +39,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/hash/hash_std.hpp"
@@ -90,11 +91,12 @@ public:
     // created.
     Status reopen_client(const client_factory& factory_method, void** client_key, int timeout_ms);
 
-    // Return a client to the cache, without closing it, and set *client_key to NULL.
+    // Return a client to the cache, or close it if it was invalidated, and set
+    // *client_key to NULL.
     void release_client(void** client_key);
 
-    // Close all connections to a host (e.g., in case of failure) so that on their
-    // next use they will have to be Reopen'ed.
+    // Close idle connections to a host and mark checked-out connections so they are
+    // closed when released.
     void close_connections(const TNetworkAddress& address);
 
     std::string debug_string();
@@ -121,6 +123,10 @@ private:
     // Map from client key back to its associated ThriftClientImpl transport
     typedef std::unordered_map<void*, ThriftClientImpl*> ClientMap;
     ClientMap _client_map;
+
+    // Clients that were checked out when close_connections() invalidated their host.
+    // They must be evicted instead of returned to a newly-created cache entry.
+    std::unordered_set<void*> _clients_to_evict;
 
     // MetricRegistry
     bool _metrics_enabled{false};
@@ -229,9 +235,8 @@ public:
         _client_cache_helper.init_metrics(metrics, key_prefix);
     }
 
-    // Close all clients connected to the supplied address, (e.g., in
-    // case of failure) so that on their next use they will have to be
-    // Reopen'ed.
+    // Close idle clients connected to the supplied address and mark checked-out
+    // clients so they are closed when released.
     void close_connections(const TNetworkAddress& hostport) { return _client_cache_helper.close_connections(hostport); }
 
 private:

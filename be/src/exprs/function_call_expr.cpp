@@ -149,8 +149,6 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL));
         }
-        FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_fragment_thread_local_call_failed);
-        RETURN_IF_ERROR(_fn_desc->prepare_function(fn_ctx, FunctionContext::THREAD_LOCAL));
     }
 
     return Status::OK();
@@ -161,8 +159,6 @@ void VectorizedFunctionCallExpr::close(starrocks::RuntimeState* state, starrocks
     // _fn_context_index >= 0 means this function call has call opened
     if (_fn_desc != nullptr && _fn_desc->close_function != nullptr && _fn_context_index >= 0) {
         FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-        (void)_fn_desc->close_function(fn_ctx, FunctionContext::THREAD_LOCAL);
-
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             (void)_fn_desc->close_function(fn_ctx, FunctionContext::FRAGMENT_LOCAL);
         }
@@ -230,6 +226,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                                                     const NgramBloomFilterReaderOptions& reader_options) const {
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning. This check must precede the cached NgramBloomFilterState because
+    // one ExprContext can scan rowsets with different index metadata.
+    if (reader_options.index_gram_num == 0) {
+        return true;
+    }
+
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
@@ -322,13 +325,21 @@ bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(const Slice& needl
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
 
-    auto gram_num_column = fn_ctx->get_constant_column(2);
-    if (gram_num_column != nullptr) {
+    // Defence in depth: the FE analyzer already requires a positive integer literal here.
+    // get_const_value() casts the constant's data column straight to an Int32Column, so a
+    // non-constant or NULL gram_num would be a wild read rather than a skipped optimization.
+    // Note this runs during index evaluation in the storage layer, before the function itself is
+    // ever evaluated, so ngram_search_prepare()'s own guard does not protect it.
+    if (fn_ctx->is_notnull_constant_column(2)) {
+        auto gram_num_column = fn_ctx->get_constant_column(2);
         size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
         // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
         if (index_gram_num != predicate_gram_num) {
             return false;
         }
+    } else {
+        // gram_num is not a usable constant: the index cannot be matched against it.
+        return false;
     }
 
     // if ngram bloom filter is case_sensitive,but function is case insensitive

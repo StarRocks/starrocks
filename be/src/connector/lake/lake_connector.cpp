@@ -492,6 +492,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     if (thrift_lake_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
+    if (thrift_lake_scan_node.__isset.sample_options) {
+        _params.sample_options = thrift_lake_scan_node.sample_options;
+    }
 
     _params.use_vector_index = _use_vector_index;
     if (_use_vector_index) {
@@ -586,6 +589,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
 
     bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                       thrift_lake_scan_node.enable_global_late_materialization;
+    LakeScanLazyMaterializationContext* glm_ctx = nullptr;
     if (enable_glm) {
         auto* glm_mgr = runtime_state->query_runtime_state()->global_late_materialization_ctx_mgr();
         auto* obj_pool = runtime_state->query_runtime_state()->object_pool();
@@ -593,11 +597,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
             auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
             return ctx;
         };
-        auto* glm_ctx =
-                (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
+        glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(_provider->_plan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
-        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
-        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
     }
 
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
@@ -612,6 +613,14 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state, bool use_
     }
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    if (glm_ctx != nullptr) {
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets(),
+                                 LakeScanCacheOptions{.use_page_cache = _params.use_page_cache,
+                                                      .fill_data_cache = _params.lake_io_opts.fill_data_cache,
+                                                      .fill_metadata_cache = _params.lake_io_opts.fill_metadata_cache,
+                                                      .skip_disk_cache = _params.lake_io_opts.skip_disk_cache});
+    }
 
     // Setup SST warmup callback for CACHE SELECT on PK tables
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
@@ -1529,8 +1538,10 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_TIMER(_runtime_profile, "DeleteFilter");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c3 = ADD_COUNTER(_runtime_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
     }
 
     int64_t pages_total = _reader->stats().total_pages_num;

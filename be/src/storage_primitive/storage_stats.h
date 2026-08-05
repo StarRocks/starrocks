@@ -91,6 +91,9 @@ struct OlapReaderStatistics {
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
+    // Rows a vector (ANN) query skipped from the row-level delete-predicate evaluation because their page's
+    // zone map proved they match no delete predicate (see SegmentIterator::_apply_del_predicate).
+    int64_t rows_del_predicate_zone_map_pruned = 0;
 
     int64_t total_pages_num = 0;
     int64_t cached_pages_num = 0;

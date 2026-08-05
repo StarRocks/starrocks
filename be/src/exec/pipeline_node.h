@@ -27,9 +27,9 @@ class PipelineNode : public ExecNode {
 public:
     using ExecNode::ExecNode;
 
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+    Status prepare(RuntimeState* state) final;
+    Status open(RuntimeState* state) final;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) final;
 };
 
 } // namespace starrocks

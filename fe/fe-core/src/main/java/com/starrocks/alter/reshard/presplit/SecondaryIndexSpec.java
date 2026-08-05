@@ -15,7 +15,11 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.sql.common.MetaUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,4 +30,21 @@ import java.util.List;
  * routed back to the correct index downstream.
  */
 public record SecondaryIndexSpec(long indexMetaId, List<Column> sortKey) {
+
+    /**
+     * Builds one spec per visible rollup index of {@code target} (every visible index except the
+     * base), each carrying its own sort key. Shared by the FILES / Broker / INSERT-from-table
+     * pre-split sources so the "every visible index except base" enumeration lives in one place.
+     */
+    static List<SecondaryIndexSpec> forVisibleRollups(OlapTable target) {
+        List<SecondaryIndexSpec> specs = new ArrayList<>();
+        for (MaterializedIndexMeta meta : target.getVisibleIndexMetas()) {
+            if (meta.getIndexMetaId() == target.getBaseIndexMetaId()) {
+                continue;
+            }
+            specs.add(new SecondaryIndexSpec(meta.getIndexMetaId(),
+                    MetaUtils.getRangeDistributionColumns(target, meta.getIndexMetaId())));
+        }
+        return specs;
+    }
 }

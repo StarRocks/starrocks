@@ -36,6 +36,7 @@ import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnPrepareMode;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -72,10 +73,14 @@ public class TransactionStateTest {
                 3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
+        transactionState.setReason("persistent reason");
+        transactionState.setTemporaryReason("temporary reason");
 
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+        Assertions.assertEquals("persistent reason", readTransactionState.getReason());
+        Assertions.assertFalse(json.contains("temporary reason"));
     }
 
     @Test
@@ -261,6 +266,15 @@ public class TransactionStateTest {
             assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
             assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(3000, 0);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(4000, 10_000, TxnPrepareMode.INTERNAL_ONE_PHASE);
+            assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
+            assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
 
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));

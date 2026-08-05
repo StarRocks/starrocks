@@ -35,7 +35,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -50,7 +49,6 @@ public class VectorIndexTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        Config.enable_experimental_vector = true;
         FeConstants.enablePruneEmptyOutputScan = false;
         starRocksAssert.withTable("CREATE TABLE test.test_cosine ("
                 + " c0 INT,"
@@ -555,9 +553,10 @@ public class VectorIndexTest extends PlanTestBase {
         assertContains(plan, "  13:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: OFF");
+        // A table without a vector index reports no VECTORINDEX state at all.
         assertContains(plan, "  25:OlapScanNode\n" +
                 "     table: test_no_vector_index, rollup: test_no_vector_index\n" +
-                "     VECTORINDEX: OFF");
+                "     preAggregation: on");
     }
 
     @Test

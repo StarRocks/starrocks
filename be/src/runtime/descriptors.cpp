@@ -31,7 +31,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-const int RowDescriptor::INVALID_IDX = -1;
 SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type, std::pmr::memory_resource* mr)
         : _id(id),
           _type(std::move(type)),
@@ -165,106 +164,33 @@ std::string TupleDescriptor::debug_string() const {
     return out.str();
 }
 
-RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples) {
-    DCHECK_GT(row_tuples.size(), 0);
-
-    for (int row_tuple : row_tuples) {
-        TupleDescriptor* tupleDesc = desc_tbl.get_tuple_descriptor(row_tuple);
-        _tuple_desc_map.push_back(tupleDesc);
-        DCHECK(_tuple_desc_map.back() != nullptr);
-    }
-
-    init_tuple_idx_map();
-}
-
-RowDescriptor::RowDescriptor(TupleDescriptor* tuple_desc) : _tuple_desc_map(1, tuple_desc) {
-    init_tuple_idx_map();
-}
-
-void RowDescriptor::init_tuple_idx_map() {
-    // find max id
-    TupleId max_id = 0;
-    for (auto& i : _tuple_desc_map) {
-        max_id = std::max(i->id(), max_id);
-    }
-
-    _tuple_idx_map.resize(max_id + 1, INVALID_IDX);
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        _tuple_idx_map[_tuple_desc_map[i]->id()] = i;
+RecordDescriptor::RecordDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& tuple_ids) {
+    _tuple_descs.reserve(tuple_ids.size());
+    for (int tuple_id : tuple_ids) {
+        TupleDescriptor* tuple_desc = desc_tbl.get_tuple_descriptor(tuple_id);
+        DCHECK(tuple_desc != nullptr);
+        _tuple_descs.push_back(tuple_desc);
     }
 }
 
-int RowDescriptor::get_tuple_idx(TupleId id) const {
-    DCHECK_LT(id, _tuple_idx_map.size()) << "RowDescriptor: " << debug_string();
-    return _tuple_idx_map[id];
+size_t RecordDescriptor::num_slots() const {
+    size_t num_slots = 0;
+    for (const auto* tuple_desc : _tuple_descs) {
+        num_slots += tuple_desc->slots().size();
+    }
+    return num_slots;
 }
 
-void RowDescriptor::to_thrift(std::vector<TTupleId>* row_tuple_ids) {
-    row_tuple_ids->clear();
-
-    for (auto& i : _tuple_desc_map) {
-        row_tuple_ids->push_back(i->id());
-    }
-}
-
-void RowDescriptor::to_protobuf(google::protobuf::RepeatedField<google::protobuf::int32>* row_tuple_ids) {
-    row_tuple_ids->Clear();
-    for (auto desc : _tuple_desc_map) {
-        row_tuple_ids->Add(desc->id());
-    }
-}
-
-bool RowDescriptor::is_prefix_of(const RowDescriptor& other_desc) const {
-    if (_tuple_desc_map.size() > other_desc._tuple_desc_map.size()) {
-        return false;
-    }
-
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        // pointer comparison okay, descriptors are unique
-        if (_tuple_desc_map[i] != other_desc._tuple_desc_map[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool RowDescriptor::equals(const RowDescriptor& other_desc) const {
-    if (_tuple_desc_map.size() != other_desc._tuple_desc_map.size()) {
-        return false;
-    }
-
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        // pointer comparison okay, descriptors are unique
-        if (_tuple_desc_map[i] != other_desc._tuple_desc_map[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-std::string RowDescriptor::debug_string() const {
+std::string RecordDescriptor::debug_string() const {
     std::stringstream ss;
-
-    ss << "tuple_desc_map: [";
-    for (int i = 0; i < _tuple_desc_map.size(); ++i) {
-        ss << _tuple_desc_map[i]->debug_string();
-        if (i != _tuple_desc_map.size() - 1) {
+    ss << "record_desc: [";
+    for (size_t i = 0; i < _tuple_descs.size(); ++i) {
+        if (i != 0) {
             ss << ", ";
         }
+        ss << _tuple_descs[i]->debug_string();
     }
-    ss << "] ";
-
-    ss << "tuple_id_map: [";
-    for (int i = 0; i < _tuple_idx_map.size(); ++i) {
-        ss << _tuple_idx_map[i];
-        if (i != _tuple_idx_map.size() - 1) {
-            ss << ", ";
-        }
-    }
-    ss << "] ";
-
+    ss << "]";
     return ss.str();
 }
 
@@ -448,6 +374,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         case TTableType::KUDU_TABLE:
             desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::FLUSS_TABLE:
+            desc = ALLOC_DESC(FlussTableDescriptor, tdesc, pool, mr);
             break;
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;

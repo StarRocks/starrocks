@@ -80,9 +80,9 @@ public:
 
         _sink_buffer = std::make_shared<SinkBuffer>(_fragment_context.get(), _destinations, /*is_dest_merge*/ false);
 
-        RowDescriptor input_row_desc;
+        RecordDescriptor input_record_desc;
         _recvr = _exec_env->stream_mgr()->create_recvr(
-                _runtime_state.get(), input_row_desc, _fragment_id, 0, 1, config::exchg_node_buffer_size_bytes,
+                _runtime_state.get(), input_record_desc, _fragment_id, 0, 1, config::exchg_node_buffer_size_bytes,
                 _dest_node_id, std::make_shared<QueryStatisticsRecvr>(),
                 /*is_pipeline*/ true, _degree_of_parallelism, /*keep_order*/ false);
         std::stringstream ss;

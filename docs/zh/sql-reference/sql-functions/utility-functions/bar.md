@@ -22,9 +22,11 @@ bar(size, min, max, width)
 
 ## 示例
 
-```SQL
-MYSQL > select r, bar(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+```sql
+select r, bar(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s(r);
+```
 
+```plaintext
 0	
 1	▓▓
 2	▓▓▓▓
@@ -36,5 +38,4 @@ MYSQL > select r, bar(r, 0, 10, 20) as x from table(generate_series(0, 10)) as s
 8	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 9	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 10	▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-
 ```

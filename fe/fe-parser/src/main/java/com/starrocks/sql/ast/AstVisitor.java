@@ -504,6 +504,10 @@ public interface AstVisitor<R, C> {
         return visitFrontendClause(clause, context);
     }
 
+    default R visitTransferLeaderClause(TransferLeaderClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
     default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
         return visitNode(clause, context);
     }

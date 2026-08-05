@@ -109,6 +109,18 @@ public:
     bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
     virtual bool need_notify_all() { return true; }
 
+    // Wake the single consumer driver that owns chunk-buffer slot `buffer_index` -- the slot a
+    // just-produced chunk was written to (the return value of BalancedChunkBuffer::put). In
+    // shared scan the round-robin buffer routes a chunk to an arbitrary sibling driver's slot,
+    // so the producer must wake that specific driver; doing it per-slot avoids fanning out to
+    // every sibling on every chunk. For non-shared (kDirect) scan the slot is the producer's
+    // own, so this just wakes itself. `buffer_index < 0` means nothing was produced.
+    void notify_chunk_buffer_consumer(int buffer_index) {
+        if (buffer_index >= 0) {
+            _source_factory()->notify_source_observer(buffer_index);
+        }
+    }
+
     template <class NotifyAll>
     auto defer_notify(NotifyAll notify_all) {
         return DeferOp([this, notify_all]() {

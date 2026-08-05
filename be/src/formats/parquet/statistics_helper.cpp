@@ -45,6 +45,24 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
     RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
     bool ret = true;
     switch (field->physical_type) {
+    case tparquet::Type::type::BOOLEAN: {
+        // Parquet stores a BOOLEAN min/max stat as a single byte using PLAIN encoding, which is
+        // bit-packed LSB first: only bit 0 holds the value (0=false, 1=true) and bits 1-7 are unused
+        // padding.
+        uint8_t decode_value = 0;
+        for (size_t i = 0; i < values.size(); i++) {
+            if (null_pages[i]) {
+                ret &= column->append_nulls(1);
+            } else {
+                if (values[i].empty()) {
+                    return Status::Corruption("Empty BOOLEAN min/max value");
+                }
+                decode_value = static_cast<uint8_t>(values[i][0]) & 0x1;
+                ret &= (column->append_numbers(&decode_value, sizeof(uint8_t)) > 0);
+            }
+        }
+        break;
+    }
     case tparquet::Type::type::INT32: {
         int32_t decode_value = 0;
         if (!converter->need_convert) {

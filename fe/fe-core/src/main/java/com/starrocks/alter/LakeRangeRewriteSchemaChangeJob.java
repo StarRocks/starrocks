@@ -391,6 +391,16 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         if (sourceColumnNames.contains(column.getName())) {
             return backquoted;
         }
+        // A MODIFY-prefixed sort-key column -- e.g. an integer key widen -- has no source column under
+        // its prefixed name, but its unprefixed origin is still present in the base. Sample the ACTUAL
+        // source values cast to the new (wider) type, NOT a constant default: sampling the default would
+        // make this column non-distinguishing and collapse the boundaries.
+        String originName = Column.removeNamePrefix(column.getName());
+        if (sourceColumnNames.contains(originName)) {
+            return "CAST(" + ParseUtil.backquote(originName) + " AS " + column.getType().toSql()
+                    + ") AS " + backquoted;
+        }
+        // A genuinely-added key column: no source value, so materialize its constant default.
         // Backslash must be escaped before the double quote, or a trailing backslash in the
         // default would swallow the closing quote and a mid-string backslash would be silently
         // reinterpreted by the StarRocks string-literal lexer.
@@ -423,8 +433,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
      */
     @Override
     protected List<String> rewriteSelectColumnNames(@NotNull OlapTable table) {
+        // Select each surviving column by its UNPREFIXED name: an unchanged column selects itself; a
+        // MODIFY-prefixed type change (e.g. a key widen) selects its unprefixed origin, which
+        // InsertPlanner.fillShadowColumns then casts to the (wider) shadow-column type.
         return survivingColumns(table).stream()
-                .map(column -> ParseUtil.backquote(column.getName()))
+                .map(column -> ParseUtil.backquote(Column.removeNamePrefix(column.getName())))
                 .collect(Collectors.toList());
     }
 
@@ -448,7 +461,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * The non-generated newSchema columns present in the base (origin) index schema, in newSchema order.
+     * The non-generated newSchema columns whose value comes from the base (origin) index schema, in
+     * newSchema order. A column qualifies when its name -- with any {@code __starrocks_shadow_} prefix
+     * removed -- is present in the base schema: an unchanged column (no prefix), or a MODIFY-prefixed
+     * type change (e.g. an integer key widen) whose unprefixed origin still exists in the base and whose
+     * value is a cast of that origin. A genuinely-added ({@code __starrocks_shadow_}-prefixed) column has
+     * no unprefixed origin in the base and is excluded (it is default-materialized, not selected).
      */
     private List<Column> survivingColumns(@NotNull OlapTable table) {
         Set<String> baseNames = table.getSchemaByIndexMetaId(originIndexMetaId).stream()
@@ -456,7 +474,7 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
         return newSchema.stream()
                 .filter(column -> !column.isGeneratedColumn())
-                .filter(column -> baseNames.contains(column.getName()))
+                .filter(column -> baseNames.contains(Column.removeNamePrefix(column.getName())))
                 .collect(Collectors.toList());
     }
 

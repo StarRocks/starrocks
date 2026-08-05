@@ -45,7 +45,9 @@ import java.util.stream.Collectors;
  *
  * <p>Subclasses implement {@link #resolveSampleSpec} to supply the FROM clause
  * SQL, an optional WHERE predicate, the total input byte count, the compute
- * resource, and the projected column identifier lists. Everything else —
+ * resource, and the base sort-key / partition projection identifier lists; a
+ * subclass may also override {@link #secondaryProjectionIdents} to control how
+ * the secondary indexes' sort keys are projected. Everything else —
  * sampling-rate math, SQL synthesis, BE invocation, JSON row decode — is shared
  * here.
  */
@@ -168,7 +170,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         List<SecondaryIndexSpec> secondaryIndexSortKeys = request.getSecondaryIndexSortKeys();
         String sampleSql = buildSampleSql(
                 spec.fromClauseSql(), spec.whereClauseSqlOrNull(),
-                spec.sortKeyProjectionIdents(), secondaryProjectionIdents(secondaryIndexSortKeys),
+                spec.sortKeyProjectionIdents(), secondaryProjectionIdents(request),
                 spec.partitionProjectionIdents(),
                 samplingRate, rowLimit, request.getSeed());
         List<TResultBatch> resultBatches = runSampleQuery(
@@ -180,20 +182,17 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     }
 
     /**
-     * Flattens each {@link SecondaryIndexSpec}'s sort-key column names into
-     * backtick-quoted SQL identifiers, in spec order then per-spec column
-     * order. Empty when {@code secondaryIndexSortKeys} is empty, so the
-     * projection is byte-identical to the pre-multi-index SQL.
+     * Projection idents to SELECT for the request's secondary indexes (rollups), flattened in
+     * spec order then per-spec column order. Empty when the request carries no secondary indexes,
+     * so the projection is byte-identical to the pre-multi-index SQL. The default projects each
+     * column by its own name -- correct when the source is name-aligned to the target. A subclass
+     * that remaps source columns back to target columns overrides this to project by the
+     * source-table column name instead.
      */
-    private static List<String> secondaryProjectionIdents(List<SecondaryIndexSpec> secondaryIndexSortKeys) {
-        if (secondaryIndexSortKeys.isEmpty()) {
-            return List.of();
-        }
+    protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
         List<String> idents = new ArrayList<>();
-        for (SecondaryIndexSpec secondaryIndexSpec : secondaryIndexSortKeys) {
-            for (Column column : secondaryIndexSpec.sortKey()) {
-                idents.add(SqlUtils.getIdentSql(column.getName()));
-            }
+        for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
+            idents.addAll(columnIdentsOf(spec.sortKey()));
         }
         return idents;
     }
@@ -327,6 +326,14 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         // pre-submit budget instead of failing fast and falling back.
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
+        // Pin the sample scan to the BASE index. setCurrentWarehouseId above re-clones the session
+        // variable, so (like the query_timeout below) disable BOTH async and sync MV/rollup rewrite
+        // AFTER the switch or the disable is dropped. Without this, once the table carries sibling
+        // rollups the sync-MV/rollup rewrite (on by default) could sample a coarser sibling and skew the
+        // tablet boundaries. Mirrors the rewrite-INSERT base pinning in
+        // LakeOnlineRewriteJobBase.runPartitionRewrite.
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        context.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }
@@ -478,5 +485,14 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      */
     protected static List<String> identsOf(List<String> columnNames) {
         return columnNames.stream().map(SqlUtils::getIdentSql).collect(Collectors.toList());
+    }
+
+    /**
+     * Backtick-quotes each column's own name into a SQL identifier. Column-typed sibling of
+     * {@link #identsOf}, shared by the default {@link #secondaryProjectionIdents} and by
+     * name-aligned subclasses that project by target column name.
+     */
+    protected static List<String> columnIdentsOf(List<Column> columns) {
+        return columns.stream().map(column -> SqlUtils.getIdentSql(column.getName())).collect(Collectors.toList());
     }
 }

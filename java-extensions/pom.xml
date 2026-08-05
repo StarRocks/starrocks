@@ -16,6 +16,7 @@
         <module>udf-examples</module>
         <module>hudi-reader</module>
         <module>paimon-reader</module>
+        <module>fluss-reader</module>
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
@@ -65,7 +66,7 @@
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
         <bouncycastle.version>1.84</bouncycastle.version>
-        <thrift.version>0.23.0</thrift.version>
+        <thrift.version>0.24.0</thrift.version>
     </properties>
 
     <profiles>
@@ -279,6 +280,17 @@
                         <groupId>org.wildfly.openssl</groupId>
                         <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
+                    <!-- CVE-2026-10050 (jetty-security) / CVE-2026-2332 (jetty-http):
+                         both are only reachable via Hadoop's embedded HttpServer2,
+                         which the JNI readers never instantiate (FS client use only). -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-security</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-http</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -318,6 +330,13 @@
                 <artifactId>hadoop-mapreduce-client-core</artifactId>
                 <version>${hadoop.version}</version>
                 <exclusions>
+                    <!-- CVE-2026-10050: vulnerable DigestAuthentication lives in
+                         jetty-client, pulled via hadoop-yarn-client -> websocket-client.
+                         The YARN websocket timeline client is unused by the readers. -->
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
@@ -710,6 +729,16 @@
                                              unused tether feature references it -->
                                         <exclude>org.apache.avro:avro-ipc</exclude>
                                         <exclude>org.apache.avro:avro-ipc-jetty</exclude>
+                                        <!-- CVE-2026-10050 (jetty-client, jetty-security) and
+                                             CVE-2026-2332 (jetty-http): excluded from the managed
+                                             hadoop-common / hadoop-mapreduce-client-core edges above.
+                                             That pruning depends on hadoop-common staying the nearest
+                                             jetty-server path (hadoop-lib also pulls hadoop-hdfs-httpfs
+                                             and hadoop-hdfs-nfs, which declare jetty-server directly),
+                                             so ban the jars outright: no reader needs them at any scope. -->
+                                        <exclude>org.eclipse.jetty:jetty-client</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-security</exclude>
+                                        <exclude>org.eclipse.jetty:jetty-http</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>

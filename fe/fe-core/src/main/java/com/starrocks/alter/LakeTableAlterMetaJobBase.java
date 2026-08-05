@@ -75,11 +75,30 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
     private Map<Long, Long> commitVersionMap = new HashMap<>();
-    private AgentBatchTask batchTask = null;
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask batchTask = null;
     private boolean isFileBundling = false;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN is skipped on the live path; RUNNING is the only in-memory-only state
+        // and its durable predecessor is PENDING - the same-state re-log in runPendingJob
+        // already persisted the watershed, and the -1 guard prevents re-allocation on re-run.
+        // replay() throws on RUNNING, so it must never leak into any persisted copy.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
+        batchTask = null;
+        // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
+        // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
+        // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
+        // non-cancellable exception (checkNotNull), sticking the job until its global timeout.
+        physicalPartitionIndexMap.clear();
     }
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
@@ -179,6 +198,17 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // Default implementation is empty. Subclasses can override this to prepare data.
     }
 
+    /**
+     * Hook for fallible validation that must run under the table WRITE lock BEFORE the FINISHED
+     * state is journaled by {@code persistStateChange}. A failure here throws before any WAL record
+     * is written, so the job stays at {@link JobState#FINISHED_REWRITING} with the catalog untouched.
+     * The default implementation is a no-op; subclasses whose finish callback performs a mutation
+     * that must not fail can move the fallible checks here.
+     */
+    protected void validateBeforeFinishUnprotected(Database db, OlapTable table) throws AlterCancelException {
+        // Default implementation is empty. Subclasses can override this to validate before persist.
+    }
+
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
     protected abstract boolean enableFileBundling();
@@ -261,6 +291,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             this.finishedTimeMs = System.currentTimeMillis();
+            // Run all fallible validation before persisting the FINISHED record, so a failure leaves
+            // the job at FINISHED_REWRITING without a durable FINISHED whose callback did not complete.
+            validateBeforeFinishUnprotected(db, table);
             // Prepare data before persist, so that copyForPersist() can include this data
             prepareForPersist(db, table);
             persistStateChange(this, JobState.FINISHED, () -> {

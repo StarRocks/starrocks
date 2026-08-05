@@ -33,6 +33,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/index_file_writer.h"
@@ -75,21 +76,51 @@ static void fill_slice_buffer(const BinaryT& bin, size_t start_row, size_t run_l
 // variable-length string columns materialize a local Slice[] because the
 // writer expects a Slice-stride array for string CppTypes.
 template <typename Writer>
-Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size) {
+Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size,
+                              size_t char_pad_len = 0) {
     if (run_len == 0) return Status::OK();
 
     // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
     // Slice array anchored at start_row.
     std::vector<Slice> slice_buf;
+    // Backing store for CHAR re-padding; must outlive the writer->add_values()
+    // calls below, so it lives at function scope.
+    std::string pad_storage;
+    // For a CHAR column the on-disk page decoder strnlen-trims the trailing
+    // '\0' padding when reading values back (BinaryPlainPageDecoder<TYPE_CHAR>
+    // / BinaryDictPageDecoder<TYPE_CHAR>), so the Slices materialized here are
+    // UNPADDED (e.g. "guangzhou", size=9). The standard segment-write index
+    // path builds its dictionary from the in-memory column padded to the
+    // declared column width, and the query predicate pads CHAR literals the
+    // same way — so an unpadded fast-path dictionary/bloom would never match at
+    // query time (bitmap over-prunes to an empty result; bloom yields false
+    // negatives / missing rows). Re-pad each slice back to `char_pad_len` bytes
+    // with '\0' so the fast-path index is byte-identical to the standard path.
+    // char_pad_len is 0 for non-CHAR columns (VARCHAR is variable-length and is
+    // not trimmed by the decoder), leaving those paths untouched.
+    auto repad_char = [&]() {
+        if (char_pad_len == 0) return;
+        pad_storage.assign(run_len * char_pad_len, '\0');
+        for (size_t i = 0; i < run_len; ++i) {
+            const size_t sz = std::min<size_t>(slice_buf[i].size, char_pad_len);
+            if (sz > 0) {
+                memcpy(pad_storage.data() + i * char_pad_len, slice_buf[i].data, sz);
+            }
+            slice_buf[i].data = pad_storage.data() + i * char_pad_len;
+            slice_buf[i].size = char_pad_len;
+        }
+    };
     auto get_pdata = [&](const Column& data_col) -> StatusOr<const uint8_t*> {
         if (auto* bin = dynamic_cast<const BinaryColumn*>(&data_col); bin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*bin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         if (auto* lbin = dynamic_cast<const LargeBinaryColumn*>(&data_col); lbin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*lbin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         RawDataVisitor data_visitor;
@@ -159,6 +190,19 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         return Status::InternalError("AddIndexSchemaChange: base tablet metadata is null");
     }
 
+    // run() executes on the alter-worker thread, which has the per-alter
+    // SCHEMA_CHANGE_TASK mem tracker installed on TLS (see
+    // EngineAlterTabletTask::execute). The per-segment index build below,
+    // however, runs on lake_schema_change pool worker threads that do NOT
+    // inherit that TLS tracker — so without re-installing it, the build's
+    // allocations (esp. the whole-segment BITMAP index accumulated until
+    // finish()) would be charged to the process-root tracker and, with no
+    // check_mem_limit, could drive the process toward OOM instead of failing
+    // cleanly. Capture the tracker here and re-install it inside each pool
+    // task, mirroring the legacy inline DirectSchemaChange path. May be the
+    // process-root tracker (or null in bare unit tests); both are safe.
+    MemTracker* mem_tracker = CurrentThread::mem_tracker();
+
     for (const auto& rowset : base_metadata->rowsets()) {
         for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
             uint32_t rssid = get_rssid(rowset, seg_idx);
@@ -166,16 +210,21 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
             // reference would dangle if we captured by reference and the
             // metadata got mutated during the run (e.g. defensive).
             RowsetMetadataPB rowset_copy = rowset;
-            Status submit_st = runner.submit(
-                    [this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index]() -> Status {
-                        IndexDeltaGroupEntryPB entry;
-                        RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
-                        std::lock_guard<std::mutex> lg(_op_mtx);
-                        auto* se = op_add_index->add_segment_entries();
-                        se->set_segment_id(rssid);
-                        se->mutable_entry()->Swap(&entry);
-                        return Status::OK();
-                    });
+            Status submit_st = runner.submit([this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index,
+                                              mem_tracker]() -> Status {
+                // Re-install the alter's schema-change mem tracker on this
+                // pool worker thread so the index build is accounted for and
+                // subject to the same limit as the legacy path. RAII-restored
+                // on task exit, leaving the pool thread's TLS clean.
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                IndexDeltaGroupEntryPB entry;
+                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                std::lock_guard<std::mutex> lg(_op_mtx);
+                auto* se = op_add_index->add_segment_entries();
+                se->set_segment_id(rssid);
+                se->mutable_entry()->Swap(&entry);
+                return Status::OK();
+            });
             if (!submit_st.ok()) {
                 // Submission failure short-circuits: wait for pending tasks
                 // to drain, then report the submit error (which takes
@@ -395,15 +444,43 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bitmap dictionary matches the
+    // standard-path dictionary and the query predicate (see
+    // feed_index_from_column). 0 = no padding (non-CHAR).
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
     while (true) {
+        // Back-pressure: the bitmap writer accumulates the entire per-segment
+        // index (distinct-value dict + a roaring posting list per value) in
+        // memory until finish(), so check the schema-change mem limit each
+        // batch and abort cleanly rather than risk an OOM. The tracker was
+        // installed on this thread's TLS by run()'s task wrapper. Mirrors
+        // legacy DirectSchemaChange (schema_change.cpp). Null-guarded so bare
+        // unit tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         col->reset_column();
         size_t n = kBatch;
         Status st = col_iter->next_batch(&n, col.get());
-        if (st.is_end_of_file() || n == 0) {
+        if (!st.ok() && !st.is_end_of_file()) return st;
+        if (n > 0) {
+            RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size, char_pad_len));
+        }
+        // A short read is the iterator's end-of-column signal: it means the
+        // last data page was consumed by this call. Keep looping only on a
+        // full batch, so we never ask an exhausted iterator for more rows.
+        if (st.is_end_of_file() || n < kBatch) {
             break;
         }
-        if (!st.ok()) return st;
-        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size));
+    }
+
+    // Final memory check: the loop-top check does not cover the last batch's
+    // growth, and finish() below materializes/serializes the whole accumulated
+    // index. Check once more here so the largest peak still fails cleanly
+    // instead of risking an OOM in finish().
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
     }
 
     // Write the bitmap blob to the shared target file and emit the
@@ -529,7 +606,21 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
 
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     const size_t type_size = type_info->size();
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bloom matches the standard-path bloom and
+    // the query predicate (see feed_index_from_column). 0 = no padding.
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
     for (int32_t page = 0; page < num_pages; ++page) {
+        // Back-pressure: the bloom writer keeps one finished filter per data
+        // page (plus the current page's distinct-value working set) in memory
+        // until finish(), so check the schema-change mem limit each page and
+        // abort cleanly rather than risk an OOM. The tracker was installed on
+        // this thread's TLS by run()'s task wrapper. Mirrors legacy
+        // DirectSchemaChange (schema_change.cpp). Null-guarded so bare unit
+        // tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         // [first_ordinal, last_ordinal] is the inclusive row range of data page
         // `page` — exactly what the read path will resolve for read_bloom_filter(page).
         auto [first_ordinal, last_ordinal] = col_reader->get_page_range(static_cast<size_t>(page));
@@ -547,12 +638,19 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
             // with BitmapIndexWriter; reuse the common feeder so Binary / string
             // columns get the Slice-buffer treatment automatically. Multiple
             // next_batch calls accumulate into the SAME pending bloom filter.
-            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
+            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size, char_pad_len));
             remaining -= n;
         }
         // Emit exactly one bloom filter for this data page (mirrors
         // finish_current_page()), so read_bloom_filter(page) lines up 1:1.
         RETURN_IF_ERROR(bf_writer->flush());
+    }
+
+    // Final memory check: the per-page check does not cover the last page's
+    // growth, and finish() below serializes all accumulated per-page filters.
+    // Check once more here so a last-page overshoot still fails cleanly.
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
     }
 
     RETURN_IF_ERROR(bf_writer->finish(target_wfile, out_meta));

@@ -41,6 +41,7 @@
 
 #include "base/hash/hash_std.hpp"
 #include "base/network/network_util.h"
+#include "base/utility/defer_op.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
 #include "gen_cpp/FrontendService.h"
@@ -159,48 +160,59 @@ void ClientCacheHelper::release_client(void** client_key) {
     DCHECK(*client_key != nullptr) << "Trying to release NULL client";
     std::lock_guard<std::mutex> lock(_lock);
 
-    auto client_map_entry = _client_map.find(*client_key);
-    if (client_map_entry == _client_map.end()) {
+    void* key = *client_key;
+    DeferOp release([&]() {
+        if (_metrics_enabled) {
+            _used_clients->increment(-1);
+        }
         *client_key = nullptr;
+    });
+
+    auto client_map_entry = _client_map.find(key);
+    if (client_map_entry == _client_map.end()) {
+        // No current path removes a checked-out client while its caller still has a
+        // non-null key. Keep this branch defensive in case a future path does so.
+        _clients_to_evict.erase(key);
         return;
     }
 
     ThriftClientImpl* info = client_map_entry->second;
     auto iter = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
-    if (iter == _client_cache.end()) {
-        *client_key = nullptr;
+    if (_clients_to_evict.find(key) != _clients_to_evict.end() || iter == _client_cache.end()) {
+        _evict_client(key, info);
         return;
     }
 
     if (_max_cache_size_per_host >= 0 && iter->second.size() >= _max_cache_size_per_host) {
         // cache of this host is full, close this client connection and remove if from _client_map
-        _evict_client(*client_key, info);
+        _evict_client(key, info);
     } else {
-        iter->second.push_back(*client_key);
+        iter->second.push_back(key);
     }
-
-    if (_metrics_enabled) {
-        _used_clients->increment(-1);
-    }
-
-    *client_key = nullptr;
 }
 
 void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
     std::lock_guard<std::mutex> lock(_lock);
     auto cache_entry = _client_cache.find(hostport);
-    if (cache_entry == _client_cache.end()) {
-        return;
+    if (cache_entry != _client_cache.end()) {
+        auto& client_keys = cache_entry->second;
+        for (void* client_key : client_keys) {
+            auto client_map_entry = _client_map.find(client_key);
+            DCHECK(client_map_entry != _client_map.end());
+            ThriftClientImpl* info = client_map_entry->second;
+            _evict_client(client_key, info);
+        }
+        _client_cache.erase(cache_entry);
     }
 
-    auto& client_keys = cache_entry->second;
-    for (void* client_key : client_keys) {
-        auto client_map_entry = _client_map.find(client_key);
-        DCHECK(client_map_entry != _client_map.end());
-        ThriftClientImpl* info = client_map_entry->second;
-        _evict_client(client_key, info);
+    // Checked-out clients cannot be closed here because their callers still hold the
+    // interface pointer. Mark them so release_client() closes them on return. This also
+    // prevents an old client from entering a cache entry recreated after this call.
+    for (const auto& [client_key, client] : _client_map) {
+        if (client->ipaddress() == hostport.hostname && client->port() == hostport.port) {
+            _clients_to_evict.insert(client_key);
+        }
     }
-    _client_cache.erase(cache_entry);
 }
 
 std::string ClientCacheHelper::debug_string() {
@@ -235,6 +247,9 @@ void ClientCacheHelper::init_metrics(MetricRegistry* metrics, const std::string&
 
 void ClientCacheHelper::_evict_client(void* client_key, ThriftClientImpl* client) {
     client->close();
+    // Clear the eviction mark before deleting: the set is keyed by the raw iface pointer,
+    // so a stale mark plus address reuse would evict a newly created client.
+    _clients_to_evict.erase(client_key);
     _client_map.erase(client_key);
     delete client;
 

@@ -317,7 +317,7 @@ public class PaimonScanNode extends ScanNode {
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
-        hdfsScanRange.setPaimon_predicate_info(predicateInfo);
+        hdfsScanRange.setJni_predicate_info(predicateInfo);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);

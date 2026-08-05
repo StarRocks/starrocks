@@ -47,10 +47,12 @@ import java.util.Set;
  * {@code LakeTableAddIndexJob} / {@code LakeTableDropIndexJob} to keep the
  * responsibility split clean and avoid duplicating table-internals lookups here.
  *
- * <p>Supported index types for the fast path: BITMAP, NGRAMBF, GIN. VECTOR is
- * intentionally excluded (separate lifecycle / parameter surface). Bloom filter
- * is a table-level property rather than a {@link CreateIndexClause}, so it is
- * not routed through this path.
+ * <p>Supported index types for the fast path: BITMAP only. NGRAMBF is excluded
+ * because the fast-path .idx ngram bloom is not consulted at query time (see
+ * isSupportedIndexType); GIN / VECTOR are excluded for separate lifecycle /
+ * parameter surface reasons — all stay on the legacy schema-change path. Plain
+ * bloom filter is a table-level property rather than a {@link CreateIndexClause}
+ * (it takes the fast path via the bloom_filter_columns handler, not this one).
  */
 public final class SchemaChangeIndexFastPathClassifier {
 
@@ -297,16 +299,22 @@ public final class SchemaChangeIndexFastPathClassifier {
         if (type == null) {
             return false;
         }
-        // Only BITMAP and NGRAMBF take the lake IDG fast path. The BE
-        // builder (AddIndexSchemaChange::run) returns Status::NotSupported
-        // for GIN / VECTOR, and the fast-path job does not auto-fall-back
-        // to the legacy schema-change job on a BE rejection — routing
-        // these types here would simply fail the alter. Keep them on the
-        // legacy path until BE adds a fast-path builder for them.
+        // Only BITMAP takes the lake IDG fast path. The BE builder
+        // (AddIndexSchemaChange::run) returns Status::NotSupported for
+        // GIN / VECTOR, and the fast-path job does not auto-fall-back to the
+        // legacy schema-change job on a BE rejection — routing those types
+        // here would simply fail the alter.
+        //
+        // NGRAMBF is intentionally excluded: the fast-path .idx ngram bloom is
+        // not consulted at query time (the read path never surfaces the IDG
+        // ngram entry, so LIKE queries never prune — verified on-cluster:
+        // footer ngram filters, fast-path ngram does a full scan), so it must
+        // stay on the legacy path (which rewrites segments with a correct
+        // footer ngram) until the BE fast-path ngram read is implemented.
         switch (type) {
             case BITMAP:
-            case NGRAMBF:
                 return true;
+            case NGRAMBF:
             case GIN:
             case VECTOR:
             default:

@@ -856,8 +856,8 @@ PRIMARY KEY (tenant_id, created_time, id);
 
 | DDL | 原因 |
 |---|---|
-| `ALTER TABLE ... ADD ROLLUP ...` | 同步 Rollup 依赖 base 表与 Rollup 表 tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 与 `ADD ROLLUP` 走同一套代码路径。 |
+| 不带 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖 base 表与 Rollup 表 tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离的 Range 分布表上（自 v4.2 起）它会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
 | `ALTER TABLE ... ORDER BY (...)`（修改排序键） | sort key 决定了 tablet 的边界，修改 sort key 会使现有范围 tablet 失效。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，新增的 KEY 列会被自动追加到（隐式推导的）范围排序键中。 |

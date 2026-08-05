@@ -751,9 +751,9 @@ PROPERTIES: タイムアウト時間を設定することをサポートして�
 
 `ORDER BY`: ベーステーブルのソートキーとは異なる、ロールアップ独自のソートキーを定義します。共有データクラスタの Range 分散テーブルでのみサポートされます（v4.2 以降）。ロールアップの先頭ソートキー列でフィルタまたは集計を行うクエリがロールアップで処理されるようになります。以下の制限があります。
 
-- テーブルは重複キー（Duplicate Key）テーブルまたは集計（Aggregate）テーブルである必要があります。主キー（Primary Key）テーブルはサポートされません。
+- テーブルは重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、またはユニークキー（Unique Key）テーブルである必要があります。主キー（Primary Key）テーブルはサポートされません。
 - テーブルは Colocate テーブルであってはならず、AUTO_INCREMENT 列を含めることはできません。
-- ロールアップは、テーブルに他のロールアップまたは同期マテリアライズドビューが存在しない場合にのみ追加できます。
+- この種のロールアップは複数追加できます。各 `ALTER TABLE` 文で 1 つのロールアップを追加します（複数追加するには文を分けて実行してください）。ロールアップは常にベースインデックスから作成され、`FROM <別のロールアップ>` はサポートされません。テーブルは同期マテリアライズドビューを持っていてはなりません。
 
 例:
 
@@ -1120,7 +1120,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ```sql
     ALTER TABLE example_db.my_table
     ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
-    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`
     TO example_rollup_index;
     ```
 

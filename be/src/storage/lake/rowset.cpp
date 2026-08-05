@@ -164,9 +164,23 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
         return std::optional<SeekRange>{};
     }
 
+    // The SeekRange is used to seek into THIS rowset's segments, which are laid out per _tablet_schema
+    // (for an old rowset, an archived historical schema with fewer sort-key columns than the current
+    // tablet). The SeekRange's field ids are positional in the schema it is decoded with, so we MUST
+    // decode with _tablet_schema for the positions to align with the segments. A range can be written at
+    // a larger (later) sort-key arity than _tablet_schema -- a tablet-level fallback range is in the
+    // current sort key, and a reshard that runs after a metadata-only trailing key add can stamp a
+    // per-rowset range at a later arity onto an old rowset. create_seek_range_from projects such a wider
+    // bound onto _tablet_schema's sort key, comparing the added columns' defaults (what old rows in this
+    // rowset read) -- taken from the current tablet schema -- against the dropped trailing bound values.
+    TabletSchemaCSPtr current_schema =
+            _tablet_metadata != nullptr ? GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first
+                                        : nullptr;
+
     // Do not use mem_pool here. SeekRange will reference the data owned by protobuf metadata,
     // and metadata lifetime is guaranteed to outlive rowset iterators.
-    ASSIGN_OR_RETURN(auto range, TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr));
+    ASSIGN_OR_RETURN(auto range,
+                     TabletRangeHelper::create_seek_range_from(*range_pb, _tablet_schema, nullptr, current_schema));
     return std::optional<SeekRange>(std::move(range));
 }
 
@@ -742,17 +756,26 @@ RowsetId Rowset::rowset_id() const {
     return rowset_id;
 }
 
-std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
+StatusOr<std::vector<SegmentSharedPtr>> Rowset::get_segments_checked() {
+    // Lock-free lazy init: callers must serialize calls on a given Rowset (the split morsel queues
+    // hold _mutex; lake Rowsets are per-reader over immutable metadata). Not std::call_once -- that
+    // marks init done even on a transient failure and would defeat the retry (issue #75203).
+    if (_segments_loaded) {
         return _segments;
     }
-
-    auto segments_or = segments(true);
-    if (!segments_or.ok()) {
-        return {};
-    }
-    _segments = std::move(segments_or.value());
+    // Propagate a transient load failure as its real (retryable) Status instead of swallowing it;
+    // _segments_loaded stays false so a later call retries.
+    ASSIGN_OR_RETURN(auto segs, segments(true));
+    _segments = std::move(segs);
+    _segments_loaded = true;
     return _segments;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    // Best-effort shim for callers that tolerate an empty result on a transient failure; callers
+    // that must not proceed on failure use get_segments_checked() and check the Status.
+    auto res = get_segments_checked();
+    return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {

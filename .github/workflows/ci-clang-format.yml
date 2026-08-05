@@ -38,6 +38,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           token: ${{ secrets.PAT }}
+          # actions/checkout now refuses fork PR checkout under pull_request_target
+          # by default (v7 GA 2026-06-18, backported to all majors 2026-07-16).
+          # This workflow intentionally checks out fork code with a write token
+          # solely to run clang-format and push the fix back, so opt back in.
+          allow-unsafe-pr-checkout: true
 
       - name: Set up base branch reference
         env:

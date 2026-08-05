@@ -741,6 +741,166 @@ TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
     ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
 }
 
+// Regression: after a metadata-only trailing sort-key add (N -> N+1), a reshard that runs later
+// stamps a per-rowset range in the CURRENT (N+1) sort key onto an old rowset that still carries its
+// archived (N) schema. get_seek_range must decode that range with THIS rowset's own (archived) schema
+// -- so the SeekRange's positional field ids align with the rowset's segments -- and project the wider
+// bound onto the leading N sort-key columns using the added columns' defaults (from the current schema);
+// otherwise the read fails with an arity mismatch ("expected N, actual N+1").
+TEST_F(LakeRowsetTest, test_rowset_range_larger_arity_decodes_with_rowset_schema_prefix) {
+    auto add_int_col = [](TabletSchemaPB* s, int uid, const std::string& name, bool is_key, bool nullable) {
+        auto* c = s->add_column();
+        c->set_unique_id(uid);
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_nullable(nullable);
+        c->set_is_key(is_key);
+        if (!is_key) {
+            c->set_aggregation("NONE");
+        }
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+
+    // Current schema: 2 sort keys (k1, k2) + value v; k2 is the trailing added key.
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(200);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    add_int_col(schema, 1, "k1", true, false);
+    add_int_col(schema, 2, "k2", true, true);
+    add_int_col(schema, 3, "v", false, true);
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+
+    // Archived pre-add schema: 1 sort key (k1) + value v.
+    constexpr int64_t kArchivedId = 100;
+    auto& archived = (*metadata->mutable_historical_schemas())[kArchivedId];
+    archived.set_id(kArchivedId);
+    archived.set_keys_type(DUP_KEYS);
+    archived.set_num_short_key_columns(1);
+    archived.set_num_rows_per_row_block(65535);
+    add_int_col(&archived, 1, "k1", true, false);
+    add_int_col(&archived, 3, "v", false, true);
+    archived.add_sort_key_idxes(0);
+
+    // One rowset mapped to the archived (arity-1) schema, carrying a current-arity (2-value) range.
+    auto* rs = metadata->add_rowsets();
+    rs->set_id(10);
+    rs->set_overlapped(false);
+    rs->set_num_rows(0);
+    rs->set_data_size(0);
+    (*metadata->mutable_rowset_to_schema())[10] = kArchivedId;
+    {
+        auto* range = rs->mutable_range();
+        auto* lo = range->mutable_lower_bound();
+        *lo->add_values() = make_int_variant_pb(1);
+        *lo->add_values() = make_int_variant_pb(10);
+        range->set_lower_bound_included(true);
+        auto* hi = range->mutable_upper_bound();
+        *hi->add_values() = make_int_variant_pb(100);
+        *hi->add_values() = make_int_variant_pb(20);
+        range->set_upper_bound_included(false);
+    }
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    // Without the fix this returns an arity-mismatch error (archived arity-1 schema vs arity-2 range).
+    // With it, get_seek_range decodes the leading value with the archived schema (positions aligned) and
+    // projects the arity-2 bound onto that one column using k2's default. k2 is nullable-no-default, so
+    // D(k2)=NULL < the non-NULL trailing values (10/20): an old row (p, NULL) is excluded from the lower
+    // bound and included under the upper.
+    ASSIGN_OR_ABORT(auto seek_range, rowset->get_seek_range());
+    ASSERT_TRUE(seek_range.has_value());
+    EXPECT_EQ(1u, seek_range->lower().columns());
+    EXPECT_FALSE(seek_range->inclusive_lower());
+    EXPECT_TRUE(seek_range->inclusive_upper());
+}
+
+// Regression: chained metadata-only adds interleaved with reshard can leave a per-rowset range at an
+// arity (2) between the rowset's archived schema (1) and the current tablet schema (3). get_seek_range
+// must decode it with THIS rowset's own (archived) schema prefix -- so positions align with the rowset's
+// segments -- NOT the current schema (whose column positions differ once a key is inserted before value
+// columns). It uses the leading (rowset sort-key arity) values and drops the rest.
+TEST_F(LakeRowsetTest, test_rowset_range_decodes_with_rowset_schema_not_current) {
+    auto add_int_col = [](TabletSchemaPB* s, int uid, const std::string& name, bool is_key, bool nullable) {
+        auto* c = s->add_column();
+        c->set_unique_id(uid);
+        c->set_name(name);
+        c->set_type("INT");
+        c->set_is_nullable(nullable);
+        c->set_is_key(is_key);
+        if (!is_key) {
+            c->set_aggregation("NONE");
+        }
+    };
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+
+    // Current schema: 3 sort keys (k1, k2, k3) + value v -- two trailing adds beyond the original k1.
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(300);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    add_int_col(schema, 1, "k1", true, false);
+    add_int_col(schema, 2, "k2", true, false);
+    add_int_col(schema, 3, "k3", true, true);
+    add_int_col(schema, 4, "v", false, true);
+    schema->mutable_column(1)->set_default_value("0"); // k2 added with a const default
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+    schema->add_sort_key_idxes(2);
+
+    // Archived original schema: 1 sort key (k1) + value v.
+    constexpr int64_t kArchivedId = 100;
+    auto& archived = (*metadata->mutable_historical_schemas())[kArchivedId];
+    archived.set_id(kArchivedId);
+    archived.set_keys_type(DUP_KEYS);
+    archived.set_num_short_key_columns(1);
+    archived.set_num_rows_per_row_block(65535);
+    add_int_col(&archived, 1, "k1", true, false);
+    add_int_col(&archived, 4, "v", false, true);
+    archived.add_sort_key_idxes(0);
+
+    // A rowset mapped to the archived (arity-1) schema, carrying an INTERMEDIATE-arity (2-value) range
+    // as a reshard between the two adds would stamp.
+    auto* rs = metadata->add_rowsets();
+    rs->set_id(10);
+    rs->set_overlapped(false);
+    rs->set_num_rows(0);
+    rs->set_data_size(0);
+    (*metadata->mutable_rowset_to_schema())[10] = kArchivedId;
+    {
+        auto* range = rs->mutable_range();
+        auto* lo = range->mutable_lower_bound();
+        *lo->add_values() = make_int_variant_pb(1);
+        *lo->add_values() = make_int_variant_pb(10);
+        range->set_lower_bound_included(true);
+        auto* hi = range->mutable_upper_bound();
+        *hi->add_values() = make_int_variant_pb(100);
+        *hi->add_values() = make_int_variant_pb(20);
+        range->set_upper_bound_included(false);
+    }
+
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    // Decodes the leading value with the rowset's archived schema (arity 1) -- positions aligned with the
+    // segment -- and projects the arity-2 bound onto that column using k2's const default D=0 (from the
+    // current schema). D=0 < the trailing values (10/20), so lower drops to exclusive and upper to
+    // inclusive. The current (arity-3) schema is used only for the projection defaults, never for positions.
+    ASSIGN_OR_ABORT(auto seek_range, rowset->get_seek_range());
+    ASSERT_TRUE(seek_range.has_value());
+    EXPECT_EQ(1u, seek_range->lower().columns());
+    EXPECT_FALSE(seek_range->inclusive_lower());
+    EXPECT_TRUE(seek_range->inclusive_upper());
+}
+
 TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
     create_rowsets_for_testing();
     auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
@@ -1869,6 +2029,254 @@ TEST_F(LakeRowsetTest, test_propagate_has_predicate_above_iterator) {
     ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
     ASSERT_TRUE(seen);
     EXPECT_TRUE(propagated);
+}
+
+namespace {
+
+// Build a DUP_KEYS schema over two INT columns c0,c1. `num_key_columns` sets the sort-key
+// arity (when the PB's sort_key_idxes is empty, TabletSchema falls the sort key back to the
+// key columns): 1 -> sort key (c0); 2 -> sort key (c0,c1). The column unique_ids are passed
+// in so the archived and current schemas keep the same column identity across the
+// metadata-only change.
+static TabletSchemaPB make_two_int_dup_schema(int64_t schema_id, int32_t schema_version, int num_key_columns,
+                                              int64_t c0_uid, int64_t c1_uid) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_id(schema_id);
+    schema_pb.set_schema_version(schema_version);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    const int64_t uids[2] = {c0_uid, c1_uid};
+    for (int i = 0; i < 2; i++) {
+        auto* c = schema_pb.add_column();
+        c->set_unique_id(uids[i]);
+        c->set_name("c" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_nullable(false);
+        const bool is_key = i < num_key_columns;
+        c->set_is_key(is_key);
+        if (!is_key) {
+            c->set_aggregation("NONE");
+        }
+    }
+    return schema_pb;
+}
+
+// Build the current schema after a metadata-only trailing key ADD: [c0 key, c_new key(const default),
+// c1 value] with sort key (c0, c_new). c_new is a brand-new column not physically present in the old
+// segment, so its rows read as `cnew_default`; c1 keeps its unique_id and shifts one position right.
+static TabletSchemaPB make_trailing_key_add_schema(int64_t schema_id, int32_t schema_version, int64_t c0_uid,
+                                                   int64_t cnew_uid, int64_t c1_uid, const std::string& cnew_default) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_id(schema_id);
+    schema_pb.set_schema_version(schema_version);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(c0_uid);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_nullable(false);
+    c0->set_is_key(true);
+    auto* cnew = schema_pb.add_column();
+    cnew->set_unique_id(cnew_uid);
+    cnew->set_name("c_new");
+    cnew->set_type("INT");
+    cnew->set_is_nullable(false);
+    cnew->set_is_key(true);
+    cnew->set_default_value(cnew_default);
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(c1_uid);
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_nullable(false);
+    c1->set_is_key(false);
+    c1->set_aggregation("NONE");
+    schema_pb.add_sort_key_idxes(0);
+    schema_pb.add_sort_key_idxes(1);
+    return schema_pb;
+}
+
+// Set a two-column INT tablet range [ (lo0,lo1), (hi0,hi1) ) (closed-open).
+static void set_tablet_range_two_int(TabletMetadata* tablet_meta, int32_t lo0, int32_t lo1, int32_t hi0, int32_t hi1) {
+    auto* range = tablet_meta->mutable_range();
+    range->Clear();
+    auto* lb = range->mutable_lower_bound();
+    *lb->add_values() = make_int_variant_pb(lo0);
+    *lb->add_values() = make_int_variant_pb(lo1);
+    range->set_lower_bound_included(true);
+    auto* ub = range->mutable_upper_bound();
+    *ub->add_values() = make_int_variant_pb(hi0);
+    *ub->add_values() = make_int_variant_pb(hi1);
+    range->set_upper_bound_included(false);
+}
+
+// Write one rowset (a single segment) with rows {(10,100),(20,100),(30,100),(40,100),(50,100)}
+// under `write_metadata`'s current schema. c0 is distinct and c1 is constant, so the row order
+// is identical whether the segment is sorted by (c0) or (c0,c1); the two-column boundary is
+// unambiguous. Appends the rowset (id=1, num_rows=5) to `metadata` but does not persist it.
+static void write_single_segment_rowset(TabletManager* tablet_mgr, TabletMetadata* metadata,
+                                        const std::shared_ptr<Schema>& write_schema) {
+    ASSIGN_OR_ABORT(auto tablet, tablet_mgr->get_tablet(metadata->id()));
+    int64_t write_txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, write_txn));
+    ASSERT_OK(writer->open());
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    for (int k : {10, 20, 30, 40, 50}) {
+        c0->append(k);
+        c1->append(100);
+    }
+    Chunk chunk({c0, c1}, write_schema);
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1, writer->segments().size());
+
+    auto* rowset_meta = metadata->add_rowsets();
+    rowset_meta->set_overlapped(false);
+    rowset_meta->set_id(1);
+    rowset_meta->set_num_rows(5);
+    for (const auto& file : writer->segments()) {
+        rowset_meta->add_segment_metas()->set_filename(file.path);
+    }
+    writer->close();
+}
+
+} // namespace
+
+// Trailing sort-key ADD (N -> N+1): an old rowset archived under the previous N-sort-key schema must
+// stay readable after a metadata-only change that appends a BRAND-NEW trailing sort-key column. The
+// added column is not physically present in the old segment, so its rows read as the column default; a
+// later reshard stamps a per-rowset/tablet range in the (N+1)-value sort key onto the old rowset.
+// Rowset::get_seek_range() must decode that wider range with the rowset's own (archived) schema for
+// positional alignment, and PROJECT the trailing bound value against the added column's default to fix
+// each bound's inclusivity -- not merely truncate it. The boundary here (trailing 5 on the lower bound,
+// -5 on the upper) is chosen so correct projection and naive truncation disagree on the count: with
+// default D=0, the lower's 0<5 excludes the c0==20 rows and the upper's 0>-5 excludes the c0==40 rows,
+// leaving only c0==30 (1 row); truncation to [20,40) would keep {20,30} (2 rows). Segments are marked
+// shared() so Rowset::read installs the tablet seek range (applied only to shared segments).
+TEST_F(LakeRowsetTest, test_seek_range_trailing_key_add_projects_and_compacts) {
+    const int64_t c0_uid = next_id();
+    const int64_t c1_uid = next_id();
+    const int64_t cnew_uid = next_id();
+    const int64_t archived_schema_id = next_id();
+    const int64_t current_schema_id = next_id();
+
+    // The physical rowset is written under the archived 1-sort-key schema (c0 key, c1 value).
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(2);
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(archived_schema_id, /*schema_version=*/1, /*num_key_columns=*/1, c0_uid, c1_uid);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto archived_schema = TabletSchema::create(metadata->schema());
+    auto write_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(archived_schema));
+    write_single_segment_rowset(_tablet_mgr.get(), metadata.get(), write_schema);
+
+    // Apply the metadata-only trailing key add: archive the old schema, install the current schema
+    // [c0 key, c_new key(default 0), c1 value] with sort key (c0, c_new), map the old rowset to the
+    // archived schema, stamp a 2-value tablet range as a later reshard would, and mark segments shared.
+    metadata->mutable_historical_schemas()->insert({archived_schema_id, metadata->schema()});
+    *metadata->mutable_schema() = make_trailing_key_add_schema(current_schema_id, /*schema_version=*/2, c0_uid,
+                                                               cnew_uid, c1_uid, /*cnew_default=*/"0");
+    metadata->mutable_rowset_to_schema()->insert({1, archived_schema_id});
+    set_tablet_range_two_int(metadata.get(), 20, 5, 40, -5); // [ (20,5), (40,-5) )
+    set_rowset_shared_segments(metadata->mutable_rowsets(0), true);
+    metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto current_schema = TabletSchema::create(metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(current_schema, std::vector<ColumnId>{0});
+
+    // BEFORE the fix, get_seek_range decodes the 2-value fallback range with the archived 1-sort-key
+    // schema and read() fails with Status::Corruption. AFTER the fix it projects to c0 in (20, 40)
+    // (both boundaries exclusive), leaving only c0==30.
+    {
+        OlapReaderStatistics stats;
+        RowsetReadOptions rs_opts;
+        rs_opts.stats = &stats;
+        rs_opts.tablet_schema = std::make_shared<const TabletSchema>(metadata->schema());
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+        auto read_res = rowset->read(input_schema, rs_opts);
+        ASSERT_TRUE(read_res.ok()) << "get_seek_range must project the wider tablet range onto the rowset's "
+                                      "archived sort key, not corrupt on arity mismatch: "
+                                   << read_res.status();
+        EXPECT_EQ(1, count_rows_from_iters(read_res.value()));
+    }
+
+    // Force a compaction of the archived rowset. The compaction reads the shared segment through
+    // get_seek_range (so it also exercises the projection) and, because the segment is shared, applies
+    // the tablet range while merging, yielding a private output rowset with the single in-range row.
+    int64_t compact_txn = next_id();
+    auto input_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    auto ctx = std::make_unique<CompactionTaskContext>(compact_txn, metadata->id(), metadata->version(),
+                                                       /*force_base_compaction=*/false,
+                                                       /*skip_write_txnlog=*/false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get(), {input_rowset}));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(metadata->id(), metadata->version() + 1, compact_txn));
+
+    ASSERT_EQ(1, new_metadata->rowsets_size());
+    OlapReaderStatistics stats2;
+    RowsetReadOptions rs_opts2;
+    rs_opts2.stats = &stats2;
+    rs_opts2.tablet_schema = std::make_shared<const TabletSchema>(new_metadata->schema());
+    auto compacted =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), new_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto iters2, compacted->read(input_schema, rs_opts2));
+    EXPECT_EQ(1, count_rows_from_iters(iters2));
+}
+
+// Regression: when the sort-key arity is unchanged, decoding the tablet fallback range with the
+// current schema is identical to decoding it with the rowset's (same-arity) archived schema. An
+// old rowset mapped to a same-arity historical schema still prunes correctly, with no behavior
+// change relative to before the fix.
+TEST_F(LakeRowsetTest, test_seek_range_same_arity_historical_schema_unchanged) {
+    const int64_t c0_uid = next_id();
+    const int64_t c1_uid = next_id();
+    const int64_t archived_schema_id = next_id();
+    const int64_t current_schema_id = next_id();
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_next_rowset_id(2);
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(archived_schema_id, /*schema_version=*/1, /*num_key_columns=*/1, c0_uid, c1_uid);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto archived_schema = TabletSchema::create(metadata->schema());
+    auto write_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(archived_schema));
+    write_single_segment_rowset(_tablet_mgr.get(), metadata.get(), write_schema);
+
+    // Keep the same 1-sort-key arity as the "current" schema (only the schema id/version change),
+    // and map the rowset to the archived (same-arity) schema. Use a single-value tablet range.
+    metadata->mutable_historical_schemas()->insert({archived_schema_id, metadata->schema()});
+    *metadata->mutable_schema() =
+            make_two_int_dup_schema(current_schema_id, /*schema_version=*/2, /*num_key_columns=*/1, c0_uid, c1_uid);
+    metadata->mutable_rowset_to_schema()->insert({1, archived_schema_id});
+    set_tablet_range_int(metadata.get(), 20, true, 40, false); // [20, 40)
+    set_rowset_shared_segments(metadata->mutable_rowsets(0), true);
+    metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto current_schema = TabletSchema::create(metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(current_schema, std::vector<ColumnId>{0});
+    OlapReaderStatistics stats;
+    RowsetReadOptions rs_opts;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(metadata->schema());
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    // Range [20, 40) keeps 20 and 30 => 2 rows, identical whether decoded with the archived or the
+    // current schema.
+    EXPECT_EQ(2, count_rows_from_iters(iters));
 }
 
 } // namespace starrocks::lake

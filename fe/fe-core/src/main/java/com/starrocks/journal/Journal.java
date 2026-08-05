@@ -20,6 +20,7 @@ package com.starrocks.journal;
 import com.starrocks.common.io.DataOutputBuffer;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 public interface Journal {
 
@@ -58,6 +59,10 @@ public interface Journal {
 
     // persist current batch
     void batchWriteCommit() throws InterruptedException, JournalException;
+
+    default void batchWriteCommit(BooleanSupplier shouldRetry) throws InterruptedException, JournalException {
+        batchWriteCommit();
+    }
 
     // abort current batch
     void batchWriteAbort() throws InterruptedException, JournalException;
