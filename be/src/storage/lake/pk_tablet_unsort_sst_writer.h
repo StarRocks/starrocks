@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "base/phmap/btree.h"
+#include "runtime/memory/counting_allocator.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/sstable/table_builder.h"
 
@@ -41,13 +42,13 @@ namespace starrocks::lake {
 // memory. At segment finalize the intermediate SSTs (plus the residual map) are k-way merged into the
 // single final SST; duplicate PKs across intermediates are resolved there (last-flushed wins) and the
 // losers appended to the delete vector.
-// Memory: the map is bounded by l0_max_mem_usage (100 MB default) before it spills, and each parallel
-// merge task owns its own writer (and map), so peak usage is up to l0_max_mem_usage x the number of
-// concurrent merge tasks before spilling kicks in. It is charged to the load-spill merge mem tracker.
+// Memory: the map and loser-rowid vector are charged by allocated capacity and trigger a map spill at
+// l0_max_mem_usage (100 MB default). Each parallel merge task owns its own writer, so peak usage scales
+// with the number of concurrent merge tasks. The loser-rowid vector must live until segment finalize
+// and is not released by a map spill. Writer memory is charged to the load-spill merge mem tracker.
 class PkTabletUnsortSSTWriter : public PkTabletSSTWriter {
 public:
-    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id) {}
+    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id);
     ~PkTabletUnsortSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;
@@ -65,6 +66,9 @@ public:
     std::vector<uint32_t> take_deleted_rowids() override { return std::move(_deleted_rowids); }
     MutableColumnPtr take_delete_keys() override { return std::move(_delete_keys); }
 
+protected:
+    size_t memory_usage() const;
+
 private:
     // A row that has no segment position (a DELETE) stores this reserved rowid, matching the
     // UINT32_MAX delete-rowid convention used elsewhere in the PK write path. At flush a winning
@@ -79,6 +83,9 @@ private:
         uint64_t order;
         uint32_t rowid;
     };
+    using MapValue = std::pair<const std::string, Entry>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<std::string, Entry, std::less<>, MapAllocator>;
     // An intermediate SST spilled from `_map` when it got full. Its entries store both rowid and order
     // (order in the value's version field) so the final merge can pick the dedup winner across SSTs.
     struct IntermediateSst {
@@ -105,20 +112,26 @@ private:
     void collect_delete_key(const Slice& key);
     // Whether `_map` has reached the memtable memory threshold and should be spilled to an SST.
     bool is_map_full() const;
+    // Memory owned by `_map`: allocated B-tree nodes plus heap allocations of non-SSO keys.
+    size_t map_memory_usage() const;
     // Spill the current `_map` to a new intermediate SST (storing order+rowid), then clear the map.
     Status flush_map_to_intermediate_sst();
     // K-way merge the intermediate SSTs into `builder` (the final SST), keeping the max-order entry
     // per key and appending the losing rowids to `_deleted_rowids`.
     Status merge_intermediates_into(sstable::TableBuilder* builder);
 
-    phmap::btree_map<std::string, Entry, std::less<>> _map;
+    // Bytes allocated for B-tree nodes. MapAllocator maintains this counter incrementally, so
+    // checking the spill threshold does not have to traverse the whole tree.
+    int64_t _map_node_bytes = 0;
+    Map _map;
     std::vector<uint32_t> _deleted_rowids;
     // Encoded primary keys (del-file binary format) whose latest op is a DELETE, collected at flush and
     // moved out via take_delete_keys(). A map/merge key IS an encoded-PK slice, so it is appended
     // straight into this column (built from clone_empty_pk_column). nullptr until the first winner.
     MutableColumnPtr _delete_keys;
-    // Rough running estimate of `_map`'s memory footprint, compared against l0_*_mem_usage.
-    size_t _map_mem_usage = 0;
+    // Heap allocations owned by non-SSO strings in `_map`. The std::string objects themselves are
+    // stored in the B-tree nodes and are already included in `_map.bytes_used()`.
+    size_t _keys_heap_size = 0;
     std::vector<IntermediateSst> _intermediate_ssts;
     // Running rowid within the current segment (== rows appended so far); reset per segment.
     uint32_t _next_rowid = 0;
