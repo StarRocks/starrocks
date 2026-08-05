@@ -27,20 +27,26 @@ namespace starrocks {
 class MgrsFunctionsTest : public ::testing::Test {
 protected:
     static Columns make_lng_lat(double lng, double lat) {
-        auto c0 = DoubleColumn::create(); c0->append(lng);
-        auto c1 = DoubleColumn::create(); c1->append(lat);
+        auto c0 = DoubleColumn::create();
+        c0->append(lng);
+        auto c1 = DoubleColumn::create();
+        c1->append(lat);
         return {std::move(c0), std::move(c1)};
     }
 
     static Columns make_lng_lat_prec(double lng, double lat, int32_t prec) {
-        auto c0 = DoubleColumn::create(); c0->append(lng);
-        auto c1 = DoubleColumn::create(); c1->append(lat);
-        auto c2 = Int32Column::create();  c2->append(prec);
+        auto c0 = DoubleColumn::create();
+        c0->append(lng);
+        auto c1 = DoubleColumn::create();
+        c1->append(lat);
+        auto c2 = Int32Column::create();
+        c2->append(prec);
         return {std::move(c0), std::move(c1), std::move(c2)};
     }
 
     static Columns make_varchar(const std::string& s) {
-        auto col = BinaryColumn::create(); col->append(s);
+        auto col = BinaryColumn::create();
+        col->append(s);
         return {std::move(col)};
     }
 
@@ -74,8 +80,7 @@ protected:
 
 TEST_F(MgrsFunctionsTest, geo_to_mgrs_eiffel_tower_default_precision) {
     // ClickHouse reference: geoToMGRS(2.294497, 48.858222) = '31UDQ4825111935'
-    EXPECT_EQ("31UDQ4825111935",
-              get_varchar(MgrsFunctions::geo_to_mgrs(ctx.get(), make_lng_lat(2.294497, 48.858222))));
+    EXPECT_EQ("31UDQ4825111935", get_varchar(MgrsFunctions::geo_to_mgrs(ctx.get(), make_lng_lat(2.294497, 48.858222))));
 }
 
 TEST_F(MgrsFunctionsTest, geo_to_mgrs_eiffel_tower_precision_3) {
@@ -93,8 +98,7 @@ TEST_F(MgrsFunctionsTest, geo_to_mgrs_precision_0) {
 
 TEST_F(MgrsFunctionsTest, geo_to_mgrs_precision_lengths) {
     for (int p = 0; p <= 5; ++p) {
-        std::string s = get_varchar(MgrsFunctions::geo_to_mgrs(
-                ctx.get(), make_lng_lat_prec(2.294497, 48.858222, p)));
+        std::string s = get_varchar(MgrsFunctions::geo_to_mgrs(ctx.get(), make_lng_lat_prec(2.294497, 48.858222, p)));
         // 5 fixed chars + 2*p digit chars
         EXPECT_EQ(5u + 2u * static_cast<size_t>(p), s.size()) << "precision=" << p;
     }
@@ -165,7 +169,7 @@ TEST_F(MgrsFunctionsTest, mgrs_to_lat_case_insensitive) {
 }
 
 TEST_F(MgrsFunctionsTest, mgrs_to_lat_whitespace_ignored) {
-    double lat_clean  = get_double(MgrsFunctions::mgrs_to_lat(ctx.get(), make_varchar("31UDQ4825111935")));
+    double lat_clean = get_double(MgrsFunctions::mgrs_to_lat(ctx.get(), make_varchar("31UDQ4825111935")));
     double lat_spaces = get_double(MgrsFunctions::mgrs_to_lat(ctx.get(), make_varchar("31U DQ 48251 11935")));
     EXPECT_NEAR(lat_clean, lat_spaces, 1e-12);
 }
@@ -183,14 +187,18 @@ TEST_F(MgrsFunctionsTest, mgrs_to_lng_null_for_invalid) {
 // ─── NULL input propagation ───────────────────────────────────────────────────
 
 TEST_F(MgrsFunctionsTest, null_input_propagates) {
-    auto null_dbl = []{
-        auto d = DoubleColumn::create(); d->append(0.0);
-        auto n = NullColumn::create();   n->append(1);
+    auto null_dbl = [] {
+        auto d = DoubleColumn::create();
+        d->append(0.0);
+        auto n = NullColumn::create();
+        n->append(1);
         return NullableColumn::create(std::move(d), std::move(n));
     };
-    auto null_str = []{
-        auto d = BinaryColumn::create(); d->append(Slice{});
-        auto n = NullColumn::create();   n->append(1);
+    auto null_str = [] {
+        auto d = BinaryColumn::create();
+        d->append(Slice{});
+        auto n = NullColumn::create();
+        n->append(1);
         return NullableColumn::create(std::move(d), std::move(n));
     };
 
