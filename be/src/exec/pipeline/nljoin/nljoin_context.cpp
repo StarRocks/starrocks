@@ -54,9 +54,21 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     return Status::OK();
 }
 
+Status NJJoinBuildInputChannel::spill_buffered_chunks(RuntimeState* state, bool should_finalize) {
+    if (should_finalize) {
+        _accumulator.finalize();
+    }
+    while (!_accumulator.empty()) {
+        auto chunk = _accumulator.pull();
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+    }
+    return Status::OK();
+}
+
 void NJJoinBuildInputChannel::finalize() {
     _accumulator.finalize();
     while (ChunkPtr output = _accumulator.pull()) {
+        _memory_usage += output->memory_usage();
         _input_chunks.emplace_back(std::move(output));
     }
 }
