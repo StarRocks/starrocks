@@ -168,8 +168,8 @@ TEST_F(BackendMetricsTest, Normal) {
     // check metric
     {
         auto metric = metrics->get_metric(
-            "build_info",
-            MetricLabels().add("version", STARROCKS_VERSION).add("commit_hash", STARROCKS_COMMIT_HASH));
+                "build_info",
+                MetricLabels().add("version", STARROCKS_VERSION).add("commit_hash", STARROCKS_COMMIT_HASH));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_EQ(MetricType::GAUGE, metric->type());
         ASSERT_STREQ("1", metric->to_string().c_str());

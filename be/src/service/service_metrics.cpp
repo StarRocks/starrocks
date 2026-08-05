@@ -35,8 +35,8 @@ void ServiceMetrics::install(MetricRegistry* registry) {
 
     build_info.set_value(1);
     registry->register_metric(
-        "build_info", MetricLabels().add("version", STARROCKS_VERSION).add("commit_hash", STARROCKS_COMMIT_HASH),
-        &build_info);
+            "build_info", MetricLabels().add("version", STARROCKS_VERSION).add("commit_hash", STARROCKS_COMMIT_HASH),
+            &build_info);
 
     registry->register_metric("short_circuit_request_total", &short_circuit_request_total);
     registry->register_metric("short_circuit_request_duration_us", &short_circuit_request_duration_us);
