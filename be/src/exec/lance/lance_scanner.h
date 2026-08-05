@@ -14,10 +14,9 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner/hdfs_scanner.h"
-
 #include <memory>
 
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/lance/lance_native_reader.h"
 
 namespace starrocks {

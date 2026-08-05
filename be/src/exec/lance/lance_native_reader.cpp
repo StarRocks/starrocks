@@ -27,8 +27,8 @@
 #include "column/column_helper.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
-#include "exec/lance/lance_rs_ffi.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exec/lance/lance_rs_ffi.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -256,18 +256,17 @@ Status LanceNativeReader::_open_reader() {
         }
 
         ASSIGN_OR_RETURN(int32_t nprobes,
-                         parse_optional_positive_i32_param(
-                                 _scanner_params.table_specific.lance_vector_search_options, LANCE_NPROBES_PARAM));
+                         parse_optional_positive_i32_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                           LANCE_NPROBES_PARAM));
         ASSIGN_OR_RETURN(int32_t refine_factor,
                          parse_optional_positive_i32_param(_scanner_params.table_specific.lance_vector_search_options,
                                                            LANCE_REFINE_FACTOR_PARAM));
         ASSIGN_OR_RETURN(int32_t ef,
-                         parse_optional_positive_i32_param(
-                                 _scanner_params.table_specific.lance_vector_search_options, LANCE_EF_PARAM));
-        ASSIGN_OR_RETURN(int32_t query_parallelism,
-                         parse_optional_query_parallelism_param(
-                                 _scanner_params.table_specific.lance_vector_search_options,
-                                 LANCE_QUERY_PARALLELISM_PARAM));
+                         parse_optional_positive_i32_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                           LANCE_EF_PARAM));
+        ASSIGN_OR_RETURN(int32_t query_parallelism, parse_optional_query_parallelism_param(
+                                                            _scanner_params.table_specific.lance_vector_search_options,
+                                                            LANCE_QUERY_PARALLELISM_PARAM));
 
         vector_options = SrLanceVectorOptions{to_lance_string(vector_column),
                                               to_lance_string(metric_type),
@@ -284,16 +283,15 @@ Status LanceNativeReader::_open_reader() {
     }
 
     char* error = nullptr;
-    int result = sr_lance_reader_open(
-            to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
-            _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(), _max_chunk_size,
-            storage_options.data(), storage_options.size(), vector_options_ptr, config::lance_index_cache_size_bytes,
-            config::lance_metadata_cache_size_bytes, &_reader, &error);
+    int result = sr_lance_reader_open(to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
+                                      _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(),
+                                      _max_chunk_size, storage_options.data(), storage_options.size(),
+                                      vector_options_ptr, config::lance_index_cache_size_bytes,
+                                      config::lance_metadata_cache_size_bytes, &_reader, &error);
     if (result == SR_LANCE_ERROR || _reader == nullptr) {
-        return lance_error_status(
-                fmt::format("Failed to open Lance native reader for {}",
-                            _scanner_params.table_specific.lance_dataset_uri),
-                error);
+        return lance_error_status(fmt::format("Failed to open Lance native reader for {}",
+                                              _scanner_params.table_specific.lance_dataset_uri),
+                                  error);
     }
     return Status::OK();
 }
@@ -360,10 +358,9 @@ Status LanceNativeReader::_next_batch() {
         return Status::EndOfFile("no data");
     }
     if (result == SR_LANCE_ERROR) {
-        return lance_error_status(
-                fmt::format("Failed to read next Lance batch from {}",
-                            _scanner_params.table_specific.lance_dataset_uri),
-                error);
+        return lance_error_status(fmt::format("Failed to read next Lance batch from {}",
+                                              _scanner_params.table_specific.lance_dataset_uri),
+                                  error);
     }
     if (result != SR_LANCE_NEXT_BATCH) {
         return Status::InternalError(fmt::format("Unexpected Lance native reader result code {}", result));
