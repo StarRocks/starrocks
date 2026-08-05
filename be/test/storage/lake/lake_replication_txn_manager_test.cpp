@@ -1012,6 +1012,34 @@ TEST_F(LakeReplicationRemoteStorageTest, raw_s3_uses_virtual_shard_uri) {
     EXPECT_NE(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.src_tablet_id), captured_uri);
 }
 
+TEST_F(LakeReplicationRemoteStorageTest, non_s3_uses_virtual_shard_uri_authority) {
+    std::string captured_meta_dir;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_meta_dir",
+                                          [&](void* arg) { captured_meta_dir = *static_cast<std::string*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("stop after source path construction");
+    });
+
+    auto request = build_request(false /* with_full_path */);
+    ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_corruption()) << status;
+
+    RemoteStarletLocationProvider provider;
+    const auto expected_meta_dir = provider.metadata_root_location(request.virtual_tablet_id, request.src_db_id,
+                                                                   request.src_table_id, request.src_partition_id);
+    const auto legacy_meta_dir = provider.metadata_root_location(request.src_tablet_id, request.src_db_id,
+                                                                 request.src_table_id, request.src_partition_id);
+    EXPECT_EQ(expected_meta_dir, captured_meta_dir);
+    EXPECT_NE(legacy_meta_dir, captured_meta_dir);
+    ASSIGN_OR_ABORT(auto expected_parsed, parse_starlet_uri(expected_meta_dir));
+    ASSIGN_OR_ABORT(auto legacy_parsed, parse_starlet_uri(legacy_meta_dir));
+    EXPECT_EQ(expected_parsed.first, legacy_parsed.first);
+    EXPECT_EQ(request.virtual_tablet_id, expected_parsed.second);
+    EXPECT_EQ(request.src_tablet_id, legacy_parsed.second);
+}
+
 // Test Case 2: has_full_path=false, new_fs_starlet returns nullptr
 TEST_F(LakeReplicationRemoteStorageTest, test_no_full_path_fs_creation_failure) {
     // SyncPoint makes new_fs_starlet return nullptr by setting an error status

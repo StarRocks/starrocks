@@ -21,6 +21,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -150,6 +151,28 @@ std::string make_bundle_content(lake::TabletManager* tablet_manager, TabletMetad
                                                                              metadatas.begin()->second.version());
     ASSIGN_OR_ABORT(auto input, FileSystem::Default()->new_random_access_file(bundle_path));
     ASSIGN_OR_ABORT(auto content, input->read_all());
+    return content;
+}
+
+std::string make_legacy_bundle_content(int64_t requested_tablet_id, TabletMetadataPB metadata, uint64_t page_offset) {
+    const auto schema = metadata.schema();
+    metadata.clear_schema();
+    metadata.mutable_historical_schemas()->clear();
+
+    std::string page;
+    CHECK(metadata.SerializeToString(&page));
+
+    BundleTabletMetadataPB bundle;
+    (*bundle.mutable_tablet_to_schema())[requested_tablet_id] = schema.id();
+    (*bundle.mutable_schemas())[schema.id()] = schema;
+    auto& page_pointer = (*bundle.mutable_tablet_meta_pages())[requested_tablet_id];
+    page_pointer.set_offset(page_offset);
+    page_pointer.set_size(page.size());
+
+    std::string header;
+    CHECK(bundle.SerializeToString(&header));
+    std::string content = page + header;
+    put_fixed64_le(&content, header.size());
     return content;
 }
 
@@ -1452,6 +1475,49 @@ TEST_F(LakeTabletManagerTest, remote_explicit_path_ignores_aggregation_cache) {
     EXPECT_EQ(101, result.value()->gtid());
 }
 
+TEST_F(LakeTabletManagerTest, remote_bundle_rejects_overflowing_page_pointer) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    auto metadata = make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/std::numeric_limits<int64_t>::max());
+    const uint64_t overflowing_offset = std::numeric_limits<uint64_t>::max() - 8;
+    const auto bundle_content = make_legacy_bundle_content(tablet_id, std::move(metadata), overflowing_offset);
+
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    const std::string source_meta_dir = "/remote/overflow/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("file_size"));
+}
+
+TEST_F(LakeTabletManagerTest, remote_bundle_rejects_mismatched_tablet_id) {
+    const int64_t tablet_id = next_id();
+    const int64_t other_tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_content = make_legacy_bundle_content(
+            tablet_id, make_remote_test_metadata(other_tablet_id, kVersion, /*gtid=*/101), /*page_offset=*/0);
+
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    const std::string source_meta_dir = "/remote/mismatched-id/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr(fmt::format("expected: {}", tablet_id)));
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr(fmt::format("found: {}", other_tablet_id)));
+}
+
 TEST_F(LakeTabletManagerTest, remote_bundle_singleflight_isolated_by_filesystem) {
     const int64_t tablet_id = next_id();
     constexpr int64_t kVersion = 2;
@@ -1460,16 +1526,92 @@ TEST_F(LakeTabletManagerTest, remote_bundle_singleflight_isolated_by_filesystem)
     const auto bundle_b =
             make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/202));
 
-    const auto source_tablet_path = _tablet_manager->tablet_metadata_location(tablet_id, kVersion);
-    const auto source_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    const auto source_tablet_path_a =
+            lake::join_path("/source-authority-a/meta", lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path_a =
+            lake::join_path("/source-authority-a/meta", lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    const auto source_tablet_path_b =
+            lake::join_path("/source-authority-b/meta", lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path_b =
+            lake::join_path("/source-authority-b/meta", lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
     auto source_fs_a = std::make_shared<TrackingMemoryFileSystem>();
     auto source_fs_b = std::make_shared<TrackingMemoryFileSystem>();
-    put_memory_file(source_fs_a, source_bundle_path, bundle_a);
-    put_memory_file(source_fs_b, source_bundle_path, bundle_b);
+    put_memory_file(source_fs_a, source_bundle_path_a, bundle_a);
+    put_memory_file(source_fs_b, source_bundle_path_b, bundle_b);
 
     ASSIGN_OR_ABORT(auto aggregation_key,
                     _location_provider->real_location(_tablet_manager->tablet_metadata_root_location(tablet_id)));
     _tablet_manager->metacache()->cache_aggregation_partition(aggregation_key, true);
+
+    std::mutex barrier_mutex;
+    std::condition_variable barrier_cv;
+    int leaders = 0;
+    int followers = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) {
+        std::lock_guard lock(barrier_mutex);
+        ++followers;
+        barrier_cv.notify_all();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        std::unique_lock lock(barrier_mutex);
+        ++leaders;
+        barrier_cv.notify_all();
+        barrier_cv.wait_for(lock, std::chrono::seconds(5), [&] { return leaders == 2 || followers == 1; });
+    });
+
+    TabletMetadataPtr metadata_a;
+    TabletMetadataPtr metadata_b;
+    Status status_a;
+    Status status_b;
+    std::thread thread_a([&] {
+        auto result = _tablet_manager->get_tablet_metadata(source_tablet_path_a, remote_source_cache_options(),
+                                                           /*expected_gtid=*/0, source_fs_a);
+        status_a = result.status();
+        if (result.ok()) {
+            metadata_a = std::move(result).value();
+        }
+    });
+    std::thread thread_b([&] {
+        auto result = _tablet_manager->get_tablet_metadata(source_tablet_path_b, remote_source_cache_options(),
+                                                           /*expected_gtid=*/0, source_fs_b);
+        status_b = result.status();
+        if (result.ok()) {
+            metadata_b = std::move(result).value();
+        }
+    });
+    thread_a.join();
+    thread_b.join();
+
+    ASSERT_OK(status_a);
+    ASSERT_OK(status_b);
+    ASSERT_NE(nullptr, metadata_a);
+    ASSERT_NE(nullptr, metadata_b);
+    EXPECT_EQ(101, metadata_a->gtid());
+    EXPECT_EQ(202, metadata_b->gtid());
+    EXPECT_EQ(2, leaders);
+    EXPECT_EQ(0, followers);
+}
+
+TEST_F(LakeTabletManagerTest, remote_bundle_singleflight_coalesces_equivalent_wrappers) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+
+    const auto source_tablet_path =
+            lake::join_path("/source-authority/meta", lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path("/source-authority/meta", lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    auto source_fs_a = std::make_shared<TrackingMemoryFileSystem>();
+    auto source_fs_b = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs_a, source_bundle_path, bundle);
+    put_memory_file(source_fs_b, source_bundle_path, bundle);
 
     std::mutex barrier_mutex;
     std::condition_variable barrier_cv;
@@ -1521,9 +1663,10 @@ TEST_F(LakeTabletManagerTest, remote_bundle_singleflight_isolated_by_filesystem)
     ASSERT_NE(nullptr, metadata_a);
     ASSERT_NE(nullptr, metadata_b);
     EXPECT_EQ(101, metadata_a->gtid());
-    EXPECT_EQ(202, metadata_b->gtid());
-    EXPECT_EQ(2, leaders);
-    EXPECT_EQ(0, followers);
+    EXPECT_EQ(101, metadata_b->gtid());
+    EXPECT_EQ(1, leaders);
+    EXPECT_EQ(1, followers);
+    EXPECT_EQ(3, source_fs_a->read_paths().size() + source_fs_b->read_paths().size());
 }
 
 TEST_F(LakeTabletManagerTest, remote_bundle_corruption_uses_source_filesystem) {

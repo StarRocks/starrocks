@@ -79,10 +79,6 @@ static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
 static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
 
-static std::string singleflight_cache_key(const std::string& path, const std::shared_ptr<FileSystem>& fs) {
-    return fs != nullptr ? fmt::format("{}#fs={}", path, fmt::ptr(fs.get())) : path;
-}
-
 // Save a lake metadata/txn-log protobuf, using the checksummed header format when
 // lake_enable_protobuf_file_checksum is on and the legacy headerless format otherwise.
 static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message) {
@@ -980,7 +976,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
         const PagePointerPB& page_pointer = tablet_page.second;
         auto offset = page_pointer.offset();
         auto size = page_pointer.size();
-        RETURN_IF(offset + size > file_size,
+        RETURN_IF(offset > file_size || size > file_size - offset,
                   Status::InternalError(
                           fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
                                       tablet_page.first, offset, size, file_size)));
@@ -1031,7 +1027,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_from_paths(
         int64_t tablet_id, int64_t version, const CacheOptions& cache_opts, int64_t expected_gtid,
         const std::shared_ptr<FileSystem>& fs, const std::string& tablet_path, const std::string& bundle_path,
-        const std::string& bundle_cache_key, const std::string& gtid_cache_evict_path,
+        const std::string& bundle_singleflight_key, const std::string& gtid_cache_evict_path,
         const std::shared_ptr<FileSystem>& gtid_cache_evict_fs) {
     if (!cache_opts.skip_meta_cache) {
         if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
@@ -1054,11 +1050,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_from_paths
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
     g_read_bundle_tablet_meta_cnt << 1;
     auto t0 = butil::gettimeofday_us();
-    // Explicit filesystems may represent different source clusters with identical object paths.
-    // Include the filesystem identity so their concurrent reads cannot be coalesced together.
-    const auto singleflight_key = singleflight_cache_key(bundle_cache_key, fs);
+    // Local callers pass the resolved bundle path, preserving the legacy singleflight key.
+    // Explicit source callers pass the canonical full bundle URI, including its Starlet authority.
     ASSIGN_OR_RETURN(auto serialized_string,
-                     _bundle_tablet_metadata_group.Do(singleflight_key, [&]() -> StatusOr<std::string> {
+                     _bundle_tablet_metadata_group.Do(bundle_singleflight_key, [&]() -> StatusOr<std::string> {
                          g_read_bundle_tablet_meta_real_access_cnt << 1;
                          ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, bundle_path));
                          return input_file->read_all();
@@ -1090,7 +1085,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_from_paths
         size = page_pointer.size();
     }
 
-    if (file_size < offset + size) {
+    if (offset > file_size || size > file_size - offset) {
         return Status::Corruption(
                 strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small($2/$3)",
                                     bundle_path, file_size, offset, size));
@@ -1109,6 +1104,12 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_from_paths
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
         auto corrupted_status =
                 Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
+        (void)corrupted_tablet_meta_handler(corrupted_status, bundle_path, file_system);
+        return corrupted_status;
+    }
+    if (metadata->id() != tablet_id) {
+        auto corrupted_status = Status::Corruption(fmt::format(
+                "Tablet ID mismatch in bundle metadata, expected: {}, found: {}", tablet_id, metadata->id()));
         (void)corrupted_tablet_meta_handler(corrupted_status, bundle_path, file_system);
         return corrupted_status;
     }
