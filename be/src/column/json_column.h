@@ -56,6 +56,7 @@ public:
     bool is_json() const override { return true; }
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
     uint32_t serialize_size(size_t idx) const override;
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,

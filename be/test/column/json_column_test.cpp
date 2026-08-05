@@ -566,4 +566,73 @@ TEST(JsonValueTest, ConvertFromSimdjsonErrorMalformedObjectBounded) {
     ASSERT_TRUE(maybe_json.status().is_data_quality_error());
 }
 
+// Regression test for the crash in
+//   ObjectColumn<JsonValue>::byte_size() <- Chunk::bytes_usage() <- PipelineDriver::process().
+//
+// INTERSECT/EXCEPT rebuild their output rows by serializing every key column into one row-major
+// buffer and then deserializing that buffer back into freshly created destination columns
+// (IntersectHashSet::deserialize_to_columns / ExceptHashSet::deserialize_to_columns). When the key
+// expression is non-nullable the destination is a bare JsonColumn, which used to inherit
+// ObjectColumn::deserialize_and_append_batch() - a DCHECK-only stub that appends nothing in a
+// release build. The JSON column then stayed empty while the sibling key column held `chunk_size`
+// rows, and the first reader that trusted Chunk::num_rows() walked off the end of the JSON pool.
+//
+// This reproduces that flow without a cluster: it must leave every destination column with the
+// same number of rows, and the JSON values must round-trip.
+// NOLINTNEXTLINE
+PARALLEL_TEST(JsonColumnTest, test_deserialize_and_append_batch_set_operation_keys) {
+    constexpr size_t kChunkSize = 4;
+
+    // The two key columns of `SELECT v1, js FROM js7 INTERSECT ...`, both NOT NULL.
+    auto src_int = Int32Column::create();
+    auto src_json = JsonColumn::create();
+    std::vector<std::string> json_strs = {R"({"a": 1})", R"({"b": [1, 2, 3]})", R"("plain string")", R"(42)"};
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        src_int->append(static_cast<int32_t>(i));
+        ASSIGN_OR_ABORT(auto json, JsonValue::parse(json_strs[i]));
+        src_json->append(std::move(json));
+    }
+
+    // 1. Serialize the keys exactly like IntersectHashSet::_serialize_columns() does for
+    //    non-nullable key columns: a leading null byte followed by the value.
+    uint32_t max_one_row_size = 0;
+    max_one_row_size += src_int->max_one_element_serialize_size() + sizeof(bool);
+    max_one_row_size += src_json->max_one_element_serialize_size() + sizeof(bool);
+
+    std::vector<uint8_t> buffer(max_one_row_size * kChunkSize, 0);
+    Buffer<uint32_t> slice_sizes(kChunkSize, 0);
+    src_int->serialize_batch_with_null_masks(buffer.data(), slice_sizes, kChunkSize, max_one_row_size, nullptr, false);
+    src_json->serialize_batch_with_null_masks(buffer.data(), slice_sizes, kChunkSize, max_one_row_size, nullptr, false);
+
+    Buffer<Slice> keys(kChunkSize);
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        keys[i] = Slice(reinterpret_cast<char*>(buffer.data()) + i * max_one_row_size, slice_sizes[i]);
+    }
+
+    // 2. Rebuild the destination columns the way *HashSet::deserialize_to_columns() does. Both
+    //    destinations are non-nullable, so the serialized null byte is skipped by hand.
+    MutableColumns dst_columns;
+    dst_columns.emplace_back(Int32Column::create());
+    dst_columns.emplace_back(JsonColumn::create());
+    for (auto& dst_column : dst_columns) {
+        for (auto& key : keys) {
+            key.data += sizeof(bool);
+        }
+        dst_column->deserialize_and_append_batch(keys, kChunkSize);
+    }
+
+    // 3. A chunk built out of these columns must be self consistent: every column has to report
+    //    the same size, otherwise Chunk::num_rows() lies about the JSON column and any range
+    //    accessor (Chunk::bytes_usage() -> ObjectColumn::byte_size(0, num_rows)) reads out of bounds.
+    ASSERT_EQ(kChunkSize, dst_columns[0]->size());
+    ASSERT_EQ(kChunkSize, dst_columns[1]->size());
+    ASSERT_EQ(dst_columns[0]->size(), dst_columns[1]->size());
+
+    auto* dst_json = down_cast<JsonColumn*>(dst_columns[1].get());
+    ASSERT_EQ(src_json->byte_size(0, kChunkSize), dst_json->byte_size(0, kChunkSize));
+    for (size_t i = 0; i < kChunkSize; ++i) {
+        ASSERT_EQ(0, src_json->get_object(i)->compare(*dst_json->get_object(i))) << "row " << i;
+    }
+}
+
 } // namespace starrocks
