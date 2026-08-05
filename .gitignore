@@ -126,3 +126,9 @@ memory/
 !be/src/runtime/memory/**
 !be/test/runtime/memory/
 !be/test/runtime/memory/**
+
+# Local build and test artifacts
+/be-cn/
+/build_*_log.txt
+/test/.venv-docker/
+/test/.venv-requirements.txt
