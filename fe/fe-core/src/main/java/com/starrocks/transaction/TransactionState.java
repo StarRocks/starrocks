@@ -143,6 +143,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    public enum TxnPrepareMode {
+        // PREPARED is only an in-memory transition inside a one-phase commit.
+        INTERNAL_ONE_PHASE,
+        // PREPARED is an explicit, persisted transaction state controlled by the client.
+        EXPLICIT_TWO_PHASE
+    }
+
     public enum TxnSourceType {
         FE(1),
         BE(2);
@@ -243,6 +250,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+
+    // Temporary diagnostics shown while a transaction is still running. This field is deliberately
+    // not persisted, and a successful rate-limit check clears it before the state transition.
+    private String temporaryReason = "";
     @SerializedName("gtid")
     private long globalTransactionId;
 
@@ -348,6 +359,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     // transaction transitions to the PREPARED state.
     @SerializedName("pto")
     private long preparedTimeoutMs = DEFAULT_PREPARED_TIMEOUT_MS;
+
+    // This mode is not persisted because INTERNAL_ONE_PHASE PREPARED state is not written to the edit log,
+    // while a recovered PREPARED state is always an explicit two-phase transaction.
+    private TxnPrepareMode txnPrepareMode = TxnPrepareMode.EXPLICIT_TWO_PHASE;
 
     // optional
     @SerializedName("ta")
@@ -667,7 +682,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public String getReason() {
-        return reason;
+        return Strings.isNullOrEmpty(temporaryReason) ? reason : temporaryReason;
     }
 
     public TxnCommitAttachment getTxnCommitAttachment() {
@@ -684,6 +699,19 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public long getTimeoutMs() {
         return timeoutMs;
+    }
+
+    public long getTimeoutDeadlineMs() {
+        if (transactionStatus == TransactionStatus.PREPARE) {
+            return prepareTime + timeoutMs;
+        }
+        if (transactionStatus == TransactionStatus.PREPARED) {
+            if (txnPrepareMode == TxnPrepareMode.INTERNAL_ONE_PHASE) {
+                return prepareTime + timeoutMs;
+            }
+            return preparedTime + getPreparedTimeoutMs();
+        }
+        return Long.MAX_VALUE;
     }
 
     public long getWarehouseId() {
@@ -831,8 +859,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public void setPreparedTimeAndTimeout(long preparedTime, long preparedTimeoutMs) {
+        setPreparedTimeAndTimeout(preparedTime, preparedTimeoutMs, TxnPrepareMode.EXPLICIT_TWO_PHASE);
+    }
+
+    public void setPreparedTimeAndTimeout(
+            long preparedTime, long preparedTimeoutMs, TxnPrepareMode txnPrepareMode) {
         this.preparedTime = preparedTime;
         this.preparedTimeoutMs = preparedTimeoutMs;
+        this.txnPrepareMode = Objects.requireNonNull(txnPrepareMode, "txnPrepareMode is null");
     }
 
     public long getPreparedTime() {
@@ -840,8 +874,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     }
 
     public long getPreparedTimeoutMs() {
-        return preparedTimeoutMs == DEFAULT_PREPARED_TIMEOUT_MS ?
-            Config.prepared_transaction_default_timeout_second * 1000L : preparedTimeoutMs;
+        return preparedTimeoutMs > 0 ?
+                preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
     }
 
     public void setCommitTime(long commitTime) {
@@ -854,6 +888,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public void setReason(String reason) {
         this.reason = Strings.nullToEmpty(reason);
+        this.temporaryReason = "";
+    }
+
+    public void setTemporaryReason(String reason) {
+        this.temporaryReason = Strings.nullToEmpty(reason);
+    }
+
+    public void clearTemporaryReason() {
+        this.temporaryReason = "";
     }
 
     public Set<Long> getErrorReplicas() {
@@ -909,15 +952,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        if (transactionStatus == TransactionStatus.PREPARE) {
-            return currentMillis - prepareTime > timeoutMs;
-        }
-        if (transactionStatus == TransactionStatus.PREPARED) {
-            long timeout = preparedTimeoutMs > 0 ?
-                    preparedTimeoutMs : Config.prepared_transaction_default_timeout_second * 1000L;
-            return (currentMillis - preparedTime) > timeout;
-        }
-        return false;
+        long timeoutDeadlineMs = getTimeoutDeadlineMs();
+        return timeoutDeadlineMs != Long.MAX_VALUE && currentMillis > timeoutDeadlineMs;
     }
 
     /**
