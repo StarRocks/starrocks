@@ -263,6 +263,46 @@ public class JoinTest extends SchedulerTestBase {
     }
 
     @Test
+    public void testDescribeUnreportedInstances() throws Exception {
+        String sql = "insert into lineitem select * from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+
+        // Nothing has reported yet, so every deployed instance is still pending.
+        List<String> unreported = scheduler.describeUnreportedInstances();
+        Assertions.assertEquals(scheduler.getExecutionDAG().getExecutions().size(), unreported.size());
+
+        // Each entry must name the worker that owns the instance, that is what makes the log actionable.
+        Set<String> expectedWorkers = scheduler.getExecutionDAG().getExecutions().stream()
+                .map(execState -> String.valueOf(execState.getWorker().getId()))
+                .collect(Collectors.toSet());
+        for (String description : unreported) {
+            int at = description.indexOf('@');
+            int stateStart = description.indexOf('(');
+            Assertions.assertTrue(at > 0 && stateStart > at, description);
+            Assertions.assertTrue(expectedWorkers.contains(description.substring(at + 1, stateStart)), description);
+        }
+
+        // The per-worker breakdown is what the log leans on when the fan-out is too wide to name, so it
+        // must account for every pending instance.
+        Map<Long, Long> perWorker = scheduler.countUnreportedInstancesPerWorker();
+        Assertions.assertEquals(unreported.size(),
+                perWorker.values().stream().mapToLong(Long::longValue).sum());
+        Assertions.assertTrue(expectedWorkers.containsAll(
+                perWorker.keySet().stream().map(String::valueOf).collect(Collectors.toSet())));
+
+        // A done report retires its instance, so it must drop out of the list.
+        FragmentInstanceExecState reported = scheduler.getExecutionDAG().getExecutions().iterator().next();
+        TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        request.setBackend_num(reported.getIndexInJob())
+                .setDone(true)
+                .setStatus(new TStatus(TStatusCode.OK))
+                .setFragment_instance_id(reported.getInstanceId());
+        scheduler.updateFragmentExecStatus(request);
+
+        Assertions.assertEquals(unreported.size() - 1, scheduler.describeUnreportedInstances().size());
+    }
+
+    @Test
     public void testUpdateExecStatusConcurrently() throws Exception {
         String sql = "insert into lineitem select a.* from lineitem a join lineitem b on a.L_ORDERKEY=b.L_ORDERKEY";
         DefaultCoordinator scheduler = startScheduling(sql);
