@@ -53,6 +53,7 @@
 #include "platform/key_cache.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/file_stream_converter.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -66,6 +67,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/protobuf_file.h"
+#include "storage/replication_utils.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
@@ -755,6 +757,222 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     // Verify failure with NotFound error
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
+}
+
+class LakeReplicationMetadataConversionTest : public testing::Test {
+protected:
+    void SetUp() override {
+        (void)fs::remove_all(_test_dir);
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        ASSERT_OK(fs::remove_all(_test_dir));
+    }
+
+    std::shared_ptr<TabletMetadata> make_metadata(int64_t tablet_id, int64_t version, bool range_table = false) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(version);
+        metadata->set_next_rowset_id(1);
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_id(1);
+        schema->set_num_short_key_columns(1);
+        auto* column = schema->add_column();
+        column->set_unique_id(1);
+        column->set_name("c0");
+        column->set_type("INT");
+        column->set_is_key(true);
+        column->set_is_nullable(false);
+        if (range_table) {
+            metadata->mutable_range();
+        }
+        return metadata;
+    }
+
+    static std::string file_name(int id, std::string_view extension) {
+        return fmt::format("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-{:012d}.{}", id, extension);
+    }
+
+    static void add_file_set(TabletMetadata* metadata, int base, bool shared) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(base + 1);
+        rowset->set_overlapped(false);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(file_name(base + 1, "dat"));
+        segment->set_size(11);
+        segment->set_shared(shared);
+        auto* del = rowset->add_del_files();
+        del->set_name(file_name(base + 2, "del"));
+        del->set_shared(shared);
+
+        auto* sst = metadata->mutable_sstable_meta()->add_sstables();
+        sst->set_filename(file_name(base + 3, "sst"));
+        sst->set_shared(shared);
+
+        auto& delvec = (*metadata->mutable_delvec_meta()->mutable_version_to_file())[base + 4];
+        delvec.set_name(file_name(base + 4, "delvec"));
+        delvec.set_shared(shared);
+
+        auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[base + 5];
+        dcg.add_column_files(file_name(base + 5, "cols"));
+        dcg.add_shared_files(shared);
+
+        auto& idg = (*metadata->mutable_idg_meta()->mutable_idgs())[base + 6];
+        auto* entry = idg.add_entries();
+        entry->set_index_file(file_name(base + 6, "idx"));
+        entry->set_shared_file(shared);
+    }
+
+    static void expect_file_set_shared(const TabletMetadataPB& metadata, int set_index, int base, bool shared) {
+        EXPECT_EQ(shared, metadata.rowsets(set_index).segment_metas(0).shared());
+        EXPECT_EQ(shared, metadata.rowsets(set_index).del_files(0).shared());
+        EXPECT_EQ(shared, metadata.sstable_meta().sstables(set_index).shared());
+        EXPECT_EQ(shared, metadata.delvec_meta().version_to_file().at(base + 4).shared());
+        EXPECT_EQ(shared, metadata.dcg_meta().dcgs().at(base + 5).shared_files(0));
+        EXPECT_EQ(shared, metadata.idg_meta().idgs().at(base + 6).entries(0).shared_file());
+    }
+
+    StatusOr<std::shared_ptr<TabletMetadataPB>> convert(
+            const TabletMetadataPtr& source, const TabletMetadataPtr& target, int64_t data_version,
+            const std::string& source_data_dir, std::unordered_map<std::string, size_t>* segment_sizes = nullptr,
+            std::map<std::string, std::string>* file_locations_out = nullptr,
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map_out = nullptr) {
+        std::unordered_map<std::string, size_t> local_segment_sizes;
+        std::map<std::string, std::string> local_file_locations;
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> local_filename_map;
+        return _replication_txn_manager->convert_and_build_new_tablet_meta(
+                source, target, source->id(), target->id(), 70001, data_version, source_data_dir,
+                segment_sizes != nullptr ? *segment_sizes : local_segment_sizes,
+                file_locations_out != nullptr ? *file_locations_out : local_file_locations,
+                filename_map_out != nullptr ? *filename_map_out : local_filename_map);
+    }
+
+    static Status write_file(const std::string& path, std::string_view content) {
+        ASSIGN_OR_RETURN(auto local_fs, FileSystemFactory::CreateSharedFromString(path));
+        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto output, local_fs->new_writable_file(opts, path));
+        RETURN_IF_ERROR(output->append(content));
+        return output->close();
+    }
+
+    static StatusOr<std::string> read_file(const std::string& path) {
+        ASSIGN_OR_RETURN(auto local_fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto input, local_fs->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto size, input->get_size());
+        std::string content(size, '\0');
+        RETURN_IF_ERROR(input->read_at_fully(0, content.data(), size));
+        return content;
+    }
+
+    static constexpr const char* kTestDirectory = "test_lake_replication_metadata_conversion";
+    std::string _test_dir = kTestDirectory;
+    std::shared_ptr<lake::FixedLocationProvider> _location_provider;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::TabletManager> _tablet_mgr;
+    std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
+};
+
+TEST_F(LakeReplicationMetadataConversionTest, target_split_child_without_data_version_metadata) {
+    auto source = make_metadata(51001, 3);
+    auto target = make_metadata(51002, 2, true);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_OK(result.status());
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, target_hash_tablet_without_data_version_metadata) {
+    auto source = make_metadata(52001, 3);
+    auto target = make_metadata(52002, 2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_not_found()) << result.status();
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix) {
+    auto source = make_metadata(53001, 2);
+    auto target = make_metadata(53002, 1);
+    add_file_set(target.get(), 0, true);
+    add_file_set(target.get(), 20, false);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    // Reuse two destination file sets with opposite ownership, then add a source-shared set
+    // that must become private because it is copied into this destination for the first time.
+    add_file_set(source.get(), 0, false);
+    add_file_set(source.get(), 20, true);
+    add_file_set(source.get(), 40, true);
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_OK(result.status());
+    expect_file_set_shared(**result, 0, 0, true);
+    expect_file_set_shared(**result, 1, 20, false);
+    expect_file_set_shared(**result, 2, 40, false);
+    EXPECT_TRUE((*result)->sstable_meta().sstables(2).filename().ends_with(".sst"));
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
+    auto source = make_metadata(54001, 2);
+    auto target = make_metadata(54002, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    const std::string bundle_name = file_name(61, "dat");
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(bundle_name);
+        segment->set_size(logical_size);
+        segment->set_bundle_file_offset(offset);
+        segment->set_shared(true);
+    }
+
+    const std::string source_data_dir = lake::join_path(_test_dir, "source_data");
+    ASSERT_OK(fs::create_directories(source_data_dir));
+    const std::string source_path = lake::join_path(source_data_dir, bundle_name);
+    const std::string physical_contents = "AAAAABBBBBBB-physical-tail";
+    ASSERT_OK(write_file(source_path, physical_contents));
+
+    std::unordered_map<std::string, size_t> segment_sizes;
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    auto result = convert(source, target, 1, source_data_dir, &segment_sizes, &file_locations, &filename_map);
+    ASSERT_OK(result.status());
+    ASSERT_EQ(1, filename_map.size());
+    ASSERT_EQ(1, file_locations.size());
+    EXPECT_EQ(5, (*result)->rowsets(0).segment_metas(0).size());
+    EXPECT_EQ(0, (*result)->rowsets(0).segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(7, (*result)->rowsets(0).segment_metas(1).size());
+    EXPECT_EQ(5, (*result)->rowsets(0).segment_metas(1).bundle_file_offset());
+
+    const size_t source_size_for_copy = segment_sizes.contains(bundle_name) ? segment_sizes.at(bundle_name) : 0;
+    ASSIGN_OR_ABORT(auto source_fs, FileSystemFactory::CreateSharedFromString(source_path));
+    const auto& target_path = file_locations.begin()->second;
+    FileConverterCreatorFunc converter = [target_path](
+                                                 const std::string& file_name,
+                                                 uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto output, fs::new_writable_file(opts, target_path));
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output));
+    };
+    size_t copied_size = 0;
+    ASSERT_OK(ReplicationUtils::download_lake_file_with_converter(source_path, bundle_name, source_size_for_copy,
+                                                                  source_fs, converter, &copied_size));
+    EXPECT_EQ(physical_contents.size(), copied_size);
+    ASSIGN_OR_ABORT(auto copied_contents, read_file(target_path));
+    EXPECT_EQ(physical_contents, copied_contents);
 }
 
 #ifdef USE_STAROS
@@ -1587,6 +1805,49 @@ TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_skipped_on_divergent_colu
     ASSERT_EQ(1, built_meta.rowsets_size());
     // idg_meta must be empty: neither the source's entry nor any target stale entry survives.
     EXPECT_TRUE(built_meta.idg_meta().idgs().empty());
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, rejects_bundled_fast_schema_conversion) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto source = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    source->set_version(2);
+    source->mutable_schema()->mutable_column(1)->set_unique_id(9999);
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000071.dat");
+    segment->set_size(17);
+    segment->set_bundle_file_offset(0);
+    source->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = source;
+                                          });
+    bool copy_started = false;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) {
+                                              copy_started = true;
+                                              *static_cast<size_t*>(arg) = 17;
+                                          });
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    (void)update_master_info(original_master_info);
+
+    ASSERT_TRUE(status.is_not_supported()) << status;
+    EXPECT_FALSE(copy_started);
+    EXPECT_TRUE(_tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id).status().is_not_found());
 }
 
 // Regression companion: with transparent data encryption ON, the replicated source IDG entry must
