@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <future>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -841,7 +842,7 @@ TEST_F(SpillTest, direct_io_option_reaches_block_manager) {
         std::string dir_path = config::storage_root_path + "/spill_test_data/" + print_id(query_id);
         ASSERT_OK(FileSystem::Default()->create_dir_recursive(dir_path));
         spill::DirManager dir_mgr;
-        ASSERT_OK(dir_mgr.init(dir_path, {config::storage_root_path}));
+        ASSERT_OK(dir_mgr.init(dir_path));
         spill::LogBlockManager block_mgr(query_id, &dir_mgr);
 
         OptionsRecordingBlockManager recorder(&block_mgr);
