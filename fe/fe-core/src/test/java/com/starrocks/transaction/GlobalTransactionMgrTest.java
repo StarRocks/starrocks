@@ -1293,6 +1293,31 @@ public class GlobalTransactionMgrTest {
         Assertions.assertFalse(exception.getMessage().contains("Cannot invoke"));
     }
 
+    // A prepared-transaction recommit can race count-eviction: the pre-check sees a live transaction, but the
+    // rate-limit-aware helper re-reads it (commitPreparedTransactionUnderIntensiveDbLock ->
+    // getTransactionStateOrThrow) after removeExpiredTxns has moved the outcome into the terminal-state
+    // cache, so the helper throws TransactionNotFoundException. The recommit must then be answered from the
+    // cache instead of being surfaced as "transaction not found".
+    @Test
+    public void testCommitPreparedFallsBackToCacheWhenEvictedMidCommit() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        // Pre-check sees a live transaction...
+        doReturn(new TransactionState()).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        // ...but the rate-limit-aware helper's own re-read races a count-eviction and throws not-found.
+        doThrow(new TransactionNotFoundException(1001L))
+                .when(globalTransactionMgr).retryCommitPreparedOnRateLimitExceeded(db, 1001L, 10L);
+        // The terminal cache now holds the outcome, so the db-mgr path resolves it idempotently.
+        doReturn(new VisibleStateWaiter(new TransactionState()))
+                .when(dbTransactionMgr).commitPreparedTransaction(1001L);
+
+        // Must not surface TransactionNotFoundException: the recommit is answered from the cache.
+        Assertions.assertDoesNotThrow(() -> globalTransactionMgr.commitPreparedTransaction(db, 1001L, 10L));
+    }
+
     @Test
     public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
             throws StarRocksException, LockTimeoutException {

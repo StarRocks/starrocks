@@ -394,7 +394,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
         // Live transaction: use upstream's rate-limit-aware retry path (lock + commit under the intensive
         // db lock, retrying on CommitRateExceededException within the timeout budget).
-        waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
+        try {
+            waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
+        } catch (TransactionNotFoundException e) {
+            // The transaction was count-evicted between the pre-check above and this path's own re-read
+            // (commitPreparedTransactionUnderIntensiveDbLock -> getTransactionStateOrThrow, which runs
+            // before it takes table locks). removeExpiredTxns has since moved the terminal outcome into
+            // the cache, so resolve it there instead of failing the recommit with "transaction not found";
+            // for a genuinely absent transaction the cache path re-throws the same exception.
+            getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+            MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+            return;
+        }
         if (waiter == null) {
             // transactionState was fetched above and is non-null here (the evicted case returned early).
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
