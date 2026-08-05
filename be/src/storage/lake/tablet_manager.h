@@ -331,7 +331,7 @@ private:
     StatusOr<TabletMetadataPtr> get_single_tablet_metadata_from_paths(
             int64_t tablet_id, int64_t version, const CacheOptions& cache_opts, int64_t expected_gtid,
             const std::shared_ptr<FileSystem>& fs, const std::string& tablet_path, const std::string& bundle_path,
-            const std::string& bundle_cache_key, const std::string& gtid_cache_evict_path,
+            const std::string& bundle_singleflight_key, const std::string& gtid_cache_evict_path,
             const std::shared_ptr<FileSystem>& gtid_cache_evict_fs);
     Status drop_local_cache(const std::string& path, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);

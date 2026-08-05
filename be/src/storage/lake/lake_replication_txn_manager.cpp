@@ -192,10 +192,11 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     } else {
         // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
         // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
-        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_meta_dir = _remote_location_provider->metadata_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                          src_partition_id);
-        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+        src_data_dir = _remote_location_provider->segment_root_location(virtual_tablet_id, src_db_id, src_table_id,
                                                                         src_partition_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_meta_dir", &src_meta_dir);
 
         LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
                   << ", data_dir: " << src_data_dir;
