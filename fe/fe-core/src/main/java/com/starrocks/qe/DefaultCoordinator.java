@@ -1189,70 +1189,63 @@ public class DefaultCoordinator extends Coordinator {
      */
     private void logUnreportedInstances(String context) {
         try {
-            List<String> unreported = describeUnreportedInstances();
-            if (unreported.isEmpty()) {
+            UnreportedInstanceSummary summary = summarizeUnreportedInstances();
+            if (summary.total() == 0) {
                 return;
             }
-            // A wide fan-out query can leave thousands of instances pending, and this runs every 30s during
-            // an incident, so log the per-worker counts in full (bounded by the cluster size, and the part
-            // that actually identifies the culprit node) but only a sample of the instances themselves.
-            List<String> sample = unreported.size() <= MAX_LOGGED_UNREPORTED_INSTANCES
-                    ? unreported
-                    : unreported.subList(0, MAX_LOGGED_UNREPORTED_INSTANCES);
             LOG.warn("query {} {}, {} instance(s) have not reported yet, pending per worker: {}, first {}: {}",
-                    DebugUtil.printId(jobSpec.getQueryId()), context, unreported.size(),
-                    countUnreportedInstancesPerWorker(), sample.size(), sample);
+                    DebugUtil.printId(jobSpec.getQueryId()), context, summary.total(),
+                    summary.pendingPerWorker(), summary.sample().size(), summary.sample());
         } catch (Throwable e) {
             // join() calls this without the coordinator lock, and phased scheduling can add executions
             // concurrently. Diagnostics must never break the wait they are describing.
-            LOG.warn("failed to describe unreported instances of query {}",
+            LOG.warn("failed to summarize unreported instances of query {}",
                     DebugUtil.printId(jobSpec.getQueryId()), e);
         }
     }
 
     /**
-     * Describe every instance still missing from the profile latch as {@code <instanceId>@<workerId>(<state>)},
-     * so the log points at the worker to look at rather than at an opaque instance id.
+     * Summarize instances still missing from the profile latch without formatting every instance in a wide
+     * fan-out. Per-worker counts identify the affected nodes, while the formatted sample stays bounded.
      */
     @VisibleForTesting
-    public List<String> describeUnreportedInstances() {
+    public UnreportedInstanceSummary summarizeUnreportedInstances() {
         List<String> unreportedIds = queryProfile.getUnfinishedInstanceIds();
         if (unreportedIds.isEmpty()) {
-            return Collections.emptyList();
+            return new UnreportedInstanceSummary(0, Collections.emptyMap(), Collections.emptyList());
         }
 
-        Map<String, String> idToDescription = Maps.newHashMap();
+        Set<String> unmatchedIds = Sets.newHashSet(unreportedIds);
+        Map<Long, Long> pendingPerWorker = Maps.newTreeMap();
+        List<String> sample = Lists.newArrayListWithCapacity(
+                Math.min(unreportedIds.size(), MAX_LOGGED_UNREPORTED_INSTANCES));
         for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             String instanceId = DebugUtil.printId(execState.getInstanceId());
+            if (!unmatchedIds.remove(instanceId)) {
+                continue;
+            }
+
             ComputeNode worker = execState.getWorker();
             String workerId = worker == null ? "not-deployed" : String.valueOf(worker.getId());
-            idToDescription.put(instanceId, String.format("%s@%s(%s)",
-                    instanceId, workerId, execState.getState()));
-        }
-        return unreportedIds.stream()
-                .map(instanceId -> idToDescription.getOrDefault(instanceId, instanceId + "(not-deployed)"))
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Count the instances that have not reported yet per worker. This is bounded by the number of workers
-     * rather than by the fan-out, and it is what tells a single stalled node apart from a cluster-wide stall.
-     */
-    @VisibleForTesting
-    public Map<Long, Long> countUnreportedInstancesPerWorker() {
-        Set<String> unreportedIds = Sets.newHashSet(queryProfile.getUnfinishedInstanceIds());
-        Map<Long, Long> perWorker = Maps.newTreeMap();
-        if (unreportedIds.isEmpty()) {
-            return perWorker;
-        }
-        for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
-            ComputeNode worker = execState.getWorker();
-            if (worker != null && unreportedIds.contains(DebugUtil.printId(execState.getInstanceId()))) {
-                perWorker.merge(worker.getId(), 1L, Long::sum);
+            if (worker != null) {
+                pendingPerWorker.merge(worker.getId(), 1L, Long::sum);
+            }
+            if (sample.size() < MAX_LOGGED_UNREPORTED_INSTANCES) {
+                sample.add(String.format("%s@%s(%s)", instanceId, workerId, execState.getState()));
             }
         }
-        return perWorker;
+
+        for (String instanceId : unmatchedIds) {
+            if (sample.size() >= MAX_LOGGED_UNREPORTED_INSTANCES) {
+                break;
+            }
+            sample.add(instanceId + "@not-deployed(UNKNOWN)");
+        }
+        return new UnreportedInstanceSummary(unreportedIds.size(), pendingPerWorker, sample);
     }
+
+    @VisibleForTesting
+    public record UnreportedInstanceSummary(int total, Map<Long, Long> pendingPerWorker, List<String> sample) {}
 
     @Override
     public void clearExternalResources() {
