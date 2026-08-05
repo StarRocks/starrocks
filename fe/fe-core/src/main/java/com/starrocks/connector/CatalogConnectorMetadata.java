@@ -257,7 +257,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
         return normal.createTable(stmt);
     }
 
