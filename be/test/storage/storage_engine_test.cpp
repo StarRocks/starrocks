@@ -16,8 +16,21 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <cstdlib>
+#include <thread>
+
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
+#include "storage/index/vector/vector_index_cache.h"
+#include "storage/storage_env.h"
+#include "storage/update_manager.h"
+
+#ifdef WITH_TENANN
+#include "tenann/index/index.h"
+#include "tenann/index/index_cache.h"
+#endif
 
 namespace starrocks {
 
@@ -64,5 +77,58 @@ PARALLEL_TEST(StorageEngineTest, test_garbage_sweep_interval_calculator) {
         }
     }
 }
+
+#ifdef WITH_TENANN
+
+class StorageEngineCacheExpireTest : public testing::Test {
+protected:
+    static void run_cache_expire_worker(StorageEngine* engine) {
+        engine->_update_cache_expire_thread_callback(nullptr);
+    }
+
+    static void set_bg_worker_stopped(StorageEngine* engine, bool stopped) {
+        engine->_bg_worker_stopped.store(stopped, std::memory_order_release);
+    }
+};
+
+TEST_F(StorageEngineCacheExpireTest, shared_worker_expires_vector_cache) {
+    auto* engine = StorageEngine::instance();
+    auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(engine, nullptr);
+    ASSERT_NE(cache, nullptr);
+    ASSERT_FALSE(engine->bg_worker_stopped());
+
+    const int32_t saved_update_expire_sec = config::update_cache_expire_sec;
+    const int64_t saved_update_expire_ms = engine->update_manager()->get_cache_expire_ms();
+    const int64_t saved_vector_expire_sec = cache->expire_seconds();
+    DeferOp restore([&] {
+        config::update_cache_expire_sec = saved_update_expire_sec;
+        engine->update_manager()->set_cache_expire_ms(saved_update_expire_ms);
+        cache->SetExpireSeconds(saved_vector_expire_sec);
+        set_bg_worker_stopped(engine, false);
+    });
+
+    config::update_cache_expire_sec = 1;
+    cache->SetExpireSeconds(1);
+
+    constexpr size_t kBytes = 1024;
+    void* buffer = std::malloc(kBytes);
+    auto ref = std::make_shared<tenann::Index>(
+            buffer, tenann::IndexType::kFaissHnsw, [](void* value) { std::free(value); }, kBytes);
+    tenann::IndexCacheHandle handle;
+    const tenann::CacheKey key("/storage-engine-cache-expire-worker.vi");
+    cache->Insert(key, std::move(ref), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    std::thread worker([&] { run_cache_expire_worker(engine); });
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    set_bg_worker_stopped(engine, true);
+    worker.join();
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_FALSE(cache->Lookup(key, &probe));
+}
+
+#endif
 
 } // namespace starrocks

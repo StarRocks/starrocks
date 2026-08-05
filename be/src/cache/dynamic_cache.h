@@ -289,13 +289,6 @@ public:
         }
     }
 
-    void set_expire_time_for_all(int64_t expire_ms) {
-        std::lock_guard<Lock> lg(_lock);
-        for (Entry* entry : _list) {
-            entry->_expire_ms = expire_ms;
-        }
-    }
-
     // clear all currently unused objects
     void clear() {
         std::vector<Entry*> entry_list;

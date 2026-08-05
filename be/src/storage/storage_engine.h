@@ -335,6 +335,7 @@ protected:
 private:
     // Friend class for testing
     friend class StorageEngineCompactionTest;
+    friend class StorageEngineCacheExpireTest;
     friend class TabletUpdatesTest;
 
     // Instance should be inited from `static open()`

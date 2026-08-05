@@ -21,6 +21,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <limits>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -323,20 +324,20 @@ TEST_F(VectorIndexCacheTest, TTL_StartsAfterLastHandleRelease) {
     cache_->Insert(tenann::CacheKey("/ttl.vi"), make_dummy_ref(), &handle);
 
     // A pinned entry survives even if the sweep time is beyond its TTL.
-    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 901 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 
     handle = tenann::IndexCacheHandle{};
-    const int64_t released_at = MonotonicMillis();
-    cache_->ClearExpired(released_at + 899 * 1000L);
+    EXPECT_FALSE(cache_->ClearExpired(base_time + 1800 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 
-    cache_->ClearExpired(released_at + 901 * 1000L);
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 1802 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
 }
 
 TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
-    cache_->SetExpireSeconds(900);
+    cache_->SetExpireSeconds(10);
 
     tenann::IndexCacheHandle inserted;
     cache_->Insert(tenann::CacheKey("/refresh.vi"), make_dummy_ref(), &inserted);
@@ -344,15 +345,29 @@ TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
 
     tenann::IndexCacheHandle hit;
     ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/refresh.vi"), &hit));
-    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    cache_->SetExpireSeconds(900);
+    hit = tenann::IndexCacheHandle{};
+
+    // The hit is released under the 900-second TTL. Lowering the runtime
+    // setting afterward must not shorten this entry's existing deadline.
+    cache_->SetExpireSeconds(10);
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 11 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 
-    hit = tenann::IndexCacheHandle{};
-    const int64_t refreshed_at = MonotonicMillis();
-    cache_->ClearExpired(refreshed_at + 899 * 1000L);
-    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
-    cache_->ClearExpired(refreshed_at + 901 * 1000L);
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 901 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_SweepsAtOwnExpireInterval) {
+    cache_->SetExpireSeconds(900);
+    const int64_t base_time = MonotonicMillis();
+
+    EXPECT_FALSE(cache_->ClearExpired(base_time));
+    EXPECT_FALSE(cache_->ClearExpired(base_time + 899 * 1000L));
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 901 * 1000L));
+    EXPECT_FALSE(cache_->ClearExpired(base_time + 1800 * 1000L));
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 1802 * 1000L));
 }
 
 TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
@@ -362,11 +377,11 @@ TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
     cache_->Insert(tenann::CacheKey("/no-ttl.vi"), make_dummy_ref(), &handle);
     handle = tenann::IndexCacheHandle{};
 
-    cache_->ClearExpired(MonotonicMillis() + 24 * 60 * 60 * 1000L);
+    EXPECT_FALSE(cache_->ClearExpired(MonotonicMillis() + 24 * 60 * 60 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 }
 
-TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateResetsExistingDeadline) {
+TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateOnlyAffectsFutureReleases) {
     cache_->SetExpireSeconds(900);
 
     tenann::IndexCacheHandle handle;
@@ -374,11 +389,27 @@ TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateResetsExistingDeadline) {
     handle = tenann::IndexCacheHandle{};
 
     cache_->SetExpireSeconds(10);
-    const int64_t updated_at = MonotonicMillis();
-    cache_->ClearExpired(updated_at + 9 * 1000L);
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 11 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
-    cache_->ClearExpired(updated_at + 11 * 1000L);
+
+    // A later release uses the new 10-second TTL for this entry only.
+    ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/updated-ttl.vi"), &handle));
+    handle = tenann::IndexCacheHandle{};
+    EXPECT_FALSE(cache_->ClearExpired(base_time + 20 * 1000L));
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 22 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_HugeValueDoesNotOverflow) {
+    cache_->SetExpireSeconds(std::numeric_limits<int64_t>::max());
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/huge-ttl.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    EXPECT_FALSE(cache_->ClearExpired(std::numeric_limits<int64_t>::max()));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 }
 
 TEST_F(VectorIndexCacheTest, TTL_IVFPQExpiresOuterEntryAndAllListBlocksTogether) {
@@ -402,7 +433,7 @@ TEST_F(VectorIndexCacheTest, TTL_IVFPQExpiresOuterEntryAndAllListBlocksTogether)
     outer_ref.reset();
     outer_handle = tenann::IndexCacheHandle{};
 
-    cache_->ClearExpired(MonotonicMillis() + 901 * 1000L);
+    EXPECT_TRUE(cache_->ClearExpired(MonotonicMillis() + 901 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
 
     tenann::IndexCacheHandle probe;

@@ -75,7 +75,7 @@ public:
 
     void SetCapacity(size_t new_capacity);
     void SetExpireSeconds(int64_t expire_seconds);
-    void ClearExpired(int64_t now = MonotonicMillis());
+    bool ClearExpired(int64_t now = MonotonicMillis());
     size_t capacity() const { return _cache.capacity(); }
     size_t memory_usage() const { return _cache.size(); }
     int64_t expire_seconds() const { return _expire_seconds.load(std::memory_order_relaxed); }
@@ -91,6 +91,7 @@ private:
     Cache _cache;
     VectorIndexCacheMetrics* _metrics = nullptr;
     std::atomic<int64_t> _expire_seconds{0};
+    std::atomic<int64_t> _last_expiration_sweep_ms;
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};
 };
@@ -108,7 +109,7 @@ public:
     VectorIndexCache(size_t, MemTracker*, VectorIndexCacheMetrics* = nullptr) {}
     void SetCapacity(size_t) {}
     void SetExpireSeconds(int64_t) {}
-    void ClearExpired(int64_t = 0) {}
+    bool ClearExpired(int64_t = 0) { return false; }
     size_t capacity() const { return 0; }
     size_t memory_usage() const { return 0; }
     int64_t expire_seconds() const { return 0; }
