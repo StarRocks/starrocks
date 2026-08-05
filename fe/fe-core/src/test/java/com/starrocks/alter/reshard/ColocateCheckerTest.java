@@ -51,6 +51,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,6 +65,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -555,8 +557,12 @@ public class ColocateCheckerTest {
         // ticked concurrently and submitted its own alignment job for the same unstable group,
         // so the total job count can be >= 1 — assert at least one alignment job exists for
         // *our* table, which is sufficient evidence the checker did its work.
-        Assertions.assertTrue(countAlignmentJobsForTable(table.getId()) >= 1,
-                "misaligned partition must trigger at least one alignment SplitTabletJob");
+        // The real TabletReshardJobMgr daemon is live in this fixture. It can reserve this table
+        // after the synthetic misalignment but before the direct checker call above; the job then
+        // becomes visible only after its asynchronous journal callback publishes it. Wait for that
+        // visibility boundary instead of sampling the job map in the short reservation/WAL window.
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> countAlignmentJobsForTable(table.getId()) >= 1);
 
         // Group must remain unstable: alignment job is pending; only after every peer is aligned
         // does the checker mark stable. Submitting the job is not enough.
