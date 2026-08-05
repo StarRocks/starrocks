@@ -71,7 +71,13 @@ subprojects {
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
+<<<<<<< HEAD
         set("parquet.version", "1.15.2")
+=======
+        set("parquet.version", "1.16.0")
+        set("ranger.version", "2.8.0")
+        set("orc.version", "1.9.1")
+>>>>>>> 68c2092528 ([BugFix] Restore Ranger Solr audit destination on the FE classpath (#77294))
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
@@ -216,7 +222,8 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
-            implementation("org.apache.ranger:ranger-plugins-common:2.8.0")
+            implementation("org.apache.ranger:ranger-audit-dest-solr:${project.ext["ranger.version"]}")
+            implementation("org.apache.ranger:ranger-plugins-common:${project.ext["ranger.version"]}")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")
