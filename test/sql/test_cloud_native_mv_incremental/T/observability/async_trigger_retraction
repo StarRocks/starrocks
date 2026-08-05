@@ -1,0 +1,41 @@
+-- name: test_ivm_auto_refresh_on_retraction_dml @cloud
+-- lifecycle/multi_mv's test_ivm_auto_refresh_fanout covers auto-refresh on INSERT. A retraction DML
+-- has to reach the same trigger: a DELETE and an UPDATE must each wake the MV exactly once, and the
+-- MV must land correct afterwards. Auto-refresh only happens on REFRESH ASYNC -- a DEFERRED MANUAL MV
+-- never self-refreshes, so this drives ASYNC and counts refreshes instead of issuing REFRESH.
+CREATE TABLE afr_pk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO afr_pk VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_afr
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH ASYNC
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, v FROM afr_pk;
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 1)
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_afr';
+DELETE FROM afr_pk WHERE id = 1;
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 2)
+SELECT id, v FROM mv_afr ORDER BY id;
+UPDATE afr_pk SET v = 99 WHERE id = 2;
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 3)
+SELECT id, v FROM mv_afr ORDER BY id;
+SELECT COUNT(*) AS diff FROM (SELECT id, v FROM mv_afr EXCEPT SELECT id, v FROM afr_pk) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, v FROM afr_pk EXCEPT SELECT id, v FROM mv_afr) t;
+-- Exactly one refresh per DML, not merely at least one: wait_mv_refresh_count returns as soon as the
+-- count reaches its argument, so it cannot by itself rule out a duplicate wake-up. One PCT run for
+-- the initial build plus one INCREMENTAL run each for the DELETE and the UPDATE.
+SELECT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, COUNT(*) AS runs
+FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS'
+GROUP BY 1 ORDER BY 1;
+-- Load-triggered, not manual.
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (DEFINITION LIKE '%mv_afr%' OR EXTRA_MESSAGE LIKE '%mv_afr%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+SELECT REFRESH_TRIGGER FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_afr';
+DROP MATERIALIZED VIEW mv_afr;

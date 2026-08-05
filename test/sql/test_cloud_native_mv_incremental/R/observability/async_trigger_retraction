@@ -1,0 +1,79 @@
+-- name: test_ivm_auto_refresh_on_retraction_dml @cloud
+CREATE TABLE afr_pk (id INT NOT NULL, v BIGINT) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO afr_pk VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_afr
+DISTRIBUTED BY HASH(id) BUCKETS 2
+REFRESH ASYNC
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT id, v FROM afr_pk;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 1)
+-- result:
+None
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_afr';
+DELETE FROM afr_pk WHERE id = 1;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 2)
+-- result:
+None
+-- !result
+SELECT id, v FROM mv_afr ORDER BY id;
+-- result:
+2	20
+3	30
+-- !result
+UPDATE afr_pk SET v = 99 WHERE id = 2;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_afr", 3)
+-- result:
+None
+-- !result
+SELECT id, v FROM mv_afr ORDER BY id;
+-- result:
+2	99
+3	30
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT id, v FROM mv_afr EXCEPT SELECT id, v FROM afr_pk) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT id, v FROM afr_pk EXCEPT SELECT id, v FROM mv_afr) t;
+-- result:
+0
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, COUNT(*) AS runs
+FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'SUCCESS'
+GROUP BY 1 ORDER BY 1;
+-- result:
+INCREMENTAL	2
+PCT	1
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (DEFINITION LIKE '%mv_afr%' OR EXTRA_MESSAGE LIKE '%mv_afr%')
+  AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+SELECT REFRESH_TRIGGER FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_afr';
+-- result:
+ON_BASE_TABLE_CHANGE
+-- !result
+DROP MATERIALIZED VIEW mv_afr;
+-- result:
+-- !result

@@ -66,3 +66,84 @@ SELECT id, v FROM mv_obs_pk ORDER BY id;
 SELECT COUNT(*) AS diff FROM (SELECT id, v FROM mv_obs_pk EXCEPT SELECT id, v FROM base_obs_pk) t;
 SELECT COUNT(*) AS incremental_runs_with_timestamp_range FROM information_schema.task_runs WHERE (EXTRA_MESSAGE LIKE '%mv_obs_pk%' OR DEFINITION LIKE '%mv_obs_pk%') AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceTimestampRange":{"default_catalog.${db[0]}.base_obs_pk":{"start":"${START_TS}', '%","end":"${END_TS}', '%');
 DROP MATERIALIZED VIEW mv_obs_pk;
+
+-- name: test_ivm_source_range_chains_across_jobs @cloud
+-- Consecutive refreshes must tile the version space without a gap or an overlap: (a,b] then (b,c].
+-- test_ivm_with_iceberg_mv_max_rows_per_refresh pins this between the runs *inside* one batched job;
+-- this pins it between separate jobs, which is where a skipped or re-consumed delta would show up.
+-- Asserted structurally (one run's end is the next run's start) so the golden holds no bookmark id.
+CREATE TABLE base_chain (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO base_chain VALUES (1, 10);
+CREATE MATERIALIZED VIEW mv_chain
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM base_chain;
+REFRESH MATERIALIZED VIEW mv_chain WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_chain';
+INSERT INTO base_chain VALUES (2, 20);
+REFRESH MATERIALIZED VIEW mv_chain WITH SYNC MODE;
+INSERT INTO base_chain VALUES (3, 30);
+REFRESH MATERIALIZED VIEW mv_chain WITH SYNC MODE;
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_chain EXCEPT SELECT k, v FROM base_chain) t;
+WITH r AS (
+  SELECT regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) AS s,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1) AS e
+  FROM information_schema.task_runs
+  WHERE TASK_NAME = '${TASK_NAME}'
+    AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+    AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
+)
+SELECT (SELECT COUNT(*) FROM r) AS incremental_runs,
+       (SELECT COUNT(*) FROM r a JOIN r b ON a.e = b.s) AS adjacent_pairs,
+       (SELECT COUNT(*) FROM r WHERE s = e) AS degenerate_windows;
+DROP MATERIALIZED VIEW mv_chain;
+
+-- name: test_ivm_source_range_unchanged_join_base @cloud
+-- A join MV records one window per base table. When only one side changed, the untouched side must
+-- still get an entry, with start == end -- the same "nothing changed" encoding a fully skipped
+-- refresh uses. A missing entry would make it impossible to tell "no change" from "not consulted".
+CREATE TABLE base_join_a (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE TABLE base_join_b (k INT, w INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- b is seeded with the k=3 row up front, so the later change to a alone still produces a new join
+-- row. If b were inserted into after the baseline it would no longer be the unchanged side.
+INSERT INTO base_join_a VALUES (1, 10), (2, 20);
+INSERT INTO base_join_b VALUES (1, 100), (2, 200), (3, 300);
+CREATE MATERIALIZED VIEW mv_join
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT a.k AS k, a.v AS v, b.w AS w FROM base_join_a a INNER JOIN base_join_b b ON a.k = b.k;
+REFRESH MATERIALIZED VIEW mv_join WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_join';
+INSERT INTO base_join_a VALUES (3, 30);
+INSERT INTO base_join_a VALUES (4, 40);
+REFRESH MATERIALIZED VIEW mv_join WITH SYNC MODE;
+SELECT k, v, w FROM mv_join ORDER BY k;
+SELECT COUNT(*) AS diff FROM (SELECT k, v, w FROM mv_join EXCEPT SELECT a.k, a.v, b.w FROM base_join_a a INNER JOIN base_join_b b ON a.k = b.k) t;
+-- Aggregated over the incremental runs rather than picking one with LIMIT: a second run appearing
+-- here should change the counts, not get silently discarded by an ORDER BY on the JSON text.
+WITH j AS (
+  SELECT get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') AS v,
+         get_json_string(EXTRA_MESSAGE, '$.imvSourceTimestampRange') AS t
+  FROM information_schema.task_runs
+  WHERE TASK_NAME = '${TASK_NAME}'
+    AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+    AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
+)
+SELECT COUNT(*) AS incremental_runs,
+       SUM(CASE WHEN v LIKE '%base_join_a%' AND v LIKE '%base_join_b%' THEN 1 ELSE 0 END) AS both_bases_present,
+       SUM(CASE WHEN regexp_extract(v, 'base_join_b":[^}]*"end": *"([0-9]+)"', 1)
+                   = regexp_extract(v, 'base_join_b":[^}]*"start": *"([0-9]+)"', 1)
+                THEN 1 ELSE 0 END) AS unchanged_version_degenerate,
+       SUM(CASE WHEN regexp_extract(v, 'base_join_a":[^}]*"end": *"([0-9]+)"', 1)
+                  <> regexp_extract(v, 'base_join_a":[^}]*"start": *"([0-9]+)"', 1)
+                THEN 1 ELSE 0 END) AS changed_version_advanced,
+       SUM(CASE WHEN regexp_extract(t, 'base_join_b":[^}]*"end": *"([0-9]+)"', 1)
+                   = regexp_extract(t, 'base_join_b":[^}]*"start": *"([0-9]+)"', 1)
+                THEN 1 ELSE 0 END) AS unchanged_timestamp_degenerate
+FROM j;
+DROP MATERIALIZED VIEW mv_join;

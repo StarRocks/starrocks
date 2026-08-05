@@ -390,3 +390,64 @@ SELECT COUNT(*) AS diff_reverse FROM (SELECT g,APPROX_COUNT_DISTINCT(v),SUM(v),M
 -- result:
 0
 -- !result
+-- name: test_ivm_ret_agg_observability @cloud
+CREATE TABLE pk_agg_obs (id INT NOT NULL, g INT, v BIGINT) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_agg_obs VALUES (1,10,100),(2,10,200),(3,20,300);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agg_obs REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT g, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM pk_agg_obs GROUP BY g;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_agg_obs';
+UPDATE pk_agg_obs SET v = 250 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+DELETE FROM pk_agg_obs WHERE id = 3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+SELECT g, sv, mx, c FROM mv_agg_obs ORDER BY g;
+-- result:
+10	350	250	2
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT g,sv,mx,c FROM mv_agg_obs EXCEPT SELECT g,SUM(v),MAX(v),COUNT(*) FROM pk_agg_obs GROUP BY g) t;
+-- result:
+0
+-- !result
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+-- result:
+INCREMENTAL	SUCCESS
+PCT	SUCCESS
+-- !result
+WITH r AS (
+  SELECT regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) AS s,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1) AS e
+  FROM information_schema.task_runs
+  WHERE TASK_NAME = '${TASK_NAME}'
+    AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+    AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
+)
+SELECT (SELECT COUNT(*) FROM r) AS incremental_runs_with_window,
+       (SELECT COUNT(*) FROM r a JOIN r b ON a.e = b.s) AS adjacent_pairs;
+-- result:
+2	1
+-- !result
+SELECT COUNT(*) AS runs_with_timestamp_range FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}'
+  AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+  AND get_json_string(EXTRA_MESSAGE, '$.imvSourceTimestampRange') LIKE '%pk_agg_obs%';
+-- result:
+2
+-- !result
+DROP MATERIALIZED VIEW mv_agg_obs;
+-- result:
+-- !result

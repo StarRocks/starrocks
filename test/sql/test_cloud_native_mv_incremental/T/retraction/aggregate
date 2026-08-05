@@ -195,3 +195,43 @@ REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
 SELECT g,nd,sv,mx,c FROM mv_nd ORDER BY g;
 SELECT COUNT(*) AS diff FROM (SELECT g,nd,sv,mx,c FROM mv_nd EXCEPT SELECT g,APPROX_COUNT_DISTINCT(v),SUM(v),MAX(v),COUNT(*) FROM pk_nd GROUP BY g) t;
 SELECT COUNT(*) AS diff_reverse FROM (SELECT g,APPROX_COUNT_DISTINCT(v),SUM(v),MAX(v),COUNT(*) FROM pk_nd GROUP BY g EXCEPT SELECT g,nd,sv,mx,c FROM mv_nd) t;
+
+-- name: test_ivm_ret_agg_observability @cloud
+-- The five cases above prove the retractable aggregate path is data-correct but assert nothing about
+-- what it reports. Per-group recompute is a different refresh shape from a projection, so pin that it
+-- still records a source window per refresh, still reports INCREMENTAL, and still tiles the version
+-- space across refreshes -- a group-recompute path that silently stopped recording would hide exactly
+-- the delete/update refreshes that need post-mortem diagnosis most.
+CREATE TABLE pk_agg_obs (id INT NOT NULL, g INT, v BIGINT) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+INSERT INTO pk_agg_obs VALUES (1,10,100),(2,10,200),(3,20,300);
+CREATE MATERIALIZED VIEW mv_agg_obs REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT g, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM pk_agg_obs GROUP BY g;
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = '${db[0]}' AND TABLE_NAME = 'mv_agg_obs';
+UPDATE pk_agg_obs SET v = 250 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+DELETE FROM pk_agg_obs WHERE id = 3;
+REFRESH MATERIALIZED VIEW mv_agg_obs WITH SYNC MODE;
+SELECT g, sv, mx, c FROM mv_agg_obs ORDER BY g;
+SELECT COUNT(*) AS diff FROM (SELECT g,sv,mx,c FROM mv_agg_obs EXCEPT SELECT g,SUM(v),MAX(v),COUNT(*) FROM pk_agg_obs GROUP BY g) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+WITH r AS (
+  SELECT regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) AS s,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1) AS e
+  FROM information_schema.task_runs
+  WHERE TASK_NAME = '${TASK_NAME}'
+    AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+    AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
+)
+SELECT (SELECT COUNT(*) FROM r) AS incremental_runs_with_window,
+       (SELECT COUNT(*) FROM r a JOIN r b ON a.e = b.s) AS adjacent_pairs;
+-- Commit times resolve on the retraction path too, not just on projections.
+SELECT COUNT(*) AS runs_with_timestamp_range FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}'
+  AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
+  AND get_json_string(EXTRA_MESSAGE, '$.imvSourceTimestampRange') LIKE '%pk_agg_obs%';
+DROP MATERIALIZED VIEW mv_agg_obs;
