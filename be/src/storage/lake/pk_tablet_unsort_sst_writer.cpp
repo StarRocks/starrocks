@@ -16,7 +16,6 @@
 
 #include <fmt/format.h>
 
-#include "base/string/string_util.h"
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "common/config.h"
@@ -36,6 +35,7 @@
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
 #include "util/starrocks_metrics.h"
+#include "util/string_util.h"
 
 namespace starrocks::lake {
 

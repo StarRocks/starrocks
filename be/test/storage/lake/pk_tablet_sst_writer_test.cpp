@@ -22,13 +22,6 @@
 #include <random>
 #include <tuple>
 
-<<<<<<< HEAD
-=======
-#include "base/string/string_util.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
->>>>>>> 1b3750ac28 ([BugFix] Fix unsorted PK SST writer memory accounting (#77251))
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -56,6 +49,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/string_util.h"
 
 namespace starrocks::lake {
 
