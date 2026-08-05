@@ -259,7 +259,7 @@ public interface ConnectorMetadata {
         return Lists.newArrayList();
     }
 
-    default boolean createTable(CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
         throw new StarRocksConnectorException("This connector doesn't support creating tables");
     }
 
