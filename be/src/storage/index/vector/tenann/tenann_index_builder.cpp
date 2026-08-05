@@ -47,17 +47,27 @@ Status TenAnnIndexBuilderProxy::init() {
         return Status::InvalidArgument("metric_type is needed because it's a critical common param");
     }
 
+    // Populating the cache at build time is opt-in (enable_vector_index_cache_on_build,
+    // default off): the cache is sized for the query working set, so loads and compactions
+    // would otherwise evict indexes queries are using in favour of ones nobody has asked
+    // for. The query path (TenANNReader::init_searcher) fills it on demand instead.
+    // Two hard exclusions on top of the config:
+    //   - IVF-PQ under block cache caches per-list blocks, so a whole-index entry is dead weight;
+    //   - no global cache injected (UT / early init) would make tenann's WriteIndex T_CHECK
+    //     throw and fail the build outright.
+    auto* index_cache = tenann::GetGlobalIndexCache();
+    const bool ivfpq_block_cached =
+            meta.index_type() == tenann::IndexType::kFaissIvfPq && config::enable_vector_index_block_cache;
+    const bool write_index_cache =
+            config::enable_vector_index_cache_on_build && !ivfpq_block_cached && index_cache != nullptr;
+
     auto meta_copy = meta;
-    if (meta.index_type() == tenann::IndexType::kFaissIvfPq && config::enable_vector_index_block_cache) {
-        meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = false;
-    } else {
-        meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = true;
-    }
+    meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = write_index_cache;
 
     try {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
-        _index_builder->index_writer()->SetIndexCache(tenann::GetGlobalIndexCache());
+        _index_builder->index_writer()->SetIndexCache(index_cache);
         // Bound the per-builder row buffer (no-op for builders that don't buffer).
         // Tunable via BE config vector_index_build_flush_threshold_rows; lower it
         // when BE memory is tight, set 0 to disable intermediate flushing.
