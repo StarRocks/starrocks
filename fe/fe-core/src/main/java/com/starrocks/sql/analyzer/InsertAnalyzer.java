@@ -181,6 +181,12 @@ public class InsertAnalyzer {
 
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
+            // Always validate a static partition clause so a clause naming a non-partition or
+            // non-existent column is rejected instead of being silently ignored (issue #11350).
+            // This is independent of the target-list invariant below, so both run when both apply.
+            if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
+            }
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
                     // case-insensitive match. refer to AstBuilder#getColumnNames
@@ -188,8 +194,6 @@ public class InsertAnalyzer {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
-            } else if (insertStmt.isStaticKeyPartitionInsert()) {
-                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             }
             if (!table.isIcebergTable()) {
                 List<Column> partitionColumns = tablePartitionColumnNames.stream()
