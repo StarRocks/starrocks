@@ -332,10 +332,11 @@ public class DatabaseTransactionMgr {
                                    List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
-                                   boolean writeEditLog)
+                                   TransactionState.TxnPrepareMode txnPrepareMode)
             throws StarRocksException {
         Preconditions.checkNotNull(tabletCommitInfos, "tabletCommitInfos is null");
         Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
+        Preconditions.checkNotNull(txnPrepareMode, "txnPrepareMode is null");
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
@@ -391,14 +392,13 @@ public class DatabaseTransactionMgr {
             txnSpan.setAttribute("tables", tableNames);
 
             for (TransactionStateListener listener : stateListeners) {
-                listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
+                listener.prePrepared(transactionState, tabletCommitInfos, tabletFailInfos);
             }
 
             transactionState.beforeStateTransform(TransactionStatus.PREPARED);
             boolean txnOperated = false;
 
             Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedPreparedTransaction", txnSpan);
-
             writeLock();
             try {
                 // transaction state is modified during check if the transaction could commit
@@ -408,14 +408,15 @@ public class DatabaseTransactionMgr {
 
                 // update transaction state version
                 transactionState.setTransactionStatus(TransactionStatus.PREPARED);
-                transactionState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs);
+                transactionState.setPreparedTimeAndTimeout(
+                        System.currentTimeMillis(), preparedTimeoutMs, txnPrepareMode);
 
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(transactionState);
                 }
 
                 // persist transactionState
-                if (writeEditLog) {
+                if (txnPrepareMode == TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE) {
                     unprotectUpsertTransactionState(transactionState);
                 }
 
@@ -435,7 +436,7 @@ public class DatabaseTransactionMgr {
                     LOG.warn("transaction after state transform failed: {}", transactionState, t);
                 }
             }
-            if (writeEditLog) {
+            if (txnPrepareMode == TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE) {
                 persistTxnStateInTxnLevelLock(transactionState);
             }
 
@@ -507,6 +508,11 @@ public class DatabaseTransactionMgr {
 
             txnSpan.setAttribute("tables", tableListString.toString());
 
+            List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
+            for (TransactionStateListener listener : stateListeners) {
+                listener.preCommit(transactionState);
+            }
+
             // before state transform
             transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
             // transaction state transform
@@ -568,7 +574,8 @@ public class DatabaseTransactionMgr {
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
         prepareTransaction(transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
-                tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
+                tabletCommitInfos, tabletFailInfos, txnCommitAttachment,
+                TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
         return commitPreparedTransaction(transactionId);
     }
 

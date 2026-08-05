@@ -346,7 +346,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             dbTransactionMgr.prepareTransaction(
-                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment, true);
+                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment,
+                    TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE);
             LOG.debug("prepare transaction: {} success", transactionId);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
@@ -376,22 +377,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
-        List<Long> tableIdList = transactionState.getTableIdList();
-
-        Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
-                timeoutMillis, TimeUnit.MILLISECONDS)) {
-            String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
-                    transactionId, db.getFullName(), timeoutMillis);
-            throw new StarRocksException(errMsg);
-        }
-        try {
-            waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
-        }
+        waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
         if (waiter == null) {
+            TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+            if (transactionState == null) {
+                throw new TransactionNotFoundException(transactionId);
+            }
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
                     transactionState.toString()));
         }
@@ -410,6 +401,49 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
+        }
+    }
+
+    VisibleStateWaiter retryCommitPreparedOnRateLimitExceeded(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        long startTime = System.currentTimeMillis();
+        long lockTimeoutMs = timeoutMs;
+        while (true) {
+            try {
+                return commitPreparedTransactionUnderIntensiveDbLock(db, transactionId, lockTimeoutMs);
+            } catch (CommitRateExceededException e) {
+                throttleCommitOnRateExceed(e, startTime, timeoutMs);
+                if (timeoutMs != 0) {
+                    lockTimeoutMs = timeoutMs - (System.currentTimeMillis() - startTime);
+                    // A zero lock timeout means wait forever, so do not retry after a finite budget is exhausted.
+                    if (lockTimeoutMs <= 0) {
+                        throw e;
+                    }
+                }
+            }
+        }
+    }
+
+    VisibleStateWaiter commitPreparedTransactionUnderIntensiveDbLock(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        if (transactionState == null) {
+            throw new TransactionNotFoundException(transactionId);
+        }
+        List<Long> tableIdList = transactionState.getTableIdList();
+
+        Locker locker = new Locker();
+        if (!locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), tableIdList, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+            String errMsg = String.format(
+                    "get database/table lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
+                    transactionId, db.getFullName(), timeoutMs);
+            throw new StarRocksException(errMsg);
+        }
+        try {
+            return getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 
