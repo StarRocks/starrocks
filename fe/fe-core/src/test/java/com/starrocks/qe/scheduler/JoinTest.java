@@ -20,7 +20,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -226,6 +230,36 @@ public class JoinTest extends SchedulerTestBase {
         Map<String, String> stringLoadCounters = loadCounters.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> String.valueOf(entry.getValue())));
         Assertions.assertEquals(stringLoadCounters, scheduler.getLoadCounters());
+    }
+
+    @Test
+    public void testProfileWaitAfterCancelUsesProfileTimeout() throws Exception {
+        String sql = "insert into lineitem select * from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+
+        int savedProfileTimeout = connectContext.getSessionVariable().getProfileTimeout();
+        boolean savedEnableProfile = connectContext.getSessionVariable().isEnableProfile();
+        try {
+            // With the profile enabled the cancel path deliberately keeps the latch held so it can still
+            // collect the profile of the fragments that failed.
+            connectContext.getSessionVariable().setEnableProfile(true);
+            setProfileTimeout(0);
+
+            scheduler.cancel("Cancel by test");
+            Assertions.assertFalse(scheduler.isDone());
+            Assertions.assertTrue(scheduler.join(300));
+            Assertions.assertTrue(scheduler.isDone());
+            Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
+        } finally {
+            setProfileTimeout(savedProfileTimeout);
+            connectContext.getSessionVariable().setEnableProfile(savedEnableProfile);
+        }
+    }
+
+    private void setProfileTimeout(int timeoutSecond) throws Exception {
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
+                connectContext.getSessionVariable(),
+                new SystemVariable(SessionVariable.PROFILE_TIMEOUT, new IntLiteral(timeoutSecond)), true);
     }
 
     @Test
