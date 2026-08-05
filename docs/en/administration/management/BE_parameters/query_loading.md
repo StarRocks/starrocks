@@ -733,7 +733,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether building a vector index also inserts the index it just built into the vector index cache sized by `vector_query_cache_capacity`. Disabled by default, because the cache is sized for the query working set: letting loads and compactions push freshly built indexes into it evicts entries that running queries depend on, in exchange for warming indexes that may never be queried. The query path still populates the cache on demand the first time an index is read. Enable this only when index build and queries run on the same node and newly built data is queried immediately, to save that first read-back of the index file. This item has no effect on IVF-PQ indexes when `enable_vector_index_block_cache` is `true`, because that read path caches per-list blocks instead of the whole index. A change takes effect for index builds started after it.
+- Description: Whether building a vector index also inserts the index it just built into the vector index cache sized by `vector_query_cache_capacity`. Disabled by default, because the cache is sized for the query working set: letting loads and compactions push freshly built indexes into it evicts entries that running queries depend on, in exchange for warming indexes that may never be queried. The query path still populates the cache on demand the first time an index is read. Enable this only when index build and queries run on the same node and newly built data is queried immediately, to save that first read-back of the index file. A change takes effect for index builds started after it.
 - Introduced in: v4.2.0
 
 ### vector_adaptive_ef_alpha
