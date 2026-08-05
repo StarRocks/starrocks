@@ -49,6 +49,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -95,6 +96,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -348,6 +350,11 @@ public class AlterJobMgr {
         // Try to parse and analyze the creation sql
         List<StatementBase> statementBaseList = SqlParser.parse(createMvSql, context.getSessionVariable());
         CreateMaterializedViewStatement createStmt = (CreateMaterializedViewStatement) statementBaseList.get(0);
+        // RANGE is omission-only SQL, so reconstructed DDL cannot carry its persisted target type.
+        // Preserve it explicitly before re-analysis, independent of the current selection switch.
+        if (materializedView.getDefaultDistributionInfo() instanceof RangeDistributionInfo) {
+            createStmt.setDistributionDesc(new RangeDistributionDesc());
+        }
         Analyzer.analyze(createStmt, context);
 
         // validate the schema

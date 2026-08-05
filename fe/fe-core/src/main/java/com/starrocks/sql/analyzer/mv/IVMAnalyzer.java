@@ -196,16 +196,16 @@ public class IVMAnalyzer {
      * - If incremental refresh is supported, the result must not be none.
      */
     public Optional<IVMAnalyzeResult> rewrite(MaterializedView.RefreshMode refreshMode) {
-        return rewriteInternal(refreshMode, null, refreshMode.isIncremental());
+        return rewriteInternal(refreshMode, null);
     }
 
     public Optional<IVMAnalyzeResult> rewriteForRefresh(MaterializedView.RefreshMode refreshMode,
                                                         int pinnedEncodeRowIdVersion) {
-        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion, false);
+        return rewriteInternal(refreshMode, pinnedEncodeRowIdVersion);
     }
 
     private Optional<IVMAnalyzeResult> rewriteInternal(MaterializedView.RefreshMode refreshMode,
-                                                       Integer pinnedVersion, boolean runTrial) {
+                                                       Integer pinnedVersion) {
         if (!refreshMode.isIncremental() && !refreshMode.isAuto()) {
             return Optional.empty();
         }
@@ -219,16 +219,10 @@ public class IVMAnalyzer {
             RowIdStrategy strategy = hasComputedRowId
                     ? RowIdStrategy.QUERY_COMPUTED
                     : RowIdStrategy.AUTO_INCREMENT;
-            // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
-            // operator without a matching IvmDelta*Rule, or a combinator's metadata that no
-            // longer matches the BE state-union path. CREATE only; refresh builds the real plan next.
-            if (runTrial) {
-                IvmTrialRewriter.runTrial(connectContext, statement, queryStatement);
-            }
             IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
             return Optional.of(result);
         } catch (SemanticException e) {
-            // Already has a self-describing message (rewriteImpl or IvmTrialRewriter). Don't re-wrap.
+            // Already has a self-describing message from rewriteImpl. Don't re-wrap.
             if (refreshMode.isIncremental()) {
                 throw e;
             }
