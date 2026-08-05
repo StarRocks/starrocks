@@ -697,6 +697,12 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
 
 // eval conjuncts for nest loop join, apply common exprs and conjuncts first
 Status NLJoinProbeOperator::_eval_conjuncts(const ChunkPtr& chunk) {
+    // The permuted chunk may have no row left, either because the join conjuncts filtered all of
+    // them out, or because the previous round already consumed the last probe row. There is nothing
+    // to evaluate on it, and the common exprs cannot be evaluated against an empty chunk.
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
     RETURN_IF_ERROR(guard.evaluate());
     RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
