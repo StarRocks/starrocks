@@ -412,5 +412,11 @@ public class QueryDumpDeserializerTest {
         ColumnStatistic mcvOnly = ColumnStatistic.buildFrom(withMcvOnly).build();
         assertThat(mcvOnly.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
         assertThat(mcvOnly.getCollectionSize()).isEqualTo(ColumnStatistic.DEFAULT_COLLECTION_SIZE);
+
+        // COS-like text inside an MCV key is column data, not collection-size metadata.
+        String withCosInMcv = "[1.0, 100.0, 0.0, 8.0, 50.0] MCV: [[foo COS: 9:10]] ESTIMATE";
+        ColumnStatistic cosInMcv = ColumnStatistic.buildFrom(withCosInMcv).build();
+        assertThat(cosInMcv.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        assertThat(cosInMcv.getCollectionSize()).isEqualTo(ColumnStatistic.DEFAULT_COLLECTION_SIZE);
     }
 }

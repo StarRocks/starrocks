@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
  * versions can still be replayed.
  **/
 public final class LegacyColumnStatisticParser {
-    private static final Pattern COLLECTION_SIZE_PATTERN = Pattern.compile("(?:^|\\s)COS:\\s*(\\S+)");
+    private static final Pattern COLLECTION_SIZE_PATTERN = Pattern.compile("^\\s*COS:\\s*(\\S+)");
 
     private LegacyColumnStatisticParser() {
     }
@@ -118,4 +118,3 @@ public final class LegacyColumnStatisticParser {
         return Double.parseDouble(part.substring(label.length()).trim());
     }
 }
-
