@@ -44,7 +44,7 @@ public:
     ~StarRocksDataSourceProvider() override = default;
     friend class StarRocksDataSource;
 
-    StarRocksDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
+    explicit StarRocksDataSourceProvider(const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     bool insert_local_exchange_operator() const override { return false; }
@@ -55,7 +55,6 @@ private:
     StatusOr<std::vector<SlotDescriptor*>> output_slots(RuntimeState* state) const;
     const std::vector<TStarRocksRemoteScanOutput>& remote_outputs() const;
 
-    ConnectorScanNode* _scan_node;
     TStarRocksScanNode _starrocks_scan_node;
 };
 

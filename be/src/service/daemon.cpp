@@ -175,9 +175,11 @@ void remote_scan_token_cleanup(Daemon* daemon) {
         if (token_mgr != nullptr) {
             for (const auto& expired : token_mgr->cleanup_expired_tokens(UnixMillis())) {
                 if (expired.transport == TStarRocksScanTransport::STARROCKS_ARROW_FLIGHT) {
-                    exec_env->remote_arrow_queue_mgr()->cancel(expired.fragment_instance_id);
+                    WARN_IF_ERROR(exec_env->remote_arrow_queue_mgr()->cancel(expired.fragment_instance_id),
+                                  "Failed to cancel expired remote scan arrow queue");
                 } else if (expired.transport == TStarRocksScanTransport::STARROCKS_BRPC_CHUNK) {
-                    exec_env->remote_chunk_queue_mgr()->cancel(expired.fragment_instance_id);
+                    WARN_IF_ERROR(exec_env->remote_chunk_queue_mgr()->cancel(expired.fragment_instance_id),
+                                  "Failed to cancel expired remote scan chunk queue");
                 }
             }
         }

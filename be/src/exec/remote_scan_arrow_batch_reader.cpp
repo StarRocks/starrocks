@@ -43,6 +43,11 @@ std::shared_ptr<arrow::Schema> RemoteScanArrowBatchReader::schema() const {
     return _schema;
 }
 
+void RemoteScanArrowBatchReader::cleanup() {
+    WARN_IF_ERROR(_arrow_queue_mgr->cancel(_fragment_instance_id), "Failed to cancel remote scan arrow queue");
+    WARN_IF_ERROR(_token_mgr->remove(_token), "Failed to remove remote scan token");
+}
+
 arrow::Status RemoteScanArrowBatchReader::ReadNext(std::shared_ptr<arrow::RecordBatch>* out) {
     if (!_schema) {
         return arrow::Status::IOError("Failed to fetch schema for fragment instance ID: ",
@@ -52,15 +57,13 @@ arrow::Status RemoteScanArrowBatchReader::ReadNext(std::shared_ptr<arrow::Record
     bool eos = false;
     auto status = _arrow_queue_mgr->fetch_result(_fragment_instance_id, out, &eos);
     if (!status.ok()) {
-        _arrow_queue_mgr->cancel(_fragment_instance_id);
-        _token_mgr->remove(_token);
+        cleanup();
         return arrow::Status::IOError("Failed to fetch remote scan arrow data for fragment instance ID: ",
                                       print_id(_fragment_instance_id), ", error: ", status.to_string());
     }
     if (eos) {
         *out = nullptr;
-        _arrow_queue_mgr->cancel(_fragment_instance_id);
-        _token_mgr->remove(_token);
+        cleanup();
     }
     return arrow::Status::OK();
 }

@@ -35,6 +35,8 @@ public:
     arrow::Status ReadNext(std::shared_ptr<arrow::RecordBatch>* out) override;
 
 private:
+    void cleanup();
+
     RemoteArrowQueueMgr* _arrow_queue_mgr = nullptr;
     RemoteScanTokenMgr* _token_mgr = nullptr;
     const TUniqueId _fragment_instance_id;

@@ -332,13 +332,12 @@ private:
     std::unique_ptr<arrow::flight::FlightStreamReader> _reader;
 };
 
-DataSourceProviderPtr StarRocksConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+DataSourceProviderPtr StarRocksConnector::create_data_source_provider(ConnectorScanNode*,
                                                                       const TPlanNode& plan_node) const {
-    return std::make_unique<StarRocksDataSourceProvider>(scan_node, plan_node);
+    return std::make_unique<StarRocksDataSourceProvider>(plan_node);
 }
 
-StarRocksDataSourceProvider::StarRocksDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node) {
+StarRocksDataSourceProvider::StarRocksDataSourceProvider(const TPlanNode& plan_node) {
     if (plan_node.__isset.starrocks_scan_node) {
         _starrocks_scan_node = plan_node.starrocks_scan_node;
     }
