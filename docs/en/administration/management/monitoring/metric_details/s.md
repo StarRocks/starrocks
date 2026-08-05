@@ -62,6 +62,13 @@ description: "Alphabetical s"
 - Unit: -
 - Description: Metrics returned by `/proc/net/snmp`.
 
+## `starrocks_be_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the BE node. The metric value is always `1`.
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -306,6 +313,13 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Labels: `type` (`add_column`, `drop_column`, or `modify_column`), `is_leader`
 - Description: Number of ALTER TABLE column operations, by type. A single statement can contain several operations — for example, `ADD COLUMN a, DROP COLUMN b` — and each is counted separately under its type. Renames, reorders, and comment-only changes are not counted. Reported only by the Leader FE (`is_leader="true"`).
+
+## `starrocks_fe_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the FE node. The metric value is always `1`.
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
