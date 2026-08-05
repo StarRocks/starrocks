@@ -826,10 +826,19 @@ Status DeltaWriterImpl::init_write_schema() {
         // stays on the COLUMN/packed path in v1 (flexible 3-way cost ranking is a follow-up). Note ROW mode
         // needs no __cset__ for the homogeneous case: it takes the standard non-flexible masked full-row
         // rewrite path (rewrite_segment/rewrite_partial_update).
+        //
+        // MUST also be gated on config::enable_sparse_dcg (default OFF). AUTO_MODE is what FE sends
+        // whenever it does NOT pick a mode explicitly, so an ORDINARY partial-update load -- e.g.
+        // `INSERT INTO pk_tbl (pk, c) VALUES ...` -- arrives here as AUTO_MODE too. Resolving those
+        // would change DEFAULT behavior, which this experimental feature must never do. Without the
+        // gate, a narrow ordinary INSERT was re-routed to a column mode and every row whose key does
+        // not already exist was silently DROPPED (column mode only inserts missing rows in
+        // COLUMN_UPSERT_MODE; see rowset_column_update_state.cpp / update_manager.cpp).
         const bool auto_is_partial_update =
                 _flexible_partial_update ||
                 _write_column_ids.size() < static_cast<size_t>(_tablet_schema->num_columns());
-        if (_partial_update_mode == PartialUpdateMode::AUTO_MODE && auto_is_partial_update) {
+        if (config::enable_sparse_dcg && _partial_update_mode == PartialUpdateMode::AUTO_MODE &&
+            auto_is_partial_update) {
             // Level-1 (per-load) column-vs-ROW decision by UPDATE WIDTH -- NOT by read-strictness. ROW mode
             // (masked full-row rewrite) writes flat, chain-free segments; it wins over the column overlays
             // once the update is WIDE, because sparse pays per-column machinery (bitmap + column file + DCG
@@ -848,7 +857,15 @@ Status DeltaWriterImpl::init_write_schema() {
             // update to ROW. A 1-column update is never "wide". (calibration)
             const bool wide = (upd_value >= config::sdcg_auto_row_width_min_cols) ||
                               (upd_value >= 2 && frac >= config::sdcg_auto_row_width_frac);
-            _partial_update_mode = wide ? PartialUpdateMode::ROW_MODE : PartialUpdateMode::COLUMN_UPDATE_MODE;
+            // COLUMN_UPSERT_MODE -- NOT COLUMN_UPDATE_MODE -- is the correct column mode here. The two
+            // differ only in what happens to a row whose key is absent from the tablet: UPSERT inserts
+            // it, UPDATE silently discards it. AUTO_MODE means "the caller did not choose", and every
+            // load that reaches this point (INSERT, stream load) has UPSERT semantics, so discarding
+            // new keys would be silent data loss. The write side cannot know which keys already exist
+            // -- that is only resolved at apply -- so the mode must be the one that is correct for
+            // both. SDCG's overlay machinery applies equally to UPSERT (txn_log_applier.cpp and
+            // meta_file.cpp treat both as column mode; the handler carries the insert_rowids path).
+            _partial_update_mode = wide ? PartialUpdateMode::ROW_MODE : PartialUpdateMode::COLUMN_UPSERT_MODE;
             _auto_resolved = true; // recorded into txn_meta so apply runs the adaptive cost model
             if (wide) {
                 StorageMetrics::instance()->sdcg_write_mode_row_total.increment(1);
