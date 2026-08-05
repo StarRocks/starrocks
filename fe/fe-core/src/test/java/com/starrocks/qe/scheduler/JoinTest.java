@@ -233,39 +233,24 @@ public class JoinTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testCancelWakesJoinWhenProfileTimeoutIsZero() throws Exception {
+    public void testProfileWaitAfterCancelUsesProfileTimeout() throws Exception {
         String sql = "insert into lineitem select * from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
         int savedProfileTimeout = connectContext.getSessionVariable().getProfileTimeout();
         boolean savedEnableProfile = connectContext.getSessionVariable().isEnableProfile();
-        Thread joinThread = null;
         try {
             // With the profile enabled the cancel path deliberately keeps the latch held so it can still
             // collect the profile of the fragments that failed.
             connectContext.getSessionVariable().setEnableProfile(true);
             setProfileTimeout(0);
 
-            AtomicBoolean joinFinished = new AtomicBoolean(false);
-            Thread activeJoinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
-            joinThread = activeJoinThread;
-            activeJoinThread.start();
-            Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                    .until(() -> activeJoinThread.getState() == Thread.State.TIMED_WAITING);
-
             scheduler.cancel("Cancel by test");
-            joinThread.join(TimeUnit.SECONDS.toMillis(2));
-
-            Assertions.assertFalse(joinThread.isAlive());
-            Assertions.assertTrue(joinFinished.get());
+            Assertions.assertFalse(scheduler.isDone());
+            Assertions.assertTrue(scheduler.join(300));
             Assertions.assertTrue(scheduler.isDone());
             Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
         } finally {
-            if (joinThread != null && joinThread.isAlive()) {
-                scheduler.cancel("Cancel test cleanup");
-                scheduler.profileWaitAfterCancelExpired();
-                joinThread.join(TimeUnit.SECONDS.toMillis(5));
-            }
             setProfileTimeout(savedProfileTimeout);
             connectContext.getSessionVariable().setEnableProfile(savedEnableProfile);
         }

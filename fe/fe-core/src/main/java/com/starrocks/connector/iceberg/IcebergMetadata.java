@@ -960,7 +960,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
             // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
             if (DataOperations.REPLACE.equals(snapshot.operation())) {
-                lastSnapshotId = snapshot.snapshotId();
+                // A REPLACE still ends the range preceding it, so it stays a usable boundary for an older
+                // delta. Before anything is emitted it would instead strand the range end on a snapshot
+                // no delta covers, which the caller reads as a lineage break.
+                if (!tvrDeltaTraits.isEmpty()) {
+                    lastSnapshotId = snapshot.snapshotId();
+                }
                 continue;
             }
             long currentSnapshotId = snapshot.snapshotId();
@@ -972,6 +977,12 @@ public class IcebergMetadata implements ConnectorMetadata {
                 tvrDeltaTraits.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
             }
             lastSnapshotId = currentSnapshotId;
+        }
+        if (tvrDeltaTraits.isEmpty()) {
+            // Nothing but skipped REPLACEs in range: emit one zero-stats delta spanning it so the caller
+            // advances past the compaction. An empty list means "no delta derivable" and fails the refresh.
+            return List.of(TvrTableDeltaTrait.ofMonotonic(
+                    TvrTableDelta.of(fromSnapshotExclusive.to, toSnapshotInclusive.to), TvrDeltaStats.EMPTY));
         }
         // reserve to ensure the last snapshot is in the last of the collection.
         Collections.reverse(tvrDeltaTraits);

@@ -29,8 +29,7 @@ public:
 // NOLINTNEXTLINE
 TEST_F(AnalytorTest, find_peer_group_end) {
     TPlanNode plan_node;
-    RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr, false);
+    Analytor analytor(plan_node, nullptr, false);
 
     int32_t v;
     auto c1 = Int32Column::create();
@@ -52,8 +51,7 @@ TEST_F(AnalytorTest, find_peer_group_end) {
 // NOLINTNEXTLINE
 TEST_F(AnalytorTest, reset_state_for_next_partition) {
     TPlanNode plan_node;
-    RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr, false);
+    Analytor analytor(plan_node, nullptr, false);
 
     analytor._partition.start = 10;
     analytor._partition.is_real = true;
@@ -67,8 +65,7 @@ TEST_F(AnalytorTest, reset_state_for_next_partition) {
 // NOLINTNEXTLINE
 TEST_F(AnalytorTest, find_partition_end) {
     TPlanNode plan_node;
-    RowDescriptor row_desc;
-    Analytor analytor1(plan_node, row_desc, nullptr, false);
+    Analytor analytor1(plan_node, nullptr, false);
 
     int32_t v;
     auto c1 = Int32Column::create();
@@ -108,7 +105,7 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor1._partition.end, 20);
 
     // partition columns is empty
-    Analytor analytor2(plan_node, row_desc, nullptr, false);
+    Analytor analytor2(plan_node, nullptr, false);
     analytor2._input_rows += 20;
     analytor1._input_eos = true;
 
@@ -118,7 +115,7 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor2._partition.end, 20);
 
     // input rows = 0
-    Analytor analytor3(plan_node, row_desc, nullptr, false);
+    Analytor analytor3(plan_node, nullptr, false);
     analytor3._input_rows = 0;
     analytor1._input_eos = true;
 

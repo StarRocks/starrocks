@@ -17,14 +17,22 @@
 
 package com.starrocks.common;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.util.PropertyAnalyzer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Locale;
 
 public class ConfigTest {
     private final Config config = new Config();
@@ -362,5 +370,69 @@ public class ConfigTest {
         // Invalid: malformed regex (unbalanced braces)
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_host_allowlist_regexp", "a{2", false, ""));
+    }
+
+    @Test
+    public void testDefaultMvRefreshMode() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        try {
+            for (String valid : List.of("pct", "PCT", "Pct", "incremental", "INCREMENTAL")) {
+                Config.setMutableConfig("default_mv_refresh_mode", valid, false, "");
+                Assertions.assertEquals(valid, Config.default_mv_refresh_mode);
+                // Every accepted value must survive the parse that MaterializedView#getRefreshMode
+                // performs on it for any MV without an explicit refresh_mode property.
+                Assertions.assertNotNull(MaterializedView.RefreshMode.valueOf(valid.toUpperCase(Locale.ROOT)));
+            }
+
+            // AUTO parses as an enum constant but is not selectable, matching the refresh_mode property.
+            for (String invalid : List.of("auto", "AUTO", "incrementall", "hybrid", "", " ")) {
+                Config.setMutableConfig("default_mv_refresh_mode", "pct", false, "");
+                Assertions.assertThrows(DdlException.class, () ->
+                        Config.setMutableConfig("default_mv_refresh_mode", invalid, false, ""));
+                // A half-applied set would be as bad as no validation at all.
+                Assertions.assertEquals("pct", Config.default_mv_refresh_mode);
+            }
+        } finally {
+            Config.default_mv_refresh_mode = original;
+        }
+    }
+
+    @Test
+    public void testDefaultMvRefreshModeSurvivesTurkishLocale() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        Locale originalLocale = Locale.getDefault();
+        try {
+            // Turkish uppercases 'i' to 'İ', so a locale-sensitive toUpperCase() would turn the
+            // accepted "incremental" into a name no enum constant has.
+            Locale.setDefault(new Locale("tr", "TR"));
+            Config.setMutableConfig("default_mv_refresh_mode", "incremental", false, "");
+
+            MaterializedView mv = new MaterializedView();
+            mv.setTableProperty(new TableProperty(Maps.newHashMap()).buildMVRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getRefreshMode());
+
+            Assertions.assertEquals("incremental",
+                    PropertyAnalyzer.analyzeRefreshMode(Maps.newHashMap(
+                            ImmutableMap.of(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental"))));
+        } finally {
+            Locale.setDefault(originalLocale);
+            Config.default_mv_refresh_mode = original;
+        }
+    }
+
+    @Test
+    public void testDefaultMvRefreshModeRejectedAtStartup() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        Path confFile = Files.createTempFile("fe_bad_refresh_mode", ".conf");
+        try {
+            Files.writeString(confFile, "default_mv_refresh_mode = incrementall\n");
+            // ADMIN SET is not the only way in: a value persisted into fe.conf would otherwise
+            // be re-applied on every restart, so the startup path must reject it as well.
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> new Config().init(confFile.toFile().getAbsolutePath()));
+        } finally {
+            Config.default_mv_refresh_mode = original;
+            Files.deleteIfExists(confFile);
+        }
     }
 }

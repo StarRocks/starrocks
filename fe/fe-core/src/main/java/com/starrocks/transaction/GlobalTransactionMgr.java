@@ -91,6 +91,7 @@ import javax.validation.constraints.NotNull;
  */
 public class GlobalTransactionMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(GlobalTransactionMgr.class);
+    private static final long PUBLISH_WAIT_CHECK_INTERVAL_MS = 300L;
 
     private final Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs = Maps.newConcurrentMap();
 
@@ -323,7 +324,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull long dbId, long transactionId, long preparedTimeoutMs, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long lockTimeoutMs) throws StarRocksException {
-        TransactionState transactionState = getTransactionState(dbId, transactionId);
+        TransactionState transactionState = getTransactionStateOrThrow(dbId, transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
         Locker locker = new Locker();
@@ -369,7 +370,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        TransactionState transactionState = getTransactionStateOrThrow(db.getId(), transactionId);
         List<Long> tableIdList = transactionState.getTableIdList();
 
         Locker locker = new Locker();
@@ -392,14 +393,15 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
         long publishTimeoutMillis = timeoutMillis - stopWatch.getTime();
-        if (publishTimeoutMillis < 0) {
-            // here commit transaction successfully cost too much time to cause publisTimeoutMillis is less than zero,
-            // so we just return false to indicate publish timeout
+        if (publishTimeoutMillis <= 0) {
+            // The commit consumed the whole budget. Exactly 0 must ALSO fail here: the historical
+            // contract for a zero wait was latch.await(0) = return immediately, and letting 0 reach
+            // awaitVisibleAfterCommit would invert it into an unbounded poll-until-visible wait.
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
         }
-        if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
+        if (!awaitVisibleAfterCommit(transactionId, waiter, publishTimeoutMillis)) {
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
@@ -444,8 +446,39 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         long dueTime = timeoutMillis != 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
         VisibleStateWaiter waiter = retryCommitOnRateLimitExceeded(db, transactionId, tabletCommitInfos,
                 tabletFailInfos, txnCommitAttachment, timeoutMillis);
-        long now = System.currentTimeMillis();
-        return waiter.await(Math.max(dueTime - now, 0), TimeUnit.MILLISECONDS);
+        return awaitVisibleAfterCommitUntil(transactionId, waiter, dueTime);
+    }
+
+    public boolean awaitVisibleAfterCommit(long transactionId, @NotNull VisibleStateWaiter waiter, long timeoutMillis) {
+        long dueTimeMs = timeoutMillis != 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
+        return awaitVisibleAfterCommitUntil(transactionId, waiter, dueTimeMs);
+    }
+
+    private boolean awaitVisibleAfterCommitUntil(long transactionId, @NotNull VisibleStateWaiter waiter, long dueTimeMs) {
+        while (true) {
+            if (waiter.await(0, TimeUnit.MILLISECONDS)) {
+                return true;
+            }
+
+            if (globalStateMgr.shouldStopPublishWaitAfterCommit()) {
+                LOG.warn("txn {} committed, but stop waiting for publish because this FE is leaving leader role. "
+                                + "feType={}, admissionOpen={}, demoting={}",
+                        transactionId, globalStateMgr.getFeType(), globalStateMgr.isLeaderWorkAdmissionOpen(),
+                        globalStateMgr.isLeaderDemoting());
+                return false;
+            }
+
+            long nowMs = System.currentTimeMillis();
+            if (dueTimeMs <= nowMs) {
+                return waiter.await(0, TimeUnit.MILLISECONDS);
+            }
+
+            long waitMs = dueTimeMs == Long.MAX_VALUE ? PUBLISH_WAIT_CHECK_INTERVAL_MS :
+                    Math.min(dueTimeMs - nowMs, PUBLISH_WAIT_CHECK_INTERVAL_MS);
+            if (waiter.await(waitMs, TimeUnit.MILLISECONDS)) {
+                return true;
+            }
+        }
     }
 
     /**
@@ -509,7 +542,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException, LockTimeoutException {
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        TransactionState transactionState = getTransactionStateOrThrow(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
         if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
@@ -729,9 +762,20 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      */
     public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList)
             throws AnalysisException {
+        return isPreviousTransactionsFinished(endTransactionId, dbId, tableIdList, Collections.emptySet());
+    }
+
+    /**
+     * Like {@link #isPreviousTransactionsFinished(long, long, List)} but ignores the transactions in
+     * {@code excludeTransactionIds} when checking. Used by tablet-reshard cleaning to skip waiting for
+     * compaction transactions on partitions the reshard job does not touch.
+     */
+    public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList,
+                                                  Set<Long> excludeTransactionIds)
+            throws AnalysisException {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList);
+            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList, excludeTransactionIds);
         } catch (AnalysisException e) {
             // NOTICE: At present, this situation will only happen when the database no longer exists.
             // In fact, getDatabaseTransactionMgr() should explicitly throw a MetaNotFoundException,
@@ -838,6 +882,15 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             LOG.warn("Get transaction {} in db {} failed. msg: {}", transactionId, dbId, e.getMessage());
             return null;
         }
+    }
+
+    private TransactionState getTransactionStateOrThrow(long dbId, long transactionId)
+            throws TransactionNotFoundException {
+        TransactionState transactionState = getTransactionState(dbId, transactionId);
+        if (transactionState == null) {
+            throw new TransactionNotFoundException(transactionId);
+        }
+        return transactionState;
     }
 
     // for replay idToTransactionState

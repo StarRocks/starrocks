@@ -420,8 +420,8 @@ struct THdfsScanRange {
     // paimon split info
     14: optional string paimon_split_info
 
-    // paimon predicate info
-    15: optional string paimon_predicate_info
+    // predicate info for JNI scanners
+    15: optional string jni_predicate_info
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
@@ -492,6 +492,12 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
+
+    // whether to use JNI scanner to read data of fluss table
+    41: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    42: optional string fluss_split_info
 }
 
 struct TBinlogScanRange {
@@ -1076,7 +1082,7 @@ struct TSortNode {
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
   30: optional bool enable_parallel_merge;
-  31: optional bool analytic_partition_skewed;
+  31: optional bool analytic_need_merge;
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
@@ -1182,6 +1188,9 @@ struct TAnalyticNode {
   20: optional bool has_outer_join_child
   21: optional bool use_hash_based_partition
   22: optional bool is_skewed
+  // Feed the AnalyticNode from a single globally-ordered stream via an ordered-partition
+  // local exchange instead of hash-shuffling the partition keys.
+  23: optional bool force_merge_sort
 }
 
 struct TMergeNode {

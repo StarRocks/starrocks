@@ -1,0 +1,238 @@
+name: CD Repo Sync
+run-name: CD Repo Sync(#${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
+
+# Reverse sync executor: cherry-pick a CelerData open-source PR's commit onto
+# StarRocks main and open a "(cd-sync #N)" PR. Mirror of celerdata-enterprise's
+# repo-sync.yml (repo-sync-main job) with direction reversed (source=CelerData,
+# target=StarRocks). Dispatched by elastic-service/lib/sync_cd_to_sr.py.
+#
+# Runner prerequisites (SR-side self-hosted sync runner):
+#   - /var/lib/starrocks           : target working copy (StarRocks)
+#   - /var/lib/elastic-service     : sync tooling
+#   - /var/local/env/ci-source-code/celerdata-enterprise : source mirror (CelerData)
+
+on:
+  workflow_dispatch:
+    inputs:
+      PR_ID:
+        description: 'ORI PR ID (on SOURCE_REPO)'
+        required: true
+        type: string
+      COMMIT_ID:
+        description: 'ORI COMMIT ID'
+        required: true
+        type: string
+      BRANCH:
+        description: 'TARGET BRANCH'
+        required: true
+        type: string
+        default: 'main'
+      SOURCE_REPO:
+        description: 'SOURCE REPOSITORY'
+        required: true
+        type: string
+        default: 'CelerData/celerdata-enterprise'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  source_repo: ${{ inputs.SOURCE_REPO }}
+
+jobs:
+
+  pr-info:
+    name: Add PR Information
+    runs-on: [self-hosted, sync, ubuntu]
+    env:
+      PR_ID: ${{ inputs.PR_ID }}
+      SYNC_PAT: ${{ secrets.SYNC_PAT }}
+      SOURCE_REPO: ${{ inputs.SOURCE_REPO }}
+    outputs:
+      assignees: ${{ steps.ori_pr_info.outputs.assignees }}
+      title: ${{ steps.ori_pr_info.outputs.title }}
+    steps:
+      - name: Ori PR Info
+        id: ori_pr_info
+        run: |
+          cd /var/lib/elastic-service
+          git pull || true
+          ./lib/get_pr_info.sh
+
+  cd-repo-sync-main:
+    name: CD Repo Sync - main
+    runs-on: [self-hosted, sync, ubuntu]
+    if: inputs.BRANCH == 'main'
+    needs: pr-info
+    env:
+      GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+      GH_TOKEN: ${{ secrets.SYNC_PAT }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: checkout code
+        run: |
+          shopt -s dotglob
+          cp -rf /var/lib/starrocks/* ${{ github.workspace }}
+          shopt -u dotglob
+
+      - name: Clean Branches
+        env:
+          source_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.PR_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+        run: |
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
+
+      - name: sync repo to branch
+        env:
+          source_branch: ${{ inputs.BRANCH }}
+          destination_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.PR_ID }}
+          github_token: ${{ secrets.SYNC_PAT }}
+        run: |
+          source_repo_dir=${source_repo#*/}
+          cp -rf /var/local/env/ci-source-code/${source_repo_dir} ${source_repo_dir}
+          cd ${source_repo_dir} && git pull
+          git checkout ${source_branch}
+          git remote set-url origin https://${github_token}@github.com/${{ github.repository }}.git
+          git push origin ${source_branch}:${destination_branch}
+
+      - name: checkout tools
+        run: |
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service
+          git pull
+
+      - name: pr branch
+        run: |
+          git pull
+          git checkout ${{ inputs.BRANCH }}
+          pr_branch=${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          git branch ${pr_branch} ${{ inputs.BRANCH }}
+          git checkout ${pr_branch}
+          git push -u origin ${pr_branch}
+
+      # Ordering: if a file-overlapping, earlier-merged cd-sync PR is still open,
+      # this PR must wait -> RES != True -> created as pending (see Create pending pr).
+      - name: previous check
+        id: previous-check
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          check_res=$(python3 lib/pr_sequence_checker_reverse.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
+          echo "${check_res}"
+          conflict_prs=$(echo ${check_res} | awk -F'Files:' '{print $1}' | awk -F' ' '{print $NF}')
+          echo CONFLICT_PRS=${conflict_prs} >> $GITHUB_OUTPUT
+          res=$(echo ${check_res} | tail -n 1)
+          echo RES=${res} >> $GITHUB_OUTPUT
+
+      - name: refresh base before cherry-pick
+        run: |
+          cd ${{ github.workspace }}
+          git fetch origin ${{ inputs.BRANCH }}
+          git reset --hard origin/${{ inputs.BRANCH }}
+
+      - name: cherry pick
+        id: cherry-pick
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
+          cd ${{ github.workspace }}
+          git push -u origin ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+
+      - name: Create pull request
+        id: create_pr
+        if: steps.previous-check.outputs.RES == 'True'
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
+          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
+          # (official template, all sections) via the file get_pr_info.py wrote in the
+          # pr-info job, plus any conflict info run_cherry_pick.sh prepended to it.
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
+
+      # A file-overlapping predecessor is still open -> hold this PR as pending.
+      # cd-sync-pipeline.yml skips `pending` PRs; cd-scan-pending.yml releases it
+      # (removes pending + re-dispatches this workflow) once predecessors merge.
+      - name: Create pending pull request
+        id: create_pending_pr
+        if: steps.previous-check.outputs.RES != 'True'
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }},pending
+          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
+
+      # Write back the marker onto the CelerData SOURCE PR for idempotency.
+      - name: Mark source PR
+        if: always() && steps.create_pr.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
+            MARK="cd-sync-conflict"
+          else
+            MARK="sr-synced"
+          fi
+          gh api -X POST \
+            "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
+            -f "labels[]=${MARK}" || echo "::warning::failed to add ${MARK} to ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+
+      - name: notify
+        if: always()
+        env:
+          branch: ${{ inputs.BRANCH }}
+          source_pr: ${{ inputs.PR_ID }}
+          source_commit_id: ${{ inputs.COMMIT_ID }}
+          action_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          cd ${{ github.workspace }}
+          if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
+            cp -rf /var/lib/elastic-service ./elastic-service
+          fi
+          cd elastic-service && git pull
+          if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
+            msg_type="conflict"
+            this_pr_url=${{ steps.create_pr.outputs.pr_url }}
+          elif [[ "${{ steps.create_pending_pr.outcome }}" == 'success' ]]; then
+            msg_type="pending"
+            this_pr_url=${{ steps.create_pending_pr.outputs.pr_url }}
+          elif [[ "${{ steps.create_pr.outcome }}" == 'success' ]]; then
+            exit 0
+          else
+            msg_type="error"
+            this_pr_url=""
+          fi
+          python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
+
+      # Kick the pending scan so a just-created pending PR is (re)evaluated promptly,
+      # and any now-releasable pending PR (predecessor merged) gets picked up.
+      - name: Trigger pending scan
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          gh workflow run cd-scan-pending.yml -R ${{ github.repository }} || true
+
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}

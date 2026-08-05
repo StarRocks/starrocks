@@ -169,10 +169,42 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
 
-            if (!functionCallExpr.getChild(2).isConstant()) {
+            // gram_num is read on the BE as a raw non-nullable INT constant column, with no type or
+            // null check. It is read twice: by ngram_search itself, and -- more dangerously -- by
+            // VectorizedFunctionCallExpr::split_normal_string_to_ngram() while evaluating an NGRAMBF
+            // index in the storage layer, which is reached before ordinary expression evaluation.
+            // "constant" alone is not enough there: a constant of another type (e.g. a JSON
+            // expression) or a constant NULL is a ConstColumn over something that is not an
+            // Int32Column, and reading it crashes the BE. Require a positive integer constant.
+            Expr gramNumExpr = functionCallExpr.getChild(2);
+            Optional<Long> gramNum = extractIntegerValue(gramNumExpr);
+            if (!gramNum.isPresent() || gramNum.get() <= 0 || gramNum.get() > Integer.MAX_VALUE) {
                 throw new SemanticException(
-                        fnName + " function 's third parameter must be constant",
-                        functionCallExpr.getPos());
+                        fnName + " function 's third parameter must be a constant positive integer",
+                        gramNumExpr.getPos());
+            }
+        }
+
+        // tokenize(tokenizer_name, content): the tokenizer name is read on the BE at prepare time as
+        // a raw non-nullable VARCHAR constant column, with no type or null check. A constant of
+        // another type -- e.g. cast('english' as time), which the FE cannot fold and so cannot see
+        // is NULL -- reaches the BE as a constant of the wrong shape and crashes it. Require a
+        // string literal naming one of the tokenizers the BE implements. A NULL constant stays
+        // legal: FoldConstantsRule rewrites the whole call to NULL, so it never reaches the BE.
+        if (fnName.equals(FunctionSet.TOKENIZE) && functionCallExpr.hasChild(0)) {
+            Expr tokenizerExpr = functionCallExpr.getChild(0);
+            Expr unwrapped = unwrapConstantString(tokenizerExpr);
+            if (unwrapped instanceof StringLiteral) {
+                String tokenizer = ((StringLiteral) unwrapped).getValue();
+                if (!FunctionSet.SUPPORTED_TOKENIZERS.contains(tokenizer)) {
+                    throw new SemanticException(
+                            "Unknown tokenizer '" + tokenizer + "'. Supported tokenizers are: " +
+                                    String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
+                }
+            } else if (!(unwrapped instanceof NullLiteral)) {
+                throw new SemanticException(
+                        "tokenize function 's first parameter (tokenizer_name) must be a constant string, one of: " +
+                                String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
             }
         }
         Function fn = functionCallExpr.getFn();
@@ -741,6 +773,25 @@ public class FunctionAnalyzer {
     }
 
     /**
+     * Peel user variables and casts to a string type off an expression, so that a constant string
+     * argument can be recognised through e.g. cast('english' as varchar). A cast to a non-string
+     * type is deliberately not peeled: cast('english' as time) is not a constant string, even
+     * though the FE will later wrap it in an implicit cast back to VARCHAR -- its value is whatever
+     * the inner cast produces, which the FE cannot fold and which is NULL at runtime.
+     */
+    private static Expr unwrapConstantString(Expr expr) {
+        if (expr instanceof UserVariableExpr) {
+            return unwrapConstantString(((UserVariableExpr) expr).getValue());
+        }
+
+        if (expr instanceof CastExpr && expr.getType().isStringType()) {
+            return unwrapConstantString(expr.getChild(0));
+        }
+
+        return expr;
+    }
+
+    /**
      * Validate that a function parameter is of numeric type.
      * 
      * @param paramExpr The parameter expression to validate
@@ -1126,6 +1177,10 @@ public class FunctionAnalyzer {
                         fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
                         Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
             }
+            // the resolved builtin is a shared singleton: mutate a copy, or the wildcard decimal
+            // signature gets stamped with a concrete (precision, scale) and later lookups with a
+            // different scale fail until the FE restarts
+            fn = fn.copy();
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }

@@ -263,19 +263,6 @@ public class QueryRuntimeProfile {
         return profileDoneSignal != null && profileDoneSignal.getCount() == 0;
     }
 
-    /**
-     * Registers a lightweight listener that runs directly when all fragment instances have finished.
-     * Unlike {@link #addListener}, this listener is not dispatched to the profile worker pool.
-     */
-    public boolean addCompletionListener(Runnable listener) {
-        MarkedCountDownLatch<TUniqueId, Long> doneSignal = profileDoneSignal;
-        if (doneSignal == null) {
-            return false;
-        }
-        doneSignal.addListener(listener);
-        return true;
-    }
-
     public boolean addListener(Consumer<Boolean> task) {
         if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
@@ -300,8 +287,13 @@ public class QueryRuntimeProfile {
         boolean res = false;
         try {
             res = profileDoneSignal.await(timeout, unit);
-        } catch (InterruptedException e) { // NOSONAR
-            LOG.warn("profile signal await error", e);
+        } catch (InterruptedException e) {
+            // Preserve the interrupt instead of swallowing it, so callers (e.g. DefaultCoordinator.join,
+            // which re-loops until the full query/load timeout) can observe it and stop waiting promptly.
+            // This lets a leader-demotion shutdownNow() interrupt actually drain the loading/export pool
+            // task rather than leaving it blocked on the running query for up to the load timeout.
+            Thread.currentThread().interrupt();
+            LOG.warn("profile signal await interrupted", e);
         }
 
         return res;

@@ -31,6 +31,7 @@ StarRocks は v2.3 以降、 catalog 機能をサポートしています。 cat
   - [Benchmark catalog](../catalog/benchmark_catalog.md): TPC-H、TPC-DS、および SSB スキーマ用に生成されたインフライトデータセットをクエリするために使用されます。
   - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): Elasticsearch からデータをクエリするために使用されます。 Elasticsearch catalog は v3.1 以降でサポートされています。
   - [Paimon catalog](../catalog/paimon_catalog.md): Paimon からデータをクエリするために使用されます。 Paimon catalog は v3.1 以降でサポートされています。
+  - [Fluss catalog](../catalog/fluss_catalog.md): Fluss のデータをクエリするために使用されます。
   - [Unified catalog](../catalog/unified_catalog.md): Hive、Iceberg、Hudi、および Delta Lake のデータソースから、統合されたデータソースとしてデータをクエリするために使用されます。 Unified catalog は v3.2 以降でサポートされています。
 
   StarRocks は、外部データをクエリするときに、外部データソースの次の 2 つのコンポーネントとやり取りします。

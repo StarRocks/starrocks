@@ -123,11 +123,11 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
     }
 }
 
-MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
+MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, RecordDescriptor record_desc,
                                                                    std::vector<TExpr> t_output_expr,
                                                                    FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-          _row_desc(row_desc),
+          _record_desc(std::move(record_desc)),
           _t_output_expr(std::move(t_output_expr)) {}
 
 Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -136,7 +136,7 @@ Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     _prepare_id_to_col_name_map();
-    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
+    RETURN_IF_ERROR(convert_to_arrow_schema(_id_to_col_name, &_arrow_schema, _output_expr_ctxs));
 
     TUniqueId fragment_instance_id = state->fragment_instance_id();
     auto* query_execution_services = state->query_execution_services();
@@ -150,14 +150,9 @@ void MemoryScratchSinkOperatorFactory::close(RuntimeState* state) {
 }
 
 void MemoryScratchSinkOperatorFactory::_prepare_id_to_col_name_map() {
-    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
-        auto& slots = tuple_desc->slots();
-        int64_t tuple_id = tuple_desc->id();
-        for (auto slot : slots) {
-            int64_t slot_id = slot->id();
-            int64_t id = tuple_id << 32 | slot_id;
-            _id_to_col_name.emplace(id, slot->col_name());
-        }
+    for (const auto* slot : _record_desc.slots()) {
+        int64_t id = static_cast<int64_t>(slot->parent()) << 32 | slot->id();
+        _id_to_col_name.emplace(id, slot->col_name());
     }
 }
 

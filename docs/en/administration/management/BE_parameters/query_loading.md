@@ -674,6 +674,42 @@ This topic introduces the following types of BE configurations:
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
+### enable_vector_index_block_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to cache IVFPQ indexes by inverted-list block. When enabled, StarRocks loads and caches only the IVFPQ blocks needed by a query. When disabled, it caches the whole IVFPQ index file. This configuration does not change HNSW caching.
+- Introduced in: -
+
+### config_vector_index_build_concurrency
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Number of OpenMP threads used by each vector index build. StarRocks clamps the effective value to at least `1`. Together with `vector_index_build_max_cpu_ratio`, this item also determines the size of the asynchronous vector index build thread pool.
+- Introduced in: -
+
+### config_vector_index_default_build_threshold
+
+- Default: 10000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Default minimum number of rows in a Segment required to build a vector index. The index property `index_build_threshold` overrides this value. For IVFPQ, the effective threshold is at least `nlist` so that the index has enough rows for training.
+- Introduced in: -
+
+### vector_index_build_max_cpu_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Target fraction of BE/CN CPU cores available to asynchronous vector index builds. The build CPU budget is `max(2, floor(cpu_cores * value))`, and the build pool size is derived from this budget and `config_vector_index_build_concurrency`. Because the minimum budget is `2`, small machines or small ratios can exceed the configured fraction.
+- Introduced in: -
+
 ### enable_vector_adaptive_search
 
 - Default: true
@@ -716,6 +752,24 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_index_brute_selectivity_threshold
+
+- Default: 0.01
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Selectivity threshold for routing a vector query with residual scalar filters to exact scoring instead of a filtered HNSW traversal. If the matched rows are no more than this fraction of the Segment, StarRocks scores the filtered candidates directly. Set to `0` to disable this ratio check. The separate short circuit for a candidate count no greater than the query `k` remains enabled.
+- Introduced in: -
+
+### vector_index_build_flush_threshold_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Maximum rows held in each vector index builder's staging buffer before the rows are added to the in-memory index. This bounds the staging-buffer memory used when building HNSW Flat indexes, but does not limit the trained index itself. Set to `0` to disable intermediate flushing and buffer the whole Segment.
 - Introduced in: -
 
 ### vector_chunk_size

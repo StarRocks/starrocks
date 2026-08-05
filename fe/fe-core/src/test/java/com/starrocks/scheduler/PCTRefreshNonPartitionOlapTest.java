@@ -71,6 +71,7 @@ public class PCTRefreshNonPartitionOlapTest extends MVTestBase {
             String plan = explainMVRefreshExecPlan(mv, "explain refresh materialized " +
                     "view test_mv1;");
             Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
+            Assertions.assertTrue(plan.contains("NO REFRESH NEEDED"), plan);
         }
 
         // refresh with force

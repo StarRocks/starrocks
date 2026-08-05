@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.FlussTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -350,6 +351,20 @@ public class OptExternalPartitionPruner {
                                     table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
                 }
 
+                // For the query dump, capture the FULL (unfiltered) partition name list so replay can
+                // reproduce the true denominator in partitions=X/Y. The list used for pruning above may
+                // already be value-filtered, which would collapse the denominator to the pruned count.
+                if (context.getDumpInfo() != null) {
+                    List<String> allPartitionNames =
+                            effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)
+                                    ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                                            table.getCatalogName(), table.getCatalogDBName(),
+                                            table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
+                                    : partitionNames;
+                    context.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(),
+                            table.getCatalogTableName()).setPartitionNames(allPartitionNames);
+                }
+
                 List<PartitionKey> keys = new ArrayList<>();
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
@@ -388,6 +403,9 @@ public class OptExternalPartitionPruner {
                 long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
+        } else if (table instanceof FlussTable) {
+            initFlussPartitionInfo(operator, context, columnToPartitionValuesMap, columnToNullPartitions,
+                    (FlussTable) table);
         } else if (table instanceof DeltaLakeTable) {
             // Init columnToPartitionValuesMap for delta lake, it will be used in classifyConjuncts function
             // to classify partition conjuncts
@@ -426,6 +444,57 @@ public class OptExternalPartitionPruner {
         }
     }
 
+    private static void initFlussPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
+                                               Map<ColumnRefOperator,
+                                                       ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                               Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+                                               FlussTable flussTable) throws AnalysisException {
+        List<Column> partitionColumns = flussTable.getPartitionColumns();
+        List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
+        for (Column column : partitionColumns) {
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
+            columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+            columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
+            partitionColumnRefOperators.add(partitionColumnRefOperator);
+        }
+
+        List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
+        if (!flussTable.isUnPartitioned()) {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(flussTable.getCatalogName(), flussTable.getCatalogDBName(),
+                            flussTable.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+            for (String partitionName : partitionNames) {
+                List<String> values = toPartitionValues(partitionName);
+                PartitionKey partitionKey = createPartitionKey(values, partitionColumns, flussTable);
+                partitionKeys.add(new Pair<>(partitionKey, context.getNextUniquePartitionId()));
+            }
+        } else {
+            partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
+        }
+
+        partitionKeys.stream().parallel().forEach(entry -> {
+            PartitionKey key = entry.first;
+            long partitionId = entry.second;
+            List<LiteralExpr> literals = key.getKeys();
+            for (int i = 0; i < literals.size(); i++) {
+                ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
+                LiteralExpr literal = literals.get(i);
+                if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
+                    columnToNullPartitions.get(columnRefOperator).add(partitionId);
+                    continue;
+                }
+
+                Set<Long> partitions = columnToPartitionValuesMap.get(columnRefOperator)
+                        .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
+                partitions.add(partitionId);
+            }
+        });
+
+        for (Pair<PartitionKey, Long> entry : partitionKeys) {
+            operator.getScanOperatorPredicates().getIdToPartitionKey().put(entry.second, entry.first);
+        }
+    }
+
     private static void computePartitionInfo(LogicalScanOperator operator, OptimizerContext context,
                                              Map<ColumnRefOperator,
                                                      ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
@@ -458,7 +527,7 @@ public class OptExternalPartitionPruner {
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
                     GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
-                            .setTableVersionRange(operator.getTvrVersionRange()).build();
+                            .setTableVersionRange(operator.getTvrVersionRange()).setLimit(operator.getLimit()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;
@@ -494,6 +563,29 @@ public class OptExternalPartitionPruner {
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
+        } else if (table instanceof FlussTable) {
+            ListPartitionPruner partitionPruner =
+                    new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
+                            scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
+            Collection<Long> selectedPartitionIds = partitionPruner.prune();
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+            }
+
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of number of fluss table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitionIds.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
+            }
+
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         }
     }
 

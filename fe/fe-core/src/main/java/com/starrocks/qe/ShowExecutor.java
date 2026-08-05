@@ -116,6 +116,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
@@ -273,7 +274,7 @@ import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
@@ -302,7 +303,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -3215,51 +3215,31 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                         CaseSensibility.VARIABLES.getCaseSensibility());
             }
-            List<Backend> backends = new LinkedList<>();
-            if (statement.getBackends() == null) {
-                List<Long> backendIds = clusterInfoService.getBackendIds(true);
-                if (backendIds == null) {
-                    throw new SemanticException("No alive backends");
-                }
-                for (long backendId : backendIds) {
-                    Backend backend = clusterInfoService.getBackend(backendId);
-                    if (backend == null) {
-                        continue;
-                    }
-                    backends.add(backend);
-                }
-            } else {
-                for (String backendAddr : statement.getBackends()) {
-                    String[] tmp = backendAddr.split(":");
-                    if (tmp.length != 2) {
-                        throw new SemanticException("invalid backend addr");
-                    }
-                    Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
-                    if (backend == null) {
-                        throw new SemanticException("cannot find backend with addr " + backendAddr);
-                    }
-                    backends.add(backend);
-                }
+            List<ComputeNode> nodes;
+            try {
+                nodes = FailPointExecutor.resolveNodes(clusterInfoService, statement.getBackends());
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
             }
             // send request
-            List<Pair<Backend, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
-            for (Backend backend : backends) {
+            List<Pair<ComputeNode, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
+            for (ComputeNode node : nodes) {
                 try {
-                    futures.add(Pair.create(backend,
-                            BackendServiceClient.getInstance().listFailPointAsync(backend.getBrpcAddress(), request)));
+                    futures.add(Pair.create(node,
+                            BackendServiceClient.getInstance().listFailPointAsync(node.getBrpcAddress(), request)));
                 } catch (RpcException e) {
                     throw new SemanticException("sending list failpoint request fails");
                 }
             }
             // handle response
             List<List<String>> rows = Lists.newArrayList();
-            for (Pair<Backend, Future<PListFailPointResponse>> future : futures) {
+            for (Pair<ComputeNode, Future<PListFailPointResponse>> future : futures) {
                 try {
-                    final Backend backend = future.first;
+                    final ComputeNode node = future.first;
                     final PListFailPointResponse result = future.second.get(10, TimeUnit.SECONDS);
                     if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
-                        String errMsg = String.format("list failpoint status failed, backend: %s:%d, error: %s",
-                                backend.getHost(), backend.getBePort(), result.status.errorMsgs.get(0));
+                        String errMsg = String.format("list failpoint status failed, node: %s:%d, error: %s",
+                                node.getHost(), node.getBePort(), result.status.errorMsgs.get(0));
                         LOG.warn(errMsg);
                         throw new SemanticException(errMsg);
                     }
@@ -3280,7 +3260,7 @@ public class ShowExecutor {
                         } else {
                             row.add("");
                         }
-                        row.add(String.format("%s:%d", backend.getHost(), backend.getBePort()));
+                        row.add(String.format("%s:%d", node.getHost(), node.getBePort()));
                         rows.add(row);
                     }
                 } catch (InterruptedException e) {

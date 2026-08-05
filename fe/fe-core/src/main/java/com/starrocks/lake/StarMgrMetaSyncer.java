@@ -30,7 +30,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -62,7 +62,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public class StarMgrMetaSyncer extends FrontendDaemon {
+public class StarMgrMetaSyncer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StarMgrMetaSyncer.class);
 
     private static final LongCounterMetric SHARD_GROUP_DELETE_COUNTER = new LongCounterMetric(
@@ -159,9 +159,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         return groupIds;
     }
 
+    // |isRangeDistribution| tells BE these tablets share physical files with the tablets a reshard
+    // produced, so it must not delete their data files. BE can otherwise only infer that from a dropped
+    // tablet's own metadata, which vacuum removes -- and then it deleted files a split child still read.
     public static void dropTabletAndDeleteShard(ComputeResource computeResource,
                                                 List<Long> shardIds, StarOSAgent starOSAgent,
-                                                boolean isFileBundling) {
+                                                boolean isFileBundling, boolean isRangeDistribution) {
         if (shardIds.isEmpty()) {
             return;
         }
@@ -236,6 +239,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
+            request.isRangeDistribution = isRangeDistribution;
 
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -440,7 +444,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 // allowing a single BE node to complete the tablet deletion. 
                 // Here, even for tables without file bundle enabled, 
                 // the tablet deletion can still be performed by a single node.
-                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true);
+                //
+                // Not range-distributed as far as this path is concerned, which is also what it did
+                // before: a reshard's output index keeps the parent's shard group and the superseded
+                // index stays installed on a live partition until the recycle bin erases it (see
+                // TabletReshardJob#recycleOldMaterializedIndexes), so the group always has a live owner
+                // and the parent's leftover shards are reaped by syncTableMetaInternal instead. What
+                // reaches here are groups whose table or partition is gone for good, and refusing to
+                // delete their data would strand it forever -- this is the only path that removes it.
+                dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, true, false);
                 LOG.debug("delete shards from starMgr and FE, shard group: {}, cost: {} ms",
                         groupId, (System.currentTimeMillis() - start));
             }
@@ -632,7 +644,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 try {
                     List<Long> shardIds = new ArrayList<>();
                     shardIds.addAll(entry.getValue());
-                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling());
+                    dropTabletAndDeleteShard(computeResource, shardIds, starOSAgent, table.isFileBundling(),
+                            table.isRangeDistribution());
                 } catch (Exception e) {
                     // ignore exception
                     LOG.info(e.getMessage());
@@ -689,15 +702,21 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         long newInterval = Config.star_mgr_meta_sync_interval_sec * 1000L;
         if (newInterval > 0 && getInterval() != newInterval) {
             setInterval(newInterval);
         }
         long start = System.currentTimeMillis();
         acquireBackgroundComputeResource();
-        deleteUnusedShardAndShardGroup();
-        deleteUnusedWorker();
+        // Shard/tablet/worker deletion is an irreversible external side effect (object-store data and
+        // starMgr shards). If this node started demoting mid-cycle (the interrupt may be eaten), skip the
+        // destructive phase so it cannot reap shards using this node's now-stale metadata during the
+        // follower window; the re-elected leader re-runs the sync from its own durable state.
+        if (isCapturedLeaseValid()) {
+            deleteUnusedShardAndShardGroup();
+            deleteUnusedWorker();
+        }
         syncTableMetaAndColocationInfo();
         long end = System.currentTimeMillis();
         META_SYNC_PROCESS_TIME_COST_TOTAL.increase((end - start) / 1000.0);

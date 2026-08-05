@@ -173,7 +173,7 @@ public:
 
     int id() const { return _id; }
     TPlanNodeType::type type() const { return _type; }
-    const RowDescriptor& row_desc() const { return _row_descriptor; }
+    const RecordDescriptor& record_desc() const { return _record_descriptor; }
     int64_t rows_returned() const { return _num_rows_returned; }
     int64_t limit() const { return _limit; }
     bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -221,7 +221,7 @@ protected:
     std::set<TPlanNodeId> _local_rf_waiting_set;
 
     std::vector<ExecNode*> _children;
-    RowDescriptor _row_descriptor;
+    RecordDescriptor _record_descriptor;
 
     // debug-only: if _debug_action is not INVALID, node will perform action in
     // _debug_phase
