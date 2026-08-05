@@ -165,12 +165,12 @@ public class UpdatePlanner {
         OlapTable olapTable = (OlapTable) targetTable;
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // Online OPTIMIZE does not write schema-change shadow indexes, so its unrelated shadow
-        // columns must not become sink slots. A real schema change still needs the full schema so
-        // concurrent writes can target its shadow indexes.
-        List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.OPTIMIZE
-                ? targetTable.getFullSchema().stream().filter(column -> !column.isShadowColumn()).toList()
-                : targetTable.getFullSchema();
+        // Only a real schema change needs shadow columns so concurrent writes can target its shadow
+        // indexes. Online OPTIMIZE may leave obsolete shadow generated columns in fullSchema even
+        // after the table returns to NORMAL, but its rewritten tablets do not contain those columns.
+        List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                ? targetTable.getFullSchema()
+                : targetTable.getFullSchema().stream().filter(column -> !column.isShadowColumn()).toList();
         for (Column column : outputSchema) {
             if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                     !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {

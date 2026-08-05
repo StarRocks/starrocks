@@ -107,7 +107,7 @@ public class UpdatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testUpdateSinkExcludesShadowColumnsDuringOptimize() throws Exception {
+    public void testUpdateSinkExcludesStaleShadowColumnsOutsideSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
         List<Column> originalFullSchema = table.getFullSchema();
@@ -121,13 +121,16 @@ public class UpdatePlanTest extends PlanTestBase {
             }
         }
         table.setNewFullSchema(schemaWithShadowGeneratedColumns);
-        table.setState(OlapTable.OlapTableState.OPTIMIZE);
 
         try {
-            ExecPlan execPlan = getUpdateExecPlanObject(
-                    "update update_shadow_generated_column set v = 2 where pk = 1");
-            OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-            assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+            for (OlapTable.OlapTableState state :
+                    List.of(OlapTable.OlapTableState.OPTIMIZE, OlapTable.OlapTableState.NORMAL)) {
+                table.setState(state);
+                ExecPlan execPlan = getUpdateExecPlanObject(
+                        "update update_shadow_generated_column set v = 2 where pk = 1");
+                OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+                assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+            }
         } finally {
             table.setState(originalState);
             table.setNewFullSchema(originalFullSchema);
