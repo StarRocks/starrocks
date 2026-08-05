@@ -401,9 +401,6 @@ public class ConfigTest {
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_host_allowlist_regexp", "a{2", false, ""));
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testDefaultMvRefreshMode() throws Exception {
@@ -469,4 +466,3 @@ public class ConfigTest {
         }
     }
 }
->>>>>>> e668a7a50bb... [BugFix] Validate default_mv_refresh_mode (#77231)
