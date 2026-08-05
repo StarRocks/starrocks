@@ -107,20 +107,18 @@ public class UpdatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testUpdateSinkExcludesStaleShadowColumnsOutsideSchemaChange() throws Exception {
+    public void testUpdateSinkExcludesStaleGeneratedColumnsOutsideSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
         List<Column> originalFullSchema = table.getFullSchema();
         OlapTable.OlapTableState originalState = table.getState();
-        List<Column> schemaWithShadowGeneratedColumns = new ArrayList<>(originalFullSchema);
+        List<Column> schemaWithStaleGeneratedColumns = new ArrayList<>(originalFullSchema);
         for (Column column : table.getBaseSchema()) {
             if (column.isGeneratedColumn()) {
-                Column shadowColumn = column.deepCopy();
-                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
-                schemaWithShadowGeneratedColumns.add(shadowColumn);
+                schemaWithStaleGeneratedColumns.add(column.deepCopy());
             }
         }
-        table.setNewFullSchema(schemaWithShadowGeneratedColumns);
+        table.setNewFullSchema(schemaWithStaleGeneratedColumns);
 
         try {
             for (OlapTable.OlapTableState state :

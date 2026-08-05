@@ -165,12 +165,13 @@ public class UpdatePlanner {
         OlapTable olapTable = (OlapTable) targetTable;
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // Only a real schema change needs shadow columns so concurrent writes can target its shadow
-        // indexes. Online OPTIMIZE may leave obsolete shadow generated columns in fullSchema even
-        // after the table returns to NORMAL, but its rewritten tablets do not contain those columns.
+        // UpdateAnalyzer builds the output expressions from baseSchema. Only a real schema change
+        // needs fullSchema so concurrent writes can target its shadow indexes. Online OPTIMIZE can
+        // leave duplicate generated-column entries in fullSchema, including entries without the
+        // shadow-name prefix, so filtering by Column.isShadowColumn() is not sufficient here.
         List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                 ? targetTable.getFullSchema()
-                : targetTable.getFullSchema().stream().filter(column -> !column.isShadowColumn()).toList();
+                : targetTable.getBaseSchema();
         for (Column column : outputSchema) {
             if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                     !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
