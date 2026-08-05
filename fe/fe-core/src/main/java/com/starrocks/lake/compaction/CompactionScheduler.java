@@ -584,7 +584,7 @@ public class CompactionScheduler extends Daemon {
         long txnId = transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
 
-        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // Register loaded indexes so prePrepared() validates the same indexes that were collected,
         // not the latest (which may change due to tablet split).
         TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
         if (txnState != null) {
