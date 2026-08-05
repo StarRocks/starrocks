@@ -36,6 +36,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -167,7 +168,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             return Status::InvalidArgument(
                     fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
         }
-        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+        std::string src_partition_starlet_uri =
+                convert_s3_path_to_starlet_uri(src_partition_full_path, virtual_tablet_id);
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::src_partition_starlet_uri", &src_partition_starlet_uri);
 
         // Append metadata and segment directory names
         src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
@@ -536,7 +539,10 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
 
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
+    // The explicit source filesystem owns the path authority. Always read durable source metadata:
+    // a target-local or previous-source metacache entry with the same logical path is not valid here.
+    const CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true};
+    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, cache_opts, 0, shared_src_fs);
     if (!src_tablet_meta_or.ok()) {
         VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
                 << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();

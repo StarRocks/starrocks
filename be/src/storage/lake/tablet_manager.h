@@ -328,6 +328,12 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata_from_paths(
+            int64_t tablet_id, int64_t version, const CacheOptions& cache_opts, int64_t expected_gtid,
+            const std::shared_ptr<FileSystem>& fs, const std::string& tablet_path, const std::string& bundle_path,
+            const std::string& bundle_cache_key, const std::string& gtid_cache_evict_path,
+            const std::shared_ptr<FileSystem>& gtid_cache_evict_fs);
+    Status drop_local_cache(const std::string& path, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
     // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
     StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
@@ -337,7 +343,8 @@ private:
                                          int64_t* table_id, int64_t* partition_id, int64_t* index_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
-    Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
+    Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location,
+                                         const std::shared_ptr<FileSystem>& fs = nullptr);
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,

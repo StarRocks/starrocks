@@ -18,7 +18,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <fstream>
+#include <mutex>
+#include <thread>
 
 #include "base/bthreads/util.h"
 #include "base/failpoint/fail_point.h"
@@ -30,6 +34,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/storage_define.h"
 #include "fs/fs.h"
+#include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -52,9 +57,42 @@
 
 namespace starrocks {
 
+class TrackingMemoryFileSystem : public MemoryFileSystem {
+public:
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override {
+        {
+            std::lock_guard lock(_mutex);
+            _read_paths.emplace_back(path);
+        }
+        return MemoryFileSystem::new_random_access_file(opts, path);
+    }
+
+    Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) override {
+        std::lock_guard lock(_mutex);
+        _dropped_paths.emplace_back(path);
+        return Status::OK();
+    }
+
+    std::vector<std::string> read_paths() const {
+        std::lock_guard lock(_mutex);
+        return _read_paths;
+    }
+
+    std::vector<std::string> dropped_paths() const {
+        std::lock_guard lock(_mutex);
+        return _dropped_paths;
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::vector<std::string> _read_paths;
+    std::vector<std::string> _dropped_paths;
+};
+
 class LakeTabletManagerTest : public testing::Test {
 public:
-    LakeTabletManagerTest() : _test_dir(){};
+    LakeTabletManagerTest() : _test_dir() {};
 
     ~LakeTabletManagerTest() override = default;
 
@@ -82,6 +120,53 @@ public:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+namespace {
+
+TabletMetadataPB make_remote_test_metadata(int64_t tablet_id, int64_t version, int64_t gtid) {
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(version);
+    metadata.set_gtid(gtid);
+    auto* schema = metadata.mutable_schema();
+    schema->set_id(tablet_id + 1000);
+    schema->set_num_short_key_columns(1);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_rows_per_row_block(65535);
+    auto* column = schema->add_column();
+    column->set_unique_id(0);
+    column->set_name("k1");
+    column->set_type("INT");
+    column->set_is_key(true);
+    column->set_is_nullable(false);
+    return metadata;
+}
+
+std::string make_bundle_content(lake::TabletManager* tablet_manager, TabletMetadataPB metadata) {
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    metadatas.emplace(metadata.id(), std::move(metadata));
+    CHECK_OK(tablet_manager->put_bundle_tablet_metadata(metadatas));
+    const auto bundle_path = tablet_manager->bundle_tablet_metadata_location(metadatas.begin()->first,
+                                                                             metadatas.begin()->second.version());
+    ASSIGN_OR_ABORT(auto input, FileSystem::Default()->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto content, input->read_all());
+    return content;
+}
+
+void put_memory_file(const std::shared_ptr<MemoryFileSystem>& fs, const std::string& path, std::string_view content) {
+    const auto slash = path.find_last_of('/');
+    if (slash != std::string::npos) {
+        CHECK_OK(fs->create_dir_recursive(path.substr(0, slash)));
+    }
+    CHECK_OK(fs->create_file(path));
+    CHECK_OK(fs->append_file(path, Slice(content)));
+}
+
+lake::CacheOptions remote_source_cache_options() {
+    return {.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true};
+}
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -1282,6 +1367,291 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_rejects_incomplete_bund
             EXPECT_EQ(2, metadata->version());
         }
     }
+}
+
+TEST_F(LakeTabletManagerTest, remote_path_reads_bundle_from_same_directory) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_content =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const auto local_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    ASSERT_OK(FileSystem::Default()->delete_file(local_bundle_path));
+    _tablet_manager->prune_metacache();
+
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    const std::string source_meta_dir = "/remote/source/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    ASSERT_OK(result);
+    EXPECT_EQ(tablet_id, result.value()->id());
+    EXPECT_EQ(101, result.value()->gtid());
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(source_tablet_path));
+}
+
+TEST_F(LakeTabletManagerTest, remote_explicit_path_reads_standalone_metadata) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_content =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/202));
+    _tablet_manager->prune_metacache();
+
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    const std::string source_meta_dir = "/remote/standalone/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    auto standalone = make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101);
+    std::string standalone_content;
+    ASSERT_TRUE(standalone.SerializeToString(&standalone_content));
+    put_memory_file(source_fs, source_tablet_path, standalone_content);
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    ASSERT_OK(result);
+    EXPECT_EQ(101, result.value()->gtid());
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(source_tablet_path));
+}
+
+TEST_F(LakeTabletManagerTest, remote_explicit_path_ignores_aggregation_cache) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto misleading_bundle =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/303));
+    const auto source_bundle =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/202));
+
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    const std::string source_meta_dir = "/remote/aggregation/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    const auto target_derived_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    auto standalone = make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101);
+    std::string standalone_content;
+    ASSERT_TRUE(standalone.SerializeToString(&standalone_content));
+    put_memory_file(source_fs, source_tablet_path, standalone_content);
+    put_memory_file(source_fs, source_bundle_path, source_bundle);
+    put_memory_file(source_fs, target_derived_bundle_path, misleading_bundle);
+
+    ASSIGN_OR_ABORT(auto aggregation_key,
+                    _location_provider->real_location(_tablet_manager->tablet_metadata_root_location(tablet_id)));
+    _tablet_manager->metacache()->cache_aggregation_partition(aggregation_key, true);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    ASSERT_OK(result);
+    EXPECT_EQ(101, result.value()->gtid());
+}
+
+TEST_F(LakeTabletManagerTest, remote_bundle_singleflight_isolated_by_filesystem) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_a =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const auto bundle_b =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/202));
+
+    const auto source_tablet_path = _tablet_manager->tablet_metadata_location(tablet_id, kVersion);
+    const auto source_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    auto source_fs_a = std::make_shared<TrackingMemoryFileSystem>();
+    auto source_fs_b = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs_a, source_bundle_path, bundle_a);
+    put_memory_file(source_fs_b, source_bundle_path, bundle_b);
+
+    ASSIGN_OR_ABORT(auto aggregation_key,
+                    _location_provider->real_location(_tablet_manager->tablet_metadata_root_location(tablet_id)));
+    _tablet_manager->metacache()->cache_aggregation_partition(aggregation_key, true);
+
+    std::mutex barrier_mutex;
+    std::condition_variable barrier_cv;
+    int leaders = 0;
+    int followers = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:1");
+        SyncPoint::GetInstance()->ClearCallBack("singleflight::Group::Do:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:1", [&](void*) {
+        std::lock_guard lock(barrier_mutex);
+        ++followers;
+        barrier_cv.notify_all();
+    });
+    SyncPoint::GetInstance()->SetCallBack("singleflight::Group::Do:2", [&](void*) {
+        std::unique_lock lock(barrier_mutex);
+        ++leaders;
+        barrier_cv.notify_all();
+        barrier_cv.wait_for(lock, std::chrono::seconds(5), [&] { return leaders == 2 || followers == 1; });
+    });
+
+    TabletMetadataPtr metadata_a;
+    TabletMetadataPtr metadata_b;
+    Status status_a;
+    Status status_b;
+    std::thread thread_a([&] {
+        auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                           /*expected_gtid=*/0, source_fs_a);
+        status_a = result.status();
+        if (result.ok()) {
+            metadata_a = std::move(result).value();
+        }
+    });
+    std::thread thread_b([&] {
+        auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                           /*expected_gtid=*/0, source_fs_b);
+        status_b = result.status();
+        if (result.ok()) {
+            metadata_b = std::move(result).value();
+        }
+    });
+    thread_a.join();
+    thread_b.join();
+
+    ASSERT_OK(status_a);
+    ASSERT_OK(status_b);
+    ASSERT_NE(nullptr, metadata_a);
+    ASSERT_NE(nullptr, metadata_b);
+    EXPECT_EQ(101, metadata_a->gtid());
+    EXPECT_EQ(202, metadata_b->gtid());
+    EXPECT_EQ(2, leaders);
+    EXPECT_EQ(0, followers);
+}
+
+TEST_F(LakeTabletManagerTest, remote_bundle_corruption_uses_source_filesystem) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const std::string source_meta_dir = "/remote/source/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    const auto destination_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    ASSERT_NE(source_bundle_path, destination_bundle_path);
+    ASSIGN_OR_ABORT(auto aggregation_key,
+                    _location_provider->real_location(_tablet_manager->tablet_metadata_root_location(tablet_id)));
+    _tablet_manager->metacache()->cache_aggregation_partition(aggregation_key, true);
+
+    const bool old_clear_corrupted = config::lake_clear_corrupted_cache_meta;
+    DeferOp restore_config([&] { config::lake_clear_corrupted_cache_meta = old_clear_corrupted; });
+
+    config::lake_clear_corrupted_cache_meta = false;
+    auto source_fs_without_eviction = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs_without_eviction, source_bundle_path, std::string(32, 'x'));
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs_without_eviction);
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(source_fs_without_eviction->read_paths(), testing::ElementsAre(source_tablet_path, source_bundle_path));
+    EXPECT_THAT(source_fs_without_eviction->read_paths(), testing::Not(testing::Contains(destination_bundle_path)));
+    EXPECT_TRUE(source_fs_without_eviction->dropped_paths().empty());
+
+    config::lake_clear_corrupted_cache_meta = true;
+    auto source_fs_with_eviction = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs_with_eviction, source_bundle_path, std::string(32, 'x'));
+    result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                  /*expected_gtid=*/0, source_fs_with_eviction);
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(source_fs_with_eviction->read_paths(),
+                testing::ElementsAre(source_tablet_path, source_bundle_path, source_bundle_path));
+    EXPECT_THAT(source_fs_with_eviction->read_paths(), testing::Not(testing::Contains(destination_bundle_path)));
+    EXPECT_THAT(source_fs_with_eviction->dropped_paths(), testing::ElementsAre(source_bundle_path));
+    EXPECT_THAT(source_fs_with_eviction->dropped_paths(), testing::Not(testing::Contains(destination_bundle_path)));
+}
+
+TEST_F(LakeTabletManagerTest, remote_bundle_gtid_mismatch_evicts_source_filesystem) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_content =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const std::string source_meta_dir = "/remote/source/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    const auto destination_bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+    ASSERT_NE(source_bundle_path, destination_bundle_path);
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    ASSIGN_OR_ABORT(auto aggregation_key,
+                    _location_provider->real_location(_tablet_manager->tablet_metadata_root_location(tablet_id)));
+    _tablet_manager->metacache()->cache_aggregation_partition(aggregation_key, true);
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/999, source_fs);
+    EXPECT_TRUE(result.status().is_not_found()) << result.status();
+    EXPECT_THAT(source_fs->read_paths(), testing::ElementsAre(source_tablet_path, source_bundle_path));
+    EXPECT_THAT(source_fs->read_paths(), testing::Not(testing::Contains(destination_bundle_path)));
+    EXPECT_THAT(source_fs->dropped_paths(), testing::ElementsAre(source_bundle_path));
+    EXPECT_THAT(source_fs->dropped_paths(), testing::Not(testing::Contains(destination_bundle_path)));
+}
+
+TEST_F(LakeTabletManagerTest, local_bundle_gtid_mismatch_evicts_legacy_tablet_path) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    (void)make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const auto tablet_path = _tablet_manager->tablet_metadata_location(tablet_id, kVersion);
+    const auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, kVersion);
+
+    std::string dropped_path;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::drop_local_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::drop_local_cache",
+                                          [&](void* arg) { dropped_path = *static_cast<std::string*>(arg); });
+
+    auto result = _tablet_manager->get_single_tablet_metadata(tablet_id, kVersion, /*fill_cache=*/false,
+                                                              /*expected_gtid=*/999);
+    EXPECT_TRUE(result.status().is_not_found()) << result.status();
+    EXPECT_EQ(tablet_path, dropped_path);
+    EXPECT_NE(bundle_path, dropped_path);
+}
+
+TEST_F(LakeTabletManagerTest, remote_standalone_error_does_not_fallback_to_bundle) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    const auto bundle_content =
+            make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+    const std::string source_meta_dir = "/remote/malformed/meta";
+    const auto source_tablet_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(tablet_id, kVersion));
+    const auto source_bundle_path =
+            lake::join_path(source_meta_dir, lake::tablet_metadata_filename(/*tablet_id=*/0, kVersion));
+    auto source_fs = std::make_shared<TrackingMemoryFileSystem>();
+    put_memory_file(source_fs, source_tablet_path, "malformed tablet metadata");
+    put_memory_file(source_fs, source_bundle_path, bundle_content);
+
+    const bool old_clear_corrupted = config::lake_clear_corrupted_cache_meta;
+    DeferOp restore_config([&] { config::lake_clear_corrupted_cache_meta = old_clear_corrupted; });
+    config::lake_clear_corrupted_cache_meta = false;
+
+    auto result = _tablet_manager->get_tablet_metadata(source_tablet_path, remote_source_cache_options(),
+                                                       /*expected_gtid=*/0, source_fs);
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(source_fs->read_paths(), testing::ElementsAre(source_tablet_path));
+    EXPECT_TRUE(source_fs->dropped_paths().empty());
+}
+
+TEST_F(LakeTabletManagerTest, local_bundle_lookup_regression) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t kVersion = 2;
+    (void)make_bundle_content(_tablet_manager, make_remote_test_metadata(tablet_id, kVersion, /*gtid=*/101));
+
+    auto result = _tablet_manager->get_tablet_metadata(tablet_id, kVersion);
+    ASSERT_OK(result);
+    EXPECT_EQ(tablet_id, result.value()->id());
+    EXPECT_EQ(kVersion, result.value()->version());
+    EXPECT_EQ(101, result.value()->gtid());
 }
 
 // Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
