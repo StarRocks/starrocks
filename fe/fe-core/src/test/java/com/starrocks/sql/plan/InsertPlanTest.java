@@ -97,19 +97,20 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testOnlineOptimizeRewriteUsesBaseSchemaWithShadowGeneratedColumns() throws Exception {
+    public void testOnlineOptimizeRewriteExcludesStaleGeneratedColumns() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(connectContext.getDatabase()).getTable("insert_online_optimize_shadow_generated_column");
         List<Column> originalFullSchema = table.getFullSchema();
-        List<Column> schemaWithShadowGeneratedColumns = new ArrayList<>(originalFullSchema);
+        List<Column> schemaWithStaleGeneratedColumns = new ArrayList<>(originalFullSchema);
         for (Column column : table.getBaseSchema()) {
             if (column.isGeneratedColumn()) {
+                schemaWithStaleGeneratedColumns.add(column.deepCopy());
                 Column shadowColumn = column.deepCopy();
                 shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
-                schemaWithShadowGeneratedColumns.add(shadowColumn);
+                schemaWithStaleGeneratedColumns.add(shadowColumn);
             }
         }
-        table.setNewFullSchema(schemaWithShadowGeneratedColumns);
+        table.setNewFullSchema(schemaWithStaleGeneratedColumns);
 
         try {
             String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
@@ -121,8 +122,10 @@ public class InsertPlanTest extends PlanTestBase {
             try {
                 ExecPlan execPlan = getInsertExecPlanObject(insertStmt, sql);
                 OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
-                Assertions.assertEquals(table.getBaseSchema().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertEquals(originalFullSchema.size(), sink.getTupleDescriptor().getSlots().size());
                 Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
+                Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
+                        .noneMatch(slot -> slot.getColumn().isShadowColumn()));
             } finally {
                 connectContext.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
             }
