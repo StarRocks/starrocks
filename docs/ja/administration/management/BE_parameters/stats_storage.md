@@ -42,6 +42,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 統計レポート
 
+### enable_zstd_compression_dict_ctx_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: はい
+- 説明: 辞書を読み込んだ ZSTD 解凍コンテキストを、共有コンテキストプールから借用するのではなく、小さなスレッドローカル集合に保持し続けるかどうか。共有プールから借用したコンテキストは返却時にリセットされ、固定化された `refDDict` が消えるため、ページごとに辞書を冷たいコンテキストへ再読み込みする必要が生じます。このパラメータは、Segment に ZSTD 圧縮辞書を持つ列の読み取りにのみ影響し、その他の列の読み取りパスは変わりません。ロールバックせずに本番環境でこの最適化を無効化できるよう、スイッチとして公開しています。
+- 導入バージョン: v4.2
+
 ### report_disk_state_interval_seconds
 
 - デフォルト: 60
