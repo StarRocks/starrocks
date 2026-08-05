@@ -23,7 +23,6 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
-#include "platform/key_cache.h"
 
 namespace starrocks {
 
@@ -34,33 +33,27 @@ StatusOr<std::unique_ptr<VectorIndexFileReader>> VectorIndexFileReader::open(con
     FileInfo resolved = file_info;
 
     RandomAccessFileOptions block_read_opts;
-    // Reuse the same decryption options for metadata and block reads.
-    if (!resolved.encryption_meta.empty()) {
-        ASSIGN_OR_RETURN(auto encryption_info, KeyCache::instance().unwrap_encryption_meta(resolved.encryption_meta));
-        block_read_opts.encryption_info = std::move(encryption_info);
-    }
-    auto metadata_read_opts = block_read_opts;
     block_read_opts.buffer_size = 0;
 
-    ASSIGN_OR_RETURN(auto metadata_file, resolved.fs->new_random_access_file(metadata_read_opts, resolved));
+    ASSIGN_OR_RETURN(auto load_file, resolved.fs->new_random_access_file(resolved));
     if (!resolved.size.has_value()) {
         // Cold path only: the caller normally hands the size down from the factory's get_size().
-        ASSIGN_OR_RETURN(auto size, metadata_file->get_size());
+        ASSIGN_OR_RETURN(auto size, load_file->get_size());
         resolved.size = size;
     }
 
     const int64_t file_size = resolved.size.value();
-    return std::make_unique<VectorIndexFileReader>(std::move(metadata_file), std::move(resolved),
+    return std::make_unique<VectorIndexFileReader>(std::move(load_file), std::move(resolved),
                                                    std::move(block_read_opts), file_size);
 }
 
 int64_t VectorIndexFileReader::Read(void* data, int64_t count) {
-    if (_metadata_file == nullptr) {
-        LOG(WARNING) << "sequential read on a released vector index stream, path=" << _file_info.path
+    if (_load_file == nullptr) {
+        LOG(WARNING) << "sequential read on a released vector index load stream, path=" << _file_info.path
                      << ", position=" << _position << ", count=" << count;
         return -1;
     }
-    auto st = _metadata_file->read_at_fully(_position, data, count);
+    auto st = _load_file->read_at_fully(_position, data, count);
     if (!st.ok()) {
         LOG(WARNING) << "sequential read of vector index file failed, path=" << _file_info.path
                      << ", position=" << _position << ", count=" << count << ", status=" << st;
@@ -72,7 +65,7 @@ int64_t VectorIndexFileReader::Read(void* data, int64_t count) {
 
 int64_t VectorIndexFileReader::ReadAt(int64_t offset, void* data, int64_t count) {
     // Each call needs an independent stream because RandomAccessFile is not thread-safe.
-    auto file_or = _file_info.fs->new_random_access_file(_read_options, _file_info);
+    auto file_or = _file_info.fs->new_random_access_file(_block_read_options, _file_info);
     if (!file_or.ok()) {
         LOG(WARNING) << "failed to open vector index file for block read, path=" << _file_info.path
                      << ", offset=" << offset << ", count=" << count << ", status=" << file_or.status();

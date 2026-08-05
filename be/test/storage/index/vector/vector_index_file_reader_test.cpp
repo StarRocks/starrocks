@@ -180,11 +180,6 @@ std::string make_payload(int blocks, int block_size) {
     return payload;
 }
 
-bool same_cache_and_encryption_options(const RandomAccessFileOptions& a, const RandomAccessFileOptions& b) {
-    return a.skip_fill_local_cache == b.skip_fill_local_cache && a.skip_disk_cache == b.skip_disk_cache &&
-           a.encryption_info.algorithm == b.encryption_info.algorithm && a.encryption_info.key == b.encryption_info.key;
-}
-
 } // namespace
 
 // Concurrent ReadAt() on different offsets must return each caller's own bytes. With one
@@ -247,7 +242,7 @@ TEST(VectorIndexFileReaderTest, ConcurrentReadAtStaysParallel) {
     EXPECT_GT(fs->max_active_reads(), 1);
 }
 
-TEST(VectorIndexFileReaderTest, BlockReadsDisableReadAheadAndReuseOptions) {
+TEST(VectorIndexFileReaderTest, BlockReadsDisableReadAhead) {
     auto fs = std::make_shared<ProbeFileSystem>(make_payload(2, 64));
     ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(FileInfo{.path = "/probe/index.vi", .fs = fs}));
 
@@ -259,7 +254,6 @@ TEST(VectorIndexFileReaderTest, BlockReadsDisableReadAheadAndReuseOptions) {
     ASSERT_GE(options.size(), 3u);
     EXPECT_EQ(-1, options[0].buffer_size);
     for (size_t i = 1; i < options.size(); ++i) {
-        EXPECT_TRUE(same_cache_and_encryption_options(options[0], options[i]));
         EXPECT_EQ(0, options[i].buffer_size);
     }
 }
@@ -279,9 +273,9 @@ TEST(VectorIndexFileReaderTest, ReadsAfterCallerDropsFileSystem) {
     EXPECT_GT(fs_raw->read_count(), 0);
 }
 
-// Nothing reads the sequential stream after the index header is parsed, so dropping it must
+// Nothing reads the sequential stream after the initial index load, so dropping it must
 // leave ReadAt() and GetSize() working while Read() fails cleanly instead of dereferencing.
-TEST(VectorIndexFileReaderTest, ReleaseMetadataFileKeepsBlockReadsWorking) {
+TEST(VectorIndexFileReaderTest, ReleaseLoadFileKeepsBlockReadsWorking) {
     auto fs = std::make_shared<ProbeFileSystem>(make_payload(2, 16));
     ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(FileInfo{.path = "/probe/index.vi", .fs = fs}));
 
@@ -289,7 +283,7 @@ TEST(VectorIndexFileReaderTest, ReleaseMetadataFileKeepsBlockReadsWorking) {
     ASSERT_EQ(16, reader->Read(buf.data(), 16));
     EXPECT_EQ(std::string(16, 'a'), buf);
 
-    reader->release_metadata_file();
+    reader->release_load_file();
 
     EXPECT_EQ(-1, reader->Read(buf.data(), 16));
     EXPECT_EQ(32, reader->GetSize());

@@ -123,10 +123,10 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const FileInfo
             }
             auto index_ref = reader->ReadIndexFile(index_path);
             if (external_file_reader != nullptr) {
-                // Only the header parse needs the sequential stream; every later block read
+                // Only the initial load needs the sequential stream; every later block read
                 // opens its own file. Drop it now so the cached index does not pin an unused
                 // remote stream (and its read-ahead buffer) for its whole lifetime.
-                external_file_reader->release_metadata_file();
+                external_file_reader->release_load_file();
             }
             return index_ref;
         } catch (const tenann::Error& e) {

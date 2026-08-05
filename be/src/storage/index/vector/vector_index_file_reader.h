@@ -38,17 +38,17 @@ public:
     // in the tenann index cache entry and outlives the SegmentIterator that opened it.
     static StatusOr<std::unique_ptr<VectorIndexFileReader>> open(const FileInfo& file_info);
 
-    VectorIndexFileReader(std::unique_ptr<RandomAccessFile> metadata_file, FileInfo file_info,
-                          RandomAccessFileOptions read_options, int64_t file_size)
-            : _metadata_file(std::move(metadata_file)),
+    VectorIndexFileReader(std::unique_ptr<RandomAccessFile> load_file, FileInfo file_info,
+                          RandomAccessFileOptions block_read_options, int64_t file_size)
+            : _load_file(std::move(load_file)),
               _file_info(std::move(file_info)),
-              _read_options(std::move(read_options)),
+              _block_read_options(std::move(block_read_options)),
               _file_size(file_size),
               _filename(_file_info.path) {}
 
     ~VectorIndexFileReader() override = default;
 
-    // Used only while parsing index metadata at load time.
+    // Used only during the initial index load.
     int64_t Read(void* data, int64_t count) override;
 
     // Positioned reads for different inverted lists may run concurrently.
@@ -60,15 +60,15 @@ public:
 
     const std::string& filename() const override { return _filename; }
 
-    // Block reads open independent files, so the metadata stream can be released after loading.
-    void release_metadata_file() { _metadata_file.reset(); }
+    // Block reads open independent files, so the load stream can be released afterward.
+    void release_load_file() { _load_file.reset(); }
 
 private:
-    std::unique_ptr<RandomAccessFile> _metadata_file;
+    std::unique_ptr<RandomAccessFile> _load_file;
     // Retains the FileSystem and resolved size for future block-cache misses.
     FileInfo _file_info;
-    // Reuses cache and encryption options while disabling block-read readahead.
-    RandomAccessFileOptions _read_options;
+    // Disables readahead for independent block reads.
+    RandomAccessFileOptions _block_read_options;
     int64_t _file_size = 0;
     int64_t _position = 0;
     std::string _filename;
