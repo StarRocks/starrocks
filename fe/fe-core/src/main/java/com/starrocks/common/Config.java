@@ -1823,17 +1823,6 @@ public class Config extends ConfigBase {
     public static int max_query_retry_time = 2;
 
     /**
-     * How long a cancelled query keeps waiting for the fragment instances that have not reported yet.
-     * <p>
-     * A cancelled query is going to fail, so this wait only exists to collect the profile of the very
-     * fragments that failed. Once the grace period elapses the coordinator stops waiting and fails the
-     * statement with the error that caused the cancel, instead of holding on until query_timeout or
-     * insert_timeout expires. Set to 0 to stop waiting as soon as the query is cancelled.
-     */
-    @ConfField(mutable = true)
-    public static int profile_wait_after_cancel_second = 30;
-
-    /**
      * In order not to wait too long for create table(index), set a max timeout.
      */
     @ConfField(mutable = true)

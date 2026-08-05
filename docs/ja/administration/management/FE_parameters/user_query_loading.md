@@ -697,15 +697,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   この項目を変更すると、`BestMvSelector` の動作に影響し、物理的なレイアウトが計画の正確性やパフォーマンスに影響するかどうかに応じて、書き換えの適用範囲を改善または拡大することができます。
 - 導入時期：-
 
-### `profile_wait_after_cancel_second`
-
-- デフォルト：30
-- タイプ：Int
-- 単位：Seconds
-- 変更可能：Yes
-- 説明：`Coordinator.join()` で完了を待つ実行パスがキャンセルされた後、まだ報告していないフラグメントインスタンスを待ち続ける時間です。このパラメータは主に、`INSERT INTO` などのロードおよび DML タスクに適用されます。`Coordinator.getNext()` を使用する通常のクエリには影響しません。通常のクエリはキャンセルされると直ちに戻ります。`enable_async_profile` が `true` の場合、Profile の収集はバックグラウンドで非同期に続行されます。`enable_async_profile` が `false` の場合、Profile は同期的に収集され、最大 `profile_timeout` まで待機することがあります。`Coordinator.join()` を使用する実行パスでは、この待機は失敗したフラグメントの Profile を収集するためだけに存在します。猶予期間が経過すると、Coordinator は待機を停止し、`query_timeout` や `insert_timeout` の期限まで待たずに、キャンセルの原因となったエラーでタスクを終了します。このパラメータを `0` に設定すると、タスクがキャンセルされた時点で待機を停止します。
-- 導入時期：v4.2
-
 ### `publish_version_interval_ms`
 
 - デフォルト：10

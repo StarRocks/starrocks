@@ -127,6 +127,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -153,6 +154,13 @@ public class DefaultCoordinator extends Coordinator {
     private final Lock lock = new ReentrantLock();
 
     /**
+     * Wakes {@link #join} when either all profiles arrive or a non-internal cancellation starts.
+     */
+    private final Lock joinWaitLock = new ReentrantLock();
+    private final Condition joinWaitCondition = joinWaitLock.newCondition();
+    private final AtomicBoolean joinWaitListenerRegistered = new AtomicBoolean(false);
+
+    /**
      * Overall status of the entire query.
      * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
@@ -160,8 +168,8 @@ public class DefaultCoordinator extends Coordinator {
 
     /**
      * When the query was cancelled, or -1 if it was not.
-     * <p> Bounds how long {@link #join} keeps waiting for instances that have not reported yet, see
-     * {@link Config#profile_wait_after_cancel_second}.
+     * <p> Bounds how long {@link #join} keeps waiting for instances that have not reported yet, using
+     * {@link SessionVariable#PROFILE_TIMEOUT}.
      */
     private volatile long cancelledAtMs = -1;
 
@@ -1148,6 +1156,7 @@ public class DefaultCoordinator extends Coordinator {
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         if (!isInternalCancel(cancelReason) && cancelledAtMs < 0) {
             cancelledAtMs = System.currentTimeMillis();
+            signalJoinWaiters();
         }
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         clearExternalResourcesAsync();
@@ -1412,13 +1421,7 @@ public class DefaultCoordinator extends Coordinator {
 
         // wait for all backends
         if (jobSpec.isNeedReport()) {
-            int timeout;
-            // connectContext can be null for broker export task coordinator
-            if (connectContext != null) {
-                timeout = connectContext.getSessionVariable().getProfileTimeout();
-            } else {
-                timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
-            }
+            int timeout = getProfileTimeoutSecond();
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
@@ -1482,12 +1485,11 @@ public class DefaultCoordinator extends Coordinator {
     public boolean join(int timeoutS) {
         final long fixedMaxWaitTime = 5;
 
+        registerJoinWaitListener();
         long leftTimeoutMs = timeoutS * 1000L;
         boolean awaitRes = false;
         while (leftTimeoutMs > 0) {
-            // Check before blocking, otherwise a grace period of 0 would still wait out a whole round.
-            // A cancel that lands while we are already blocked is only noticed when that round ends, so
-            // the effective bound is the grace period plus at most one round.
+            // Check before blocking, otherwise a profile timeout of 0 would still wait out a whole round.
             if (profileWaitAfterCancelExpired()) {
                 return true;
             }
@@ -1499,9 +1501,25 @@ public class DefaultCoordinator extends Coordinator {
                 waitTimeMs = Math.max(1, Math.min(waitTimeMs, graceLeftMs));
             }
 
-            awaitRes = queryProfile.waitForProfileFinished(waitTimeMs, TimeUnit.MILLISECONDS);
+            long waitStartNs = System.nanoTime();
+            if (graceLeftMs < 0) {
+                // Before cancellation, wait on a condition that is signalled by either profile completion
+                // or cancellation. This avoids waiting out the rest of the five-second polling round when
+                // cancellation starts after waitTimeMs was sampled.
+                awaitRes = waitForProfileFinishedOrCancelled(waitTimeMs);
+            } else {
+                awaitRes = queryProfile.waitForProfileFinished(waitTimeMs, TimeUnit.MILLISECONDS);
+            }
+            long waitedMs = Math.max(1,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - waitStartNs));
+            leftTimeoutMs = Math.max(0, leftTimeoutMs - waitedMs);
             if (awaitRes) {
                 return true;
+            }
+
+            if (cancelledAtMs >= 0) {
+                // Recompute the remaining profile timeout immediately after cancellation wakes this wait.
+                continue;
             }
 
             if (!checkBackendState()) {
@@ -1512,8 +1530,6 @@ public class DefaultCoordinator extends Coordinator {
                     && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
             }
-
-            leftTimeoutMs -= waitTimeMs;
         }
 
         if (!awaitRes) {
@@ -1561,8 +1577,56 @@ public class DefaultCoordinator extends Coordinator {
         if (cancelledAt < 0) {
             return -1;
         }
-        long deadlineMs = cancelledAt + Config.profile_wait_after_cancel_second * 1000L;
+        long deadlineMs = cancelledAt + getProfileTimeoutSecond() * 1000L;
         return Math.max(0, deadlineMs - System.currentTimeMillis());
+    }
+
+    private int getProfileTimeoutSecond() {
+        // connectContext can be null for broker export task coordinator.
+        if (connectContext == null || connectContext.getSessionVariable() == null) {
+            return DEFAULT_PROFILE_TIMEOUT_SECOND;
+        }
+        return connectContext.getSessionVariable().getProfileTimeout();
+    }
+
+    private void registerJoinWaitListener() {
+        if (!joinWaitListenerRegistered.compareAndSet(false, true)) {
+            return;
+        }
+        if (!queryProfile.addCompletionListener(this::signalJoinWaiters)) {
+            joinWaitListenerRegistered.set(false);
+        }
+    }
+
+    private boolean waitForProfileFinishedOrCancelled(long timeoutMs) {
+        joinWaitLock.lock();
+        try {
+            // Recheck both predicates while holding the same lock used by signalJoinWaiters(), so a signal
+            // cannot be lost between these checks and await().
+            if (queryProfile.isFinished()) {
+                return true;
+            }
+            if (cancelledAtMs >= 0) {
+                return false;
+            }
+            try {
+                joinWaitCondition.await(timeoutMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) { // NOSONAR
+                LOG.warn("profile signal await error", e);
+            }
+            return queryProfile.isFinished();
+        } finally {
+            joinWaitLock.unlock();
+        }
+    }
+
+    private void signalJoinWaiters() {
+        joinWaitLock.lock();
+        try {
+            joinWaitCondition.signalAll();
+        } finally {
+            joinWaitLock.unlock();
+        }
     }
 
     // build execution profile  from every BE's report

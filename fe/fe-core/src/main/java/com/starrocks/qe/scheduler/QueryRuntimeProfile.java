@@ -263,6 +263,19 @@ public class QueryRuntimeProfile {
         return profileDoneSignal != null && profileDoneSignal.getCount() == 0;
     }
 
+    /**
+     * Registers a lightweight listener that runs directly when all fragment instances have finished.
+     * Unlike {@link #addListener}, this listener is not dispatched to the profile worker pool.
+     */
+    public boolean addCompletionListener(Runnable listener) {
+        MarkedCountDownLatch<TUniqueId, Long> doneSignal = profileDoneSignal;
+        if (doneSignal == null) {
+            return false;
+        }
+        doneSignal.addListener(listener);
+        return true;
+    }
+
     public boolean addListener(Consumer<Boolean> task) {
         if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;

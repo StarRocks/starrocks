@@ -715,15 +715,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   更改此项会影响 `BestMvSelector` 的行为，并可以根据物理布局是否影响计划正确性或性能来改进或扩大重写的适用性。
 - 引入版本: -
 
-### `profile_wait_after_cancel_second`
-
-- 默认值: 30
-- 类型: Int
-- 单位: 秒
-- 是否可变: Yes
-- 描述: 通过 `Coordinator.join()` 等待执行完成的任务被取消后，继续等待尚未上报的 Fragment 实例的时长。该参数主要适用于 `INSERT INTO` 等导入和 DML 任务，不影响通过 `Coordinator.getNext()` 获取结果的普通查询。普通查询被取消后会立即返回。当 `enable_async_profile` 为 `true` 时，Profile 收集会在后台异步继续；当 `enable_async_profile` 为 `false` 时，Profile 会同步收集，最多等待 `profile_timeout`。对于使用 `Coordinator.join()` 的执行路径，该等待仅用于收集失败 Fragment 的 Profile。超过该宽限期后，Coordinator 停止等待，并以导致取消的错误结束任务，而不会一直等到 `query_timeout` 或 `insert_timeout` 超时。将该参数设置为 `0`，表示任务一旦被取消就停止等待。
-- 引入版本: v4.2
-
 ### `publish_version_interval_ms`
 
 - 默认值: 10

@@ -716,15 +716,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
   Changing this item affects `BestMvSelector` behavior and can improve or broaden rewrite applicability depending on whether physical layout matters for plan correctness or performance.
 - Introduced in: -
 
-### `profile_wait_after_cancel_second`
-
-- Default: 30
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: How long a cancelled execution path that waits through `Coordinator.join()` keeps waiting for fragment instances that have not reported yet. This parameter primarily applies to load and DML tasks such as `INSERT INTO`. It does not affect regular queries, which use `Coordinator.getNext()` instead. After a regular query is cancelled, it returns immediately. If `enable_async_profile` is `true`, Profile collection continues asynchronously in the background. If `enable_async_profile` is `false`, Profile collection is synchronous and can wait for up to `profile_timeout`. For execution paths that use `Coordinator.join()`, the wait only exists to collect the profiles of failed fragments. Once the grace period elapses, the coordinator stops waiting and fails the task with the error that caused the cancellation, instead of holding on until `query_timeout` or `insert_timeout` expires. Set this parameter to `0` to stop waiting as soon as the task is cancelled.
-- Introduced in: v4.2
-
 ### `publish_version_interval_ms`
 
 - Default: 10

@@ -18,10 +18,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Config;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -230,36 +233,48 @@ public class JoinTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testProfileWaitAfterCancelIsBounded() throws Exception {
+    public void testCancelWakesJoinWhenProfileTimeoutIsZero() throws Exception {
         String sql = "insert into lineitem select * from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
 
-        int savedWait = Config.profile_wait_after_cancel_second;
+        int savedProfileTimeout = connectContext.getSessionVariable().getProfileTimeout();
         boolean savedEnableProfile = connectContext.getSessionVariable().isEnableProfile();
+        Thread joinThread = null;
         try {
             // With the profile enabled the cancel path deliberately keeps the latch held so it can still
             // collect the profile of the fragments that failed.
             connectContext.getSessionVariable().setEnableProfile(true);
-            Config.profile_wait_after_cancel_second = 3600;
+            setProfileTimeout(0);
 
-            // Not cancelled yet, so there is nothing to bound.
-            Assertions.assertFalse(scheduler.profileWaitAfterCancelExpired());
+            AtomicBoolean joinFinished = new AtomicBoolean(false);
+            Thread activeJoinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
+            joinThread = activeJoinThread;
+            activeJoinThread.start();
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> activeJoinThread.getState() == Thread.State.TIMED_WAITING);
 
             scheduler.cancel("Cancel by test");
-            // No instance reported, and the profile is enabled, so the wait is still on.
-            Assertions.assertFalse(scheduler.isDone());
-            Assertions.assertFalse(scheduler.profileWaitAfterCancelExpired());
+            joinThread.join(TimeUnit.SECONDS.toMillis(2));
 
-            // Once the grace period elapses the coordinator stops waiting and marks the query done, so the
-            // caller reports the error that caused the cancel instead of a timeout.
-            Config.profile_wait_after_cancel_second = 0;
-            Assertions.assertTrue(scheduler.profileWaitAfterCancelExpired());
+            Assertions.assertFalse(joinThread.isAlive());
+            Assertions.assertTrue(joinFinished.get());
             Assertions.assertTrue(scheduler.isDone());
             Assertions.assertTrue(scheduler.getExecStatus().isCancelled());
         } finally {
-            Config.profile_wait_after_cancel_second = savedWait;
+            if (joinThread != null && joinThread.isAlive()) {
+                scheduler.cancel("Cancel test cleanup");
+                scheduler.profileWaitAfterCancelExpired();
+                joinThread.join(TimeUnit.SECONDS.toMillis(5));
+            }
+            setProfileTimeout(savedProfileTimeout);
             connectContext.getSessionVariable().setEnableProfile(savedEnableProfile);
         }
+    }
+
+    private void setProfileTimeout(int timeoutSecond) throws Exception {
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(
+                connectContext.getSessionVariable(),
+                new SystemVariable(SessionVariable.PROFILE_TIMEOUT, new IntLiteral(timeoutSecond)), true);
     }
 
     @Test
