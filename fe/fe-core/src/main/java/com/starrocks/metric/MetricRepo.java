@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.Version;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
@@ -522,6 +523,13 @@ public final class MetricRepo {
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
 
         // 1. gauge
+        // build info
+        GaugeMetricImpl<Long> buildInfo = new GaugeMetricImpl<>("build_info",
+                MetricUnit.NOUNIT, "StarRocks FE build information", 1L);
+        buildInfo.addLabel(new MetricLabel("version", Version.STARROCKS_VERSION))
+                .addLabel(new MetricLabel("commit_hash", Version.STARROCKS_COMMIT_HASH));
+        STARROCKS_METRIC_REGISTER.addMetric(buildInfo);
+
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
