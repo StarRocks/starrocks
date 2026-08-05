@@ -174,21 +174,31 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             for (int i = 0; i < columnNames.size(); i++) {
                 String columnName = columnNames.get(i);
                 Type columnType = columnTypes.get(i);
-                List<TStatisticData> mcv = queryStatisticSync(
-                        buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
-                Map<String, String> mostCommonValues = new HashMap<>();
-                for (TStatisticData tStatisticData : mcv) {
-                    mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-                }
+                List<Expr> row;
+                String rowSql;
+                long rowSize;
+                try {
+                    List<TStatisticData> mcv = queryStatisticSync(
+                            buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
+                    Map<String, String> mostCommonValues = new HashMap<>();
+                    for (TStatisticData tStatisticData : mcv) {
+                        mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
+                    }
 
-                String histogramQuery = buildQueryHistogram(
-                        db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
-                String buckets = getSingleHistogramResult(
-                        queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
-                String mcvJson = buildMcvJson(mostCommonValues);
-                List<Expr> row = buildBatchInsertRow(columnName, buckets, mcvJson);
-                String rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
-                long rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
+                    String histogramQuery = buildQueryHistogram(
+                            db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                    String buckets = getSingleHistogramResult(
+                            queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
+                    String mcvJson = buildMcvJson(mostCommonValues);
+                    row = buildBatchInsertRow(columnName, buckets, mcvJson);
+                    rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
+                    rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
+                } catch (Exception collectionFailure) {
+                    flushBatchInsertOnCollectionFailure(
+                            rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns,
+                            context, analyzeStatus, columnName, collectionFailure);
+                    throw collectionFailure;
+                }
 
                 if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
                     flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
@@ -216,6 +226,21 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
         analyzeStatus.setProgress(100);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+    }
+
+    private void flushBatchInsertOnCollectionFailure(
+            List<List<Expr>> rowsBuffer, List<String> sqlBuffer, List<String> columnsBuffer,
+            List<String> insertedColumns, ConnectContext context, AnalyzeStatus analyzeStatus,
+            String columnName, Exception collectionFailure) {
+        try {
+            flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
+        } catch (Exception flushFailure) {
+            if (flushFailure != collectionFailure) {
+                collectionFailure.addSuppressed(flushFailure);
+            }
+            LOG.warn("Failed to flush buffered external histogram statistics after collection failed for column {}",
+                    columnName, flushFailure);
+        }
     }
 
     private void cleanupInsertedRawHistogramRows(ConnectContext context, List<String> insertedColumns) {

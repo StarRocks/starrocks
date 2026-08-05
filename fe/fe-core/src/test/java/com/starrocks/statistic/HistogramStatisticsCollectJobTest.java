@@ -171,6 +171,37 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     }
 
     @Test
+    public void testBatchInsertFlushesCompletedRowsBeforeCollectionFailure() throws Exception {
+        try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
+            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.failOnSecondColumn();
+
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
+
+            Assertions.assertEquals("mock second-column failure", exception.getMessage());
+            Assertions.assertEquals(1, fixture.batchInsertSql().size());
+            Assertions.assertTrue(fixture.batchInsertSql().get(0).contains("'v2'"));
+            Assertions.assertFalse(fixture.batchInsertSql().get(0).contains("'v7'"));
+        }
+    }
+
+    @Test
+    public void testCollectionFailureRemainsPrimaryWhenEmergencyFlushFails() throws Exception {
+        try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
+            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.failOnSecondColumn();
+            fixture.failBatchInsert();
+
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
+
+            Assertions.assertEquals("mock second-column failure", exception.getMessage());
+            Assertions.assertEquals(1, fixture.batchInsertAttempts());
+            Assertions.assertEquals(1, exception.getSuppressed().length);
+            Assertions.assertEquals("mock batch insert failure", exception.getSuppressed()[0].getMessage());
+        }
+    }
+
+    @Test
     public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
             fixture.disableBatch();
@@ -201,8 +232,11 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         private final OlapTable table;
         private final HistogramStatisticsCollectJob job;
         private final AtomicInteger statisticsQueryCalls = new AtomicInteger();
+        private final AtomicInteger failSecondColumn = new AtomicInteger();
+        private final AtomicInteger batchInsertAttempts = new AtomicInteger();
         private final List<String> statisticsQueries = new ArrayList<>();
         private boolean emptyV2Histogram;
+        private boolean failBatchInsert;
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> capturedBatchInsertSql = new ArrayList<>();
@@ -231,6 +265,10 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                 public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
                     statisticsQueryCalls.incrementAndGet();
                     statisticsQueries.add(sql);
+                    if (failSecondColumn.get() != 0 && sql.contains("`v7`")) {
+                        throw new RuntimeException("mock second-column failure");
+                    }
+
                     TStatisticData data = new TStatisticData();
                     if (sql.toLowerCase().contains("group by")) {
                         data.columnName = "1";
@@ -248,6 +286,10 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                 @Mock
                 public void collectStatisticSync(Supplier<StatementBase> statementSupplier,
                                                  ConnectContext ctx, AnalyzeStatus status) {
+                    batchInsertAttempts.incrementAndGet();
+                    if (failBatchInsert) {
+                        throw new RuntimeException("mock batch insert failure");
+                    }
                     StatementBase statement = statementSupplier.get();
                     batchInsertStatements.add(statement);
                     retryBatchInsertStatements.add(statementSupplier.get());
@@ -274,6 +316,14 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             emptyV2Histogram = true;
         }
 
+        private void failOnSecondColumn() {
+            failSecondColumn.set(1);
+        }
+
+        private void failBatchInsert() {
+            failBatchInsert = true;
+        }
+
         private NativeAnalyzeStatus collect() throws Exception {
             NativeAnalyzeStatus status = new NativeAnalyzeStatus();
             job.collect(context, status);
@@ -286,6 +336,10 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
 
         private int statisticsQueryCount() {
             return statisticsQueryCalls.get();
+        }
+
+        private int batchInsertAttempts() {
+            return batchInsertAttempts.get();
         }
 
         private List<String> statisticsQueries() {

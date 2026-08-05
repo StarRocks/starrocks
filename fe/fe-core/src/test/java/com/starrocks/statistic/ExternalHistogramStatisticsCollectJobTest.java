@@ -177,13 +177,32 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     @Test
     public void testBatchInsertCleansInsertedColumnsAfterFailure() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(1);
+            fixture.enableBatch(20L * 1024 * 1024);
             fixture.failOnSecondColumn();
 
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
 
             Assertions.assertEquals("mock second-column failure", exception.getMessage());
             Assertions.assertEquals(1, fixture.batchInsertSql().size());
+            Assertions.assertEquals(1, fixture.cleanupCallCount());
+            Assertions.assertEquals(Lists.newArrayList("v2"), fixture.cleanedColumns());
+        }
+    }
+
+    @Test
+    public void testBatchInsertFlushesCompletedRowsBeforeInvalidHistogramResult() throws Exception {
+        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
+            fixture.enableBatch(20L * 1024 * 1024);
+            fixture.returnNoSecondColumnHistogramResults();
+
+            Exception exception = Assertions.assertThrows(Exception.class, fixture::collect);
+
+            Assertions.assertEquals(
+                    "Expected exactly one external histogram result for column v7, but got 0",
+                    exception.getMessage());
+            Assertions.assertEquals(1, fixture.batchInsertSql().size());
+            Assertions.assertTrue(fixture.batchInsertSql().get(0).contains("'v2'"));
+            Assertions.assertFalse(fixture.batchInsertSql().get(0).contains("'v7'"));
             Assertions.assertEquals(1, fixture.cleanupCallCount());
             Assertions.assertEquals(Lists.newArrayList("v2"), fixture.cleanedColumns());
         }
@@ -223,6 +242,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         private final AtomicInteger failSecondColumn = new AtomicInteger();
         private final List<String> cleanedColumns = new ArrayList<>();
         private boolean emptyV2Histogram;
+        private boolean noSecondColumnHistogramResults;
         private final List<String> statisticsQueries = new ArrayList<>();
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
@@ -252,6 +272,9 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                     statisticsQueries.add(sql);
                     if (failSecondColumn.get() != 0 && sql.contains("`v7`")) {
                         throw new RuntimeException("mock second-column failure");
+                    }
+                    if (noSecondColumnHistogramResults && sql.contains("'v7'")) {
+                        return Lists.newArrayList();
                     }
 
                     TStatisticData data = new TStatisticData();
@@ -308,6 +331,10 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
 
         private void returnEmptyV2Histogram() {
             emptyV2Histogram = true;
+        }
+
+        private void returnNoSecondColumnHistogramResults() {
+            noSecondColumnHistogramResults = true;
         }
 
         private void collect() throws Exception {

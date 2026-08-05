@@ -205,19 +205,29 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
-            List<TStatisticData> mcv = queryStatisticSync(
-                    buildCollectMCV(db, table, mcvSize, columnName, sampleRatio), context, analyzeStatus);
-            Map<String, String> mostCommonValues = buildMostCommonValues(mcv, sampleRatio);
+            List<Expr> row;
+            String rowSql;
+            long rowSize;
+            try {
+                List<TStatisticData> mcv = queryStatisticSync(
+                        buildCollectMCV(db, table, mcvSize, columnName, sampleRatio), context, analyzeStatus);
+                Map<String, String> mostCommonValues = buildMostCommonValues(mcv, sampleRatio);
 
-            String histogramQuery = buildBatchedHistogramQuery(
-                    context, analyzeStatus, sampleRatio, bucketNum, ndvMode, mostCommonValues, columnName, columnType);
+                String histogramQuery = buildBatchedHistogramQuery(
+                        context, analyzeStatus, sampleRatio, bucketNum, ndvMode,
+                        mostCommonValues, columnName, columnType);
 
-            String buckets = getSingleHistogramResult(
-                    queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
-            String mcvJson = buildMcvJson(mostCommonValues);
-            List<Expr> row = buildBatchInsertRow(columnName, buckets, mcvJson);
-            String rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
-            long rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
+                String buckets = getSingleHistogramResult(
+                        queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
+                String mcvJson = buildMcvJson(mostCommonValues);
+                row = buildBatchInsertRow(columnName, buckets, mcvJson);
+                rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
+                rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
+            } catch (Exception collectionFailure) {
+                flushBatchInsertOnCollectionFailure(
+                        rowsBuffer, sqlBuffer, context, analyzeStatus, columnName, collectionFailure);
+                throw collectionFailure;
+            }
 
             if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
                 flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
@@ -240,6 +250,20 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
         analyzeStatus.setProgress(100);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+    }
+
+    private void flushBatchInsertOnCollectionFailure(
+            List<List<Expr>> rowsBuffer, List<String> sqlBuffer, ConnectContext context,
+            AnalyzeStatus analyzeStatus, String columnName, Exception collectionFailure) {
+        try {
+            flushBatchInsert(rowsBuffer, sqlBuffer, context, analyzeStatus);
+        } catch (Exception flushFailure) {
+            if (flushFailure != collectionFailure) {
+                collectionFailure.addSuppressed(flushFailure);
+            }
+            LOG.warn("Failed to flush buffered histogram statistics after collection failed for column {}",
+                    columnName, flushFailure);
+        }
     }
 
     private String buildBatchedHistogramQuery(
