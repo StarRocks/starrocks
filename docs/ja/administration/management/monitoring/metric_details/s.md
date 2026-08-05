@@ -56,6 +56,13 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `starrocks_be_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: BEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -342,6 +349,13 @@ description: "Alphabetical s"
 - 単位: 個
 - タイプ: 累積
 - 説明: リポジトリから削除されたバックアップスナップショットの合計数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
+
+## `starrocks_fe_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: FEノードのビルド情報。メトリクスの値は常に `1` です。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
