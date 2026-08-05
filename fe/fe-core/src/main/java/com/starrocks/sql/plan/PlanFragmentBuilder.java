@@ -3810,16 +3810,16 @@ public class PlanFragmentBuilder {
             //  query hanging forever.
             boolean canExecGroup = true;
             Optional<List<BucketProperty>> extractedBP = extractBucketProperties(inputFragments);
+            if (optExpr.getOp() instanceof PhysicalUnionOperator) {
+                setOperationFragment.mergeQueryGlobalDicts(
+                        ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
+            }
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
                 setOperationFragment.addChildren(inputFragment.getChildren());
                 setOperationFragment.mergeQueryDictExprs(inputFragment.getQueryGlobalDictExprs());
                 setOperationFragment.mergeQueryGlobalDicts(inputFragment.getQueryGlobalDicts());
-                if (optExpr.getOp() instanceof PhysicalUnionOperator) {
-                    setOperationFragment.mergeQueryGlobalDicts(
-                            ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
-                }
                 ExecGroup inputExecGroup = inputExecGroups.get(i);
                 execGroups.remove(inputExecGroup);
                 if (inputFragment.getPlanRoot() instanceof ExchangeNode) {

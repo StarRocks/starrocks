@@ -914,3 +914,21 @@ FROM (
 ) t
 WHERE LENGTH(`text`) > 10
 order by 1,2 limit 10;
+
+SELECT * FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T
+ORDER BY 1, 2;
+
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'true');
+
+SELECT max(source), min(source), count(source), max(value), min(value), count(value)
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+
+ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');

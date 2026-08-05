@@ -1912,11 +1912,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "10:Decode\n" +
+        assertContains(plan, "  14:Decode\n" +
                 "  |  <dict id 55> : <string id 23>\n" +
                 "  |  \n" +
-                "  9:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(24: fee_zb)\n" +
+                "  13:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(27: sum)\n" +
                 "  |  group by: 55: c_mr");
     }
 
