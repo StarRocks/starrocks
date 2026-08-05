@@ -107,10 +107,11 @@ public class UpdatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testUpdateSinkUsesBaseSchemaWithShadowGeneratedColumns() throws Exception {
+    public void testUpdateSinkExcludesShadowColumnsDuringOptimize() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
         List<Column> originalFullSchema = table.getFullSchema();
+        OlapTable.OlapTableState originalState = table.getState();
         List<Column> schemaWithShadowGeneratedColumns = new ArrayList<>(originalFullSchema);
         for (Column column : table.getBaseSchema()) {
             if (column.isGeneratedColumn()) {
@@ -120,6 +121,7 @@ public class UpdatePlanTest extends PlanTestBase {
             }
         }
         table.setNewFullSchema(schemaWithShadowGeneratedColumns);
+        table.setState(OlapTable.OlapTableState.OPTIMIZE);
 
         try {
             ExecPlan execPlan = getUpdateExecPlanObject(
@@ -127,6 +129,37 @@ public class UpdatePlanTest extends PlanTestBase {
             OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
             assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
         } finally {
+            table.setState(originalState);
+            table.setNewFullSchema(originalFullSchema);
+        }
+    }
+
+    @Test
+    public void testUpdateSinkPreservesShadowColumnsDuringSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(connectContext.getDatabase()).getTable("update_shadow_generated_column");
+        List<Column> originalFullSchema = table.getFullSchema();
+        OlapTable.OlapTableState originalState = table.getState();
+        List<Column> schemaWithShadowGeneratedColumns = new ArrayList<>(originalFullSchema);
+        for (Column column : table.getBaseSchema()) {
+            if (column.isGeneratedColumn()) {
+                Column shadowColumn = column.deepCopy();
+                shadowColumn.setName(SchemaChangeHandler.SHADOW_NAME_PREFIX + column.getName());
+                schemaWithShadowGeneratedColumns.add(shadowColumn);
+            }
+        }
+        table.setNewFullSchema(schemaWithShadowGeneratedColumns);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        try {
+            ExecPlan execPlan = getUpdateExecPlanObject(
+                    "update update_shadow_generated_column set v = 2 where pk = 1");
+            OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
+            assertEquals(schemaWithShadowGeneratedColumns.size(), sink.getTupleDescriptor().getSlots().size());
+            Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
+                    .anyMatch(slot -> slot.getColumn().isShadowColumn()));
+        } finally {
+            table.setState(originalState);
             table.setNewFullSchema(originalFullSchema);
         }
     }

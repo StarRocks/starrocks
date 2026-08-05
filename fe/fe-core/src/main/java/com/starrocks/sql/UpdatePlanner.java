@@ -162,12 +162,16 @@ public class UpdatePlanner {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
         long tableId = targetTable.getId();
+        OlapTable olapTable = (OlapTable) targetTable;
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        // UpdateAnalyzer builds the update output from the base schema. Keep the sink tuple
-        // aligned with that output instead of including shadow columns from an in-progress
-        // schema change in the full schema.
-        for (Column column : targetTable.getBaseSchema()) {
+        // Online OPTIMIZE does not write schema-change shadow indexes, so its unrelated shadow
+        // columns must not become sink slots. A real schema change still needs the full schema so
+        // concurrent writes can target its shadow indexes.
+        List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.OPTIMIZE
+                ? targetTable.getFullSchema().stream().filter(column -> !column.isShadowColumn()).toList()
+                : targetTable.getFullSchema();
+        for (Column column : outputSchema) {
             if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                     !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                 continue;
@@ -186,7 +190,6 @@ public class UpdatePlanner {
         }
         olapTuple.computeMemLayout();
 
-        OlapTable olapTable = (OlapTable) targetTable;
         List<Long> partitionIds = Lists.newArrayList();
         for (Partition partition : olapTable.getPartitions()) {
             partitionIds.add(partition.getId());
