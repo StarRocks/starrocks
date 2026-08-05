@@ -441,8 +441,6 @@ public class InsertOverwriteJobRunner {
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null || !db.isExist()) {
-<<<<<<< HEAD
-=======
             if (isReplay) {
                 // the database was dropped by a journal entry replayed before this one, so
                 // there is nothing left to clean up; throwing here would exit the FE
@@ -450,20 +448,10 @@ public class InsertOverwriteJobRunner {
                         dbId, job.getJobId());
                 return;
             }
-            // the dynamic overwrite transaction needs only dbId and txnId to abort;
-            // clean it up even when the database is gone, otherwise it lingers until
-            // the transaction timeout checker reaps it. Skip on replay: the transaction
-            // was already aborted when the job originally ran.
-            if (!isReplay) {
-                abortDynamicOverwriteTxnQuietly();
-            }
->>>>>>> a8c0f4c522 ([BugFix] Do not journal an insert overwrite failure for a dropped table (#77212))
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
-<<<<<<< HEAD
-=======
             if (isReplay) {
                 // the table was dropped by a journal entry replayed before this one, so
                 // there is nothing left to clean up. Only a FAILED entry written before the
@@ -473,10 +461,6 @@ public class InsertOverwriteJobRunner {
                         + "skip gc", tableId, db.getFullName(), job.getJobId());
                 return;
             }
-            if (!isReplay) {
-                abortDynamicOverwriteTxnQuietly();
-            }
->>>>>>> a8c0f4c522 ([BugFix] Do not journal an insert overwrite failure for a dropped table (#77212))
             throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
         }
         Preconditions.checkState(table instanceof OlapTable);
