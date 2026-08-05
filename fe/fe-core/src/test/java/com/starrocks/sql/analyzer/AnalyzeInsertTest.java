@@ -37,6 +37,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -298,6 +299,129 @@ public class AnalyzeInsertTest {
         };
 
         analyzeSuccess("insert into iceberg_catalog.db.tbl select 1, 2, \"2023-01-01 12:34:45\"");
+    }
+
+    @Test
+    public void testInsertIntoNonExistentIcebergPartitionColumn(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                // Non-partitioned table: no partition columns at all.
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList();
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", IntegerType.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Column("c1", IntegerType.INT);
+                minTimes = 0;
+            }
+        };
+
+        // A static partition clause naming a non-partition column must be rejected, not silently
+        // ignored, even when a target column list is present (issue #11350).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(nonexist_part_col='x') (c1) values (1)",
+                "Only 0 partition columns can be included in the partition clause");
+    }
+
+    @Test
+    public void testInsertIntoIcebergStaticPartitionWithColumnList(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        Column c1 = new Column("c1", IntegerType.INT, true);
+        Column p1 = new Column("p1", IntegerType.INT, true);
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1");
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Delegate<Column>() {
+                    Column getColumn(String name) {
+                        return "p1".equalsIgnoreCase(name) ? p1 : c1;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        // The target-list invariant still applies to a static partition insert: a column list that
+        // omits the partition column is rejected (partition columns must appear in the list).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111) (c1) values (1)",
+                "Must include partition column p1");
+
+        // A column list that includes the partition column stays accepted (the partition value is
+        // taken from the PARTITION clause; only the non-partition column is supplied by VALUES).
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111) (c1, p1) values (1)");
     }
 
     @Test
