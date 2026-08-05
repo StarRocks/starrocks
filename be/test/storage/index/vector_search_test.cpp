@@ -192,9 +192,10 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
 
         std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
+        FileInfo vi_file{.path = index_path};
+        VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &ann_reader);
 
-        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
+        auto init_status = ann_reader->init_searcher(*index_meta, vi_file);
 
         ASSERT_TRUE(!init_status.is_not_supported());
 
@@ -249,8 +250,9 @@ TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
         auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
 
         std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
-        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
+        FileInfo vi_file{.path = index_path};
+        VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &ann_reader);
+        auto init_status = ann_reader->init_searcher(*index_meta, vi_file);
         ASSERT_TRUE(!init_status.is_not_supported());
 
         constexpr int kTopK = 1;
@@ -311,11 +313,15 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
 namespace {
 constexpr std::string_view kTestPayload = "0123456789ABCDEF";
 constexpr int64_t kTestPayloadSize = static_cast<int64_t>(kTestPayload.size());
-constexpr std::string_view kTestFilename = "memory_index.vi";
+constexpr std::string_view kTestFilename = "/memory_index.vi";
 
 std::unique_ptr<VectorIndexFileReader> make_reader(std::string_view payload, std::string_view name = kTestFilename) {
-    auto raf = new_random_access_file_from_memory(name, payload);
-    return std::make_unique<VectorIndexFileReader>(std::move(raf), static_cast<int64_t>(payload.size()));
+    auto fs = std::make_shared<MemoryFileSystem>();
+    CHECK_OK(fs->append_file(std::string(name), Slice(payload)));
+    auto reader = VectorIndexFileReader::open(
+            FileInfo{.path = std::string(name), .size = static_cast<int64_t>(payload.size()), .fs = std::move(fs)});
+    CHECK_OK(reader.status());
+    return std::move(reader).value();
 }
 } // namespace
 
@@ -359,9 +365,9 @@ TEST_F(VectorIndexSearchTest, vector_index_file_reader_seek_then_read) {
 }
 
 TEST_F(VectorIndexSearchTest, vector_index_file_reader_get_size_and_filename) {
-    auto reader = make_reader(kTestPayload, "abc.vi");
+    auto reader = make_reader(kTestPayload, "/abc.vi");
     EXPECT_EQ(reader->GetSize(), kTestPayloadSize);
-    EXPECT_EQ(reader->filename(), "abc.vi");
+    EXPECT_EQ(reader->filename(), "/abc.vi");
 }
 
 TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_minus_one) {
@@ -378,10 +384,9 @@ TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_min
     EXPECT_EQ(m, -1);
 }
 
-// TenANNReader::init_searcher(meta, path, fs) should delegate to the legacy
-// init_searcher(meta, path) when fs is nullptr. Build a real HNSW index on
-// local disk, then invoke the FS-aware overload with fs=nullptr and confirm
-// the call reaches the legacy success path (returns OK, NOT NotSupported).
+// init_searcher must read from the local filesystem when vi_file.fs is null.
+// Build a real HNSW index on local disk, pass a FileInfo without a FileSystem,
+// and confirm the call reaches the local success path (returns OK, NOT NotSupported).
 TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_legacy) {
     auto tablet_index = prepare_tablet_index();
     tablet_index->add_common_properties("index_type", "hnsw");
@@ -401,8 +406,8 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
         ASSIGN_OR_ABORT(auto ann_meta, get_vector_meta(tablet_index, empty_query_params));
 
         TenANNReader tenann_reader;
-        // fs=nullptr branch dispatches to the legacy init_searcher(meta, path) overload.
-        Status status = tenann_reader.init_searcher(ann_meta, ann_path, /*fs=*/nullptr);
+        // Null vi_file.fs selects the local-filesystem branch.
+        Status status = tenann_reader.init_searcher(ann_meta, FileInfo{.path = ann_path});
         EXPECT_TRUE(status.ok()) << status;
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();

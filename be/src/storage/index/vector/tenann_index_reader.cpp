@@ -73,7 +73,8 @@ void apply_index_reader_cache_options(tenann::IndexMeta* meta_copy) {
 
 } // namespace
 
-Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs) {
+Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file) {
+    const std::string& index_path = vi_file.path;
     auto* cache = tenann::GetGlobalIndexCache();
     if (cache == nullptr) {
         return Status::InternalError(
@@ -103,12 +104,12 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     // and surfaces the real Status to init_searcher's caller — preserves
     // NotFound for the brute-force fallback at vector_index_reader_factory.
     Status load_status;
-    auto loader = [&meta_copy, &index_path, fs, cache, tracker, &load_status]() -> tenann::IndexRef {
+    auto loader = [&meta_copy, &vi_file, &index_path, cache, tracker, &load_status]() -> tenann::IndexRef {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
         try {
             std::shared_ptr<VectorIndexFileReader> external_file_reader;
-            if (fs != nullptr) {
-                auto opened_or = VectorIndexFileReader::open(fs, index_path);
+            if (vi_file.fs != nullptr) {
+                auto opened_or = VectorIndexFileReader::open(vi_file);
                 if (!opened_or.ok()) {
                     load_status = opened_or.status();
                     return nullptr;
@@ -120,7 +121,14 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
             if (external_file_reader != nullptr) {
                 reader->SetFileReader(external_file_reader);
             }
-            return reader->ReadIndexFile(index_path);
+            auto index_ref = reader->ReadIndexFile(index_path);
+            if (external_file_reader != nullptr) {
+                // Only the header parse needs the sequential stream; every later block read
+                // opens its own file. Drop it now so the cached index does not pin an unused
+                // remote stream (and its read-ahead buffer) for its whole lifetime.
+                external_file_reader->release_metadata_file();
+            }
+            return index_ref;
         } catch (const tenann::Error& e) {
             load_status = tenann_error_to_status(e);
             return nullptr;
@@ -153,11 +161,11 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     return Status::OK();
 }
 
-Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
-                                   size_t segment_num_rows, int query_k, bool user_set_ef) {
+Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file, size_t segment_num_rows,
+                                   int query_k, bool user_set_ef) {
     auto adapted_meta = meta;
     apply_adaptive_ef_search(&adapted_meta, segment_num_rows, query_k, user_set_ef);
-    return init_searcher(adapted_meta, index_path, fs);
+    return init_searcher(adapted_meta, vi_file);
 }
 
 Status TenANNReader::search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids,
