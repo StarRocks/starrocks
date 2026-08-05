@@ -4,15 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       FE_OUTPUT_TAR:
-        description: "FE tar OSS path (e.g. oss://celerdata-ci-release/.../fe/xxx.tar.gz)"
-        required: true
+        description: "FE tar OSS path. Leave EMPTY to build from PR_NUMBER instead."
+        required: false
+        default: ""
         type: string
       BE_OUTPUT_TAR:
-        description: "BE tar OSS path (e.g. oss://celerdata-ci-release/.../be/xxx.tar.gz)"
-        required: true
+        description: "BE tar OSS path. Leave EMPTY to build from PR_NUMBER instead."
+        required: false
+        default: ""
         type: string
       BRANCH:
-        description: "Branch"
+        description: "Branch (base branch to build/deploy)"
         required: true
         default: main
         type: string
@@ -39,6 +41,26 @@ on:
         required: false
         default: "6"
         type: string
+      RUN_SQL_TESTER:
+        description: "After deploy, also run SQL-Tester against the deployed cluster"
+        required: false
+        default: false
+        type: boolean
+      DELETE_AFTER:
+        description: "Delete the ECS cluster when the run finishes (saves cost; overrides KEEP_HOURS)"
+        required: false
+        default: false
+        type: boolean
+      PR_NUMBER:
+        description: "PR to build/test. Required when tars are empty (build) or RUN_SQL_TESTER is on."
+        required: false
+        default: ""
+        type: string
+      BASE_VERSION:
+        description: "Base commit for the SQL-Tester merge (optional; auto-filled from build when building)."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -49,16 +71,81 @@ env:
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
   CLUSTER_NAME: ${{ inputs.CLUSTER_MODE == 'shared_data' && 'ci-admit-cloud' || 'ci-admit' }}
-  FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
-  BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR }}
   PR_NUMBER: manual-${{ github.run_id }}
 
 jobs:
+  # Optional BUILD: only runs when the tar paths are NOT both provided. Builds
+  # the PR in the branch's own dev image (elastic-build --branch), so the
+  # correct toolchain/thirdparty is used (this is required for customer/release
+  # branches). Outputs the produced tar OSS paths for the deploy job.
+  build:
+    runs-on: [self-hosted, normal]
+    name: BUILD
+    if: ${{ inputs.FE_OUTPUT_TAR == '' || inputs.BE_OUTPUT_TAR == '' }}
+    timeout-minutes: 120
+    env:
+      PR_NUMBER: ${{ inputs.PR_NUMBER }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      fe_tar: ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}
+      be_tar: ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}
+      base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
+    steps:
+      - name: Validate input
+        run: |
+          if [[ -z "${PR_NUMBER}" ]]; then
+            echo "::error::Tars are empty, so a build is required — but PR_NUMBER is empty. Provide a PR to build, or provide both tar paths."
+            exit 1
+          fi
+
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.BRANCH }}
+          fetch-depth: 0
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        timeout-minutes: 110
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          # --branch is REQUIRED: elastic-build.sh hardcodes BRANCH=main by default
+          # (ignores the env) and picks the build image via `eci_lib.py --image $BRANCH`.
+          ./bin/elastic-build.sh --branch ${BRANCH} --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
+
+      - name: build result
+        if: steps.run_build.outcome == 'success'
+        run: |
+          echo "FE: ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+          echo "BE: ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+
   deploy:
     runs-on: [self-hosted, normal]
     name: DEPLOY ONLY
+    needs: build
+    if: ${{ !cancelled() && needs.build.result != 'failure' }}
     timeout-minutes: 60
+    env:
+      # use the provided tar, else the freshly-built one
+      FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR != '' && inputs.FE_OUTPUT_TAR || needs.build.outputs.fe_tar }}
+      BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR != '' && inputs.BE_OUTPUT_TAR || needs.build.outputs.be_tar }}
+    outputs:
+      fe: ${{ steps.cluster_info.outputs.fe }}
+      be: ${{ steps.cluster_info.outputs.be }}
+      cluster_name: ${{ env.CLUSTER_NAME }}
     steps:
+      - name: Validate tars
+        run: |
+          if [[ -z "${FE_OUTPUT_TAR}" || -z "${BE_OUTPUT_TAR}" ]]; then
+            echo "::error::No FE/BE tar to deploy (build may have been skipped or failed). FE='${FE_OUTPUT_TAR}' BE='${BE_OUTPUT_TAR}'"
+            exit 1
+          fi
+
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
@@ -83,8 +170,18 @@ jobs:
           echo "##### BE: ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           ./bin/deploy-cluster.sh -c "${CLUSTER_NAME}" --with-coverage
 
+      - name: Export cluster info
+        id: cluster_info
+        if: steps.apply.outcome == 'success'
+        run: |
+          cd ci-tool
+          fe=$(grep '^fe =' conf/starrocks_deploy.conf | awk '{print $3}')
+          be=$(grep '^be_list =' conf/starrocks_deploy.conf | awk '{print $3}')
+          echo "fe=${fe}" >> $GITHUB_OUTPUT
+          echo "be=${be}" >> $GITHUB_OUTPUT
+
       - name: Renew cluster lease
-        if: success() && inputs.KEEP_HOURS != '0' && inputs.KEEP_HOURS != ''
+        if: success() && !inputs.DELETE_AFTER && inputs.KEEP_HOURS != '0' && inputs.KEEP_HOURS != ''
         run: |
           cd ci-tool && source lib/init.sh
           python3 lib/ecs_lib.py renew cluster all "${{ inputs.KEEP_HOURS }}" || true
@@ -112,4 +209,84 @@ jobs:
             echo "cd /var/lib/ci-tool && source lib/init.sh && PR_NUMBER=${PR_NUMBER} ./bin/elastic-cluster.sh --delete"
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
-          echo "::warning::Cluster is RETAINED. Remember to delete after debugging."
+          if [[ "${{ inputs.DELETE_AFTER }}" == "true" ]]; then
+            echo "::warning::DELETE_AFTER is on — the cluster will be deleted when this run finishes."
+          else
+            echo "::warning::Cluster is RETAINED. Remember to delete after debugging."
+          fi
+
+  # Optional: run SQL-Tester against the just-deployed cluster.
+  # Gated by the RUN_SQL_TESTER toggle; needs a real PR_NUMBER to check out.
+  # The cluster is NOT deleted here (debug-only philosophy) — clean it up manually.
+  sql-tester:
+    runs-on: [self-hosted, normal]
+    name: SQL-Tester
+    needs: [build, deploy]
+    if: ${{ !cancelled() && inputs.RUN_SQL_TESTER && needs.deploy.result == 'success' }}
+    timeout-minutes: 60
+    env:
+      PR_NUMBER: ${{ inputs.PR_NUMBER }}
+      BRANCH: ${{ inputs.BRANCH }}
+      # explicit base version, else the one the build produced
+      BASE_VERSION: ${{ inputs.BASE_VERSION != '' && inputs.BASE_VERSION || needs.build.outputs.base_version }}
+      CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Validate input
+        run: |
+          if [[ -z "${PR_NUMBER}" ]]; then
+            echo "::error::RUN_SQL_TESTER is on but PR_NUMBER is empty. Provide the PR number to test."
+            exit 1
+          fi
+
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.BRANCH }}
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout ${BRANCH};
+          if [[ -n "${BASE_VERSION}" ]]; then git reset ${BASE_VERSION} --hard || true; fi
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout ${BRANCH_NAME};
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit 1);
+
+      - name: Run SQL-Tester (fe=${{ needs.deploy.outputs.fe }})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-sql-tester.sh
+
+      - name: Upload SQL-Tester XML
+        if: success() || failure()
+        run: |
+          repo="${{ github.repository }}"
+          bucket_prefix=$(echo ${repo%/*} | tr '[:upper:]' '[:lower:]')
+          xml_oss_path=oss://${bucket_prefix}-ci-release/${BRANCH}/Release/pr/SQL-Tester-XML/${PR_NUMBER}/
+          ossutil64 --config-file ~/.ossutilconfig rm ${xml_oss_path} -rf || true
+          ossutil64 --config-file ~/.ossutilconfig cp test/ ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci" || true
+
+  # Optional teardown: delete the ECS cluster when DELETE_AFTER is on. Runs
+  # regardless of build/deploy/SQL-Tester outcome so a failed run never leaks a
+  # paid cluster. Uses the same PR_NUMBER (manual-<run_id>) the deploy job used.
+  teardown:
+    runs-on: [self-hosted, normal]
+    name: Teardown (delete cluster)
+    needs: [deploy, sql-tester]
+    if: ${{ always() && inputs.DELETE_AFTER }}
+    steps:
+      - name: Delete ECS cluster
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --delete || true
+          echo "::notice::Deleted ECS cluster for ${PR_NUMBER} (${CLUSTER_NAME})."
