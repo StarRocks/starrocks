@@ -31,7 +31,7 @@ Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
-        _strategy = spill::SpillStrategy::SPILL_ALL;
+        _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
     return Status::OK();
 }
@@ -41,7 +41,7 @@ void SpillableNLJoinBuildOperator::close(RuntimeState* state) {
 }
 
 bool SpillableNLJoinBuildOperator::need_input() const {
-    if (_strategy == spill::SpillStrategy::NO_SPILL) {
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return NLJoinBuildOperator::need_input();
     }
     return !_is_finished && !_spill_channel->spiller()->is_full();
@@ -69,10 +69,14 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
         return NLJoinBuildOperator::set_finishing(state);
     }
 
-    if (!spiller->spilled()) {
+    auto& input_channel = _cross_join_context->input_channel(_driver_sequence);
+    if (!spiller->spilled() && (_spill_strategy == spill::SpillStrategy::NO_SPILL || input_channel.num_rows() == 0)) {
         _spill_channel->set_finishing();
         RETURN_IF_ERROR(NLJoinBuildOperator::set_finishing(state));
         return Status::OK();
+    }
+    if (_should_spill_buffered_chunks) {
+        RETURN_IF_ERROR(_spill_buffered_chunks(state, true));
     }
 
     RETURN_IF_ERROR(spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
@@ -89,12 +93,31 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
 }
 
 Status SpillableNLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    if (_strategy == spill::SpillStrategy::NO_SPILL) {
+    DeferOp update_revocable_bytes{
+            [this]() { set_revocable_mem_bytes(_cross_join_context->input_channel(_driver_sequence).memory_usage()); }};
+
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         RETURN_IF_ERROR(NLJoinBuildOperator::push_chunk(state, chunk));
     } else {
-        // TODO: process auto spill mode
+        if (_should_spill_buffered_chunks) {
+            RETURN_IF_ERROR(_spill_buffered_chunks(state, false));
+        }
         RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).add_chunk_to_spill_buffer(state, chunk));
     }
+    return Status::OK();
+}
+
+void SpillableNLJoinBuildOperator::set_execute_mode(int performance_level) {
+    if (!_is_finished) {
+        // TODO: set the _spill_strategy by cast(performance_level)
+        _spill_strategy = spill::SpillStrategy::SPILL_ALL;
+        TRACE_SPILL_LOG << "NLJoinBuildOperator, mark spill " << (void*)this;
+    }
+}
+
+Status SpillableNLJoinBuildOperator::_spill_buffered_chunks(RuntimeState* state, bool should_finalize) {
+    RETURN_IF_ERROR(_cross_join_context->input_channel(_driver_sequence).spill_buffered_chunks(state, should_finalize));
+    _should_spill_buffered_chunks = false;
     return Status::OK();
 }
 

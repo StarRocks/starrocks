@@ -29,6 +29,8 @@ enum MEM_RESOURCE {
 
 class OperatorMemoryResourceManager {
 public:
+    // TODO: per-instance only, no query-level coordination. With dop > 1 each instance decides
+    // on its own, and a finished instance's retained memory can never be reclaimed.
     ~OperatorMemoryResourceManager() noexcept { close(); }
 
     class ResGuard {

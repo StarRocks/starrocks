@@ -58,6 +58,8 @@ public:
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
     const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
     bool has_spilled() { return _spiller && _spiller->spilled(); }
+    Status spill_buffered_chunks(RuntimeState* state, bool should_finalize);
+    size_t memory_usage() const { return _accumulator.memory_usage(); }
 
     Status add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk);
 
@@ -88,6 +90,7 @@ public:
 private:
     size_t _num_rows{};
     size_t _chunk_size;
+    size_t _memory_usage{};
     ChunkAccumulator _accumulator;
     std::vector<ChunkPtr> _input_chunks;
 
