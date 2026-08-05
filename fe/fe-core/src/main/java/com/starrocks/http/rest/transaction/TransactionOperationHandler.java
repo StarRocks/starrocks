@@ -19,6 +19,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionStateSnapshot;
 
 /**
  * Transaction management request handler.
@@ -29,6 +30,22 @@ public interface TransactionOperationHandler {
      * Handle transaction management request.
      */
     ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException;
+
+    /**
+     * Echo the cached transaction id into an eviction-recovery response so its shape matches the live
+     * path, which always returns TxnId alongside Label. A terminal-state cache record always carries a
+     * real id (the id is the cache's key and is persisted in the image), so the guard omits the field only
+     * for an id-less snapshot -- the truly-UNKNOWN outcomes built via the shorter constructors, which the
+     * eviction-recovery success branches never reach. The {@code > 0} test (rather than
+     * {@code != NO_TXN_ID}) also suppresses a GSON-defaulted 0 from any record whose image JSON lacked the
+     * id, so a bogus {@code "TxnId": 0} can never be emitted either.
+     */
+    static void addCachedTxnId(TransactionResult result, TransactionStateSnapshot snapshot) {
+        long txnId = snapshot.getTxnId();
+        if (txnId > 0) {
+            result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
+        }
+    }
 
     class ResultWrapper {
 

@@ -197,6 +197,7 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
             case COMMITTED:
             case VISIBLE:
                 result.setOKMsg(String.format("Transaction has already committed, label is %s", label));
+                TransactionOperationHandler.addCachedTxnId(result, snapshot);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             case ABORTED:
@@ -217,6 +218,7 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         switch (snapshot.getStatus()) {
             case ABORTED:
                 result.setOKMsg(String.format("Transaction has already aborted, label is %s", label));
+                TransactionOperationHandler.addCachedTxnId(result, snapshot);
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             case COMMITTED:

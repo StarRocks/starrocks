@@ -89,6 +89,7 @@ import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestMethodOrder(MethodName.class)
@@ -104,6 +105,10 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     private static final String CHANNEL_ID_STR = "channel_id";
     private static final String SOURCE_TYPE = "source_type";
     private static final String WAREHOUSE_KEY = "warehouse";
+    // A distinctive transaction id stamped into the terminal-state cache snapshots that the evicted-path
+    // tests mock, so an assertion can prove the eviction-recovery response echoes TxnId (the field the
+    // live path returns), not just Label.
+    private static final long EVICTED_TXN_ID = 918273645L;
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
@@ -418,10 +423,20 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     }
 
+    // Mirror production when stamping the mocked cache snapshot's txn id: a cached terminal outcome
+    // (VISIBLE/COMMITTED/ABORTED) carries its real id, while a non-terminal/UNKNOWN snapshot has none
+    // (NO_TXN_ID). Keeps the evicted-path mocks from feeding an id-carrying UNKNOWN state that production
+    // never emits.
+    private static long evictedSnapshotTxnId(TransactionStatus status) {
+        return (status == TransactionStatus.VISIBLE || status == TransactionStatus.COMMITTED
+                || status == TransactionStatus.ABORTED) ? EVICTED_TXN_ID : TransactionStateSnapshot.NO_TXN_ID;
+    }
+
     // Label-based HTTP 2PC commit of a transaction whose full state was evicted (count-based eviction
     // ignores age): the FE must resolve the terminal outcome from the terminal-state cache by label
     // instead of returning "no transaction found". This is the Flink savepoint/resume recommit path.
     private void mockEvictedLabel(TransactionStatus terminalStatus) {
+        long snapshotTxnId = evictedSnapshotTxnId(terminalStatus);
         new Expectations() {
             {
                 // Full state has been evicted.
@@ -430,7 +445,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 minTimes = 0;
                 // But the terminal outcome is still known via the terminal-state cache.
                 globalTransactionMgr.getLabelStatus(anyLong, anyString);
-                result = new TransactionStateSnapshot(terminalStatus, null);
+                result = new TransactionStateSnapshot(terminalStatus, null, null, snapshotTxnId);
                 minTimes = 0;
             }
         };
@@ -459,6 +474,10 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already committed"));
+            // The eviction-recovery success must echo TxnId, exactly like the live commit path, so a
+            // client that parses TxnId from an idempotent recommit keeps working after count eviction.
+            assertNotNull(body.get(TransactionResult.TXN_ID_KEY));
+            assertEquals(EVICTED_TXN_ID, ((Number) body.get(TransactionResult.TXN_ID_KEY)).longValue());
         }
     }
 
@@ -486,13 +505,14 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     // handler's post-eviction source guard (assertCachedOutcomeIsBypassWrite, P2-a) can be exercised end to
     // end through routing -> handler -> commitEvictedByLabel, not just as an isolated unit.
     private void mockEvictedLabelSourced(TransactionStatus terminalStatus, LoadJobSourceType sourceType) {
+        long snapshotTxnId = evictedSnapshotTxnId(terminalStatus);
         new Expectations() {
             {
                 globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
                 result = null;
                 minTimes = 0;
                 globalTransactionMgr.getLabelStatus(anyLong, anyString);
-                result = new TransactionStateSnapshot(terminalStatus, null, sourceType);
+                result = new TransactionStateSnapshot(terminalStatus, null, sourceType, snapshotTxnId);
                 minTimes = 0;
             }
         };
@@ -524,6 +544,9 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already committed"));
+            // Same TxnId echo requirement on the bypass-write handler's eviction-recovery success.
+            assertNotNull(body.get(TransactionResult.TXN_ID_KEY));
+            assertEquals(EVICTED_TXN_ID, ((Number) body.get(TransactionResult.TXN_ID_KEY)).longValue());
         }
     }
 
@@ -550,6 +573,59 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
                     .contains("isn't created in " + LoadJobSourceType.BYPASS_WRITE.name()));
+        }
+    }
+
+    // Rollback counterpart of commitByLabel: a label-based HTTP rollback with no source_type, routed to
+    // the without-channel handler.
+    private Response rollbackByLabel(String label) throws Exception {
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        Request request = newRequest(TransactionOperation.TXN_ROLLBACK, (uriBuilder, reqBuilder) -> {
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        return networkClient.newCall(request).execute();
+    }
+
+    // Rollback counterpart of commitByLabelBypassWrite: a label-based HTTP rollback carrying
+    // source_type=BYPASS_WRITE, routed to the bypass-write handler.
+    private Response rollbackByLabelBypassWrite(String label) throws Exception {
+        TransactionLoadAction.getAction().getCoordinatorMgr().remove(label);
+        Request request = newRequest(TransactionOperation.TXN_ROLLBACK, (uriBuilder, reqBuilder) -> {
+            uriBuilder.addParameter(SOURCE_TYPE, Objects.toString(LoadJobSourceType.BYPASS_WRITE.getFlag()));
+            reqBuilder.addHeader(DB_KEY, DB_NAME);
+            reqBuilder.addHeader(TABLE_KEY, TABLE_NAME2);
+            reqBuilder.addHeader(LABEL_KEY, label);
+        });
+        return networkClient.newCall(request).execute();
+    }
+
+    @Test
+    public void rollbackEvictedAbortedTxnByLabelReturnsIdempotentSuccess() throws Exception {
+        // Without-channel evicted rollback: an ABORTED cached outcome is idempotent success and must
+        // echo TxnId just like the live abort path.
+        mockEvictedLabel(TransactionStatus.ABORTED);
+        try (Response response = rollbackByLabel(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already aborted"));
+            assertNotNull(body.get(TransactionResult.TXN_ID_KEY));
+            assertEquals(EVICTED_TXN_ID, ((Number) body.get(TransactionResult.TXN_ID_KEY)).longValue());
+        }
+    }
+
+    @Test
+    public void rollbackEvictedBypassWriteAbortedByLabelSucceeds() throws Exception {
+        // Bypass-write evicted rollback: the cached outcome is a bypass-write ABORTED -> the source guard
+        // passes, the rollback is idempotent success, and TxnId is echoed like the live path.
+        mockEvictedLabelSourced(TransactionStatus.ABORTED, LoadJobSourceType.BYPASS_WRITE);
+        try (Response response = rollbackByLabelBypassWrite(RandomStringUtils.randomAlphanumeric(32))) {
+            Map<String, Object> body = parseResponseBody(response);
+            assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+            assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("already aborted"));
+            assertNotNull(body.get(TransactionResult.TXN_ID_KEY));
+            assertEquals(EVICTED_TXN_ID, ((Number) body.get(TransactionResult.TXN_ID_KEY)).longValue());
         }
     }
 

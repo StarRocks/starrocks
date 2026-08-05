@@ -935,7 +935,7 @@ public class DatabaseTransactionMgr {
                     if (MetricRepo.hasInit) {
                         MetricRepo.COUNTER_TXN_TERMINAL_CACHE_HIT.increase(1L);
                     }
-                    return new TransactionStateSnapshot(record.status, record.reason, record.sourceType);
+                    return new TransactionStateSnapshot(record.status, record.reason, record.sourceType, record.txnId);
                 }
                 return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
             }
@@ -943,7 +943,7 @@ public class DatabaseTransactionMgr {
             long maxTxnId = existingTxnIds.stream().max(Comparator.comparingLong(Long::valueOf)).orElse(Long.MIN_VALUE);
             TransactionState transactionState = unprotectedGetTransactionState(maxTxnId);
             return new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason(),
-                    transactionState.getSourceType());
+                    transactionState.getSourceType(), transactionState.getTransactionId());
         } finally {
             readUnlock();
         }
@@ -2743,7 +2743,7 @@ public class DatabaseTransactionMgr {
             TransactionState transactionState = unprotectedGetTransactionState(txnId);
             if (transactionState != null) {
                 return new TransactionStateSnapshot(transactionState.getTransactionStatus(), transactionState.getReason(),
-                    transactionState.getSourceType());
+                    transactionState.getSourceType(), transactionState.getTransactionId());
             }
             // The full state may have been evicted; return the cached terminal outcome if known so
             // callers can distinguish "committed then cleaned up" from "never existed" (UNKNOWN).
@@ -2752,7 +2752,7 @@ public class DatabaseTransactionMgr {
                 if (MetricRepo.hasInit) {
                     MetricRepo.COUNTER_TXN_TERMINAL_CACHE_HIT.increase(1L);
                 }
-                return new TransactionStateSnapshot(record.status, record.reason, record.sourceType);
+                return new TransactionStateSnapshot(record.status, record.reason, record.sourceType, record.txnId);
             }
             return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
         } finally {
