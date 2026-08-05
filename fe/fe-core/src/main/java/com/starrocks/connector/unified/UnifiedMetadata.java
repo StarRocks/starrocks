@@ -250,7 +250,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean createTable(CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
         requireNonNull(stmt.getEngineName(), "engine name is null");
         Table.TableType type = Table.TableType.deserialize(stmt.getEngineName().toUpperCase());
         return metadataMap.get(type).createTable(stmt);

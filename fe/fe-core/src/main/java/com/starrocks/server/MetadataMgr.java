@@ -297,15 +297,7 @@ public class MetadataMgr {
                     }
                 }
             }
-            try {
-                return connectorMetadata.get().createTable(stmt);
-            } catch (AlreadyExistsException e) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, stmt.getTableName());
-                }
-                LOG.info("create table[{}] which already exists", stmt.getTableName());
-                return false;
-            }
+            return connectorMetadata.get().createTable(stmt);
         } else {
             throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
@@ -362,15 +354,7 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
             }
-            try {
-                return connectorMetadata.get().createTable(stmt);
-            } catch (AlreadyExistsException e) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
-                }
-                LOG.info("create temporary table[{}] which already exists in session[{}]", tableName, sessionId);
-                return false;
-            }
+            return connectorMetadata.get().createTable(stmt);
         }
     }
 
