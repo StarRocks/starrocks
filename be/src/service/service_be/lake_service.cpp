@@ -1065,11 +1065,17 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
             },
             [&] {
                 LOG(WARNING) << "abort transaction task has been cancelled";
+                for (auto tablet_id : request->tablet_ids()) {
+                    response->add_failed_tablets(tablet_id);
+                }
                 latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit abort transaction task: " << st;
+        for (auto tablet_id : request->tablet_ids()) {
+            response->add_failed_tablets(tablet_id);
+        }
         latch.count_down();
     }
 

@@ -4673,8 +4673,8 @@ TEST_F(LakeServiceTest, test_replication_abort_installs_local_fence) {
     replicate_request.__set_src_tablet_id(_tablet_id + 1);
     replicate_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_LAKE);
     replicate_request.__set_src_visible_version(2);
-    auto status = StorageEnv::GetInstance()->lake_replication_txn_manager()->replicate_snapshot(replicate_request,
-                                                                                                nullptr);
+    auto status =
+            StorageEnv::GetInstance()->lake_replication_txn_manager()->replicate_snapshot(replicate_request, nullptr);
     EXPECT_TRUE(status.is_aborted()) << status;
 }
 
