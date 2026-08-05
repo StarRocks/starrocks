@@ -47,22 +47,25 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
 
     _num_rows += build_chunk->num_rows();
     RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
-    if (auto chunk = _accumulator.pull()) {
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+    if (!_spiller->is_full()) {
+        if (auto chunk = _accumulator.pull()) {
+            RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+        }
     }
 
     return Status::OK();
 }
 
-Status NJJoinBuildInputChannel::spill_buffered_chunks(RuntimeState* state, bool should_finalize) {
+std::function<StatusOr<ChunkPtr>()> NJJoinBuildInputChannel::buffered_chunk_iterator(bool should_finalize) {
     if (should_finalize) {
         _accumulator.finalize();
     }
-    while (!_accumulator.empty()) {
-        auto chunk = _accumulator.pull();
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
-    }
-    return Status::OK();
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (auto chunk = _accumulator.pull()) {
+            return chunk;
+        }
+        return Status::EndOfFile("no more buffered chunks");
+    };
 }
 
 void NJJoinBuildInputChannel::finalize() {
