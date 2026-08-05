@@ -33,10 +33,10 @@ namespace starrocks {
 //
 // This is the cell whose validity and roundtrip we rely on in all tests.
 // ─────────────────────────────────────────────────────────────────────────────
-static constexpr int64_t kSfCell9     = 617700169958293503LL;
-static constexpr double  kSfLng       = -122.4194;
-static constexpr double  kSfLat       =   37.7749;
-static constexpr int     kSfRes       =    9;
+static constexpr int64_t kSfCell9 = 617700169958293503LL;
+static constexpr double kSfLng = -122.4194;
+static constexpr double kSfLat = 37.7749;
+static constexpr int kSfRes = 9;
 
 class H3FunctionsTest : public ::testing::Test {
 protected:
@@ -127,7 +127,7 @@ protected:
         auto* arr = down_cast<ArrayColumn*>(col.get());
         auto* elems = down_cast<Int64Column*>(arr->elements_column().get());
         uint32_t start = arr->offsets().get_data()[0];
-        uint32_t end   = arr->offsets().get_data()[1];
+        uint32_t end = arr->offsets().get_data()[1];
         std::vector<int64_t> out;
         for (uint32_t i = start; i < end; ++i) out.push_back(elems->get_data()[i]);
         std::sort(out.begin(), out.end());
@@ -142,7 +142,7 @@ protected:
         auto* arr = down_cast<ArrayColumn*>(col.get());
         auto* elems = down_cast<Int32Column*>(arr->elements_column().get());
         uint32_t start = arr->offsets().get_data()[0];
-        uint32_t end   = arr->offsets().get_data()[1];
+        uint32_t end = arr->offsets().get_data()[1];
         std::vector<int32_t> out;
         for (uint32_t i = start; i < end; ++i) out.push_back(elems->get_data()[i]);
         std::sort(out.begin(), out.end());
@@ -157,17 +157,23 @@ protected:
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_F(H3FunctionsTest, geo_to_h3_basic) {
-    auto lng = DoubleColumn::create();  lng->append(kSfLng);
-    auto lat = DoubleColumn::create();  lat->append(kSfLat);
-    auto res = Int32Column::create();   res->append(kSfRes);
+    auto lng = DoubleColumn::create();
+    lng->append(kSfLng);
+    auto lat = DoubleColumn::create();
+    lat->append(kSfLat);
+    auto res = Int32Column::create();
+    res->append(kSfRes);
     Columns cols{std::move(lng), std::move(lat), std::move(res)};
     EXPECT_EQ(kSfCell9, get_bigint(H3Functions::geo_to_h3(ctx.get(), cols)));
 }
 
 TEST_F(H3FunctionsTest, geo_to_h3_invalid_resolution) {
-    auto lng = DoubleColumn::create();  lng->append(kSfLng);
-    auto lat = DoubleColumn::create();  lat->append(kSfLat);
-    auto res = Int32Column::create();   res->append(16); // out of range
+    auto lng = DoubleColumn::create();
+    lng->append(kSfLng);
+    auto lat = DoubleColumn::create();
+    lat->append(kSfLat);
+    auto res = Int32Column::create();
+    res->append(16); // out of range
     Columns cols{std::move(lng), std::move(lat), std::move(res)};
     EXPECT_TRUE(is_null(H3Functions::geo_to_h3(ctx.get(), cols)));
 }
@@ -211,7 +217,7 @@ TEST_F(H3FunctionsTest, h3_edge_length_m_increases_with_lower_res) {
 }
 
 TEST_F(H3FunctionsTest, h3_edge_length_km_consistent) {
-    double m  = get_double(H3Functions::h3_edge_length_m(ctx.get(),  make_int(9)));
+    double m = get_double(H3Functions::h3_edge_length_m(ctx.get(), make_int(9)));
     double km = get_double(H3Functions::h3_edge_length_km(ctx.get(), make_int(9)));
     EXPECT_NEAR(m / 1000.0, km, km * 1e-9);
 }
@@ -222,7 +228,7 @@ TEST_F(H3FunctionsTest, h3_hex_area_m2_res0) {
 }
 
 TEST_F(H3FunctionsTest, h3_hex_area_km2_consistent) {
-    double m2  = get_double(H3Functions::h3_hex_area_m2(ctx.get(),  make_int(5)));
+    double m2 = get_double(H3Functions::h3_hex_area_m2(ctx.get(), make_int(5)));
     double km2 = get_double(H3Functions::h3_hex_area_km2(ctx.get(), make_int(5)));
     EXPECT_NEAR(m2 / 1e6, km2, km2 * 1e-9);
 }
@@ -293,28 +299,36 @@ TEST_F(H3FunctionsTest, string_to_h3_invalid_null) {
 
 TEST_F(H3FunctionsTest, h3_to_parent_then_indexes_are_not_neighbors) {
     // parent at res 8 is not a neighbour of the child at res 9
-    auto h3c = Int64Column::create();  h3c->append(kSfCell9);
-    auto rc  = Int32Column::create();  rc->append(8);
+    auto h3c = Int64Column::create();
+    h3c->append(kSfCell9);
+    auto rc = Int32Column::create();
+    rc->append(8);
     int64_t parent = get_bigint(H3Functions::h3_to_parent(ctx.get(), {std::move(h3c), std::move(rc)}));
     EXPECT_EQ(8, get_int(H3Functions::h3_get_resolution(ctx.get(), make_bigint(parent))));
 
-    auto h1 = Int64Column::create();  h1->append(kSfCell9);
-    auto h2 = Int64Column::create();  h2->append(parent);
+    auto h1 = Int64Column::create();
+    h1->append(kSfCell9);
+    auto h2 = Int64Column::create();
+    h2->append(parent);
     Columns cols{std::move(h1), std::move(h2)};
     EXPECT_FALSE(get_bool(H3Functions::h3_indexes_are_neighbors(ctx.get(), cols)));
 }
 
 TEST_F(H3FunctionsTest, h3_to_center_child_has_finer_res) {
-    auto h  = Int64Column::create();  h->append(kSfCell9);
-    auto r  = Int32Column::create();  r->append(10);
+    auto h = Int64Column::create();
+    h->append(kSfCell9);
+    auto r = Int32Column::create();
+    r->append(10);
     Columns cols{std::move(h), std::move(r)};
     int64_t child = get_bigint(H3Functions::h3_to_center_child(ctx.get(), cols));
     EXPECT_EQ(10, get_int(H3Functions::h3_get_resolution(ctx.get(), make_bigint(child))));
 }
 
 TEST_F(H3FunctionsTest, h3_distance_self_is_zero) {
-    auto h1 = Int64Column::create();  h1->append(kSfCell9);
-    auto h2 = Int64Column::create();  h2->append(kSfCell9);
+    auto h1 = Int64Column::create();
+    h1->append(kSfCell9);
+    auto h2 = Int64Column::create();
+    h2->append(kSfCell9);
     Columns cols{std::move(h1), std::move(h2)};
     EXPECT_EQ(0LL, get_bigint(H3Functions::h3_distance(ctx.get(), cols)));
 }
@@ -325,24 +339,35 @@ TEST_F(H3FunctionsTest, h3_distance_self_is_zero) {
 
 TEST_F(H3FunctionsTest, directed_edge_roundtrip) {
     // Get a neighbour cell (kRing k=1 gives ≥1 neighbour besides self)
-    auto h3c = Int64Column::create();  h3c->append(kSfCell9);
-    auto kc  = Int32Column::create();  kc->append(1);
+    auto h3c = Int64Column::create();
+    h3c->append(kSfCell9);
+    auto kc = Int32Column::create();
+    kc->append(1);
     Columns ring_cols{std::move(h3c), std::move(kc)};
     auto ring = get_array_bigint(H3Functions::h3k_ring(ctx.get(), ring_cols));
     // Pick a neighbour that is different from kSfCell9.
     int64_t neighbour = -1;
-    for (auto v : ring) { if (v != kSfCell9) { neighbour = v; break; } }
+    for (auto v : ring) {
+        if (v != kSfCell9) {
+            neighbour = v;
+            break;
+        }
+    }
     ASSERT_NE(-1, neighbour) << "kRing(k=1) should return at least one neighbour";
 
     // Build edge
-    auto orig = Int64Column::create();  orig->append(kSfCell9);
-    auto dest = Int64Column::create();  dest->append(neighbour);
+    auto orig = Int64Column::create();
+    orig->append(kSfCell9);
+    auto dest = Int64Column::create();
+    dest->append(neighbour);
     Columns edge_cols{std::move(orig), std::move(dest)};
     int64_t edge = get_bigint(H3Functions::h3_get_unidirectional_edge(ctx.get(), edge_cols));
 
     EXPECT_TRUE(get_bool(H3Functions::h3_unidirectional_edge_is_valid(ctx.get(), make_bigint(edge))));
-    EXPECT_EQ(kSfCell9,  get_bigint(H3Functions::h3_get_origin_index_from_unidirectional_edge(ctx.get(), make_bigint(edge))));
-    EXPECT_EQ(neighbour, get_bigint(H3Functions::h3_get_destination_index_from_unidirectional_edge(ctx.get(), make_bigint(edge))));
+    EXPECT_EQ(kSfCell9,
+              get_bigint(H3Functions::h3_get_origin_index_from_unidirectional_edge(ctx.get(), make_bigint(edge))));
+    EXPECT_EQ(neighbour,
+              get_bigint(H3Functions::h3_get_destination_index_from_unidirectional_edge(ctx.get(), make_bigint(edge))));
 }
 
 TEST_F(H3FunctionsTest, h3_unidirectional_edge_is_valid_false_for_cell) {
@@ -355,19 +380,28 @@ TEST_F(H3FunctionsTest, h3_unidirectional_edge_is_valid_false_for_cell) {
 
 TEST_F(H3FunctionsTest, h3_exact_edge_lengths_consistent) {
     // Build an edge from kSfCell9 to a neighbour.
-    auto h3c = Int64Column::create();  h3c->append(kSfCell9);
-    auto kc  = Int32Column::create();  kc->append(1);
+    auto h3c = Int64Column::create();
+    h3c->append(kSfCell9);
+    auto kc = Int32Column::create();
+    kc->append(1);
     auto ring = get_array_bigint(H3Functions::h3k_ring(ctx.get(), {std::move(h3c), std::move(kc)}));
     int64_t nbr = -1;
-    for (auto v : ring) { if (v != kSfCell9) { nbr = v; break; } }
+    for (auto v : ring) {
+        if (v != kSfCell9) {
+            nbr = v;
+            break;
+        }
+    }
     ASSERT_NE(-1, nbr);
 
-    auto o = Int64Column::create();  o->append(kSfCell9);
-    auto d = Int64Column::create();  d->append(nbr);
+    auto o = Int64Column::create();
+    o->append(kSfCell9);
+    auto d = Int64Column::create();
+    d->append(nbr);
     int64_t edge = get_bigint(H3Functions::h3_get_unidirectional_edge(ctx.get(), {std::move(o), std::move(d)}));
 
-    double m    = get_double(H3Functions::h3_exact_edge_length_m(ctx.get(),    make_bigint(edge)));
-    double km   = get_double(H3Functions::h3_exact_edge_length_km(ctx.get(),   make_bigint(edge)));
+    double m = get_double(H3Functions::h3_exact_edge_length_m(ctx.get(), make_bigint(edge)));
+    double km = get_double(H3Functions::h3_exact_edge_length_km(ctx.get(), make_bigint(edge)));
     double rads = get_double(H3Functions::h3_exact_edge_length_rads(ctx.get(), make_bigint(edge)));
     EXPECT_NEAR(m / 1000.0, km, km * 1e-9);
     EXPECT_GT(rads, 0.0);
@@ -378,27 +412,35 @@ TEST_F(H3FunctionsTest, h3_exact_edge_lengths_consistent) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_F(H3FunctionsTest, h3_point_dist_self_zero) {
-    auto la1 = DoubleColumn::create();  la1->append(kSfLat);
-    auto lo1 = DoubleColumn::create();  lo1->append(kSfLng);
-    auto la2 = DoubleColumn::create();  la2->append(kSfLat);
-    auto lo2 = DoubleColumn::create();  lo2->append(kSfLng);
+    auto la1 = DoubleColumn::create();
+    la1->append(kSfLat);
+    auto lo1 = DoubleColumn::create();
+    lo1->append(kSfLng);
+    auto la2 = DoubleColumn::create();
+    la2->append(kSfLat);
+    auto lo2 = DoubleColumn::create();
+    lo2->append(kSfLng);
     Columns cols{std::move(la1), std::move(lo1), std::move(la2), std::move(lo2)};
     EXPECT_NEAR(0.0, get_double(H3Functions::h3_point_dist_m(ctx.get(), cols)), 1e-6);
 }
 
 TEST_F(H3FunctionsTest, h3_point_dist_equator) {
     // 20° apart on equator ≈ 2,224 km
-    auto la1 = DoubleColumn::create();  la1->append(0.0);
-    auto lo1 = DoubleColumn::create();  lo1->append(-10.0);
-    auto la2 = DoubleColumn::create();  la2->append(0.0);
-    auto lo2 = DoubleColumn::create();  lo2->append(10.0);
+    auto la1 = DoubleColumn::create();
+    la1->append(0.0);
+    auto lo1 = DoubleColumn::create();
+    lo1->append(-10.0);
+    auto la2 = DoubleColumn::create();
+    la2->append(0.0);
+    auto lo2 = DoubleColumn::create();
+    lo2->append(10.0);
     Columns cols{std::move(la1), std::move(lo1), std::move(la2), std::move(lo2)};
 
-    double m  = get_double(H3Functions::h3_point_dist_m(ctx.get(),    cols));
-    double km = get_double(H3Functions::h3_point_dist_km(ctx.get(),   cols));
-    double r  = get_double(H3Functions::h3_point_dist_rads(ctx.get(), cols));
-    EXPECT_NEAR(m / 1000.0, km,  km  * 1e-6);
-    EXPECT_NEAR(r, km / 6371.0,   0.001);
+    double m = get_double(H3Functions::h3_point_dist_m(ctx.get(), cols));
+    double km = get_double(H3Functions::h3_point_dist_km(ctx.get(), cols));
+    double r = get_double(H3Functions::h3_point_dist_rads(ctx.get(), cols));
+    EXPECT_NEAR(m / 1000.0, km, km * 1e-6);
+    EXPECT_NEAR(r, km / 6371.0, 0.001);
     EXPECT_NEAR(km, 2223.9, 1.0);
 }
 
@@ -407,32 +449,40 @@ TEST_F(H3FunctionsTest, h3_point_dist_equator) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 TEST_F(H3FunctionsTest, h3k_ring_k0_returns_self) {
-    auto h = Int64Column::create();  h->append(kSfCell9);
-    auto k = Int32Column::create();  k->append(0);
+    auto h = Int64Column::create();
+    h->append(kSfCell9);
+    auto k = Int32Column::create();
+    k->append(0);
     auto ring = get_array_bigint(H3Functions::h3k_ring(ctx.get(), {std::move(h), std::move(k)}));
     ASSERT_EQ(1u, ring.size());
     EXPECT_EQ(kSfCell9, ring[0]);
 }
 
 TEST_F(H3FunctionsTest, h3k_ring_k1_returns_7_cells) {
-    auto h = Int64Column::create();  h->append(kSfCell9);
-    auto k = Int32Column::create();  k->append(1);
+    auto h = Int64Column::create();
+    h->append(kSfCell9);
+    auto k = Int32Column::create();
+    k->append(1);
     auto ring = get_array_bigint(H3Functions::h3k_ring(ctx.get(), {std::move(h), std::move(k)}));
     EXPECT_EQ(7u, ring.size()); // centre + 6 neighbours (all hex, no pentagon)
     EXPECT_NE(ring.end(), std::find(ring.begin(), ring.end(), kSfCell9));
 }
 
 TEST_F(H3FunctionsTest, h3_hex_ring_k1_returns_6_cells) {
-    auto h = Int64Column::create();  h->append(kSfCell9);
-    auto k = Int32Column::create();  k->append(1);
+    auto h = Int64Column::create();
+    h->append(kSfCell9);
+    auto k = Int32Column::create();
+    k->append(1);
     auto ring = get_array_bigint(H3Functions::h3_hex_ring(ctx.get(), {std::move(h), std::move(k)}));
     EXPECT_EQ(6u, ring.size());
     EXPECT_EQ(ring.end(), std::find(ring.begin(), ring.end(), kSfCell9));
 }
 
 TEST_F(H3FunctionsTest, h3_to_children_res10_returns_7) {
-    auto h = Int64Column::create();  h->append(kSfCell9);
-    auto r = Int32Column::create();  r->append(10);
+    auto h = Int64Column::create();
+    h->append(kSfCell9);
+    auto r = Int32Column::create();
+    r->append(10);
     auto kids = get_array_bigint(H3Functions::h3_to_children(ctx.get(), {std::move(h), std::move(r)}));
     EXPECT_EQ(7u, kids.size()); // 7 children per hex at next resolution
     for (auto c : kids) {
@@ -441,8 +491,10 @@ TEST_F(H3FunctionsTest, h3_to_children_res10_returns_7) {
 }
 
 TEST_F(H3FunctionsTest, h3_line_self_returns_1) {
-    auto h1 = Int64Column::create();  h1->append(kSfCell9);
-    auto h2 = Int64Column::create();  h2->append(kSfCell9);
+    auto h1 = Int64Column::create();
+    h1->append(kSfCell9);
+    auto h2 = Int64Column::create();
+    h2->append(kSfCell9);
     auto path = get_array_bigint(H3Functions::h3_line(ctx.get(), {std::move(h1), std::move(h2)}));
     EXPECT_EQ(1u, path.size());
     EXPECT_EQ(kSfCell9, path[0]);
@@ -475,8 +527,8 @@ TEST_F(H3FunctionsTest, h3_get_pentagon_indexes_returns_12) {
 }
 
 TEST_F(H3FunctionsTest, h3_get_unidirectional_edges_from_hexagon_returns_6) {
-    auto edges = get_array_bigint(
-            H3Functions::h3_get_unidirectional_edges_from_hexagon(ctx.get(), make_bigint(kSfCell9)));
+    auto edges =
+            get_array_bigint(H3Functions::h3_get_unidirectional_edges_from_hexagon(ctx.get(), make_bigint(kSfCell9)));
     EXPECT_EQ(6u, edges.size());
     for (auto e : edges) {
         EXPECT_TRUE(get_bool(H3Functions::h3_unidirectional_edge_is_valid(ctx.get(), make_bigint(e))));
