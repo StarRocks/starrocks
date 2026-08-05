@@ -383,11 +383,8 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
-<<<<<<< HEAD
     ./storage/rowset/bm25_segment_scoring_test.cpp
-=======
     ./storage/rowset/segment_full_sort_key_index_test.cpp
->>>>>>> 2dc15c756fb... [Enhancement] Store full sort key in the short key index for split boundary sampling (#76728)
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
