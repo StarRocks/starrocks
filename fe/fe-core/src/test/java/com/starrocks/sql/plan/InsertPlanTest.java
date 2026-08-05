@@ -35,7 +35,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -110,26 +113,38 @@ public class InsertPlanTest extends PlanTestBase {
                 schemaWithStaleGeneratedColumns.add(shadowColumn);
             }
         }
-        table.setNewFullSchema(schemaWithStaleGeneratedColumns);
 
+        String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
+                "select pk, v, tags from insert_online_optimize_shadow_generated_column";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
+                .get(0);
+        boolean originalOnlineOptimizeRewrite = connectContext.isOnlineOptimizeRewrite();
+        connectContext.setOnlineOptimizeRewrite(true);
         try {
-            String sql = "insert into insert_online_optimize_shadow_generated_column (pk, v, tags) " +
-                    "select pk, v, tags from insert_online_optimize_shadow_generated_column";
-            InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
-                    .get(0);
-            boolean originalOnlineOptimizeRewrite = connectContext.isOnlineOptimizeRewrite();
-            connectContext.setOnlineOptimizeRewrite(true);
+            connectContext.setQueryId(UUIDUtil.genUUID());
+            connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(sql);
+            Analyzer.analyze(insertStmt, connectContext);
+            AnalyzerUtils.collectAllDatabase(connectContext, insertStmt);
+
+            // Simulate fullSchema changing after analysis but before sink planning, as can happen when
+            // an online optimize job publishes or cleans up a shadow schema concurrently with DML.
+            table.setNewFullSchema(schemaWithStaleGeneratedColumns);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, insertStmt);
+            StatementPlanner.lock(locker);
             try {
-                ExecPlan execPlan = getInsertExecPlanObject(insertStmt, sql);
+                ExecPlan execPlan = new InsertPlanner(locker, true).plan(insertStmt, connectContext);
                 OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 Assertions.assertEquals(originalFullSchema.size(), sink.getTupleDescriptor().getSlots().size());
                 Assertions.assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
                 Assertions.assertTrue(sink.getTupleDescriptor().getSlots().stream()
                         .noneMatch(slot -> slot.getColumn().isShadowColumn()));
             } finally {
-                connectContext.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
+                StatementPlanner.unLock(locker);
             }
         } finally {
+            connectContext.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
             table.setNewFullSchema(originalFullSchema);
         }
     }

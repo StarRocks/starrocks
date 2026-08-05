@@ -36,7 +36,10 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.IcebergPlannerUtils;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.UpdatePlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -118,14 +121,23 @@ public class UpdatePlanTest extends PlanTestBase {
                 schemaWithStaleGeneratedColumns.add(column.deepCopy());
             }
         }
-        table.setNewFullSchema(schemaWithStaleGeneratedColumns);
-
         try {
             for (OlapTable.OlapTableState state :
                     List.of(OlapTable.OlapTableState.OPTIMIZE, OlapTable.OlapTableState.NORMAL)) {
                 table.setState(state);
-                ExecPlan execPlan = getUpdateExecPlanObject(
-                        "update update_shadow_generated_column set v = 2 where pk = 1");
+                table.setNewFullSchema(originalFullSchema);
+                String sql = "update update_shadow_generated_column set v = 2 where pk = 1";
+                connectContext.setQueryId(UUIDUtil.genUUID());
+                connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+                connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+                connectContext.getDumpInfo().setOriginStmt(sql);
+                UpdateStmt updateStmt = (UpdateStmt) com.starrocks.sql.parser.SqlParser
+                        .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+                Analyzer.analyze(updateStmt, connectContext);
+
+                // Simulate a stale fullSchema becoming visible between analysis and sink planning.
+                table.setNewFullSchema(schemaWithStaleGeneratedColumns);
+                ExecPlan execPlan = new UpdatePlanner().plan(updateStmt, connectContext);
                 OlapTableSink sink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 assertEquals(execPlan.getOutputExprs().size(), sink.getTupleDescriptor().getSlots().size());
             }
