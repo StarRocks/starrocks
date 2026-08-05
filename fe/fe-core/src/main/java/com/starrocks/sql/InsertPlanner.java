@@ -288,8 +288,8 @@ public class InsertPlanner {
             // of normal synchronous materialized views, which are also kept in fullSchema. A completed
             // OPTIMIZE may also leave same-named generated-column entries in fullSchema, so only emit one
             // occurrence of each logical column and prefer the committed base-schema definition.
-            outputFullSchema = session.isOnlineOptimizeRewrite()
-                    ? getOnlineOptimizeOutputFullSchema(targetTable)
+            outputFullSchema = session.isOptimizeRewrite()
+                    ? getOptimizeOutputFullSchema(targetTable)
                     : targetTable.getFullSchema();
         }
 
@@ -597,7 +597,7 @@ public class InsertPlanner {
                 watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
     }
 
-    private List<Column> getOnlineOptimizeOutputFullSchema(Table targetTable) {
+    private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
         List<Column> outputSchema = new ArrayList<>(targetTable.getBaseSchema());
         Set<String> outputColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         targetTable.getBaseSchema().stream().map(Column::getName).forEach(outputColumnNames::add);

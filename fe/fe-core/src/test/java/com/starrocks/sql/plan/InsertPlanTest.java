@@ -118,8 +118,8 @@ public class InsertPlanTest extends PlanTestBase {
                 "select pk, v, tags from insert_online_optimize_shadow_generated_column";
         InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode())
                 .get(0);
-        boolean originalOnlineOptimizeRewrite = connectContext.isOnlineOptimizeRewrite();
-        connectContext.setOnlineOptimizeRewrite(true);
+        boolean originalOptimizeRewrite = connectContext.isOptimizeRewrite();
+        connectContext.setOptimizeRewrite(true);
         try {
             connectContext.setQueryId(UUIDUtil.genUUID());
             connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
@@ -144,7 +144,7 @@ public class InsertPlanTest extends PlanTestBase {
                 StatementPlanner.unLock(locker);
             }
         } finally {
-            connectContext.setOnlineOptimizeRewrite(originalOnlineOptimizeRewrite);
+            connectContext.setOptimizeRewrite(originalOptimizeRewrite);
             table.setNewFullSchema(originalFullSchema);
         }
     }
