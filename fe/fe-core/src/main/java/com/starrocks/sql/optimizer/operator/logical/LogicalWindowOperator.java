@@ -222,6 +222,7 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.forceMergeSort = windowOperator.forceMergeSort;
             builder.skewColumn = windowOperator.skewColumn;
             builder.skewValues = windowOperator.skewValues;
+            builder.inputIsBinary = windowOperator.inputIsBinary;
             return this;
         }
 
