@@ -85,7 +85,7 @@ public:
 
 private:
     tenann::IndexCacheHandle _wrap(Entry* entry, tenann::IndexRef ref);
-    void _release(Entry* entry, bool is_ivfpq_list);
+    void _release(Entry* entry, bool is_ivfpq_list_block);
     void _update_metrics() const;
 
     Cache _cache;

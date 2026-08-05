@@ -160,14 +160,15 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
 // Deleter captures this as a raw pointer; handles MUST be released before
 // StorageEnv::destroy_vector_index_cache() runs after query/vector users drain.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
-    const bool is_ivfpq_list = ref != nullptr && ref->index_type() == tenann::IndexType::kFaissIvfPqOneInvertedList;
-    return tenann::IndexCacheHandle(std::move(ref), std::shared_ptr<void>(entry, [this, is_ivfpq_list](void* p) {
-                                        _release(static_cast<Entry*>(p), is_ivfpq_list);
+    const bool is_ivfpq_list_block =
+            ref != nullptr && ref->index_type() == tenann::IndexType::kFaissIvfPqOneInvertedList;
+    return tenann::IndexCacheHandle(std::move(ref), std::shared_ptr<void>(entry, [this, is_ivfpq_list_block](void* p) {
+                                        _release(static_cast<Entry*>(p), is_ivfpq_list_block);
                                     }));
 }
 
-void VectorIndexCache::_release(Entry* entry, bool is_ivfpq_list) {
-    if (is_ivfpq_list) {
+void VectorIndexCache::_release(Entry* entry, bool is_ivfpq_list_block) {
+    if (is_ivfpq_list_block) {
         // List blocks belong to the outer IVF-PQ entry. When that entry goes
         // away, release its blocks as a group instead of giving each list an
         // independent TTL.
