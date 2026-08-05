@@ -137,8 +137,6 @@ public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
 
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
-    // How often join() reports the instances it is still waiting for. Only affects logging.
-    private static final long STALL_LOG_INTERVAL_MS = TimeUnit.SECONDS.toMillis(30);
     // Cap on how many pending instances are named individually, so a wide fan-out cannot blow up the log.
     private static final int MAX_LOGGED_UNREPORTED_INSTANCES = 20;
     private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
@@ -1184,8 +1182,8 @@ public class DefaultCoordinator extends Coordinator {
      * Log the fragment instances that have not sent their final report yet, if any.
      * <p>
      * An instance is only counted down by a {@code done=true} report, so an instance whose worker stops
-     * finalizing never leaves this set and {@link #join} keeps waiting for it. Naming these instances makes
-     * it possible to distinguish a stalled fragment from a slow one by reading the FE log.
+     * finalizing never leaves this set and {@link #join} keeps waiting for it after cancellation. Naming these
+     * instances identifies the affected worker when the cancellation grace period expires.
      */
     private void logUnreportedInstances(String context) {
         try {
@@ -1550,10 +1548,8 @@ public class DefaultCoordinator extends Coordinator {
     public boolean join(int timeoutS) {
         final long fixedMaxWaitTime = 5;
 
-        long totalTimeoutMs = timeoutS * 1000L;
-        long leftTimeoutMs = totalTimeoutMs;
+        long leftTimeoutMs = timeoutS * 1000L;
         boolean awaitRes = false;
-        long nextStallLogMs = STALL_LOG_INTERVAL_MS;
         while (leftTimeoutMs > 0) {
             // Check before blocking, otherwise a profile timeout of 0 would still wait out a whole round.
             if (profileWaitAfterCancelExpired()) {
@@ -1582,13 +1578,6 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             leftTimeoutMs -= waitTimeMs;
-
-            long waitedMs = totalTimeoutMs - leftTimeoutMs;
-            if (waitedMs >= nextStallLogMs) {
-                nextStallLogMs += STALL_LOG_INTERVAL_MS;
-                logUnreportedInstances(String.format("has waited %ds of %ds [status=%s]",
-                        TimeUnit.MILLISECONDS.toSeconds(waitedMs), timeoutS, queryStatus.getErrorCodeString()));
-            }
 
             if (cancelledAtMs >= 0) {
                 // Recompute the remaining profile timeout after this wait round observes cancellation.
