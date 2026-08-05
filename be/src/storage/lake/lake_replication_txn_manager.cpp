@@ -231,13 +231,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     ASSIGN_OR_RETURN(auto target_tablet, _tablet_manager->get_tablet(target_tablet_id));
     ASSIGN_OR_RETURN(auto target_tablet_meta, target_tablet.get_metadata(target_visible_version));
-    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
-    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
-    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
-                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
-                                                       target_tablet_id, txn_id, data_version, src_data_dir,
-                                                       segment_name_to_size_map, file_locations, filename_map));
-    // calc column unique id to adapt for fast schema change
     if (!src_tablet_meta->has_schema()) {
         LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
                      << ", target tablet: " << target_tablet_id;
@@ -247,11 +240,22 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::unordered_set<std::string> bundled_segment_names;
     for (const auto& rowset : src_tablet_meta->rowsets()) {
         for (const auto& segment : rowset.segment_metas()) {
-            if (segment.has_bundle_file_offset()) {
-                bundled_segment_names.emplace(segment.filename());
+            if (!segment.has_bundle_file_offset()) {
+                continue;
+            }
+            bundled_segment_names.emplace(segment.filename());
+            if (!segment.encryption_meta().empty()) {
+                return Status::NotSupported("Encrypted bundled segments are not supported in lake replication");
             }
         }
     }
+    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
+    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
+    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
+                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
+                                                       target_tablet_id, txn_id, data_version, src_data_dir,
+                                                       segment_name_to_size_map, file_locations, filename_map));
+    // calc column unique id to adapt for fast schema change
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
                                                 &column_unique_id_map);
