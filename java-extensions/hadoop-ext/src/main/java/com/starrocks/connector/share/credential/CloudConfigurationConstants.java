@@ -147,6 +147,8 @@ public class CloudConfigurationConstants {
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
     public static final String ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
     public static final String ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
+    public static final String ALIYUN_OSS_STS_TOKEN = "aliyun.oss.sts_token";
+    public static final String ALIYUN_OSS_REGION = "aliyun.oss.region";
 
     // Credential for Tencent COS
     public static final String TENCENT_COS_ACCESS_KEY = "tencent.cos.access_key";

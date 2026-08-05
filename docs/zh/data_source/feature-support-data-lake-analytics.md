@@ -448,6 +448,10 @@ Elasticsearch Catalog 自 v3.1.0 起支持。
 
 Paimon Catalog 自 v3.1.0 起支持。
 
+## Lance Catalog
+
+Lance Catalog 作为 Beta 功能支持。
+
 ## MaxCompute Catalog
 
 MaxCompute Catalog 自 v3.3.0 起支持。
@@ -455,4 +459,3 @@ MaxCompute Catalog 自 v3.3.0 起支持。
 ## Kudu Catalog
 
 Kudu Catalog 自 v3.3.0 起支持。
-

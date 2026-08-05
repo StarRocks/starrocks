@@ -194,7 +194,9 @@ public class FunctionSet {
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
 
     // Vector Index functions:
+    public static final String APPROX_COSINE_DISTANCE = "approx_cosine_distance";
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_INNER_PRODUCT = "approx_inner_product";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -805,7 +807,9 @@ public class FunctionSet {
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
+                    .add(APPROX_COSINE_DISTANCE)
                     .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_INNER_PRODUCT)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 

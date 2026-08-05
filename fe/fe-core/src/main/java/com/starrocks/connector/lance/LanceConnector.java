@@ -14,30 +14,45 @@
 
 package com.starrocks.connector.lance;
 
+import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 
 import java.util.Map;
 
 public class LanceConnector implements Connector {
+    public static final String LANCE_CATALOG_TYPE = "lance.catalog.type";
+    public static final String LANCE_CATALOG_WAREHOUSE = "lance.catalog.warehouse";
+    public static final String DIRECTORY_CATALOG = "directory";
+    public static final String DEFAULT_DB = "default";
+
     private final String catalogName;
     private final Map<String, String> properties;
-    private final LanceMetadata metadata;
+    private final HdfsEnvironment hdfsEnvironment;
 
     public LanceConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
-        this.metadata = new LanceMetadata(catalogName, properties);
+        String catalogType = properties.getOrDefault(LANCE_CATALOG_TYPE, DIRECTORY_CATALOG);
+        if (!DIRECTORY_CATALOG.equalsIgnoreCase(catalogType)) {
+            throw new StarRocksConnectorException("Unsupported lance catalog type: %s. Only directory is supported.",
+                    catalogType);
+        }
+        if (Strings.isNullOrEmpty(properties.get(LANCE_CATALOG_WAREHOUSE))) {
+            throw new StarRocksConnectorException("The property %s must be set for a lance catalog.",
+                    LANCE_CATALOG_WAREHOUSE);
+        }
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return metadata;
-    }
-
-    @Override
-    public void shutdown() {
-        // No-op for Phase 1
+        return new LanceMetadata(catalogName, properties, hdfsEnvironment);
     }
 }

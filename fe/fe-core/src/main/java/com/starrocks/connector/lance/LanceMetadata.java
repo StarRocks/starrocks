@@ -15,65 +15,53 @@
 package com.starrocks.connector.lance;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.planner.lance.LanceConfig;
 import com.starrocks.qe.ConnectContext;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.lance.Dataset;
+import org.lance.ReadOptions;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class LanceMetadata implements ConnectorMetadata {
+    private static final Logger LOG = LogManager.getLogger(LanceMetadata.class);
+
     private final String catalogName;
     private final Map<String, String> properties;
+    private final HdfsEnvironment hdfsEnvironment;
+    private final String warehousePath;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<String, List<Table>> tables = new ConcurrentHashMap<>();
+    private final Map<String, Table> tables = new ConcurrentHashMap<>();
 
-    public LanceMetadata(String catalogName, Map<String, String> properties) {
+    public LanceMetadata(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
-        bootstrapMetadata();
-    }
-
-    private void bootstrapMetadata() {
-        // Bootstraps basic database and table definitions from the catalog configuration properties.
-        // This ensures SHOW DATABASES / SHOW TABLES can discover configured tables in production.
-        // e.g. properties can contain:
-        // "database" -> "default"
-        // "table.vectors.uri" -> "s3://bucket/vectors"
-        // "table.vectors.schema" -> "id:int64,embedding:fixed_size_list<float32, 128>"
-        String dbName = properties.getOrDefault("database", "default");
-        Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
-        addDatabase(db);
-
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
-            if (key.startsWith("table.") && key.endsWith(".uri")) {
-                String tblName = key.substring(6, key.length() - 4);
-                String uri = entry.getValue();
-                String schemaStr = properties.get("table." + tblName + ".schema");
-                ArrayList<Column> columns = new ArrayList<>();
-                if (schemaStr != null) {
-                    for (String field : LanceApiConverter.splitTopLevel(schemaStr, ',')) {
-                        int colonIdx = field.indexOf(':');
-                        if (colonIdx > 0) {
-                            String name = field.substring(0, colonIdx).trim();
-                            String typeStr = field.substring(colonIdx + 1).trim();
-                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr)));
-                        }
-                    }
-                }
-                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, columns, uri);
-                addTable(dbName, table);
-            }
-        }
+        this.hdfsEnvironment = hdfsEnvironment;
+        this.warehousePath = stripTrailingSlash(properties.get(LanceConnector.LANCE_CATALOG_WAREHOUSE));
     }
 
     @Override
@@ -83,41 +71,143 @@ public class LanceMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
-        return ImmutableList.copyOf(databases.keySet());
-    }
-
-    @Override
-    public List<String> listTableNames(ConnectContext context, String dbName) {
-        List<Table> tableList = tables.get(dbName);
-        if (tableList == null) {
-            return ImmutableList.of();
+        Set<String> dbNames = new LinkedHashSet<>();
+        dbNames.add(LanceConnector.DEFAULT_DB);
+        for (FileStatus status : listStatus(warehousePath)) {
+            String name = status.getPath().getName();
+            if (status.isDirectory() && !name.endsWith(LanceConfig.LANCE_FILE_SUFFIX)) {
+                dbNames.add(name);
+            }
         }
-        return tableList.stream().map(Table::getName).collect(ImmutableList.toImmutableList());
+        return ImmutableList.copyOf(dbNames);
     }
 
     @Override
     public Database getDb(ConnectContext context, String dbName) {
-        return databases.get(dbName);
+        return databases.computeIfAbsent(dbName,
+                name -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), name));
+    }
+
+    @Override
+    public boolean dbExists(ConnectContext context, String dbName) {
+        return dbName != null && !dbName.isEmpty();
+    }
+
+    @Override
+    public List<String> listTableNames(ConnectContext context, String dbName) {
+        Set<String> tableNames = new LinkedHashSet<>();
+        if (LanceConnector.DEFAULT_DB.equalsIgnoreCase(dbName)) {
+            tableNames.addAll(listTableNamesInPath(warehousePath));
+            tableNames.addAll(listTableNamesInPath(joinPath(warehousePath, dbName)));
+        } else {
+            tableNames.addAll(listTableNamesInPath(joinPath(warehousePath, dbName)));
+        }
+        return ImmutableList.copyOf(tableNames);
+    }
+
+    private List<String> listTableNamesInPath(String tableRoot) {
+        return listStatus(tableRoot).stream()
+                .filter(FileStatus::isDirectory)
+                .map(status -> status.getPath().getName())
+                .filter(name -> name.endsWith(LanceConfig.LANCE_FILE_SUFFIX))
+                .map(name -> name.substring(0, name.length() - LanceConfig.LANCE_FILE_SUFFIX.length()))
+                .collect(Collectors.toList());
     }
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        List<Table> tableList = tables.get(dbName);
-        if (tableList == null) {
-            return null;
+        String cacheKey = dbName.toLowerCase(Locale.ROOT) + "." + tblName.toLowerCase(Locale.ROOT);
+        Table cached = tables.get(cacheKey);
+        if (cached != null) {
+            return cached;
         }
-        return tableList.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(tblName))
-                .findFirst()
-                .orElse(null);
+
+        RuntimeException lastException = null;
+        for (String datasetUri : candidateDatasetUris(dbName, tblName)) {
+            try {
+                LanceTable table = new LanceTable(catalogName, dbName, tblName, inferSchema(datasetUri),
+                        buildTableProperties(datasetUri));
+                tables.put(cacheKey, table);
+                return table;
+            } catch (RuntimeException e) {
+                lastException = e;
+                LOG.debug("Failed to open lance dataset {}", datasetUri, e);
+            }
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        return null;
     }
 
-    // Helpers for unit tests to register metadata manually in Phase 1 (local catalogs)
-    public void addDatabase(Database db) {
-        databases.put(db.getFullName(), db);
+    @Override
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        try {
+            return getTable(context, dbName, tblName) != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
-    public void addTable(String dbName, Table table) {
-        tables.computeIfAbsent(dbName, k -> Lists.newCopyOnWriteArrayList()).add(table);
+    private List<String> candidateDatasetUris(String dbName, String tblName) {
+        List<String> uris = new ArrayList<>();
+        if (LanceConnector.DEFAULT_DB.equalsIgnoreCase(dbName)) {
+            uris.add(joinPath(warehousePath, tblName + LanceConfig.LANCE_FILE_SUFFIX));
+            uris.add(joinPath(joinPath(warehousePath, dbName), tblName + LanceConfig.LANCE_FILE_SUFFIX));
+        } else {
+            uris.add(joinPath(joinPath(warehousePath, dbName), tblName + LanceConfig.LANCE_FILE_SUFFIX));
+        }
+        return uris;
+    }
+
+    private Map<String, String> buildTableProperties(String datasetUri) {
+        Map<String, String> tableProperties = new HashMap<>(properties);
+        tableProperties.put(LanceTable.DATASET_URI, datasetUri);
+        return tableProperties;
+    }
+
+    private List<Column> inferSchema(String datasetUri) {
+        ReadOptions.Builder builder = new ReadOptions.Builder();
+        Map<String, String> storageOptions = LanceConfig.buildStorageOptions(properties);
+        if (!storageOptions.isEmpty()) {
+            builder.setStorageOptions(storageOptions);
+        }
+
+        try (BufferAllocator allocator = new RootAllocator(Long.MAX_VALUE);
+                Dataset dataset = Dataset.open(allocator, datasetUri, builder.build())) {
+            return LanceSchemaConverter.fromArrowSchema(dataset.getSchema());
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to open lance dataset %s: %s", datasetUri,
+                    ExceptionUtils.getRootCauseMessage(e));
+        }
+    }
+
+    private List<FileStatus> listStatus(String path) {
+        try {
+            Path hadoopPath = new Path(path);
+            FileSystem fileSystem = FileSystem.get(hadoopPath.toUri(), hdfsEnvironment.getConfiguration());
+            FileStatus[] statuses = fileSystem.listStatus(hadoopPath);
+            if (statuses == null) {
+                return List.of();
+            }
+            return List.of(statuses);
+        } catch (Exception e) {
+            LOG.debug("Failed to list lance path {}", path, e);
+            return List.of();
+        }
+    }
+
+    private static String joinPath(String parent, String child) {
+        if (parent.endsWith("/")) {
+            return parent + child;
+        }
+        return parent + "/" + child;
+    }
+
+    private static String stripTrailingSlash(String path) {
+        if (path != null && path.endsWith("/")) {
+            return path.substring(0, path.length() - 1);
+        }
+        return path;
     }
 }

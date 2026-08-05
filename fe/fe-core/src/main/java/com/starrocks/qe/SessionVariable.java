@@ -744,6 +744,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String LANCE_FORCE_JNI_READER = "lance_force_jni_reader";
+    public static final String LANCE_FORCE_NATIVE_READER = "lance_force_native_reader";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -1079,6 +1081,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // ann params like: nprobe
     public static final String ANN_PARAMS = "ann_params";
+    public static final String TOP_INDEX_LOCAL_ROWS = "top_index_local_rows";
+    public static final String TOP_INDEX_LOCAL_ROWS_MULTIPLIER = "top_index_local_rows_multiplier";
 
     public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
 
@@ -2797,6 +2801,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = LANCE_FORCE_JNI_READER)
+    private boolean lanceForceJNIReader = false;
+
+    @VariableMgr.VarAttr(name = LANCE_FORCE_NATIVE_READER)
+    private boolean lanceForceNativeReader = false;
+
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3163,6 +3173,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ANN_PARAMS)
     private String annParams = "";
 
+    // Per-segment candidate count for ANN scans. A positive value is an explicit override;
+    // zero derives the count from LIMIT and topIndexLocalRowsMultiplier.
+    @VarAttr(name = TOP_INDEX_LOCAL_ROWS)
+    private int topIndexLocalRows = 300;
+
+    @VarAttr(name = TOP_INDEX_LOCAL_ROWS_MULTIPLIER)
+    private int topIndexLocalRowsMultiplier = 1;
+
     @VarAttr(name = PQ_REFINE_FACTOR)
     private double pqRefineFactor = 1;
 
@@ -3210,6 +3228,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
         }.getType();
         return GsonUtils.GSON.fromJson(annParams, type);
+    }
+
+    public int getTopIndexLocalRows() {
+        return topIndexLocalRows;
+    }
+
+    public void setTopIndexLocalRows(int topIndexLocalRows) {
+        this.topIndexLocalRows = topIndexLocalRows;
+    }
+
+    public int getTopIndexLocalRowsMultiplier() {
+        return topIndexLocalRowsMultiplier;
+    }
+
+    public void setTopIndexLocalRowsMultiplier(int topIndexLocalRowsMultiplier) {
+        if (topIndexLocalRowsMultiplier < 1) {
+            throw new IllegalArgumentException(
+                    "top_index_local_rows_multiplier must be >= 1, but got " + topIndexLocalRowsMultiplier);
+        }
+        this.topIndexLocalRowsMultiplier = topIndexLocalRowsMultiplier;
     }
 
     public String getHiveTempStagingDir() {
@@ -3657,6 +3695,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
+    }
+
+    public boolean getLanceForceJNIReader() {
+        return lanceForceJNIReader;
+    }
+
+    public void setLanceForceJNIReader(boolean lanceForceJNIReader) {
+        this.lanceForceJNIReader = lanceForceJNIReader;
+    }
+
+    public boolean getLanceForceNativeReader() {
+        return lanceForceNativeReader;
+    }
+
+    public void setLanceForceNativeReader(boolean lanceForceNativeReader) {
+        this.lanceForceNativeReader = lanceForceNativeReader;
     }
 
     public boolean getAvroUseJNIReader() {

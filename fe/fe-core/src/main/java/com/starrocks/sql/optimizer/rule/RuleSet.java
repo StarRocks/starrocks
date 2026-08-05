@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementation
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.LanceScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
@@ -166,6 +167,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteLanceToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
@@ -202,6 +204,7 @@ public class RuleSet {
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
+            new LanceScanImplementationRule(),
             new OdpsScanImplementationRule(),
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
@@ -259,7 +262,8 @@ public class RuleSet {
     ));
 
     public static final Rule VECTOR_REWRITE_RULES = new CombinationRule(RuleType.GP_VECTOR_REWRITE, ImmutableList.of(
-            new RewriteToVectorPlanRule()
+            new RewriteToVectorPlanRule(),
+            new RewriteLanceToVectorPlanRule()
     ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(

@@ -41,6 +41,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
+        <lance.version>8.0.0</lance.version>
         <python>python</python>
         
         <!-- async-profiler in UT -->
@@ -666,6 +667,28 @@ under the License.
         <dependency>
             <groupId>org.apache.orc</groupId>
             <artifactId>orc-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.lance</groupId>
+            <artifactId>lance-core</artifactId>
+            <version>${lance.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.questdb</groupId>
+            <artifactId>jar-jni</artifactId>
+            <version>1.1.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-c-data</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-dataset</artifactId>
         </dependency>
 
         <dependency>

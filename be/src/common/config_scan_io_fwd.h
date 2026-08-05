@@ -35,6 +35,14 @@ CONF_mInt32(max_pushdown_conditions_per_column, "1024");
 
 CONF_Bool(enable_check_string_lengths, "true");
 
+// Process-wide Lance Rust SDK index cache size in bytes. 0 disables the index
+// cache. Takes effect after BE/CN restart.
+CONF_Int64(lance_index_cache_size_bytes, "6442450944");
+
+// Process-wide Lance Rust SDK metadata cache size in bytes. 0 disables the
+// metadata cache. Takes effect after BE/CN restart.
+CONF_Int64(lance_metadata_cache_size_bytes, "1073741824");
+
 // es index max result window, and this value affects batch size.
 // if request batch size exceeds this value, ES will return bad request(400)
 // https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html

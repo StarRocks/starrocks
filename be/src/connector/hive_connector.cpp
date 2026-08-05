@@ -30,6 +30,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/lance/lance_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -861,6 +862,26 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_lance_reader = dynamic_cast<const LanceTableDescriptor*>(_hive_table) != nullptr;
+    bool use_lance_native_reader = true;
+    if (use_lance_reader) {
+        scanner_params.table_specific.lance_dataset_uri = scan_range.dataset_uri;
+        scanner_params.table_specific.lance_fragment_id = scan_range.fragment_id;
+        if (scan_range.__isset.lance_storage_options) {
+            scanner_params.table_specific.lance_storage_options = scan_range.lance_storage_options;
+        }
+        if (scan_range.__isset.lance_vector_search_options) {
+            scanner_params.table_specific.use_lance_vector_search =
+                    scan_range.lance_vector_search_options.enable_use_ann;
+            scanner_params.table_specific.lance_vector_search_options = scan_range.lance_vector_search_options;
+        }
+        if (scan_range.__isset.lance_index_segment_uuids) {
+            scanner_params.table_specific.lance_index_segment_uuids = scan_range.lance_index_segment_uuids;
+        }
+    }
+    if (scan_range.__isset.use_lance_native_reader) {
+        use_lance_native_reader = scan_range.use_lance_native_reader;
+    }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
@@ -889,6 +910,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_scanner_params.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (use_lance_reader && use_lance_native_reader) {
+        scanner = new LanceScanner();
+    } else if (use_lance_reader) {
+        scanner = create_lance_jni_scanner(jni_scanner_create_options).release();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {

@@ -168,6 +168,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                     .add(TableType.ODPS)
                     .add(TableType.DELTALAKE)
                     .add(TableType.PAIMON)
+                    .add(TableType.LANCE)
                     .build();
 
     @SerializedName(value = "id")
@@ -388,7 +389,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isExternalTableWithFileSystem() {
-        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() ||
+                isLanceTable() || isKuduTable();
     }
 
     public boolean isHiveTable() {

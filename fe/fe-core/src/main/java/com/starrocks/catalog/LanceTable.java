@@ -14,31 +14,133 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.thrift.THdfsTable;
+import com.starrocks.thrift.TLanceTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class LanceTable extends Table {
+    public static final String DATASET_URI = "dataset.uri";
 
-    @SerializedName(value = "uri")
-    private final String uri;
+    @SerializedName(value = "cn")
+    private String catalogName;
+    @SerializedName(value = "dn")
+    private String databaseName;
+    @SerializedName(value = "tn")
+    private String tableName;
+    @SerializedName(value = "prop")
+    private Map<String, String> lanceProperties;
 
-    public LanceTable(long id, String name, List<Column> schema, String uri) {
-        super(id, name, TableType.LANCE, schema);
-        this.uri = uri;
+    public LanceTable() {
+        super(TableType.LANCE);
     }
 
-    public String getUri() {
-        return uri;
+    public LanceTable(String catalogName, String dbName, String tblName, List<Column> schema,
+                      Map<String, String> lanceProperties) {
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.LANCE, schema);
+        this.catalogName = catalogName;
+        this.databaseName = dbName;
+        this.tableName = tblName;
+        this.lanceProperties = new HashMap<>(lanceProperties);
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return databaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return tableName;
+    }
+
+    @Override
+    public String getUUID() {
+        return String.join(".", catalogName, databaseName, tableName, getDatasetURI());
     }
 
     @Override
     public String getTableLocation() {
-        return uri;
+        return getDatasetURI();
+    }
+
+    public String getDatasetURI() {
+        return lanceProperties.get(DATASET_URI);
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        return lanceProperties;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns() {
+        return List.of();
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return true;
     }
 
     @Override
     public boolean isSupported() {
-        return false;
+        return true;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
+        TLanceTable tLanceTable = new TLanceTable();
+        tLanceTable.setDataset_uri(getDatasetURI());
+
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.LANCE_TABLE,
+                fullSchema.size(), 0, tableName, databaseName);
+        THdfsTable tHdfsTable = new THdfsTable();
+        tHdfsTable.setHdfs_base_dir(getDatasetURI());
+        tHdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
+        tHdfsTable.setPartition_columnsIsSet(false);
+        tHdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
+        tTableDescriptor.setHdfsTable(tHdfsTable);
+        tTableDescriptor.setLanceTable(tLanceTable);
+        return tTableDescriptor;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(name, getUUID());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(catalogName, databaseName, tableName, getDatasetURI());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof LanceTable)) {
+            return false;
+        }
+        LanceTable otherTable = (LanceTable) other;
+        return Objects.equal(catalogName, otherTable.catalogName)
+                && Objects.equal(databaseName, otherTable.databaseName)
+                && Objects.equal(tableName, otherTable.tableName)
+                && Objects.equal(getDatasetURI(), otherTable.getDatasetURI());
     }
 }
