@@ -565,13 +565,15 @@ def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[st
         ).fetchone()
         return row[0] if row else None
     except Exception as e:
-        # Expected when the migration user cannot CREATE VIEW in ``schema`` (or a
-        # referenced object is missing); logged so the fallback is diagnosable rather
-        # than silent. Set ``starrocks_temp_view_schema`` to a schema the user can write.
+        # Expected when the migration user lacks privileges on ``schema`` (or a referenced
+        # object is missing); logged so the fallback is diagnosable rather than silent. The
+        # round-trip needs create + read-back + drop, so all three privileges are required.
         logger.debug(
             "Temp-view canonicalization could not create %s (falling back to AST/regex "
-            "normalization); grant CREATE VIEW on schema %r or set %s: %s",
-            quoted, schema, TEMP_VIEW_SCHEMA_OPT, e,
+            "normalization). Grant the migration user privileges on schema %r with "
+            "`GRANT CREATE VIEW ON DATABASE %s; GRANT SELECT, DROP ON ALL VIEWS IN DATABASE %s;`, "
+            "or set %s to a schema it can already write to. Error: %s",
+            quoted, schema, schema, schema, TEMP_VIEW_SCHEMA_OPT, e,
         )
         return None
     finally:

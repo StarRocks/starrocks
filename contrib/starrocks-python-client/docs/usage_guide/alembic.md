@@ -152,8 +152,7 @@ stored form of both sides.
 By default that temporary view is created in the schema of the object being compared, so
 the migration user needs privileges to create views in every schema that contains a view or
 MV. If your user is locked down, set `starrocks_temp_view_schema` to a single dedicated
-schema (for example the same one as your `version_table_schema`) and grant the required
-privileges only there:
+schema and grant the required privileges only there.
 
 ```python
 # alembic/env.py
@@ -162,17 +161,16 @@ context.configure(
     target_metadata=target_metadata,
     render_item=render_column_type,
     include_object=include_object_for_view_mv,
-    version_table_schema="migrations",
-    starrocks_temp_view_schema="migrations",  # host the transient comparison view here
+    starrocks_temp_view_schema="__alembic_canon__",  # host the transient comparison view here
 )
 ```
 
 Grant the migration user, on that one schema, the privileges needed for the
-create → read-back → drop round-trip:
+create → read-back → drop round-trip (`CREATE VIEW` alone is not enough):
 
 ```sql
-GRANT CREATE VIEW ON DATABASE migrations TO '<user>';
-GRANT SELECT, DROP ON ALL VIEWS IN DATABASE migrations TO '<user>';
+GRANT CREATE VIEW ON DATABASE __alembic_canon__ TO '<user>';
+GRANT SELECT, DROP ON ALL VIEWS IN DATABASE __alembic_canon__ TO '<user>';
 ```
 
 When `starrocks_temp_view_schema` is unset the previous behaviour is unchanged (the temp
