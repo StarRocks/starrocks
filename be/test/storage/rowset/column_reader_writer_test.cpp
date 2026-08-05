@@ -916,6 +916,60 @@ TEST_F(ColumnReaderWriterTest, test_string_writer_finish_without_append) {
     ASSERT_OK(writer->finish());
 }
 
+// Reading past the end of a column must be idempotent.
+//
+// Before the fix this crashed with
+//   Check failed: _cur_idx < _index->_num_pages (1 vs. 1)
+// in OrdinalPageIndexIterator::next(). The call that consumes the last rows
+// returns a SHORT batch (n < requested) and, on its way out, already steps the
+// page iterator one past the last data page to detect eos. A caller that only
+// stops on n == 0 -- e.g. the lake ADD INDEX bitmap builder -- then issues one
+// more next_batch(), and _load_next_page() stepped the exhausted page iterator
+// again, tripping the DCHECK in debug/ASAN builds.
+TEST_F(ColumnReaderWriterTest, test_next_batch_after_eos_is_idempotent) {
+    // 100 rows: fewer than one batch, so the very first read is short and the
+    // column fits in a single data page (_num_pages == 1).
+    constexpr size_t kNumRows = 100;
+    constexpr size_t kBatch = 4096;
+
+    auto src = ChunkFactory::column_from_field_type(TYPE_INT, true);
+    for (size_t i = 0; i < kNumRows; ++i) {
+        src->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, DEFAULT_ENCODING, 2>(&meta);
+        TabletColumn column = make_tablet_column<TYPE_INT>();
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*src));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    auto iter = create_and_init_iterator(meta, segment.get(), fname);
+    ASSERT_OK(iter->seek_to_first());
+
+    // First read: short batch, all rows.
+    auto dst = ChunkFactory::column_from_field_type(TYPE_INT, true);
+    size_t n = kBatch;
+    ASSERT_OK(iter->next_batch(&n, dst.get()));
+    ASSERT_EQ(kNumRows, n);
+
+    // Every subsequent read must report zero rows instead of crashing.
+    for (int i = 0; i < 3; ++i) {
+        dst->reset_column();
+        n = kBatch;
+        ASSERT_OK(iter->next_batch(&n, dst.get()));
+        ASSERT_EQ(0U, n);
+        ASSERT_EQ(0U, dst->size());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // IDG read-side probe tests (covers scalar_column_iterator.cpp lines 80-99,
 // the `_opts.idg_loader != nullptr` block in init() that flips

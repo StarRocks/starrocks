@@ -935,7 +935,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);
 
-        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // Register loaded indexes so prePrepared() validates the same indexes that were collected,
         // not the latest (which may change due to tablet split).
         TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
                 .getTransactionState(databaseId, transactionId);

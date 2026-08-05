@@ -724,6 +724,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
 - 引入版本：v3.4.0
 
+### enable_vector_index_cache_on_build
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：构建向量索引时，是否把刚构建出的索引一并写入由 `vector_query_cache_capacity` 控制的向量索引缓存。默认关闭：该缓存是按查询工作集容量规划的，如果允许导入和 Compaction 把新构建的索引不断写入缓存，会淘汰正在被查询使用的条目，换来的却是一批可能永远不会被查询的索引。查询路径仍会在首次读取索引时按需填充缓存。仅当索引构建与查询在同一节点上执行、且新写入的数据会被立即查询时，才建议开启该项，以省去首次从索引文件回读的开销。修改后对之后启动的索引构建生效。
+- 引入版本：v4.2.0
+
 ### vector_adaptive_ef_alpha
 
 - 默认值：1.0

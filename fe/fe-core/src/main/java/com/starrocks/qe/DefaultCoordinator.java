@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -156,6 +157,13 @@ public class DefaultCoordinator extends Coordinator {
      * <p> Set to the first reported fragment error status or to CANCELLED, if {@link #cancel(String cancelledMessage)} is called.
      */
     private Status queryStatus = new Status();
+
+    /**
+     * When the query was cancelled, or -1 if it was not.
+     * <p> Bounds how long {@link #join} keeps waiting for instances that have not reported yet, using
+     * {@link SessionVariable#PROFILE_TIMEOUT}.
+     */
+    private volatile long cancelledAtMs = -1;
 
     private PQueryStatistics auditStatistics;
 
@@ -1138,6 +1146,9 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
+        if (!isInternalCancel(cancelReason) && cancelledAtMs < 0) {
+            cancelledAtMs = System.currentTimeMillis();
+        }
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         clearExternalResourcesAsync();
 
@@ -1401,13 +1412,7 @@ public class DefaultCoordinator extends Coordinator {
 
         // wait for all backends
         if (jobSpec.isNeedReport()) {
-            int timeout;
-            // connectContext can be null for broker export task coordinator
-            if (connectContext != null) {
-                timeout = connectContext.getSessionVariable().getProfileTimeout();
-            } else {
-                timeout = DEFAULT_PROFILE_TIMEOUT_SECOND;
-            }
+            int timeout = getProfileTimeoutSecond();
 
             // Waiting for other fragment instances to finish execState
             // Ideally, it should wait indefinitely, but out of defense, set timeout
@@ -1471,11 +1476,22 @@ public class DefaultCoordinator extends Coordinator {
     public boolean join(int timeoutS) {
         final long fixedMaxWaitTime = 5;
 
-        long leftTimeoutS = timeoutS;
+        long leftTimeoutMs = timeoutS * 1000L;
         boolean awaitRes = false;
-        while (leftTimeoutS > 0) {
-            long waitTime = Math.min(leftTimeoutS, fixedMaxWaitTime);
-            awaitRes = queryProfile.waitForProfileFinished(waitTime, TimeUnit.SECONDS);
+        while (leftTimeoutMs > 0) {
+            // Check before blocking, otherwise a profile timeout of 0 would still wait out a whole round.
+            if (profileWaitAfterCancelExpired()) {
+                return true;
+            }
+
+            long waitTimeMs = Math.min(leftTimeoutMs, fixedMaxWaitTime * 1000L);
+            long graceLeftMs = remainingCancelGraceMs();
+            if (graceLeftMs >= 0) {
+                // Never sleep past the end of the grace period. At least 1ms, so this cannot spin.
+                waitTimeMs = Math.max(1, Math.min(waitTimeMs, graceLeftMs));
+            }
+
+            awaitRes = queryProfile.waitForProfileFinished(waitTimeMs, TimeUnit.MILLISECONDS);
             if (awaitRes) {
                 return true;
             }
@@ -1485,8 +1501,15 @@ public class DefaultCoordinator extends Coordinator {
             // waiting out the remaining query/load timeout; the interrupt flag is preserved for the caller.
             if (Thread.currentThread().isInterrupted()) {
                 LOG.warn("interrupted while joining, stop waiting for profile after {} seconds",
-                        timeoutS - leftTimeoutS);
+                        TimeUnit.MILLISECONDS.toSeconds(timeoutS * 1000L - leftTimeoutMs));
                 return false;
+            }
+
+            leftTimeoutMs -= waitTimeMs;
+
+            if (cancelledAtMs >= 0) {
+                // Recompute the remaining profile timeout after this wait round observes cancellation.
+                continue;
             }
 
             if (!checkBackendState()) {
@@ -1497,14 +1520,63 @@ public class DefaultCoordinator extends Coordinator {
                     && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
             }
-
-            leftTimeoutS -= waitTime;
         }
 
         if (!awaitRes) {
             LOG.warn("failed to get profile within {} seconds", timeoutS);
         }
         return false;
+    }
+
+    /**
+     * Stop waiting for the still unreported instances once a cancelled query has been given its grace period.
+     * <p>
+     * An instance is only retired from the profile latch by a {@code done=true} report. If its worker stops
+     * finalizing while its heartbeat keeps answering, that report never arrives and neither
+     * {@link CoordinatorMonitor} nor {@link #checkBackendState} declares the worker dead, so the only thing
+     * left bounding the wait is the statement timeout - up to insert_timeout for DML. The query has already
+     * been cancelled at this point and is going to fail either way, so waiting longer only delays the error.
+     *
+     * @return true if the wait was ended here, in which case the query is marked done so the caller reports
+     *         the error that caused the cancel rather than a timeout.
+     */
+    @VisibleForTesting
+    public boolean profileWaitAfterCancelExpired() {
+        long graceLeftMs = remainingCancelGraceMs();
+        if (graceLeftMs != 0) {
+            // -1 means the query was not cancelled, anything positive means the grace period is still open.
+            return false;
+        }
+
+        long waitedMs = System.currentTimeMillis() - cancelledAtMs;
+        List<String> unreported = queryProfile.getUnfinishedInstanceIds();
+        LOG.warn("query {} was cancelled {}ms ago and {} instance(s) still have not reported, " +
+                        "giving up on their profile: {}",
+                DebugUtil.printId(jobSpec.getQueryId()), waitedMs, unreported.size(), unreported);
+        // Release the latch so isDone() holds and the caller does not mistake this for a timeout.
+        queryProfile.finishAllInstances(Status.OK);
+        return true;
+    }
+
+    /**
+     * Milliseconds left in the cancellation grace period: -1 if the query was not cancelled, 0 once the
+     * grace period has elapsed. {@link #join} also uses it to avoid sleeping past the deadline.
+     */
+    private long remainingCancelGraceMs() {
+        long cancelledAt = cancelledAtMs;
+        if (cancelledAt < 0) {
+            return -1;
+        }
+        long deadlineMs = cancelledAt + getProfileTimeoutSecond() * 1000L;
+        return Math.max(0, deadlineMs - System.currentTimeMillis());
+    }
+
+    private int getProfileTimeoutSecond() {
+        // connectContext can be null for broker export task coordinator.
+        if (connectContext == null || connectContext.getSessionVariable() == null) {
+            return DEFAULT_PROFILE_TIMEOUT_SECOND;
+        }
+        return connectContext.getSessionVariable().getProfileTimeout();
     }
 
     // build execution profile  from every BE's report
