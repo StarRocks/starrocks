@@ -167,8 +167,9 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addTableStatistics(tableKey, columnKey, columnStatistic);
             }
         }
-        // column histogram: merge the round-tripped histogram back onto the column statistic parsed above.
-        // Optional section (older dumps don't have it), guarded by has().
+        // Compatibility with dumps written while histograms used a separate side channel. New structured
+        // column_statistics objects carry their histogram inline, but this optional legacy section still needs
+        // to be merged onto either text or structured base statistics.
         if (dumpJsonObject.has("column_histogram")) {
             JsonObject tableColumnHistogram = dumpJsonObject.getAsJsonObject("column_histogram");
             for (String tableKey : tableColumnHistogram.keySet()) {

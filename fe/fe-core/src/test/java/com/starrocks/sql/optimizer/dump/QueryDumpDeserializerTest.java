@@ -405,10 +405,12 @@ public class QueryDumpDeserializerTest {
         assertThat(parsed.getMinValue()).isEqualTo(1.0);
         assertThat(parsed.getMaxValue()).isEqualTo(100.0);
         assertThat(parsed.getDistinctValuesCount()).isEqualTo(50.0);
+        assertThat(parsed.getCollectionSize()).isEqualTo(5.0);
 
         // MCV-only tail (no collection size) must parse too.
         String withMcvOnly = "[1.0, 100.0, 0.0, 8.0, 50.0] MCV: [[5:10]] ESTIMATE";
-        assertThat(ColumnStatistic.buildFrom(withMcvOnly).build().getType())
-                .isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        ColumnStatistic mcvOnly = ColumnStatistic.buildFrom(withMcvOnly).build();
+        assertThat(mcvOnly.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+        assertThat(mcvOnly.getCollectionSize()).isEqualTo(ColumnStatistic.DEFAULT_COLLECTION_SIZE);
     }
 }

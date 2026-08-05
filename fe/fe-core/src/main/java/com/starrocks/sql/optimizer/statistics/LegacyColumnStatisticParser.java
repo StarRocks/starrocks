@@ -16,12 +16,16 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Parser for the legacy text form of {@link ColumnStatistic} (i.e. the output of
  * {@link ColumnStatistic#toString()}), kept solely so that query dumps produced by older StarRocks
  * versions can still be replayed.
  **/
 public final class LegacyColumnStatisticParser {
+    private static final Pattern COLLECTION_SIZE_PATTERN = Pattern.compile("(?:^|\\s)COS:\\s*(\\S+)");
 
     private LegacyColumnStatisticParser() {
     }
@@ -75,6 +79,10 @@ public final class LegacyColumnStatisticParser {
 
         ColumnStatistic.Builder
                 builder = new ColumnStatistic.Builder(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
+        Matcher collectionSizeMatcher = COLLECTION_SIZE_PATTERN.matcher(typeString);
+        if (collectionSizeMatcher.find()) {
+            builder.setCollectionSize(Double.parseDouble(collectionSizeMatcher.group(1)));
+        }
         ColumnStatistic.StatisticType parsedType = parseTrailingStatisticType(typeString);
         if (parsedType != null) {
             builder.setType(parsedType);
@@ -84,8 +92,9 @@ public final class LegacyColumnStatisticParser {
         return builder;
     }
 
-    // The tail may carry "COS: .."/"MCV: [..]" before the type token; take only the trailing enum
-    // so a dump with a histogram/collection-size no longer breaks StatisticType.valueOf on replay.
+    // The tail may carry "COS: .."/"MCV: [..]" before the type token. The collection size is recovered above;
+    // the MCV preview is intentionally ignored because it is truncated and has no histogram buckets. Full
+    // histograms from this legacy format are restored from the query dump's separate column_histogram section.
     private static ColumnStatistic.StatisticType parseTrailingStatisticType(String typeString) {
         if (typeString == null) {
             return null;
@@ -109,5 +118,4 @@ public final class LegacyColumnStatisticParser {
         return Double.parseDouble(part.substring(label.length()).trim());
     }
 }
-
 
