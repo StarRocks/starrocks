@@ -93,9 +93,9 @@ TEST_F(StorageEngineCacheExpireTest, expire_caches_includes_vector_cache) {
     ASSERT_FALSE(engine->bg_worker_stopped());
 
     const int64_t saved_vector_expire_sec = cache->expire_seconds();
-    DeferOp restore([&] { cache->SetExpireSeconds(saved_vector_expire_sec); });
+    DeferOp restore([&] { cache->set_expire_seconds(saved_vector_expire_sec); });
 
-    cache->SetExpireSeconds(1);
+    cache->set_expire_seconds(1);
 
     constexpr size_t kBytes = 1024;
     void* buffer = std::malloc(kBytes);

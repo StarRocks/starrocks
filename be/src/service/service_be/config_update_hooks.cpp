@@ -127,7 +127,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         if (cache == nullptr) {
             return Status::InternalError("Vector index cache is not initialized");
         }
-        cache->SetExpireSeconds(config::vector_index_cache_expire_sec);
+        cache->set_expire_seconds(config::vector_index_cache_expire_sec);
         LOG(INFO) << "vector_index_cache_expire_sec updated: " << config::vector_index_cache_expire_sec;
         return Status::OK();
     });

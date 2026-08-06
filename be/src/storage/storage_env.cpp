@@ -140,7 +140,7 @@ Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker
     }
     _vector_index_cache =
             std::make_unique<VectorIndexCache>(static_cast<size_t>(vi_capacity), vector_index_mem_tracker);
-    _vector_index_cache->SetExpireSeconds(config::vector_index_cache_expire_sec);
+    _vector_index_cache->set_expire_seconds(config::vector_index_cache_expire_sec);
     tenann::SetGlobalIndexCache(_vector_index_cache.get());
 #endif
     return Status::OK();

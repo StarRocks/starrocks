@@ -26,16 +26,24 @@ namespace starrocks {
 
 namespace {
 
+int64_t saturated_milliseconds(int64_t seconds) {
+    constexpr int64_t kMillisPerSecond = 1000;
+    if (seconds >= std::numeric_limits<int64_t>::max() / kMillisPerSecond) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return seconds * kMillisPerSecond;
+}
+
 int64_t expire_time_ms(int64_t expire_seconds) {
     if (expire_seconds <= 0) {
         return std::numeric_limits<int64_t>::max();
     }
     const int64_t now = MonotonicMillis();
-    constexpr int64_t kMillisPerSecond = 1000;
-    if (expire_seconds > (std::numeric_limits<int64_t>::max() - now) / kMillisPerSecond) {
+    const int64_t expire_ms = saturated_milliseconds(expire_seconds);
+    if (expire_ms > std::numeric_limits<int64_t>::max() - now) {
         return std::numeric_limits<int64_t>::max();
     }
-    return now + expire_seconds * kMillisPerSecond;
+    return now + expire_ms;
 }
 
 } // namespace
@@ -92,13 +100,26 @@ void VectorIndexCache::SetCapacity(size_t new_capacity) {
     _update_metrics();
 }
 
-void VectorIndexCache::SetExpireSeconds(int64_t expire_seconds) {
+void VectorIndexCache::set_expire_seconds(int64_t expire_seconds) {
     _expire_seconds.store(expire_seconds, std::memory_order_relaxed);
+    _last_clear_expired_ms.store(0, std::memory_order_relaxed);
 }
 
-bool VectorIndexCache::ClearExpired(int64_t now) {
-    if (expire_seconds() <= 0) {
+bool VectorIndexCache::clear_expired(int64_t now) {
+    const int64_t interval_seconds = clear_expired_interval_seconds();
+    if (interval_seconds <= 0) {
         return false;
+    }
+
+    const int64_t interval_ms = saturated_milliseconds(interval_seconds);
+    int64_t last_clear_expired_ms = _last_clear_expired_ms.load(std::memory_order_relaxed);
+    if (last_clear_expired_ms != 0 && (now <= last_clear_expired_ms || now - last_clear_expired_ms < interval_ms)) {
+        return false;
+    }
+    while (!_last_clear_expired_ms.compare_exchange_weak(last_clear_expired_ms, now, std::memory_order_relaxed)) {
+        if (last_clear_expired_ms != 0 && (now <= last_clear_expired_ms || now - last_clear_expired_ms < interval_ms)) {
+            return false;
+        }
     }
 
     _cache.clear_expired(now);
