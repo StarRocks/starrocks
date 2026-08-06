@@ -17,15 +17,24 @@ package com.starrocks.alter.reshard;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.thrift.TTabletReshardJobsItem;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -34,6 +43,16 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TabletReshardJobMgrTest {
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
@@ -175,6 +194,51 @@ public class TabletReshardJobMgrTest {
         }
     }
 
+    private static class CountingTabletReshardJob extends TestNormalTabletReshardJob {
+        private final transient AtomicInteger initCount = new AtomicInteger();
+        private final transient AtomicInteger rollbackCount = new AtomicInteger();
+
+        private CountingTabletReshardJob(long jobId) {
+            super(jobId, TabletReshardJob.JobType.SPLIT_TABLET);
+        }
+
+        @Override
+        public void init() {
+            initCount.incrementAndGet();
+        }
+
+        @Override
+        protected void replayAbortedJob() {
+            rollbackCount.incrementAndGet();
+        }
+    }
+
+    private static class BlockingJobIdTabletReshardJob extends CountingTabletReshardJob {
+        private final transient CountDownLatch getterEntered;
+        private final transient CountDownLatch releaseGetter;
+
+        private BlockingJobIdTabletReshardJob(long jobId, CountDownLatch getterEntered,
+                CountDownLatch releaseGetter) {
+            super(jobId);
+            this.getterEntered = getterEntered;
+            this.releaseGetter = releaseGetter;
+        }
+
+        @Override
+        public long getJobId() {
+            getterEntered.countDown();
+            try {
+                if (!releaseGetter.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("timed out waiting to release job-id getter");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("interrupted waiting to release job-id getter", e);
+            }
+            return super.getJobId();
+        }
+    }
+
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     private static Database reshardDb;
@@ -268,6 +332,185 @@ public class TabletReshardJobMgrTest {
         Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(job));
         Assertions.assertNull(jobMgr.getTabletReshardJob(1));
         Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+    }
+
+    @Test
+    public void testExternalBoundaryFactoryRejectsFollowerBeforeIdAllocation() {
+        oversizedTablet.setRange(new TabletRange());
+        Map<Long, List<TabletRange>> boundaries = Map.of(oversizedTablet.getId(), List.of(
+                new TabletRange(Range.lt(createTuple(0))),
+                new TabletRange(Range.ge(createTuple(0)))));
+        AtomicInteger nextIdCalls = new AtomicInteger();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+
+            @Mock
+            public long getNextId() {
+                return 9_000_000L + nextIdCalls.incrementAndGet();
+            }
+        };
+
+        Assertions.assertThrows(StarRocksException.class,
+                () -> SplitTabletJobFactory.forExternalBoundaries(reshardDb, reshardTable, boundaries));
+        Assertions.assertEquals(0, nextIdCalls.get(), "follower rejection must precede every id allocation");
+    }
+
+    @Test
+    public void testAddJobRejectedBeforeInitWhenWalGateClosed() {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, false);
+        mockLeaderAdmissionWithEditLog(editLog);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountingTabletReshardJob job = new CountingTabletReshardJob(41_001L);
+
+        Assertions.assertThrows(EditLogException.class, () -> jobMgr.addTabletReshardJob(job));
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(0, job.initCount.get(),
+                        "closed WAL gate must reject before reservation init"),
+                () -> Assertions.assertEquals(0, job.rollbackCount.get(),
+                        "a reservation that never started must not roll back"),
+                () -> Assertions.assertTrue(journalQueue.isEmpty()),
+                () -> Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty()));
+    }
+
+    @Test
+    public void testInitialWalAbortRollsBackWithoutPublishing() throws Exception {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, true);
+        mockLeaderAdmissionWithEditLog(editLog);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountingTabletReshardJob job = new CountingTabletReshardJob(41_002L);
+
+        CompletableFuture<Throwable> submission = submitJobAsync(jobMgr, job);
+        JournalTask task = journalQueue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task, "initial reshard WAL record must be submitted");
+        Assertions.assertEquals(1, job.initCount.get());
+        boolean invisibleBeforeAbort = jobMgr.getTabletReshardJobs().isEmpty();
+
+        task.markAbort(new JournalWriteException(
+                JournalWriteException.Reason.WRITER_ABORTED, "injected initial WAL abort"));
+        Throwable failure = submission.get(5, TimeUnit.SECONDS);
+
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(invisibleBeforeAbort,
+                        "job must remain invisible while initial WAL is unresolved"),
+                () -> Assertions.assertInstanceOf(EditLogException.class, failure),
+                () -> Assertions.assertEquals(1, job.rollbackCount.get(),
+                        "an initialized but non-durable reservation must roll back exactly once"),
+                () -> Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty(),
+                        "an aborted initial WAL must never publish the job"));
+    }
+
+    @Test
+    public void testInitialJobInvisibleUntilWalCommit() throws Exception {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, true);
+        mockLeaderAdmissionWithEditLog(editLog);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountingTabletReshardJob job = new CountingTabletReshardJob(41_003L);
+
+        CompletableFuture<Throwable> submission = submitJobAsync(jobMgr, job);
+        JournalTask task = journalQueue.poll(5, TimeUnit.SECONDS);
+        Assertions.assertNotNull(task, "initial reshard WAL record must be submitted");
+        boolean invisibleBeforeCommit = jobMgr.getTabletReshardJobs().isEmpty();
+
+        task.markSucceed();
+        Throwable failure = submission.get(5, TimeUnit.SECONDS);
+
+        Assertions.assertNull(failure);
+        Assertions.assertTrue(invisibleBeforeCommit, "job must remain invisible before initial WAL commit");
+        Assertions.assertSame(job, jobMgr.getTabletReshardJob(41_003L));
+    }
+
+    @Test
+    public void testWalDrainWaitsForInitialJobPublication() throws Exception {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, true);
+        mockLeaderAdmissionWithEditLog(editLog);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountDownLatch getterEntered = new CountDownLatch(1);
+        CountDownLatch releaseGetter = new CountDownLatch(1);
+        BlockingJobIdTabletReshardJob job =
+                new BlockingJobIdTabletReshardJob(41_004L, getterEntered, releaseGetter);
+
+        CompletableFuture<Throwable> submission = submitJobAsync(jobMgr, job);
+        JournalTask task = null;
+        try {
+            task = journalQueue.poll(5, TimeUnit.SECONDS);
+            Assertions.assertNotNull(task,
+                    "initial WAL submission must happen before the manager-map applier reads jobId");
+            Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+
+            task.markSucceed();
+            Assertions.assertTrue(getterEntered.await(5, TimeUnit.SECONDS),
+                    "post-commit manager-map applier must read jobId");
+            editLog.closeWalGate();
+            CompletableFuture<Void> drain =
+                    CompletableFuture.runAsync(() -> editLog.awaitWalDrained(5000L));
+
+            Thread.sleep(150L);
+            Assertions.assertFalse(drain.isDone(),
+                    "demotion drain must wait for post-commit manager publication");
+            Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
+
+            releaseGetter.countDown();
+            Assertions.assertNull(submission.get(5, TimeUnit.SECONDS));
+            drain.get(5, TimeUnit.SECONDS);
+            Assertions.assertSame(job, jobMgr.getTabletReshardJob(41_004L));
+        } finally {
+            releaseGetter.countDown();
+            if (task == null) {
+                task = journalQueue.poll(5, TimeUnit.SECONDS);
+            }
+            if (task != null && !task.isDone()) {
+                task.markAbort(new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, "test cleanup"));
+            }
+            submission.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    private static Tuple createTuple(int value) {
+        return new Tuple(Arrays.asList(Variant.of(IntegerType.INT, String.valueOf(value))));
+    }
+
+    private void mockLeaderAdmissionWithEditLog(EditLog editLog) {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return true;
+            }
+
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+    }
+
+    private CompletableFuture<Throwable> submitJobAsync(TabletReshardJobMgr jobMgr, TabletReshardJob job) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                jobMgr.addTabletReshardJob(job);
+                return null;
+            } catch (Throwable t) {
+                return t;
+            }
+        });
     }
 
     @Test

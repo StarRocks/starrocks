@@ -261,6 +261,11 @@ public abstract class TabletReshardJob implements Writable {
      */
     public abstract void init() throws StarRocksException;
 
+    /** Roll back a successful admission-time reservation that did not become durable. */
+    public final void rollbackInit() {
+        replayAbortedJob();
+    }
+
     protected abstract void runPendingJob();
 
     protected abstract void runPreparingJob();

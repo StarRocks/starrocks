@@ -40,6 +40,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
@@ -208,15 +209,20 @@ class RangeDistributionMigrationServiceTest {
         request.put(secondRollup.getTablets().get(0).getId(), splitAt(List.of("7")));
 
         TabletReshardJobMgr isolatedManager = new TabletReshardJobMgr();
-        AtomicBoolean journaled = new AtomicBoolean();
-        AtomicBoolean publishedBeforeJournal = new AtomicBoolean();
+        AtomicBoolean initialRecordDurable = new AtomicBoolean();
+        AtomicBoolean unpublishedBeforeCommit = new AtomicBoolean();
+        AtomicBoolean publishedAfterCommit = new AtomicBoolean();
         AtomicReference<List<LockType>> journalLockTypes = new AtomicReference<>();
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateTabletReshardJob(TabletReshardJob job) {
-                publishedBeforeJournal.set(isolatedManager.getTabletReshardJob(job.getJobId()) == job);
+            public void logInitTabletReshardJob(TabletReshardJob job, WALApplier applier)
+                    throws StarRocksException {
+                job.init();
+                unpublishedBeforeCommit.set(isolatedManager.getTabletReshardJob(job.getJobId()) == null);
                 journalLockTypes.set(currentTableLockTypes());
-                journaled.set(true);
+                initialRecordDurable.set(true);
+                applier.apply(job);
+                publishedAfterCommit.set(isolatedManager.getTabletReshardJob(job.getJobId()) == job);
             }
         };
         RangeDistributionMigrationService migrationService = new RangeDistributionMigrationService() {
@@ -240,8 +246,9 @@ class RangeDistributionMigrationServiceTest {
             Assertions.assertTrue(admittedIndexes.stream()
                     .anyMatch(index -> index.getMaterializedIndexId() == secondRollup.getId()));
             Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
-            Assertions.assertTrue(journaled.get());
-            Assertions.assertTrue(publishedBeforeJournal.get());
+            Assertions.assertTrue(initialRecordDurable.get());
+            Assertions.assertTrue(unpublishedBeforeCommit.get());
+            Assertions.assertTrue(publishedAfterCommit.get());
             Assertions.assertEquals(List.of(), journalLockTypes.get());
         } finally {
             table.setState(OlapTable.OlapTableState.NORMAL);
