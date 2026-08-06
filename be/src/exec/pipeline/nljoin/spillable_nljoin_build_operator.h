@@ -45,7 +45,6 @@ private:
     Status _spill_buffered_chunks(RuntimeState* state, bool should_finalize);
 
 private:
-    bool _is_finished = false;
     SpillProcessChannelPtr _spill_channel;
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
     bool _should_spill_buffered_chunks = true;

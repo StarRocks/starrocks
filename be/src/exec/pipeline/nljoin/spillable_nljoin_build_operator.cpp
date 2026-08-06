@@ -44,11 +44,19 @@ bool SpillableNLJoinBuildOperator::need_input() const {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return NLJoinBuildOperator::need_input();
     }
-    return !_is_finished && !_spill_channel->spiller()->is_full();
+    auto spiller = _spill_channel->spiller();
+    // A queued spill task iterates the input channel's accumulator on the spill-process pipeline, so the
+    // sink must stay blocked until that task drains: otherwise push_chunk() would mutate the accumulator
+    // concurrently with the task pulling from it.
+    return !_is_finished && spiller != nullptr && !spiller->is_full() && !_spill_channel->has_task();
 }
 
 bool SpillableNLJoinBuildOperator::is_finished() const {
-    if (!_spill_channel->spiller()->spilled()) {
+    auto spiller = _spill_channel->spiller();
+    if (spiller == nullptr) {
+        return _is_finished || NLJoinBuildOperator::is_finished();
+    }
+    if (!spiller->spilled()) {
         return NLJoinBuildOperator::is_finished();
     }
     return _is_finished;
@@ -88,6 +96,12 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     _cross_join_context->ref();
     auto callback_task = [this](RuntimeState* state) {
         auto spiller = _spill_channel->spiller();
+        if (spiller == nullptr) {
+            auto defer = DeferOp([&]() { _cross_join_context->unref(state); });
+            RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
+            _is_finished = true;
+            return Status::OK();
+        }
         return spiller->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _cross_join_context->unref(state); });
