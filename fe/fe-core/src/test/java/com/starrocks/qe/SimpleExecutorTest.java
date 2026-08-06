@@ -1,0 +1,84 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.qe;
+
+import com.starrocks.common.FeConstants;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class SimpleExecutorTest {
+
+    private static final String INSERT_SQL = "INSERT INTO db1.t1 VALUES(1)";
+
+    @BeforeAll
+    public static void beforeAll() {
+        UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.runningUnitTest = false;
+    }
+
+    /**
+     * StmtExecutor.execute() does not rethrow a StarRocksException, it only records the failure in
+     * the ConnectContext state and returns normally. The internal executor must not report that as
+     * a success, otherwise its callers silently lose the data they believe they have persisted.
+     */
+    @Test
+    public void testExecuteDMLFailsWhenStatementSetsErrorState() {
+        mockStatementFailure("Tablet lost replicas. Check if any backend is down or not. tablet_id: 10093");
+
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL);
+        SemanticException e =
+                assertThrows(SemanticException.class, () -> executor.executeDML(INSERT_SQL));
+        assertTrue(e.getMessage().contains("Tablet lost replicas"), e.getMessage());
+    }
+
+    @Test
+    public void testExecuteControlFailsWhenStatementSetsErrorState() {
+        mockStatementFailure("Unknown thread id: 1024");
+
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.MYSQL_PROTOCAL);
+        SemanticException e =
+                assertThrows(SemanticException.class, () -> executor.executeControl("KILL 1024"));
+        assertTrue(e.getMessage().contains("Unknown thread id"), e.getMessage());
+    }
+
+    @Test
+    public void testExecuteDMLSucceedsWhenStatementIsOk() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+            }
+        };
+
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL);
+        executor.executeDML(INSERT_SQL);
+    }
+
+    private static void mockStatementFailure(String errorMessage) {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+                ConnectContext.get().getState().setError(errorMessage);
+            }
+        };
+    }
+}
