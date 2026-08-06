@@ -18,12 +18,17 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+<<<<<<< HEAD
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> b80fcfd295 ([BugFix] Assign index ids to GIN indexes created on a materialized view (#77340))
 import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -177,4 +182,146 @@ public class GINIndexTest extends PlanTestBase {
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGINWithAutoIncrement() throws Exception {
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = true (Should succeed)
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(
+                "CREATE TABLE `t_builtin` (" +
+                        "  `k` BIGINT AUTO_INCREMENT," +
+                        "  `msg_all` varchar(100)," +
+                        "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                        ") ENGINE=OLAP " +
+                        "DUPLICATE KEY(`k`) " +
+                        "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+        starRocksAssert.dropTable("t_builtin");
+
+        // Test clucene GIN with AUTO_INCREMENT and replicated_storage = true (Should fail)
+        // because OlapTableFactory will force replicated_storage to false for clucene GIN
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_clucene` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = false (Should fail)
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_builtin_no_rs` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"false\" );"));
+    }
+
+    @Test
+    public void testMaterializedViewGINIndexProperties() throws Exception {
+        // Create a MV with GIN index on the DUP_KEYS table
+        String mvSql = "create materialized view test_mv_gin_index " +
+                "(f1, f2, " +
+                "INDEX gin_idx1 (`f2`) USING GIN" +
+                ") " +
+                "DISTRIBUTED BY HASH(`f1`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "(" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select f1, f2 from test_index_tbl;";
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(mvSql, connectContext);
+        Assertions.assertInstanceOf(CreateMaterializedViewStatement.class, stmt);
+        CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) stmt;
+
+        // Verify that the MV indexes have properties (not empty)
+        List<Index> mvIndexes = createMVStmt.getMvIndexes();
+        Assertions.assertEquals(1, mvIndexes.size());
+
+        Index ginIndex = mvIndexes.get(0);
+        Assertions.assertEquals("gin_idx1", ginIndex.getIndexName());
+        Assertions.assertEquals(IndexType.GIN, ginIndex.getIndexType());
+
+        // Key assertion: properties should NOT be empty
+        java.util.Map<String, String> properties = ginIndex.getProperties();
+        Assertions.assertNotNull(properties, "Index properties should not be null");
+        Assertions.assertFalse(properties.isEmpty(), "Index properties should not be empty");
+
+        // Verify imp_lib default property is present
+        Assertions.assertTrue(
+                properties.containsKey(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "Index properties should contain imp_lib");
+        Assertions.assertEquals(
+                InvertedIndexImpType.CLUCENE.toString().toLowerCase(),
+                properties.get(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "imp_lib should default to clucene");
+
+        // Verify parser default property is present
+        Assertions.assertTrue(
+                properties.containsKey(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "Index properties should contain parser");
+        Assertions.assertEquals(
+                IndexAnalyzer.INVERTED_INDEX_PARSER_NONE,
+                properties.get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "parser should default to none");
+
+        // Verify properties are correctly passed to Thrift object
+        TOlapTableIndex olapIndex = ginIndex.toThrift();
+        Assertions.assertEquals(
+                InvertedIndexImpType.CLUCENE.toString().toLowerCase(),
+                olapIndex.getCommon_properties().get(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "Thrift common_properties should contain imp_lib with default value");
+        Assertions.assertEquals(
+                IndexAnalyzer.INVERTED_INDEX_PARSER_NONE,
+                olapIndex.getIndex_properties().get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "Thrift index_properties should contain parser with default value");
+    }
+
+    @Test
+    public void testMaterializedViewGINIndexGetsDistinctIndexId() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `mv_index_base` (\n" +
+                "  `f1` int NOT NULL COMMENT \"\",\n" +
+                "  `f2` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  `f3` varchar(200) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`f1`)\n" +
+                "DISTRIBUTED BY HASH(`f1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_two_gin\n" +
+                "(f1, f2, f3,\n" +
+                " INDEX gin_idx1 (`f2`) USING GIN,\n" +
+                " INDEX gin_idx2 (`f3`) USING GIN)\n" +
+                "DISTRIBUTED BY HASH(f1) BUCKETS 1\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT f1, f2, f3 FROM mv_index_base;");
+
+        OlapTable mv = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "mv_two_gin");
+        List<Index> mvIndexes = mv.getIndexes();
+        Assertions.assertEquals(2, mvIndexes.size());
+        // A GIN index must carry a real id: it goes into the tablet schema pushed to BE and, for the
+        // CLucene backend, into the on-disk index file name.
+        for (Index index : mvIndexes) {
+            Assertions.assertTrue(index.getIndexId() >= 0,
+                    "GIN index " + index.getIndexName() + " should get a valid index id, got "
+                            + index.getIndexId());
+        }
+        // Two indexes sharing an id would resolve to the same .ivt directory and clobber each other.
+        Assertions.assertNotEquals(mvIndexes.get(0).getIndexId(), mvIndexes.get(1).getIndexId(),
+                "two GIN indexes on one materialized view must not share an index id");
+    }
+>>>>>>> b80fcfd295 ([BugFix] Assign index ids to GIN indexes created on a materialized view (#77340))
 }
