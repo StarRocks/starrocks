@@ -688,16 +688,17 @@ public class FragmentNormalizer {
         }
     }
 
-    // Ids of every PlanNode of the subtree rooted at `node` that still belongs to this fragment. The
-    // recursion stops at an ExchangeNode's children, which live in another fragment.
-    private void collectNodeIdsOfSameFragment(PlanNode node, Set<Integer> ids) {
+    // Whether any PlanNode of the subtree rooted at `node` still retains one of the given runtime
+    // filters as a probe. The recursion stops at an ExchangeNode's children, which live in another
+    // fragment, and a local runtime filter cannot reach them anyway.
+    private boolean probesAnyFilterOfSameFragment(PlanNode node, Set<Integer> filterIds) {
         if (node.getFragment() != fragment) {
-            return;
+            return false;
         }
-        ids.add(node.getId().asInt());
-        for (PlanNode child : node.getChildren()) {
-            collectNodeIdsOfSameFragment(child, ids);
+        if (node.getProbeRuntimeFilters().stream().anyMatch(rf -> filterIds.contains(rf.getFilterId()))) {
+            return true;
         }
+        return node.getChildren().stream().anyMatch(child -> probesAnyFilterOfSameFragment(child, filterIds));
     }
 
     public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
@@ -827,16 +828,17 @@ public class FragmentNormalizer {
         // -- `... join r on l.k = r.k order by r.v limit n` builds a TOPN_FILTER on r.v that only r's
         // scan can probe. That one cannot change a single row the cache point produces, so rejecting it
         // would give up the cache for nothing.
-        Set<Integer> cachedSubtreeNodeIds = Sets.newHashSet();
-        collectNodeIdsOfSameFragment(firstAggNode, cachedSubtreeNodeIds);
-        boolean filtersCachedRows = leftNodesTopDown.stream()
+        // The targets are read off the probe nodes rather than off RuntimeFilterDescription's
+        // nodeIdToProbeExpr, because that map is only ever added to: a probe dropped afterwards -- by
+        // removeDictMappingProbeRuntimeFilters for a DictMappingExpr probe, or by computeLocalRfWaitingSet
+        // when global runtime filters are off -- leaves its node id behind and would read as an active
+        // probe here. A PlanNode's retained probe list is what the BE actually applies.
+        Set<Integer> localFilterIds = leftNodesTopDown.stream()
                 .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
                 .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
-                // an empty probe map should not happen -- a filter with no target is never added to the
-                // build list -- but treat it as unknown, hence unsafe, rather than as harmless.
-                .anyMatch(rf -> rf.getNodeIdToProbeExpr().isEmpty() ||
-                        rf.getNodeIdToProbeExpr().keySet().stream().anyMatch(cachedSubtreeNodeIds::contains));
-        if (filtersCachedRows) {
+                .map(RuntimeFilterDescription::getFilterId)
+                .collect(Collectors.toSet());
+        if (!localFilterIds.isEmpty() && probesAnyFilterOfSameFragment(firstAggNode, localFilterIds)) {
             return false;
         }
 
