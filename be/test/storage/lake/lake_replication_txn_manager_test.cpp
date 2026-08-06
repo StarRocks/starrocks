@@ -1288,6 +1288,29 @@ TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_ar
     EXPECT_TRUE(result.status().is_not_supported()) << result.status();
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_rejected) {
+    seed_test_encryption_keys();
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    for (bool range_table : {true, false}) {
+        auto source = make_metadata(range_table ? 53025 : 53027, 2, range_table);
+        auto target = make_metadata(range_table ? 53026 : 53028, 1, range_table);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+        auto* rowset = source->add_rowsets();
+        rowset->set_id(1);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(file_name(25, "dat"));
+        segment->set_size(11);
+        segment->set_bundle_file_offset(0);
+        segment->set_shared(false);
+
+        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        ASSERT_FALSE(result.ok()) << "range_table=" << range_table;
+        EXPECT_TRUE(result.status().is_not_supported()) << result.status();
+    }
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, range_existing_shared_files_with_tde_reuse_encryption_meta) {
     seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
