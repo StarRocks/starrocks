@@ -454,17 +454,14 @@ public class TabletReshardJobMgrTest {
             Assertions.assertTrue(getterEntered.await(5, TimeUnit.SECONDS),
                     "post-commit manager-map applier must read jobId");
             editLog.closeWalGate();
-            CompletableFuture<Void> drain =
-                    CompletableFuture.runAsync(() -> editLog.awaitWalDrained(5000L));
-
-            Thread.sleep(150L);
-            Assertions.assertFalse(drain.isDone(),
+            Assertions.assertThrows(IllegalStateException.class,
+                    () -> editLog.awaitWalDrained(100L),
                     "demotion drain must wait for post-commit manager publication");
             Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
 
             releaseGetter.countDown();
             Assertions.assertNull(submission.get(5, TimeUnit.SECONDS));
-            drain.get(5, TimeUnit.SECONDS);
+            editLog.awaitWalDrained(5000L);
             Assertions.assertSame(job, jobMgr.getTabletReshardJob(41_004L));
         } finally {
             releaseGetter.countDown();
