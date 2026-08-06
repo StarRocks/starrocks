@@ -109,6 +109,44 @@ public class OpaHttpClientTest {
         client.close();
     }
 
+    @Test
+    public void testMissingPolicyUrlIsRejected() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new OpaHttpClient("", "", "", "", 1000, 1000));
+    }
+
+    @Test
+    public void testDisabledOptionalEndpointsReturnEmptyResults() {
+        OpaHttpClient client = new OpaHttpClient("http://127.0.0.1:1/policy", "", "", "", 1000, 1000);
+        OpaRequest request = OpaRequest.createCheck(context(), PrivilegeType.SELECT, ObjectType.TABLE,
+                OpaResource.table(new TableName("default_catalog", "db1", "tbl1")));
+
+        Assertions.assertEquals(List.of(), client.getRowFilters(request));
+        Assertions.assertEquals(java.util.Optional.empty(), client.getColumnMask(request));
+        Assertions.assertEquals(Map.of(), client.getBatchColumnMasks(request, List.of("v1")));
+        Assertions.assertFalse(client.supportsBatchColumnMasks());
+        client.close();
+    }
+
+    @Test
+    public void testMalformedOptionalEndpointResultsFailClosed() throws Exception {
+        String policyUrl = startServer("/policy", 200, "{\"result\":true}");
+        String baseUrl = policyUrl.substring(0, policyUrl.length() - "/policy".length());
+        register("/rows", 200, "{\"result\":true}");
+        register("/mask", 200, "{\"result\":42}");
+        register("/batch", 200, "{\"result\":[42]}");
+        OpaHttpClient client = new OpaHttpClient(policyUrl, baseUrl + "/rows", baseUrl + "/mask", baseUrl + "/batch",
+                1000, 1000);
+        OpaRequest tableRequest = OpaRequest.createCheck(context(), PrivilegeType.SELECT, ObjectType.TABLE,
+                OpaResource.table(new TableName("default_catalog", "db1", "tbl1")));
+
+        Assertions.assertThrows(OpaQueryException.class, () -> client.getRowFilters(tableRequest));
+        Assertions.assertThrows(OpaQueryException.class, () -> client.getColumnMask(tableRequest));
+        Assertions.assertThrows(OpaQueryException.class,
+                () -> client.getBatchColumnMasks(tableRequest, List.of("v1")));
+        client.close();
+    }
+
     private void assertDeniedResponse(String responseBody, int status) throws Exception {
         String policyUrl = startServer("/policy", status, responseBody);
         OpaHttpClient client = new OpaHttpClient(policyUrl, "", "", "", 1000, 1000);
