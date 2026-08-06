@@ -20,7 +20,9 @@ import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -252,6 +254,40 @@ public class TaskRunHistoryTest {
         history.addHistory(run3);
         history.vacuum(true);
         assertEquals(2, history.getInMemoryHistory().size());
+    }
+
+    /**
+     * A failed archive INSERT must not drop the in-memory history. StmtExecutor swallows the
+     * failure by only recording it in the ConnectContext state, so the archive has to detect it:
+     * otherwise the finished task run is erased from both memory and the history table, and
+     * callers waiting for that task run (e.g. OptimizeJobV2) never see it finish.
+     */
+    @Test
+    public void testHistoryVacuumKeepsStateWhenInsertFailsSilently() {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+                ConnectContext.get().getState()
+                        .setError("Tablet lost replicas. Check if any backend is down or not. tablet_id: 10093");
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+        TaskRunStatus run = new TaskRunStatus();
+        run.setExpireTime(System.currentTimeMillis() + 10000);
+        run.setQueryId("q1");
+        run.setTaskName("t1");
+        run.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run);
+
+        history.vacuum(true);
+        assertEquals(1, history.getInMemoryHistory().size());
     }
 
     @Test
