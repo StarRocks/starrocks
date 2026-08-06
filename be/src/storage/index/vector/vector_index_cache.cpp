@@ -16,8 +16,10 @@
 
 #ifdef WITH_TENANN
 
+#include <algorithm>
 #include <limits>
 
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
@@ -26,24 +28,12 @@ namespace starrocks {
 
 namespace {
 
-int64_t saturated_milliseconds(int64_t seconds) {
-    constexpr int64_t kMillisPerSecond = 1000;
-    if (seconds >= std::numeric_limits<int64_t>::max() / kMillisPerSecond) {
-        return std::numeric_limits<int64_t>::max();
-    }
-    return seconds * kMillisPerSecond;
-}
-
-int64_t expire_time_ms(int64_t expire_seconds) {
+int64_t expire_time_ms() {
+    const int32_t expire_seconds = config::vector_index_cache_expire_sec;
     if (expire_seconds <= 0) {
         return std::numeric_limits<int64_t>::max();
     }
-    const int64_t now = MonotonicMillis();
-    const int64_t expire_ms = saturated_milliseconds(expire_seconds);
-    if (expire_ms > std::numeric_limits<int64_t>::max() - now) {
-        return std::numeric_limits<int64_t>::max();
-    }
-    return now + expire_ms;
+    return MonotonicMillis() + static_cast<int64_t>(expire_seconds) * 1000;
 }
 
 } // namespace
@@ -100,18 +90,13 @@ void VectorIndexCache::SetCapacity(size_t new_capacity) {
     _update_metrics();
 }
 
-void VectorIndexCache::set_expire_seconds(int64_t expire_seconds) {
-    _expire_seconds.store(expire_seconds, std::memory_order_relaxed);
-    _last_clear_expired_ms.store(0, std::memory_order_relaxed);
-}
-
 bool VectorIndexCache::clear_expired(int64_t now) {
-    const int64_t interval_seconds = clear_expired_interval_seconds();
-    if (interval_seconds <= 0) {
+    const int64_t expire_seconds = config::vector_index_cache_expire_sec;
+    if (expire_seconds <= 0) {
         return false;
     }
 
-    const int64_t interval_ms = saturated_milliseconds(interval_seconds);
+    const int64_t interval_ms = std::max<int64_t>(1, expire_seconds / 2) * 1000;
     int64_t last_clear_expired_ms = _last_clear_expired_ms.load(std::memory_order_relaxed);
     if (last_clear_expired_ms != 0 && (now <= last_clear_expired_ms || now - last_clear_expired_ms < interval_ms)) {
         return false;
@@ -199,7 +184,7 @@ void VectorIndexCache::_release(Entry* entry, bool is_ivfpq_list_block) {
         return;
     }
 
-    _cache.release_with_expire_time(entry, expire_time_ms(expire_seconds()));
+    _cache.release_with_expire_time(entry, expire_time_ms());
 }
 
 void VectorIndexCache::_update_metrics() const {

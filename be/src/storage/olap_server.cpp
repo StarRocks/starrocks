@@ -48,6 +48,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "common/storage_define.h"
 #include "common/thread/thread.h"
@@ -684,11 +685,8 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
         StorageEnv::GetInstance()->lake_update_manager()->set_cache_expire_ms(expire_sec * 1000);
 #endif
         int64_t sleep_sec = std::max(1, expire_sec / 2);
-        auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
-        const int64_t vector_expire_interval_sec =
-                vector_index_cache == nullptr ? 0 : vector_index_cache->clear_expired_interval_seconds();
-        if (vector_expire_interval_sec > 0) {
-            sleep_sec = std::min(sleep_sec, vector_expire_interval_sec);
+        if (StorageEnv::GetInstance()->vector_index_cache() != nullptr && config::vector_index_cache_expire_sec > 0) {
+            sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, config::vector_index_cache_expire_sec / 2));
         }
         SLEEP_IN_BG_WORKER(sleep_sec);
         _expire_caches(MonotonicMillis());

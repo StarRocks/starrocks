@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/storage_env.h"
 
@@ -92,10 +93,10 @@ TEST_F(StorageEngineCacheExpireTest, expire_caches_includes_vector_cache) {
     ASSERT_NE(cache, nullptr);
     ASSERT_FALSE(engine->bg_worker_stopped());
 
-    const int64_t saved_vector_expire_sec = cache->expire_seconds();
-    DeferOp restore([&] { cache->set_expire_seconds(saved_vector_expire_sec); });
+    const int32_t saved_vector_expire_sec = config::vector_index_cache_expire_sec;
+    DeferOp restore([&] { config::vector_index_cache_expire_sec = saved_vector_expire_sec; });
 
-    cache->set_expire_seconds(1);
+    config::vector_index_cache_expire_sec = 1;
 
     constexpr size_t kBytes = 1024;
     void* buffer = std::malloc(kBytes);

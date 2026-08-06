@@ -108,9 +108,6 @@ TEST(StorageEnvTest, vector_index_cache_init_installs_and_destroy_clears_global)
     const std::string saved_capacity = config::vector_query_cache_capacity.value();
     DeferOp restore_capacity([&] { config::vector_query_cache_capacity = saved_capacity; });
     config::vector_query_cache_capacity = std::string("1024");
-    const int32_t saved_expire_sec = config::vector_index_cache_expire_sec;
-    DeferOp restore_expire_sec([&] { config::vector_index_cache_expire_sec = saved_expire_sec; });
-    config::vector_index_cache_expire_sec = 123;
 
     MemTracker vector_index_mem_tracker(-1, "storage_env_vector_index_test");
     StorageEnv env;
@@ -118,7 +115,6 @@ TEST(StorageEnvTest, vector_index_cache_init_installs_and_destroy_clears_global)
     ASSERT_OK(env.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
     ASSERT_NE(env.vector_index_cache(), nullptr);
     EXPECT_EQ(env.vector_index_cache()->capacity(), 1024u);
-    EXPECT_EQ(env.vector_index_cache()->expire_seconds(), 123);
     EXPECT_EQ(tenann::GetGlobalIndexCache(), env.vector_index_cache());
 
     ASSERT_OK(env.init_vector_index_cache(1024 * 1024, &vector_index_mem_tracker));
