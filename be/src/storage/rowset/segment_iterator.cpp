@@ -576,8 +576,8 @@ private:
 
     IndexReadOptions _index_read_options(ColumnId cid) const;
 
-    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                  const std::map<std::string, std::string>& query_params, FileSystem* fs = nullptr);
+    Status _init_reader_from_file(FileInfo* vi_file, const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                  const std::map<std::string, std::string>& query_params);
     StatusOr<size_t> _predicate_evaluate(vector<rowid_t>* rowid);
 
     StatusOr<size_t> _predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid);
@@ -1246,18 +1246,18 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     return _scan_range;
 }
 
-inline Status SegmentIterator::_init_reader_from_file(const std::string& index_path,
+inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
                                                       const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                                      const std::map<std::string, std::string>& query_params,
-                                                      FileSystem* fs) {
+                                                      const std::map<std::string, std::string>& query_params) {
 #ifdef WITH_TENANN
     if (!_vector_index_ctx) {
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
     _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-    auto create_st = VectorIndexReaderFactory::create_from_file(index_path, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, fs);
+    // create_from_file backfills vi_file->size on the cold path; init_searcher reuses it.
+    auto create_st = VectorIndexReaderFactory::create_from_file(vi_file, _vector_index_ctx->index_meta,
+                                                                &_vector_index_ctx->ann_reader);
     // .vi file not found — caller will set up brute-force fallback
     if (create_st.is_not_found()) {
         _vector_index_ctx->use_vector_index = false;
@@ -1276,7 +1276,7 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
             break;
         }
     }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
+    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), *vi_file,
                                                                  static_cast<size_t>(_segment->num_rows()),
                                                                  _vector_index_ctx->k, user_set_ef);
     // empty ann reader — caller will set up brute-force fallback
@@ -1389,9 +1389,14 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-        FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Hold the FileSystem by shared_ptr: the .vi reader built from it lands in the tenann
+        // index cache and outlives this iterator, so a raw Segment::file_system() would dangle.
+        FileInfo vi_file{.path = index_path};
+        if (_opts.belonged_to_cloud_native) {
+            vi_file.fs = _segment->shared_file_system();
+        }
         // Turns off use_vector_index on a runtime NotFound / not-supported.
-        RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
+        RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
 #else
         _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif

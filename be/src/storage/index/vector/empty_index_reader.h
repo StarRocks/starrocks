@@ -23,8 +23,7 @@ class EmptyIndexReader final : public VectorIndexReader {
 public:
     ~EmptyIndexReader() override = default;
 
-    Status init_searcher(const tenann::IndexMeta& /*meta*/, const std::string& /*index_path*/,
-                         FileSystem* /*fs*/) override {
+    Status init_searcher(const tenann::IndexMeta& /*meta*/, const FileInfo& /*vi_file*/) override {
         return Status::NotSupported("EmptyIndexReader does not support this operation");
     }
 
