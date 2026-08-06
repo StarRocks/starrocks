@@ -1618,6 +1618,7 @@ public class OlapTable extends Table {
             this.indexes = new TableIndexes(null);
         }
         this.indexes.setIndexes(indexes);
+        tryToAssignIndexId();
     }
 
     public String getColocateGroup() {
