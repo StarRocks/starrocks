@@ -727,6 +727,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `iceberg_remove_orphan_files_min_retention_seconds`
+
+- Default: 86400
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum retention window accepted for the `older_than` argument of the `remove_orphan_files` procedure. The procedure collects the files reachable from the table state it loaded and only afterwards lists storage, so a file written in between - including a data file of an INSERT that has not committed yet - is indistinguishable from an orphan. The modification time cutoff derived from `older_than` is what keeps such a file safe, so an `older_than` closer to the current time than this window is rejected. This bounds the explicit `older_than` argument only; omitting the argument keeps its own 7-day default. The default leaves a wide margin over the longest window in which a legitimate write can hold uncommitted files, which `insert_timeout` bounds at 4 hours by default. Raise it for deployments that allow longer writes, and lower it only when no write can run concurrently with the procedure.
+- Introduced in: v4.2.0
+
 ##### lake_balance_tablets_threshold
 
 - Default: 0.15

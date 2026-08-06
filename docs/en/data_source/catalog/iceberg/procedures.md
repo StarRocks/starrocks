@@ -208,7 +208,7 @@ EXECUTE remove_orphan_files(
 
 ##### `older_than`
 
-- Description: The timestamp before which orphan files will be removed. If not specified, files older than 7 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'.
+- Description: The timestamp before which orphan files will be removed. If not specified, files older than 7 days (from the current time) will be removed by default. Format: 'YYYY-MM-DD HH:MM:SS'. The value must be at least [`iceberg_remove_orphan_files_min_retention_seconds`](../../../administration/management/FE_parameters/shared_lake_other.md) (24 hours by default) before the current time. A value closer to the current time is rejected, because the scan cannot tell the files of an uncommitted concurrent write apart from orphan files and would delete them, leaving the table unreadable.
 - Type: DATETIME
 - Required: No
 
