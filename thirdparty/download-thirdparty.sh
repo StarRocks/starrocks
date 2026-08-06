@@ -426,6 +426,13 @@ PATCHED_MARK="patched_mark"
 # Packages whose patches only change behaviour then build fine and are silently
 # missing those fixes.
 #
+# Stopping here leaves the source directory with the patches applied so far and
+# without PATCHED_MARK. A later run finds that directory, skips extraction and
+# replays the whole block, so -N is passed to keep patch from taking an already
+# applied patch for a reversed one and undoing it: with -N it reports the patch as
+# already applied and fails, instead of silently producing a source tree that
+# misses the patches which had succeeded before.
+#
 # Usage mirrors the patch call it replaces, with the patch file as last argument:
 #   apply_patch -p1 "${TP_PATCH_DIR}/foo.patch"
 apply_patch() {
@@ -437,8 +444,9 @@ apply_patch() {
         exit 1
     fi
 
-    if ! patch "${patch_options[@]}" < "${patch_file}"; then
+    if ! patch -N "${patch_options[@]}" < "${patch_file}"; then
         echo "Failed to apply patch ${patch_file} in ${PWD}" >&2
+        echo "That source directory is partially patched now, remove it so the next run re-extracts it." >&2
         exit 1
     fi
 }
