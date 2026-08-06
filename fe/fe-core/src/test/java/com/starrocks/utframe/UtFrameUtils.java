@@ -1689,7 +1689,7 @@ public class UtFrameUtils {
     public static void setPartitionVersion(Partition partition, long version) {
         partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
         partition.getDefaultPhysicalPartition().setDataVersion(version);
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

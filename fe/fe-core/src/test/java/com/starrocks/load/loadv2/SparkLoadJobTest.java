@@ -426,7 +426,7 @@ public class SparkLoadJobTest {
                 table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
@@ -544,7 +544,7 @@ public class SparkLoadJobTest {
                 table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();

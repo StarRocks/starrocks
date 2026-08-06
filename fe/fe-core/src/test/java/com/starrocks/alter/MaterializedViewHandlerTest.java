@@ -153,7 +153,7 @@ public class MaterializedViewHandlerTest {
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getWritableIndex(baseIndexMetaId);
+                partition.getLatestIndex(baseIndexMetaId);
                 result = materializedIndex;
 
                 materializedIndex.getState();
@@ -411,7 +411,7 @@ public class MaterializedViewHandlerTest {
                 olapTable.getPhysicalPartitions();
                 result = Lists.newArrayList(partition);
 
-                partition.getWritableIndex(1L);
+                partition.getLatestIndex(1L);
                 result = materializedIndex;
             }
         };

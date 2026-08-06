@@ -288,7 +288,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
      */
     private void flipTabletRangesInPlace(OlapTable table, long indexMetaId) {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            MaterializedIndex index = physicalPartition.getWritableIndex(indexMetaId);
+            MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
             if (index == null) {
                 continue;
             }
@@ -306,7 +306,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
      */
     private void verifyLiveRangesMatchTargets(OlapTable table, long indexMetaId) {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            MaterializedIndex index = physicalPartition.getWritableIndex(indexMetaId);
+            MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
             if (index == null) {
                 continue;
             }
@@ -352,7 +352,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                 throw new AlterCancelException("range flip keysType mismatch for indexMetaId " + indexMetaId);
             }
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-                MaterializedIndex index = physicalPartition.getWritableIndex(indexMetaId);
+                MaterializedIndex index = physicalPartition.getLatestIndex(indexMetaId);
                 if (index == null) {
                     continue;
                 }

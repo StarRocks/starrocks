@@ -176,7 +176,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(physicalPartition);
 
-                physicalPartition.getWritableIndex(anyLong);
+                physicalPartition.getLatestIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
@@ -280,7 +280,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(physicalPartition);
 
-                physicalPartition.getWritableIndex(anyLong);
+                physicalPartition.getLatestIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();

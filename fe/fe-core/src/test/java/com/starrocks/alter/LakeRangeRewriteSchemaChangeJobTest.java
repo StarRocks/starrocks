@@ -183,7 +183,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
     /** Create a PendingPartitionPlan for the first physical partition of the test table. */
     private PendingPartitionPlan newPendingPlan(PhysicalPartition physicalPartition) {
-        MaterializedIndex baseIndex = physicalPartition.getWritableIndex(table.getBaseIndexMetaId());
+        MaterializedIndex baseIndex = physicalPartition.getLatestIndex(table.getBaseIndexMetaId());
         return new PendingPartitionPlan(
                 physicalPartition.getId(),
                 baseIndex,
@@ -497,7 +497,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     public void testRunPendingResolvesBaseIndexByMetaIdAfterReshard() throws Exception {
         // Simulate a tablet split/merge reshard: the base index keeps its meta id, but its latest
         // MaterializedIndex carries a NEW physical index id and the old physical version is gone.
-        // runPendingJob must resolve the base index by META id (getWritableIndex), not by physical index id
+        // runPendingJob must resolve the base index by META id (getLatestIndex), not by physical index id
         // (getIndex) -- otherwise it cancels with "base index missing" for resharded range tables.
         long baseMetaId = table.getBaseIndexMetaId();
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
@@ -515,7 +515,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             pp.deleteMaterializedIndexByIndexId(oldBase.getId());
             // After the reshard the physical-id lookup misses; only the meta-id lookup finds the base.
             Assertions.assertNull(pp.getIndex(baseMetaId), "getIndex(metaId) must miss a resharded index");
-            Assertions.assertEquals(newBase, pp.getWritableIndex(baseMetaId));
+            Assertions.assertEquals(newBase, pp.getLatestIndex(baseMetaId));
         }
 
         // With the fix, runPendingJob resolves the resharded base index and advances to WAITING_TXN;
@@ -543,7 +543,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
         PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
         // Precondition: PENDING did not expose the shadow to the partition catalog index map.
-        Assertions.assertNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()));
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
 
         // First WAITING_TXN run: allocate the watershed and expose the shadow. The drain is not
         // checked yet (no W captured), so stay in WAITING_TXN.
@@ -557,7 +557,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         // The shadow MaterializedIndex is now exposed in the partition catalog index map with
         // visibleTxnId == watershedTxnId, so post-watershed loads double-write it.
-        MaterializedIndex exposed = physicalPartition.getWritableIndex(job.getShadowIndexMetaId());
+        MaterializedIndex exposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
         Assertions.assertNotNull(exposed, "WAITING_TXN must expose the shadow index to the partition catalog map");
         Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, exposed.getState());
         // visibleTxnId == watershedTxnId: transactions at/after the watershed see the shadow (and so
@@ -666,7 +666,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             invertedIndex.deleteTablet(tabletId);
         }
         table.setState(OlapTable.OlapTableState.NORMAL);
-        Assertions.assertNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()),
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
                 "precondition: shadow index exposure removed before replay");
 
         LakeRangeRewriteSchemaChangeJob replayed =
@@ -676,7 +676,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         inMemory.replay(replayed);
 
         // Replay re-exposes the shadow index to the partition catalog map with the journaled watershed.
-        MaterializedIndex reExposed = physicalPartition.getWritableIndex(job.getShadowIndexMetaId());
+        MaterializedIndex reExposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
         Assertions.assertNotNull(reExposed, "replay must re-expose the shadow index after the watershed");
         Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, reExposed.getState());
         Assertions.assertTrue(reExposed.visibleForTransaction(watershedTxnId));
@@ -684,7 +684,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         // A second replay is a no-op: the exposure is idempotent (no double-add crash).
         inMemory.replay(replayed);
-        Assertions.assertNotNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()));
+        Assertions.assertNotNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
     }
 
     /** Drive a job through PENDING + both WAITING_TXN runs into RUNNING with W captured. */
@@ -972,7 +972,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         long shadowIndexMetaId = job.getShadowIndexMetaId();
         Assertions.assertNotEquals(originBaseIndexMetaId, shadowIndexMetaId);
         // The shadow index is exposed (WAITING_TXN) and carries the new sort key (k2, k1).
-        MaterializedIndex shadowIndex = physicalPartition.getWritableIndex(shadowIndexMetaId);
+        MaterializedIndex shadowIndex = physicalPartition.getLatestIndex(shadowIndexMetaId);
         Assertions.assertNotNull(shadowIndex);
         List<Long> shadowTabletIds = shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
         long visibleBeforeFlip = physicalPartition.getVisibleVersion();
@@ -996,7 +996,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         //    promoted to NORMAL, tiling the new key space.
         Assertions.assertNull(table.getIndexMetaByMetaId(originBaseIndexMetaId),
                 "the origin base index meta must be dropped after the flip");
-        MaterializedIndex newBaseIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex newBaseIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(shadowIndexMetaId, newBaseIndex.getMetaId());
         Assertions.assertEquals(MaterializedIndex.IndexState.NORMAL, newBaseIndex.getState());
         Assertions.assertEquals(shadowTabletIds,
@@ -1093,7 +1093,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     private void assertShadowCleanedUp(LakeRangeRewriteSchemaChangeJob job, long physicalPartitionId,
                                        List<Long> shadowTabletIds) {
         PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-        Assertions.assertNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()),
+        Assertions.assertNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
                 "shadow index must be absent from the partition catalog map after cancel");
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(),
                 "table state must be reset to NORMAL after cancel");
@@ -1119,7 +1119,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 .stream().map(Tablet::getId).collect(Collectors.toList());
         // Shadow is exposed.
         Assertions.assertNotNull(table.getPhysicalPartition(physicalPartitionId)
-                .getWritableIndex(job.getShadowIndexMetaId()));
+                .getLatestIndex(job.getShadowIndexMetaId()));
 
         boolean cancelled = job.cancelImpl("test cancel in WAITING_TXN");
 
@@ -1211,7 +1211,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                 .stream().map(Tablet::getId).collect(Collectors.toList());
         // At this point the shadow IS in the inverted index but NOT in the partition catalog map.
         Assertions.assertNull(table.getPhysicalPartition(physicalPartitionId)
-                .getWritableIndex(job.getShadowIndexMetaId()),
+                .getLatestIndex(job.getShadowIndexMetaId()),
                 "precondition: shadow not yet in partition catalog map");
 
         boolean cancelled = job.cancelImpl("cancel after PENDING");
@@ -1245,7 +1245,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState(),
                 "the job must stay in FINISHED_REWRITING after a refused normal cancel");
         // The shadow must NOT have been dropped and the version chain must be intact.
-        Assertions.assertNotNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()),
+        Assertions.assertNotNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()),
                 "the shadow index must not be dropped by a refused normal cancel");
         Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState(),
                 "the table must remain in SCHEMA_CHANGE after a refused normal cancel");
@@ -1564,7 +1564,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertNotNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()),
                 "replay must re-register the shadow meta");
         Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
-        MaterializedIndex reExposed = physicalPartition.getWritableIndex(job.getShadowIndexMetaId());
+        MaterializedIndex reExposed = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
         Assertions.assertNotNull(reExposed, "RUNNING replay must re-expose the shadow index");
         Assertions.assertEquals(MaterializedIndex.IndexState.SHADOW, reExposed.getState());
         Assertions.assertTrue(reExposed.visibleForTransaction(watershedTxnId));
@@ -1576,7 +1576,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         // A second replay is a no-op: no double-add of the exposed index/tablets/meta.
         inMemory.replay(replayed);
-        Assertions.assertNotNull(physicalPartition.getWritableIndex(job.getShadowIndexMetaId()));
+        Assertions.assertNotNull(physicalPartition.getLatestIndex(job.getShadowIndexMetaId()));
         Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
     }
 
@@ -1671,7 +1671,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         long originBaseIndexMetaId = table.getBaseIndexMetaId();
         long shadowIndexMetaId = job.getShadowIndexMetaId();
         long visibleBeforeFlip = physicalPartition.getVisibleVersion();
-        List<Long> shadowTabletIds = physicalPartition.getWritableIndex(shadowIndexMetaId).getTablets()
+        List<Long> shadowTabletIds = physicalPartition.getLatestIndex(shadowIndexMetaId).getTablets()
                 .stream().map(Tablet::getId).collect(Collectors.toList());
 
         // Journal a FINISHED image (finishedTimeMs must be set so visualiseShadowIndex stamps the version).
@@ -1695,7 +1695,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(List.of(1, 0),
                 table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSortKeyIdxes());
         Assertions.assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion());
-        MaterializedIndex newBaseIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex newBaseIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(shadowIndexMetaId, newBaseIndex.getMetaId());
         Assertions.assertEquals(MaterializedIndex.IndexState.NORMAL, newBaseIndex.getState());
 
@@ -2021,7 +2021,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Assertions.assertEquals(shadowIndexMetaId, table.getBaseIndexMetaId());
-        MaterializedIndex newBaseIndex = table.getPhysicalPartition(physicalPartitionId).getWritableBaseIndex();
+        MaterializedIndex newBaseIndex = table.getPhysicalPartition(physicalPartitionId).getLatestBaseIndex();
         Assertions.assertEquals(1, newBaseIndex.getTablets().size(),
                 "an empty partition flips to a single full-range tablet");
     }

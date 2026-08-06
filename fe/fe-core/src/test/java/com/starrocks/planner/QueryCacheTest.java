@@ -1609,7 +1609,7 @@ public class QueryCacheTest {
         // !isProcessingLeftNode() branch, which is required to exercise that code path at all.
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("qc_db", "dates");
         Partition partition = table.getPartition("dates");
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         long emptySubPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition emptyPhysicalPartition = new PhysicalPartition(emptySubPartitionId, partition.getId(),
                 new MaterializedIndex(baseIndex.getId(), MaterializedIndex.IndexState.NORMAL));

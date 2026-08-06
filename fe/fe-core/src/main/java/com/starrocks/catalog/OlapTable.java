@@ -864,7 +864,7 @@ public class OlapTable extends Table {
                         + " has no data property: " + name);
             }
             for (MaterializedIndex index : partition
-                    .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (tablet == null) {
                         throw new DdlException("tablet is null in table: " + name);
@@ -1799,7 +1799,7 @@ public class OlapTable extends Table {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex = copied.getPhysicalPartitions().stream().findFirst()
-                    .map(p -> p.getWritableMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
+                    .map(p -> p.getLatestMaterializedIndices(IndexExtState.SHADOW)).orElse(Lists.newArrayList());
             for (MaterializedIndex deleteIndex : shadowIndex) {
                 LOG.debug("copied table delete shadow index : {}", deleteIndex.getMetaId());
                 copied.deleteIndexInfo(copied.getIndexNameByMetaId(deleteIndex.getMetaId()));
@@ -1940,7 +1940,7 @@ public class OlapTable extends Table {
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long visibleVersion = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex mIndex : physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex mIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : mIndex.getTablets()) {
                         LocalTablet localTablet = (LocalTablet) tablet;
                         if (tabletScheduler.containsTablet(tablet.getId())) {
@@ -1976,7 +1976,7 @@ public class OlapTable extends Table {
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
-            MaterializedIndex baseIdx = physicalPartition.getWritableBaseIndex();
+            MaterializedIndex baseIdx = physicalPartition.getLatestBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();

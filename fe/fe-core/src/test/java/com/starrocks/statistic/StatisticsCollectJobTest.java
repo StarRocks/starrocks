@@ -1167,7 +1167,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         int i = 1;
         for (Partition p : t0p.getAllPartitions()) {
             p.getDefaultPhysicalPartition().updateVisibleVersion(2);
-            p.getDefaultPhysicalPartition().getWritableBaseIndex().setRowCount(i * 100L);
+            p.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(i * 100L);
             i++;
         }
 
@@ -1201,7 +1201,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         for (Partition p : t0p.getAllPartitions()) {
             p.getDefaultPhysicalPartition().updateVisibleVersion(2);
-            p.getDefaultPhysicalPartition().getWritableBaseIndex().setRowCount(0);
+            p.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(0);
         }
 
         collectSqlList = collectJob.buildCollectSQLList(1);

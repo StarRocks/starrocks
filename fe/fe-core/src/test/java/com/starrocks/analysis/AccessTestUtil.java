@@ -112,7 +112,7 @@ public class AccessTestUtil {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getWritableBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index;
 
@@ -120,7 +120,7 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = index;
 
-                physicalPartition.getWritableIndex(30000L);
+                physicalPartition.getLatestIndex(30000L);
                 minTimes = 0;
                 result = index;
             }

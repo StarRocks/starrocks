@@ -507,7 +507,7 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
             // Look the shadow index up from the live catalog (not the journaled state): a job recovered
             // from the edit log holds a different MaterializedIndex object than the one in globalStateMgr,
             // so mutating the journaled object would not reflect into the catalog.
-            MaterializedIndex shadowIndex = physicalPartition.getWritableIndex(shadowIndexMetaId);
+            MaterializedIndex shadowIndex = physicalPartition.getLatestIndex(shadowIndexMetaId);
             Preconditions.checkNotNull(shadowIndex, shadowIndexMetaId);
             List<MaterializedIndex> droppedOriginIndices =
                     physicalPartition.deleteMaterializedIndexByMetaId(originIndexMetaId);

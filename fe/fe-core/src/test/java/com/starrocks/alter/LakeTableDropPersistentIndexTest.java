@@ -80,7 +80,7 @@ public class LakeTableDropPersistentIndexTest {
         for (Partition partition : table.getPartitions()) {
             physicalPartitions.addAll(partition.getSubPartitions());
             for (PhysicalPartition physicalPartition : physicalPartitions) {
-                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                 MaterializedIndex.IndexExtState.VISIBLE)) {
                     tablets.addAll(index.getTablets());
                 }

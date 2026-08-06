@@ -525,7 +525,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexMetaIdToSchema = table.getIndexMetaIdToSchema();
         PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
-        for (MaterializedIndex index : partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexMetaId() == index.getMetaId()) {
                 continue;
             }

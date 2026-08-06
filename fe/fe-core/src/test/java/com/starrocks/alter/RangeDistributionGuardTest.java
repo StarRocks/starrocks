@@ -819,7 +819,7 @@ public class RangeDistributionGuardTest {
         assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
                 "base meta must remain after DROP ROLLUP");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex base = pp.getWritableIndex(baseMetaId);
+            MaterializedIndex base = pp.getLatestIndex(baseMetaId);
             assertNotNull(base, "base physical index must remain in every partition");
         }
     }
@@ -863,7 +863,7 @@ public class RangeDistributionGuardTest {
             assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
                     "base meta must remain after cancel");
             for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-                assertNotNull(pp.getWritableIndex(baseMetaId),
+                assertNotNull(pp.getLatestIndex(baseMetaId),
                         "base physical index must remain in every partition after cancel");
             }
             // Table state must return to NORMAL after cancel.
@@ -1490,7 +1490,7 @@ public class RangeDistributionGuardTest {
         long baseId = table.getBaseIndexMetaId();
         int count = 0;
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex idx = pp.getWritableIndex(baseId);
+            MaterializedIndex idx = pp.getLatestIndex(baseId);
             if (idx != null) {
                 count += idx.getTablets().size();
             }
@@ -1592,7 +1592,7 @@ public class RangeDistributionGuardTest {
         long baseId = table.getBaseIndexMetaId();
         long tabletId = -1;
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            for (Tablet t : pp.getWritableIndex(baseId).getTablets()) {
+            for (Tablet t : pp.getLatestIndex(baseId).getTablets()) {
                 t.setRange(new TabletRange(Range.of(
                         new Tuple(List.of(Variant.of(IntegerType.INT, "10"), Variant.of(IntegerType.INT, "20"))),
                         new Tuple(List.of(Variant.of(IntegerType.INT, "30"), Variant.of(IntegerType.INT, "40"))),

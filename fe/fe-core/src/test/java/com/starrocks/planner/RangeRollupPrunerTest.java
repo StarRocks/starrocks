@@ -178,7 +178,7 @@ public class RangeRollupPrunerTest {
             partition.getSubPartitions();
             result = Arrays.asList(physicalPartition);
 
-            physicalPartition.getWritableIndex(anyLong);
+            physicalPartition.getLatestIndex(anyLong);
             result = index;
 
             partition.getDistributionInfo();

@@ -1102,7 +1102,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
             }
         }
 
-        return physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL);
+        return physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
     }
 
     public List<MaterializedIndex> getPartitionLoadedIndexes(long tableId, PhysicalPartition physicalPartition) {

@@ -87,7 +87,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
             for (Partition partition : table.getPartitions()) {
                 for (com.starrocks.catalog.PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     com.starrocks.catalog.MaterializedIndex index =
-                            physicalPartition.getWritableIndex(table.getBaseIndexMetaId());
+                            physicalPartition.getLatestIndex(table.getBaseIndexMetaId());
                     if (index != null) {
                         for (com.starrocks.catalog.Tablet tablet : index.getTablets()) {
                             tableTabletIds.add(tablet.getId());
@@ -149,7 +149,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
     private List<Tablet> baseTablets(LakeTable table) {
         List<Tablet> tablets = new ArrayList<>();
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex index = pp.getWritableIndex(table.getBaseIndexMetaId());
+            MaterializedIndex index = pp.getLatestIndex(table.getBaseIndexMetaId());
             if (index != null) {
                 tablets.addAll(index.getTablets());
             }

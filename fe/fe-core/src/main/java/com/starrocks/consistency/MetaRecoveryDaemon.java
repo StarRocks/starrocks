@@ -115,7 +115,7 @@ public class MetaRecoveryDaemon extends LeaderDaemon {
                             StringBuilder info = new StringBuilder();
                             boolean isFirstTablet = true;
                             boolean foundCommonVersion = true;
-                            for (MaterializedIndex idx : physicalPartition.getWritableMaterializedIndices(
+                            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
                                     MaterializedIndex.IndexExtState.VISIBLE)) {
                                 for (Tablet tablet : idx.getTablets()) {
                                     LocalTablet localTablet = (LocalTablet) tablet;
@@ -236,7 +236,7 @@ public class MetaRecoveryDaemon extends LeaderDaemon {
                 long originNextVersion = physicalPartition.getNextVersion();
                 physicalPartition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
                 physicalPartition.setNextVersion(version.getVersion() + 1);
-                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         if (!(tablet instanceof LocalTablet)) {
                             continue;

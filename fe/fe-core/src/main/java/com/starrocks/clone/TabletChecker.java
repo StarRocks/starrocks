@@ -460,7 +460,7 @@ public class TabletChecker extends LeaderDaemon {
 
         // Tablet in SHADOW index can not be repaired or balanced
         if (physicalPartition != null) {
-            for (MaterializedIndex idx : physicalPartition.getWritableMaterializedIndices(
+            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
                     IndexExtState.VISIBLE)) {
                 BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
                 boolean allTabletsChecked = true;

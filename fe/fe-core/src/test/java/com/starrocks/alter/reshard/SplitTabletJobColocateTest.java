@@ -160,7 +160,7 @@ public class SplitTabletJobColocateTest {
         ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
         long existingPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
         long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
-                .getWritableBaseIndex().getShardGroupId();
+                .getLatestBaseIndex().getShardGroupId();
         Assertions.assertEquals(1, rangeMgr.getColocateRanges(groupId.grpId).size());
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
@@ -410,7 +410,7 @@ public class SplitTabletJobColocateTest {
         // The table's real SPREAD shard group id: a distinct StarMgr-allocated id that can never
         // collide with a PACK group id, so findMisplacedTablets correctly ignores it.
         long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
-                .getWritableBaseIndex().getShardGroupId();
+                .getLatestBaseIndex().getShardGroupId();
 
         List<Long> orderedNewTabletIds = new ArrayList<>();
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
@@ -529,7 +529,7 @@ public class SplitTabletJobColocateTest {
         ColocateRangeMgr rangeMgr = idx.getColocateRangeMgr();
         long existingPackGroup = rangeMgr.getColocateRanges(groupId.grpId).get(0).getShardGroupId();
         long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
-                .getWritableBaseIndex().getShardGroupId();
+                .getLatestBaseIndex().getShardGroupId();
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             // Return ONLY the first child's range → the missing second range triggers BE identical
@@ -611,7 +611,7 @@ public class SplitTabletJobColocateTest {
         ColocateTableIndex idx = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long oldPackGroup = idx.getColocateRangeMgr().getColocateRanges(groupId.grpId).get(0).getShardGroupId();
         long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
-                .getWritableBaseIndex().getShardGroupId();
+                .getLatestBaseIndex().getShardGroupId();
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             Map<Long, TabletRangePB> result = new HashMap<>();
@@ -703,7 +703,7 @@ public class SplitTabletJobColocateTest {
         long grpId = groupId.grpId;
         StarOSAgent agent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         long spreadGroup = table.getAllPhysicalPartitions().iterator().next()
-                .getWritableBaseIndex().getShardGroupId();
+                .getLatestBaseIndex().getShardGroupId();
 
         // Seed a boundary at colocate-prefix 100: [-inf,100) -> packLow, [100,+inf) -> packHigh.
         long packLow = rangeMgr.getColocateRanges(grpId).get(0).getShardGroupId();
@@ -819,7 +819,7 @@ public class SplitTabletJobColocateTest {
 
     private TabletReshardJob createTabletReshardJob(long targetSize) throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex idx = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex idx = physicalPartition.getLatestBaseIndex();
         long tabletId = idx.getTablets().get(0).getId();
         TabletList tabletList = new TabletList(List.of(tabletId));
         Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
@@ -855,7 +855,7 @@ public class SplitTabletJobColocateTest {
     @Test
     public void testForExternalBoundariesAcceptsCoveredRangeColocateInput() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         Tablet oldTablet = materializedIndex.getTablets().get(0);
         long oldTabletId = oldTablet.getId();
         oldTablet.setRange(new TabletRange());
@@ -880,7 +880,7 @@ public class SplitTabletJobColocateTest {
     @Test
     public void testForExternalBoundariesRejectsUncoveredColocateRange() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         Tablet oldTablet = materializedIndex.getTablets().get(0);
         long oldTabletId = oldTablet.getId();
         oldTablet.setRange(new TabletRange());

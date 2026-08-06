@@ -1205,7 +1205,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         when(baseIndex.getTablets()).thenReturn(List.of(tablet));
         when(baseIndex.getRowCount()).thenReturn(rowCount);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
-        when(physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);
@@ -1232,7 +1232,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         when(baseIndex.getTablets()).thenReturn(tablets);
         when(baseIndex.getRowCount()).thenReturn(rowCount);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
-        when(physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);
@@ -1284,14 +1284,14 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
     /**
      * Install a {@link Partition} whose default physical partition exposes the given
      * visible indices (base index first). {@code resolveUnderReadLock} walks both
-     * {@code getIndex(baseIndexMetaId)} and {@code getWritableMaterializedIndices}.
+     * {@code getIndex(baseIndexMetaId)} and {@code getLatestMaterializedIndices}.
      */
     private void installPartitionWithIndices(String name, long physicalPartitionId, List<MaterializedIndex> indices) {
         Partition partition = mock(Partition.class);
         PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
         when(physicalPartition.getId()).thenReturn(physicalPartitionId);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(indices.get(0));
-        when(physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(indices);
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);

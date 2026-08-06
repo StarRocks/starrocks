@@ -809,7 +809,7 @@ public class StarRocksAssert {
                             if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                                 long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
                                 partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-                                MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
+                                MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                                 List<Tablet> tablets = baseIndex.getTablets();
                                 for (Tablet tablet : tablets) {
                                     List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -1189,7 +1189,7 @@ public class StarRocksAssert {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName).getTable(tableName);
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
             partition.setVisibleVersion(version, System.currentTimeMillis());
-            MaterializedIndex baseIndex = partition.getWritableBaseIndex();
+            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
             List<Tablet> tablets = baseIndex.getTablets();
             for (Tablet tablet : tablets) {
                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

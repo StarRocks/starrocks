@@ -89,7 +89,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 long partitionId = physicalPartition.getParentId();
                 long physicalPartitionId = physicalPartition.getId();
-                MaterializedIndex originIndex = physicalPartition.getWritableIndex(originIndexMetaId);
+                MaterializedIndex originIndex = physicalPartition.getLatestIndex(originIndexMetaId);
                 long shardGroupId = originIndex.getShardGroupId();
 
                 List<Tablet> originTablets = originIndex.getTablets();

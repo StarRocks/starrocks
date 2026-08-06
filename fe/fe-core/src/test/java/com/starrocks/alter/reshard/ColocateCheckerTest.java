@@ -144,7 +144,7 @@ public class ColocateCheckerTest {
 
     private long firstVisibleTabletId() {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     return tablet.getId();
                 }
@@ -155,7 +155,7 @@ public class ColocateCheckerTest {
 
     private long firstVisibleIndexSpreadGroup() {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 return index.getShardGroupId();
             }
         }
@@ -328,7 +328,7 @@ public class ColocateCheckerTest {
 
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
         MaterializedIndex index = table.getPhysicalPartitions().iterator().next()
-                .getWritableMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
         Tablet lowTablet = index.getTablets().iterator().next();
         lowTablet.setRange(new TabletRange(
                 ColocateRangeUtils.expandToFullSortKey(Range.lt(boundary), sortKeyColumns, 1)));
@@ -386,7 +386,7 @@ public class ColocateCheckerTest {
 
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
         MaterializedIndex index = table.getPhysicalPartitions().iterator().next()
-                .getWritableMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
         Tablet lowTablet = index.getTablets().iterator().next();
         lowTablet.setRange(new TabletRange(
                 ColocateRangeUtils.expandToFullSortKey(Range.lt(boundary), sortKeyColumns, 1)));
@@ -976,7 +976,7 @@ public class ColocateCheckerTest {
 
         // A tablet-range change (real reshard progress) MUST also re-arm.
         long sigAfterLoad = ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig);
-        MaterializedIndex index = pp.getWritableMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+        MaterializedIndex index = pp.getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
         Tablet tablet = index.getTablets().iterator().next();
         TabletRange originalRange = tablet.getRange();
         tablet.setRange(new TabletRange(Range.lt(

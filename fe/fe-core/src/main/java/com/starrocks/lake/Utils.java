@@ -99,7 +99,7 @@ public class Utils {
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(indexState)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
                                 tablet.getId());

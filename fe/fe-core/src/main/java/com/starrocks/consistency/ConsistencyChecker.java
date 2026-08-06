@@ -609,7 +609,7 @@ public class ConsistencyChecker extends LeaderDaemon {
 
             // sort materializedIndices
             List<MaterializedIndex> visibleIndexes =
-                        physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE);
+                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
             Queue<MetaObject> indexQueue =
                     new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
             indexQueue.addAll(visibleIndexes);

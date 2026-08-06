@@ -409,7 +409,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             indexList = new ArrayList<>(physicalPartition
-                    .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }

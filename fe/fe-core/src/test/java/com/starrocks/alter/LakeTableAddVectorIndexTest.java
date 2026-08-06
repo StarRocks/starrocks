@@ -460,7 +460,7 @@ public class LakeTableAddVectorIndexTest {
 
         // ---- Step 6: assert vibv == vSnap in live catalog shadow indexes ----
         // The physical partition must now have at least one shadow index whose tablets carry vibv.
-        List<MaterializedIndex> shadowIndexes = pp.getWritableMaterializedIndices(IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes = pp.getLatestMaterializedIndices(IndexExtState.SHADOW);
         Assertions.assertFalse(shadowIndexes.isEmpty(),
                 "Physical partition must have at least one shadow index after replay");
 

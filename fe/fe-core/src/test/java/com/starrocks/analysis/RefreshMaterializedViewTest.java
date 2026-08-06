@@ -734,7 +734,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
                             partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -838,7 +838,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
                             partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

@@ -364,7 +364,7 @@ public class BrokerLoadPreSplitHookTest {
 
         PhysicalPartition partition = mock(PhysicalPartition.class);
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
-        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex, rollupIndex));
         when(target.getPhysicalPartitions()).thenReturn(List.of(partition));
     }

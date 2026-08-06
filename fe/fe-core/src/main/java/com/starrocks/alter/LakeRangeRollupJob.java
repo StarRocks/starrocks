@@ -239,7 +239,7 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     @Override
     protected boolean flipNotYetApplied(@NotNull OlapTable table) {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            MaterializedIndex idx = physicalPartition.getWritableIndex(shadowIndexMetaId);
+            MaterializedIndex idx = physicalPartition.getLatestIndex(shadowIndexMetaId);
             if (idx == null || idx.getState() != MaterializedIndex.IndexState.NORMAL) {
                 return true;
             }
@@ -409,7 +409,7 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
             TStorageMedium medium =
                     table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
 
-            MaterializedIndex shadowIndex = physicalPartition.getWritableIndex(shadowIndexMetaId);
+            MaterializedIndex shadowIndex = physicalPartition.getLatestIndex(shadowIndexMetaId);
             Preconditions.checkNotNull(shadowIndex, shadowIndexMetaId);
 
             TabletMeta shadowTabletMeta =

@@ -147,7 +147,7 @@ public class GlobalStateMgrTestUtil {
                 return false;
             }
             List<MaterializedIndex> allMaterializedIndices = masterPartition.getDefaultPhysicalPartition()
-                    .getWritableMaterializedIndices(IndexExtState.ALL);
+                    .getLatestMaterializedIndices(IndexExtState.ALL);
             for (MaterializedIndex masterIndex : allMaterializedIndices) {
                 MaterializedIndex slaveIndex = slavePartition.getDefaultPhysicalPartition().getIndex(masterIndex.getId());
                 if (slaveIndex == null) {

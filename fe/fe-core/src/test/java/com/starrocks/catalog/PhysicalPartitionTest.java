@@ -86,15 +86,15 @@ public class PhysicalPartitionTest {
         p.createRollupIndex(new MaterializedIndex(1));
         p.createRollupIndex(new MaterializedIndex(2, IndexState.SHADOW));
 
-        Assertions.assertEquals(0, p.getWritableBaseIndex().getId());
+        Assertions.assertEquals(0, p.getLatestBaseIndex().getId());
         Assertions.assertNotNull(p.getIndex(0));
         Assertions.assertNotNull(p.getIndex(1));
         Assertions.assertNotNull(p.getIndex(2));
         Assertions.assertNull(p.getIndex(3));
 
-        Assertions.assertEquals(3, p.getWritableMaterializedIndices(IndexExtState.ALL).size());
-        Assertions.assertEquals(2, p.getWritableMaterializedIndices(IndexExtState.VISIBLE).size());
-        Assertions.assertEquals(1, p.getWritableMaterializedIndices(IndexExtState.SHADOW).size());
+        Assertions.assertEquals(3, p.getLatestMaterializedIndices(IndexExtState.ALL).size());
+        Assertions.assertEquals(2, p.getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assertions.assertEquals(1, p.getLatestMaterializedIndices(IndexExtState.SHADOW).size());
 
         Assertions.assertTrue(p.hasMaterializedView());
         Assertions.assertTrue(p.hasStorageData());
@@ -251,9 +251,9 @@ public class PhysicalPartitionTest {
 
         // 1. Base index
         // initial base index
-        Assertions.assertEquals(baseIndex, partition.getWritableBaseIndex());
+        Assertions.assertEquals(baseIndex, partition.getLatestBaseIndex());
         Assertions.assertEquals(baseIndex, partition.getIndex(baseIndexId));
-        Assertions.assertEquals(baseIndex, partition.getWritableIndex(baseMetaId));
+        Assertions.assertEquals(baseIndex, partition.getLatestIndex(baseMetaId));
 
         List<MaterializedIndex> baseIndices = partition.getBaseIndices();
         Assertions.assertEquals(1, baseIndices.size());
@@ -270,7 +270,7 @@ public class PhysicalPartitionTest {
         partition.createRollupIndex(shadowRollup);
 
         Assertions.assertEquals(shadowRollup, partition.getIndex(shadowIndexId));
-        Assertions.assertEquals(shadowRollup, partition.getWritableIndex(shadowMetaId));
+        Assertions.assertEquals(shadowRollup, partition.getLatestIndex(shadowMetaId));
 
         shardGroupIds = partition.getShardGroupIds();
         Assertions.assertEquals(2, shardGroupIds.size());
@@ -316,9 +316,9 @@ public class PhysicalPartitionTest {
 
         // 1. Base index
         // initial base index
-        Assertions.assertEquals(baseIndex, partition.getWritableBaseIndex());
+        Assertions.assertEquals(baseIndex, partition.getLatestBaseIndex());
         Assertions.assertEquals(baseIndex, partition.getIndex(baseIndexId));
-        Assertions.assertEquals(baseIndex, partition.getWritableIndex(baseMetaId));
+        Assertions.assertEquals(baseIndex, partition.getLatestIndex(baseMetaId));
 
         List<MaterializedIndex> baseIndices = partition.getBaseIndices();
         Assertions.assertEquals(1, baseIndices.size());
@@ -335,7 +335,7 @@ public class PhysicalPartitionTest {
         partition.createRollupIndex(rollupIndex);
 
         Assertions.assertEquals(rollupIndex, partition.getIndex(rollupIndexId));
-        Assertions.assertEquals(rollupIndex, partition.getWritableIndex(rollupMetaId));
+        Assertions.assertEquals(rollupIndex, partition.getLatestIndex(rollupMetaId));
 
         shardGroupIds = partition.getShardGroupIds();
         Assertions.assertEquals(2, shardGroupIds.size());
@@ -351,9 +351,9 @@ public class PhysicalPartitionTest {
         partition.createRollupIndex(rollupIndexNew);
 
         Assertions.assertEquals(baseIndexNew, partition.getIndex(baseIndexIdNew));
-        Assertions.assertEquals(baseIndexNew, partition.getWritableIndex(baseMetaIdNew));
+        Assertions.assertEquals(baseIndexNew, partition.getLatestIndex(baseMetaIdNew));
         Assertions.assertEquals(rollupIndexNew, partition.getIndex(rollupIndexIdNew));
-        Assertions.assertEquals(rollupIndexNew, partition.getWritableIndex(rollupMetaIdNew));
+        Assertions.assertEquals(rollupIndexNew, partition.getLatestIndex(rollupMetaIdNew));
 
         shardGroupIds = partition.getShardGroupIds();
         Assertions.assertEquals(2, shardGroupIds.size());
@@ -401,9 +401,9 @@ public class PhysicalPartitionTest {
 
         // 1. Base index
         // initial base index
-        Assertions.assertEquals(baseIndex1, partition.getWritableBaseIndex());
+        Assertions.assertEquals(baseIndex1, partition.getLatestBaseIndex());
         Assertions.assertEquals(baseIndex1, partition.getIndex(baseIndexId1));
-        Assertions.assertEquals(baseIndex1, partition.getWritableIndex(baseMetaId));
+        Assertions.assertEquals(baseIndex1, partition.getLatestIndex(baseMetaId));
 
         List<MaterializedIndex> baseIndices = partition.getBaseIndices();
         Assertions.assertEquals(1, baseIndices.size());
@@ -413,9 +413,9 @@ public class PhysicalPartitionTest {
         MaterializedIndex baseIndex2 = new MaterializedIndex(baseIndexId2, baseMetaId, IndexState.NORMAL, baseShardGroupId);
         partition.addMaterializedIndex(baseIndex2, true);
 
-        Assertions.assertEquals(baseIndex2, partition.getWritableBaseIndex());
+        Assertions.assertEquals(baseIndex2, partition.getLatestBaseIndex());
         Assertions.assertEquals(baseIndex2, partition.getIndex(baseIndexId2));
-        Assertions.assertEquals(baseIndex2, partition.getWritableIndex(baseMetaId));
+        Assertions.assertEquals(baseIndex2, partition.getLatestIndex(baseMetaId));
 
         baseIndices = partition.getBaseIndices();
         Assertions.assertEquals(2, baseIndices.size());
@@ -437,7 +437,7 @@ public class PhysicalPartitionTest {
         partition.addMaterializedIndex(rollup2, false);
 
         Assertions.assertEquals(rollup1, partition.getIndex(rollupIndexId2));
-        Assertions.assertEquals(rollup2, partition.getWritableIndex(rollupMetaId));
+        Assertions.assertEquals(rollup2, partition.getLatestIndex(rollupMetaId));
 
         shardGroupIds = partition.getShardGroupIds();
         Assertions.assertEquals(2, shardGroupIds.size());
@@ -447,7 +447,7 @@ public class PhysicalPartitionTest {
         List<MaterializedIndex> allIndices = partition.getAllMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(4, allIndices.size());
 
-        List<MaterializedIndex> writableIndices = partition.getWritableMaterializedIndices(IndexExtState.VISIBLE);
+        List<MaterializedIndex> writableIndices = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(2, writableIndices.size());
         Assertions.assertTrue(writableIndices.contains(baseIndex2));
         Assertions.assertTrue(writableIndices.contains(rollup2));
@@ -493,7 +493,7 @@ public class PhysicalPartitionTest {
 
         Assertions.assertTrue(partition.isDesharding());
         Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
-        Assertions.assertEquals(children, partition.getWritableBaseIndex());
+        Assertions.assertEquals(children, partition.getLatestBaseIndex());
         Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
         Assertions.assertEquals(Set.of(parent.getId(), children.getId()),
                 partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE).stream()

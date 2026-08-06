@@ -180,7 +180,7 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex beforeMergeIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex beforeMergeIndex = physicalPartition.getLatestBaseIndex();
         List<Long> oldTabletIds = new ArrayList<>();
         for (Tablet tablet : beforeMergeIndex.getTablets()) {
             oldTabletIds.add(tablet.getId());
@@ -207,7 +207,7 @@ public class MergeTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertEquals(oldVersion + 1, newVersion);
 
-        MaterializedIndex afterMergeIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex afterMergeIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertNotEquals(beforeMergeIndex, afterMergeIndex);
         Assertions.assertTrue(afterMergeIndex.getTablets().size() < beforeMergeIndex.getTablets().size());
 
@@ -607,7 +607,7 @@ public class MergeTabletJobTest {
         Deencapsulation.invoke(addIndexJob, "addNewMaterializedIndexes");
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         ReshardingMaterializedIndex badIndex = new ReshardingMaterializedIndex(-1L,
                 new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(),
                         oldIndex.getMetaId(), IndexState.NORMAL, oldIndex.getShardGroupId()),
@@ -644,7 +644,7 @@ public class MergeTabletJobTest {
         Assertions.assertNotNull(mergeJob);
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         // Replay paths do not call createShardsOnStarOS, but in production the original
@@ -675,7 +675,7 @@ public class MergeTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertEquals(oldVersion + 1, newVersion);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertNotEquals(materializedIndex, newMaterializedIndex);
     }
 
@@ -700,7 +700,7 @@ public class MergeTabletJobTest {
     public void testMergeTabletJobFactoryWithTabletGroups() throws Exception {
         ensureTabletCount(3);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long firstTabletId = orderedTablets.get(0).getId();
@@ -737,7 +737,7 @@ public class MergeTabletJobTest {
     public void testMergeTabletJobFactoryAutoMergeBySize() throws Exception {
         ensureTabletCount(3);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
@@ -781,7 +781,7 @@ public class MergeTabletJobTest {
     public void testMergeTabletJobFactoryAutoMergeStopsAtTargetSize() throws Exception {
         ensureTabletCount(4);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
@@ -820,7 +820,7 @@ public class MergeTabletJobTest {
     public void testMergeTabletJobFactoryAutoMergeSkipsStaleTablet() throws Exception {
         ensureTabletCount(3);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
@@ -854,7 +854,7 @@ public class MergeTabletJobTest {
     public void testMergeTabletJobFactoryExcludesTabletAtPairThreshold() throws Exception {
         ensureTabletCount(4);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
@@ -921,7 +921,7 @@ public class MergeTabletJobTest {
         };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (Tablet orderedTablet : orderedTablets) {
@@ -964,7 +964,7 @@ public class MergeTabletJobTest {
         };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (Tablet orderedTablet : oldIndex.getTablets()) {
             LakeTablet tablet = (LakeTablet) orderedTablet;
@@ -991,7 +991,7 @@ public class MergeTabletJobTest {
         };
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
         long firstTabletId = orderedTablets.get(0).getId();
         long secondTabletId = orderedTablets.get(1).getId();
@@ -1006,7 +1006,7 @@ public class MergeTabletJobTest {
 
     private TabletReshardJob createSplitTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
         TabletList tabletList = new TabletList(List.of(tabletId));
@@ -1046,7 +1046,7 @@ public class MergeTabletJobTest {
     private static TabletRange getTabletRangeFromOldTablet(long oldTabletId) {
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             for (MaterializedIndex index : partition
-                    .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (tablet.getId() == oldTabletId) {
                         TabletRange tabletRange = tablet.getRange();
@@ -1114,7 +1114,7 @@ public class MergeTabletJobTest {
 
     private void ensureTabletCount(int count) throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
         int maxTries = 5;
         while (materializedIndex.getTablets().size() < count && maxTries-- > 0) {
             TabletReshardJob splitJob = createSplitTabletReshardJob();
@@ -1122,7 +1122,7 @@ public class MergeTabletJobTest {
             splitJob.run();
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
-            materializedIndex = physicalPartition.getWritableBaseIndex();
+            materializedIndex = physicalPartition.getLatestBaseIndex();
         }
         Preconditions.checkState(materializedIndex.getTablets().size() >= count,
                 "Not enough tablets for merge");
@@ -1132,7 +1132,7 @@ public class MergeTabletJobTest {
         ensureTabletCount(2);
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getWritableBaseIndex();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         List<Tablet> oldTablets = oldIndex.getTablets();
         Preconditions.checkState(oldTablets.size() >= 2, "Not enough tablets for merge");
 

@@ -3422,7 +3422,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex baseIndex = physicalPartition.getWritableBaseIndex();
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
                 for (Tablet tablet : baseIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
@@ -3623,7 +3623,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex baseIndex = physicalPartition.getWritableBaseIndex();
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
                 for (Tablet tablet : baseIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
@@ -3710,7 +3710,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             Set<Long> tabletSet = beIdToTabletSet.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
@@ -4681,7 +4681,7 @@ public class SchemaChangeHandler extends AlterHandler {
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
         Map<Long, TabletRange> targetRanges = new HashMap<>();
         for (PhysicalPartition physicalPartition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex index = physicalPartition.getWritableIndex(baseIndexMetaId);
+            MaterializedIndex index = physicalPartition.getLatestIndex(baseIndexMetaId);
             if (index == null) {
                 continue;
             }

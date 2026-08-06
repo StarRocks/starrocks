@@ -229,7 +229,7 @@ public class MergeTabletJob extends TabletReshardJob {
                     allPartitionFinished = false;
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
-                    for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(

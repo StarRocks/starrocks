@@ -693,7 +693,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // so the new bundle stays a complete whole-partition snapshot. See collectFileBundlingCarryForwardTablets.
             if (useAggregatePublish) {
                 carryForwardTablets = collectFileBundlingCarryForwardTablets(
-                        partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
+                        partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
                         publishedNormalIndexMetaIds);
             }
         } finally {
@@ -1163,7 +1163,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // Only needed for file bundling; without it each tablet keeps its own per-version metadata file.
             if (useAggregatePublish) {
                 carryForwardTablets = collectFileBundlingCarryForwardTablets(
-                        partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
+                        partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
                         publishedNormalIndexMetaIds);
             }
         } finally {

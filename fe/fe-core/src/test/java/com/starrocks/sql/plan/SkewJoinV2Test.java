@@ -96,7 +96,7 @@ public class SkewJoinV2Test extends PlanTestBase {
         public Map<Long, Optional<Long>> getTableStatistics(Long tableId, Collection<Partition> partitions) {
             return partitions.stream().collect(java.util.stream.Collectors.toMap(
                     Partition::getId,
-                    p -> Optional.of(p.getDefaultPhysicalPartition().getWritableBaseIndex().getRowCount())));
+                    p -> Optional.of(p.getDefaultPhysicalPartition().getLatestBaseIndex().getRowCount())));
         }
 
         @Override
