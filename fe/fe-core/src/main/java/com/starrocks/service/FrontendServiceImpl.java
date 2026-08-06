@@ -2363,7 +2363,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         List<Long> indexIds = Lists.newArrayList();
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             // Because multiple versions of a materialized index cannot be loaded simultaneously,
             // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());
@@ -3157,7 +3157,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         List<Long> indexIds = Lists.newArrayList();
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             // Because multiple versions of a materialized index cannot be loaded simultaneously,
             // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());

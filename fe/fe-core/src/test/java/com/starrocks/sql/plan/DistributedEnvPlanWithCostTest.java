@@ -1495,7 +1495,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         OlapTable datesN = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
                 .getDb("test").getTable("dates_n");
         LocalTablet tablet = (LocalTablet) datesN.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+                .getDefaultPhysicalPartition().getWritableBaseIndex().getTablets().get(0);
         Replica replica = tablet.getImmutableReplicas().get(0);
 
         long originalVersion = replica.getVersion();
@@ -1537,7 +1537,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 .getDb("test").getTable("dates_n");
         Partition partition = datesN.getPartitions().iterator().next();
         LocalTablet tablet = (LocalTablet) partition.getDefaultPhysicalPartition()
-                .getLatestBaseIndex().getTablets().get(0);
+                .getWritableBaseIndex().getTablets().get(0);
         Replica replica = tablet.getImmutableReplicas().get(0);
 
         long indexMetaId = datesN.getBaseIndexMetaId();

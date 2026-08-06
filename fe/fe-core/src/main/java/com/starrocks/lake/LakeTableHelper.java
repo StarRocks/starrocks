@@ -128,7 +128,7 @@ public class LakeTableHelper {
 
     static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition,
                                                       ComputeResource computeResource) throws StarClientException {
-        List<MaterializedIndex> allIndices = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        List<MaterializedIndex> allIndices = partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         final long workerGroupId = computeResource.getWorkerGroupId();
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();

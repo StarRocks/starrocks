@@ -1060,7 +1060,7 @@ public class LeaderImpl {
 
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> indexes =
-                        partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL);
+                        partition.getDefaultPhysicalPartition().getWritableMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());

@@ -96,7 +96,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
      */
     private static void ensureMultipleTablets() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex index = physicalPartition.getWritableBaseIndex();
         if (index.getTablets().size() >= 3) {
             return;
         }
@@ -123,7 +123,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
 
     private static List<Long> getOldTabletIds(int count) {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex index = physicalPartition.getWritableBaseIndex();
         List<Tablet> tablets = index.getTablets();
         Assertions.assertTrue(tablets.size() >= count,
                 "test fixture must have >= " + count + " tablets (has " + tablets.size() + ")");
@@ -301,8 +301,8 @@ public class SplitTabletJobFactoryMultiTabletTest {
                 "fixture must have exactly two physical partitions");
         PhysicalPartition partitionA = physicalPartitions.get(0);
         PhysicalPartition partitionB = physicalPartitions.get(1);
-        MaterializedIndex indexA = partitionA.getLatestBaseIndex();
-        MaterializedIndex indexB = partitionB.getLatestBaseIndex();
+        MaterializedIndex indexA = partitionA.getWritableBaseIndex();
+        MaterializedIndex indexB = partitionB.getWritableBaseIndex();
         Assertions.assertEquals(indexA.getId(), indexB.getId(),
                 "precondition: the two partitions' base indexes share the same index id");
 
@@ -370,7 +370,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
     public void rejectsTabletMetaWithMissingPhysicalPartition() {
         // Inverted-index meta names this table but a physical partition id it does not
         // contain -> resolveTabletMeta must surface "Cannot find physical partition".
-        long realIndexId = table.getAllPhysicalPartitions().iterator().next().getLatestBaseIndex().getId();
+        long realIndexId = table.getAllPhysicalPartitions().iterator().next().getWritableBaseIndex().getId();
         long tabletId = GlobalStateMgr.getCurrentState().getNextId();
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId,
                 new com.starrocks.catalog.TabletMeta(db.getId(), table.getId(),
@@ -409,7 +409,7 @@ public class SplitTabletJobFactoryMultiTabletTest {
         // Meta resolves to a real, NORMAL index, but the tablet id is not one of that
         // index's tablets -> "Cannot find tablet ... in materialized index".
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex baseIndex = physicalPartition.getWritableBaseIndex();
         long tabletId = GlobalStateMgr.getCurrentState().getNextId();
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(tabletId,
                 new com.starrocks.catalog.TabletMeta(db.getId(), table.getId(),

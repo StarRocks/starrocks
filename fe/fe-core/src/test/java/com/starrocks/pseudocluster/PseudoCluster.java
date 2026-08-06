@@ -296,7 +296,7 @@ public class PseudoCluster {
             OlapTable olapTable = (OlapTable) table;
             List<Long> ret = Lists.newArrayList();
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                for (MaterializedIndex index : partition.getLatestMaterializedIndices(
+                for (MaterializedIndex index : partition.getWritableMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
                         ret.add(tablet.getId());

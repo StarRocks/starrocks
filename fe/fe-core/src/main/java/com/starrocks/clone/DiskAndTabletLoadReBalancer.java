@@ -1859,7 +1859,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // Tablet in SHADOW index cannot be repaired or balanced
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
+            for (MaterializedIndex idx : physicalPartition.getWritableMaterializedIndices(
                     MaterializedIndex.IndexExtState.VISIBLE)) {
                 PartitionStat pStat = new PartitionStat(db.getId(), olapTbl.getId(), 0, replicaNum, replicationFactor);
                 context.partitionStats.put(new Pair<>(physicalPartition.getId(), idx.getId()), pStat);

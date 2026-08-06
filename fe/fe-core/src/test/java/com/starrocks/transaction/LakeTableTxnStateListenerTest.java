@@ -162,7 +162,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
 
         // Create compaction transaction and register loaded indexes (the fix)
         TransactionState txnState = newCompactionTransactionState();
-        List<Long> loadedIndexIds = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+        List<Long> loadedIndexIds = partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                 .stream().map(MaterializedIndex::getId).collect(Collectors.toList());
         txnState.addPartitionLoadedIndexes(tableId, partition.getId(), loadedIndexIds);
 

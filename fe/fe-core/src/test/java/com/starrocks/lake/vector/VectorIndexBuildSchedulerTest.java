@@ -227,7 +227,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet1, tablet2));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        Mockito.when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -262,9 +262,9 @@ public class VectorIndexBuildSchedulerTest {
 
         PhysicalPartition partition = Mockito.mock(PhysicalPartition.class);
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        Mockito.when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(visibleIndex));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
+        Mockito.when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL))
                 .thenReturn(Lists.newArrayList(visibleIndex, shadowIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -275,7 +275,7 @@ public class VectorIndexBuildSchedulerTest {
         Assertions.assertTrue(pending.containsKey(2001L), "visible lagging tablet must be enqueued");
         Assertions.assertFalse(pending.containsKey(9001L), "shadow tablet must NOT be enqueued by recoveryScan");
         Mockito.verify(partition, Mockito.never())
-                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
     }
 
     @Test
@@ -290,7 +290,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(5L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(tablet));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        Mockito.when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartitions()).thenReturn(Lists.newArrayList(partition));
 
@@ -363,7 +363,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(partition.getVisibleVersion()).thenReturn(9L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(built, lagging));
-        Mockito.when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        Mockito.when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartition(partitionId)).thenReturn(partition);
 
@@ -391,7 +391,7 @@ public class VectorIndexBuildSchedulerTest {
         Mockito.when(reshardedPartition.getVisibleVersion()).thenReturn(9L);
         MaterializedIndex matIndex = Mockito.mock(MaterializedIndex.class);
         Mockito.when(matIndex.getTablets()).thenReturn(Lists.newArrayList(lagging));
-        Mockito.when(reshardedPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        Mockito.when(reshardedPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Lists.newArrayList(matIndex));
         Mockito.when(table.getPhysicalPartition(reshardedPartitionId)).thenReturn(reshardedPartition);
 

@@ -115,7 +115,7 @@ public class SchemaChangeJobV2EditLogTest {
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
             Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
             PhysicalPartition physicalPartition = ctx.table.getPartition(ctx.partitionId).getDefaultPhysicalPartition();
-            Assertions.assertEquals(0, physicalPartition.getLatestMaterializedIndices(IndexExtState.SHADOW).size());
+            Assertions.assertEquals(0, physicalPartition.getWritableMaterializedIndices(IndexExtState.SHADOW).size());
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }

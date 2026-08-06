@@ -220,7 +220,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
         long tableSize = 0;
         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
             long partitionSize = 0;
-            for (MaterializedIndex mIndex : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex mIndex : partition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                 partitionSize += mIndex.getDataSize(singleReplica);
             } // end for indexes
             tableSize += partitionSize;

@@ -99,7 +99,7 @@ public class TabletPreSplitCoordinatorTest {
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
         // Default: base index only, visible to resolveVisibleIndexTargets. Tests that add a
         // rollup override this via stubRollupIndex(...).
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
 
         table = mock(OlapTable.class);
@@ -138,7 +138,7 @@ public class TabletPreSplitCoordinatorTest {
     /**
      * Add a visible rollup index (alongside the default base index) with {@code tabletCount}
      * tablets and {@code sortKeyColumns} as its sort key, mirroring {@link #stubSortKeyColumns}
-     * for the base index. Overrides the default {@code partition.getLatestMaterializedIndices}
+     * for the base index. Overrides the default {@code partition.getWritableMaterializedIndices}
      * stub so both indices are visible to {@link PreSplitTargets#resolveVisibleIndexTargets}.
      */
     private void stubRollupIndex(int tabletCount, Column... sortKeyColumns) {
@@ -159,7 +159,7 @@ public class TabletPreSplitCoordinatorTest {
         }
         when(rollupIndex.getTablets()).thenReturn(tablets);
 
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex, rollupIndex));
     }
 

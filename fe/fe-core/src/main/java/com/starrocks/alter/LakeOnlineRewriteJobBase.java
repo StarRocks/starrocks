@@ -528,9 +528,9 @@ public abstract class LakeOnlineRewriteJobBase
                 // Resolve by META id, not physical index id: a range-distribution table that has gone
                 // through tablet split/merge resharding keeps the same index meta id but the latest
                 // MaterializedIndex carries a new physical index id, so getIndex(metaId) (a physical-id
-                // lookup) would miss it. getLatestIndex(metaId) is the meta-id lookup the rest of the
+                // lookup) would miss it. getWritableIndex(metaId) is the meta-id lookup the rest of the
                 // alter/reshard code uses (e.g. LakeTableAlterJobV2Builder).
-                MaterializedIndex baseIndex = physicalPartition.getLatestIndex(originIndexMetaId);
+                MaterializedIndex baseIndex = physicalPartition.getWritableIndex(originIndexMetaId);
                 if (baseIndex == null) {
                     throw new AlterCancelException("base index missing in partition " + physicalPartitionId);
                 }
@@ -845,7 +845,7 @@ public abstract class LakeOnlineRewriteJobBase
             if (physicalPartition == null) {
                 continue;
             }
-            if (physicalPartition.getLatestIndex(shadowIndexMetaId) != null) {
+            if (physicalPartition.getWritableIndex(shadowIndexMetaId) != null) {
                 // Already exposed (replay re-run): do not double-add.
                 continue;
             }
@@ -1337,13 +1337,13 @@ public abstract class LakeOnlineRewriteJobBase
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
-                MaterializedIndex shadowIndex = physicalPartition.getLatestIndex(shadowIndexMetaId);
+                MaterializedIndex shadowIndex = physicalPartition.getWritableIndex(shadowIndexMetaId);
                 Preconditions.checkNotNull(shadowIndex, shadowIndexMetaId);
                 List<Tablet> shadowTablets = new ArrayList<>(shadowIndex.getTablets());
                 // The base index (and any other unchanged visible index) only needs its version
                 // upgraded via the no-op publish.
                 List<Tablet> originTablets = new ArrayList<>();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                     originTablets.addAll(index.getTablets());
                 }
                 PartitionRewriteState state = partitionStates.get(physicalPartitionId);
@@ -1458,7 +1458,7 @@ public abstract class LakeOnlineRewriteJobBase
                     }
                     List<Tablet> regularTablets = new ArrayList<>();
                     for (MaterializedIndex index :
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                            physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                         regularTablets.addAll(index.getTablets());
                     }
                     tabletsByPartition.put(physicalPartitionId, regularTablets);

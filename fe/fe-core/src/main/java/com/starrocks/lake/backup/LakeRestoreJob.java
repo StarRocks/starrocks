@@ -94,7 +94,7 @@ public class LakeRestoreJob extends RestoreJob {
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                   BackupJobInfo.BackupPartitionInfo backupPartInfo, boolean overwrite) {
         for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
-                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {

@@ -243,7 +243,7 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getWritableBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     LOG.warn("Statistics table {} partition {} has tablets without normal replicas",
                             tableName, partition.getName());

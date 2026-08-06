@@ -324,7 +324,7 @@ public class LakeRangeRollupJobTest {
 
     /** Create a PendingPartitionPlan for the first physical partition of the test table. */
     private PendingPartitionPlan newPendingPlan(PhysicalPartition physicalPartition) {
-        MaterializedIndex baseIndex = physicalPartition.getLatestIndex(baseIndexMetaId);
+        MaterializedIndex baseIndex = physicalPartition.getWritableIndex(baseIndexMetaId);
         return new PendingPartitionPlan(
                 physicalPartition.getId(),
                 baseIndex,
@@ -633,7 +633,7 @@ public class LakeRangeRollupJobTest {
 
         // Add shadow tablets to the inverted index (as the live job would have done in WAITING_TXN).
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
+        MaterializedIndex shadowIdx = physicalPartition.getWritableIndex(job.getShadowIndexMetaId());
         assertNotNull(shadowIdx, "shadow index must be present before replay");
         for (Tablet t : shadowIdx.getTablets()) {
             invertedIndex.addTablet(t.getId(),
@@ -661,7 +661,7 @@ public class LakeRangeRollupJobTest {
         assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
                 "sibling r1 meta must be untouched (identity) after the first replay");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            MaterializedIndex r1Idx = pp.getWritableIndex(r1MetaId);
             assertNotNull(r1Idx, "sibling r1 physical index must remain after first replay");
             assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
                     "sibling r1 physical index must stay NORMAL after first replay");
@@ -677,7 +677,7 @@ public class LakeRangeRollupJobTest {
         assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId),
                 "sibling r1 meta must still be intact after the second replay");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            MaterializedIndex r1Idx = pp.getWritableIndex(r1MetaId);
             assertNotNull(r1Idx, "sibling r1 physical index must remain after second replay");
             assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(),
                     "sibling r1 physical index must stay NORMAL after second replay");
@@ -702,7 +702,7 @@ public class LakeRangeRollupJobTest {
         long r2MetaId = job.getShadowIndexMetaId();
         assertNotNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be installed before cancel");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            assertNotNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be installed before cancel");
+            assertNotNull(pp.getWritableIndex(r2MetaId), "r2 shadow physical index must be installed before cancel");
         }
 
         // Cancel r2 (drives removeShadowIndexOnCancel under the edit-log applier).
@@ -711,12 +711,12 @@ public class LakeRangeRollupJobTest {
         // r2 shadow fully removed.
         assertNull(table.getIndexMetaByMetaId(r2MetaId), "r2 shadow meta must be removed after cancel");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            assertNull(pp.getLatestIndex(r2MetaId), "r2 shadow physical index must be removed after cancel");
+            assertNull(pp.getWritableIndex(r2MetaId), "r2 shadow physical index must be removed after cancel");
         }
         // Sibling r1 + base intact.
         assertSame(r1MetaBefore, table.getIndexMetaByMetaId(r1MetaId), "sibling r1 meta must survive r2 cancel");
         for (PhysicalPartition pp : table.getPhysicalPartitions()) {
-            MaterializedIndex r1Idx = pp.getLatestIndex(r1MetaId);
+            MaterializedIndex r1Idx = pp.getWritableIndex(r1MetaId);
             assertNotNull(r1Idx, "sibling r1 physical index must survive r2 cancel");
             assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(), "sibling r1 must stay NORMAL");
         }

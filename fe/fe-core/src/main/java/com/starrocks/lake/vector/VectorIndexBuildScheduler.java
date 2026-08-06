@@ -309,7 +309,7 @@ public class VectorIndexBuildScheduler extends LeaderDaemon {
         // the ALTER finishes and the index becomes visible, its tablets are picked up normally
         // (builtVersion < visibleVersion).
         for (MaterializedIndex index :
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             for (Tablet tablet : index.getTablets()) {
                 long builtVersion = 0;
                 if (tablet instanceof LakeTablet) {

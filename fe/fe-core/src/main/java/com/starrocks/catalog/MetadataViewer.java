@@ -269,7 +269,7 @@ public class MetadataViewer {
             for (long partId : partitionIds) {
                 Partition partition = olapTable.getPartition(partId);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             for (long beId : tablet.getBackendIds()) {
                                 if (!countMap.containsKey(beId)) {
@@ -367,7 +367,7 @@ public class MetadataViewer {
                 }
 
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                         List<Tablet> tablets = index.getTablets();
 
                         List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());

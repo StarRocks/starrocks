@@ -262,14 +262,14 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getWritableBaseIndex().setRowCount(rowCount);
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
-                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
+                partition.getDefaultPhysicalPartition().getWritableBaseIndex().setRowCount(rowCount);
             }
         }
     }

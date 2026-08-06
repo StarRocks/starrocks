@@ -1745,7 +1745,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         // physical partitions in the same logical partition use the same shard_group_id,
         // so that the shards of this logical partition are more evenly distributed.
-        long shardGroupId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getShardGroupId();
+        long shardGroupId = partition.getDefaultPhysicalPartition().getWritableBaseIndex().getShardGroupId();
         for (long indexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
             // initially, index id and index meta id are the same
             MaterializedIndex rollup = new MaterializedIndex(indexMetaId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
@@ -5566,7 +5566,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     private void setBadForHighVersionReplica(PhysicalPartition physicalPartition, long version) {
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
             for (Tablet tablet : index.getTablets()) {
                 if (!(tablet instanceof LocalTablet localTablet)) {
                     continue;

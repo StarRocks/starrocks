@@ -185,7 +185,7 @@ public class PartitionInfoView {
                     // TODO add more type support in the future
             }
 
-            List<MaterializedIndex> allIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> allIndices = physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL);
             if (CollectionUtils.isNotEmpty(allIndices)) {
                 MaterializedIndex materializedIndex = allIndices.get(0);
                 List<Tablet> tablets = materializedIndex.getTablets();

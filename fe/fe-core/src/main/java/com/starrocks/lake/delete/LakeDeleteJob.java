@@ -117,7 +117,7 @@ public class LakeDeleteJob extends DeleteJob {
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     List<Long> indexIds = Lists.newArrayList();
-                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                         indexIds.add(index.getId());
                         for (Tablet tablet : index.getTablets()) {
                             ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,

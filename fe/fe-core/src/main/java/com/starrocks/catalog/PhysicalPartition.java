@@ -66,7 +66,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     /**
      * Deprecated, use baseIndexMetaId and indexMetaIdToIndexIds instead.
      *
-     * indexMetaIdToIndexIds.get(baseIndexMetaId).getLast() is the latest version of base index.
+     * indexMetaIdToIndexIds.get(baseIndexMetaId).getLast() is the writable base index.
      */
     @Deprecated
     @SerializedName(value = "baseIndex")
@@ -87,9 +87,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     /**
      * Transitional query layout for an ORDER BY != PK tablet split.
      *
-     * <p>Writes and publish always use the latest index id in {@link #indexMetaIdToIndexIds} (the
+     * <p>Writes and publish always use the last index id in {@link #indexMetaIdToIndexIds} (the
      * children). Queries stay pinned to the superseded parent index until the atomic DESHARD
-     * compaction becomes visible. Empty means queries use the latest layout, preserving the
+     * compaction becomes visible. Empty means queries use the writable layout, preserving the
      * historical behavior for every other table and partition.
      */
     @SerializedName(value = "queryIndexMetaIdToIndexId")
@@ -394,13 +394,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         idToVisibleIndex.put(baseIndex.getId(), baseIndex);
     }
 
-    public MaterializedIndex getLatestBaseIndex() {
+    /** Returns the base index that accepts new writes. During DESHARD this is the child layout. */
+    public MaterializedIndex getWritableBaseIndex() {
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
         Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
                 String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
     }
 
+    /** Returns the base index used by scans. During DESHARD this can remain pinned to the parent layout. */
     public MaterializedIndex getQueryableBaseIndex() {
         return getQueryableIndex(baseIndexMetaId);
     }
@@ -552,7 +554,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     public boolean isTabletBalanced() {
-        for (MaterializedIndex index : getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
             if (!index.isTabletBalanced()) {
                 return false;
             }
@@ -560,7 +562,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
-    public MaterializedIndex getLatestIndex(long indexMetaId) {
+    /** Resolves an index meta id to the layout that accepts new writes. */
+    public MaterializedIndex getWritableIndex(long indexMetaId) {
         List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
         if (indexIds == null || indexIds.isEmpty()) {
             return null;
@@ -568,9 +571,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return getIndex(indexIds.get(indexIds.size() - 1));
     }
 
+    /** Resolves an index meta id to the layout visible to queries. */
     public MaterializedIndex getQueryableIndex(long indexMetaId) {
         Long queryIndexId = queryIndexMetaIdToIndexId.get(indexMetaId);
-        return queryIndexId == null ? getLatestIndex(indexMetaId) : getIndex(queryIndexId);
+        return queryIndexId == null ? getWritableIndex(indexMetaId) : getIndex(queryIndexId);
     }
 
     public void pinQueryableIndex(long indexMetaId, long indexId) {
@@ -605,7 +609,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
     }
 
-    private List<MaterializedIndex> getLatestVisibleIndices() {
+    private List<MaterializedIndex> getWritableVisibleIndices() {
         List<MaterializedIndex> indices = Lists.newArrayList();
         for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
             List<Long> indexIds = entry.getValue();
@@ -619,9 +623,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
+    /** Enumerates query-visible layouts; visible indexes may be pinned while shadow indexes stay writable-only. */
     public List<MaterializedIndex> getQueryableMaterializedIndices(IndexExtState extState) {
         if (queryIndexMetaIdToIndexId.isEmpty()) {
-            return getLatestMaterializedIndices(extState);
+            return getWritableMaterializedIndices(extState);
         }
         List<MaterializedIndex> indices = Lists.newArrayList();
         if (extState == IndexExtState.ALL || extState == IndexExtState.VISIBLE) {
@@ -633,18 +638,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             }
         }
         if (extState == IndexExtState.ALL || extState == IndexExtState.SHADOW) {
-            indices.addAll(getLatestShadowIndices());
+            indices.addAll(getWritableShadowIndices());
         }
         return indices;
     }
 
     /**
      * Returns every layout whose files must stay visible to vacuum. During DESHARD this is the
-     * union of the latest write layout and the pinned query layout; outside the transition it is
-     * exactly the historical latest-layout result.
+     * union of the writable layout and the pinned query layout; outside the transition it is
+     * exactly the writable-layout result.
      */
     public List<MaterializedIndex> getMaterializedIndicesForVacuum(IndexExtState extState) {
-        List<MaterializedIndex> indices = Lists.newArrayList(getLatestMaterializedIndices(extState));
+        List<MaterializedIndex> indices = Lists.newArrayList(getWritableMaterializedIndices(extState));
         if (queryIndexMetaIdToIndexId.isEmpty()) {
             return indices;
         }
@@ -657,7 +662,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
-    private List<MaterializedIndex> getLatestShadowIndices() {
+    private List<MaterializedIndex> getWritableShadowIndices() {
         List<MaterializedIndex> indices = Lists.newArrayList();
         for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
             List<Long> indexIds = entry.getValue();
@@ -671,18 +676,19 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
-    public List<MaterializedIndex> getLatestMaterializedIndices(IndexExtState extState) {
+    /** Enumerates layouts that accept writes and participate in publish/compaction/alter workflows. */
+    public List<MaterializedIndex> getWritableMaterializedIndices(IndexExtState extState) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         switch (extState) {
             case ALL:
-                indices.addAll(getLatestVisibleIndices());
-                indices.addAll(getLatestShadowIndices());
+                indices.addAll(getWritableVisibleIndices());
+                indices.addAll(getWritableShadowIndices());
                 break;
             case VISIBLE:
-                indices.addAll(getLatestVisibleIndices());
+                indices.addAll(getWritableVisibleIndices());
                 break;
             case SHADOW:
-                indices.addAll(getLatestShadowIndices());
+                indices.addAll(getWritableShadowIndices());
                 break;
             default:
                 break;
@@ -711,7 +717,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getTabletMaxDataSize() {
         long maxDataSize = 0;
-        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
+        for (MaterializedIndex mIndex : getWritableVisibleIndices()) {
             maxDataSize = Math.max(maxDataSize, mIndex.getTabletMaxDataSize());
         }
         return maxDataSize;
@@ -719,7 +725,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageDataSize() {
         long dataSize = 0;
-        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
+        for (MaterializedIndex mIndex : getWritableVisibleIndices()) {
             dataSize += mIndex.getDataSize();
         }
         return dataSize;
@@ -727,7 +733,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageRowCount() {
         long rowCount = 0;
-        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
+        for (MaterializedIndex mIndex : getWritableVisibleIndices()) {
             rowCount += mIndex.getRowCount();
         }
         return rowCount;
@@ -735,7 +741,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long storageReplicaCount() {
         long replicaCount = 0;
-        for (MaterializedIndex mIndex : getLatestVisibleIndices()) {
+        for (MaterializedIndex mIndex : getWritableVisibleIndices()) {
             replicaCount += mIndex.getReplicaCount();
         }
         return replicaCount;

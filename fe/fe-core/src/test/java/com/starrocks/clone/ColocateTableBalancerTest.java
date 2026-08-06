@@ -206,7 +206,7 @@ public class ColocateTableBalancerTest {
         Partition partition = table.getPartition("tbl");
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         Assertions.assertFalse(physicalPartition.isTabletBalanced());
-        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex index = physicalPartition.getWritableBaseIndex();
         BalanceStat balanceStat = index.getBalanceStat();
         Assertions.assertFalse(balanceStat.isBalanced());
         Assertions.assertEquals(BalanceType.COLOCATION_GROUP, balanceStat.getBalanceType());
@@ -232,7 +232,7 @@ public class ColocateTableBalancerTest {
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
         LocalTablet tablet =
-                (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+                (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getWritableBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
         long oldVal = Config.tablet_sched_repair_delay_factor_second;
         try {

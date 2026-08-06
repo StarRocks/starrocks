@@ -756,7 +756,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
-                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                        .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 for (MaterializedIndex index : allMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
@@ -834,7 +834,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
                 LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                         commitVersion, jobId);
-                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
+                MaterializedIndex rollupIndex = physicalPartition.getWritableIndex(rollupIndexMetaId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
                 physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }

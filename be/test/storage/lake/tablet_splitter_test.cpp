@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
+#include "column/binary_column.h"
 #include "column/chunk_factory.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -41,6 +42,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -55,6 +57,58 @@ static VariantTuple make_int_tuple(int64_t value) {
     VariantTuple tuple;
     tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(value)));
     return tuple;
+}
+
+static TabletMetadataPtr make_pk_order_by_metadata() {
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(100);
+    metadata->set_version(10);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(101);
+    schema->set_keys_type(PRIMARY_KEYS);
+    schema->set_num_short_key_columns(1);
+    schema->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto* pk = schema->add_column();
+    pk->set_unique_id(1);
+    pk->set_name("pk");
+    pk->set_type("INT");
+    pk->set_is_key(true);
+    pk->set_is_nullable(false);
+    auto* order_by = schema->add_column();
+    order_by->set_unique_id(2);
+    order_by->set_name("order_by");
+    order_by->set_type("INT");
+    order_by->set_is_key(false);
+    order_by->set_is_nullable(false);
+    schema->add_sort_key_idxes(1);
+    return metadata;
+}
+
+static std::vector<std::string> encode_int_pk_samples(const TabletMetadataPtr& metadata,
+                                                      const std::vector<int32_t>& values) {
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+    auto chunk = ChunkFactory::new_chunk(pkey_schema, values.size());
+    for (int32_t value : values) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(value));
+    }
+    MutableColumnPtr encoded;
+    CHECK_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), encoded.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    const auto& binary = down_cast<const BinaryColumn&>(*encoded);
+    std::vector<std::string> result;
+    result.reserve(binary.size());
+    for (size_t i = 0; i < binary.size(); ++i) {
+        result.emplace_back(binary.get_slice(i).to_string());
+    }
+    return result;
+}
+
+static int32_t int_pk_bound(const TuplePB& bound) {
+    VariantTuple tuple;
+    CHECK_OK(tuple.from_proto(bound));
+    return tuple[0].value().get_int32();
 }
 
 // Build a SegmentSplitInfo without samples.
@@ -137,6 +191,72 @@ TEST(TabletSplitterTest, single_segment_cannot_split_without_samples) {
                     calculate_range_split_boundaries(segs, /*target_split_count=*/2, /*target_value_per_split=*/50,
                                                      /*use_num_rows=*/true, /*track_sources=*/true));
     EXPECT_TRUE(result.boundaries.empty()) << "1 segment yields 1 range; cannot produce N>=2 splits without samples";
+}
+
+TEST(TabletSplitterTest, pk_index_samples_choose_decoded_quantiles) {
+    auto metadata = make_pk_order_by_metadata();
+    auto samples = encode_int_pk_samples(metadata, {0, 10, 20, 30, 40, 50, 60, 70, 80, 90});
+
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(get_tablet_split_ranges_from_pk_index_samples(/*tablet_manager=*/nullptr, metadata,
+                                                            /*split_count=*/2, std::move(samples), &ranges));
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].range.has_upper_bound());
+    ASSERT_TRUE(ranges[1].range.has_lower_bound());
+    EXPECT_EQ(50, int_pk_bound(ranges[0].range.upper_bound()));
+    EXPECT_EQ(50, int_pk_bound(ranges[1].range.lower_bound()));
+    EXPECT_FALSE(ranges[0].range.upper_bound_included());
+    EXPECT_TRUE(ranges[1].range.lower_bound_included());
+}
+
+TEST(TabletSplitterTest, pk_index_samples_filter_parent_range_and_anchor_stats) {
+    auto metadata = make_pk_order_by_metadata();
+    VariantTuple lower;
+    lower.emplace(get_type_info(TYPE_INT), Datum(int32_t{20}));
+    lower.to_proto(metadata->mutable_range()->mutable_lower_bound());
+    metadata->mutable_range()->set_lower_bound_included(true);
+    VariantTuple upper;
+    upper.emplace(get_type_info(TYPE_INT), Datum(int32_t{80}));
+    upper.to_proto(metadata->mutable_range()->mutable_upper_bound());
+    metadata->mutable_range()->set_upper_bound_included(false);
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(7);
+    rowset->set_num_rows(101);
+    rowset->set_data_size(1001);
+    rowset->set_num_dels(11);
+
+    auto samples = encode_int_pk_samples(metadata, {10, 20, 30, 40, 50, 60, 70, 80, 90});
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(get_tablet_split_ranges_from_pk_index_samples(/*tablet_manager=*/nullptr, metadata,
+                                                            /*split_count=*/2, std::move(samples), &ranges));
+    ASSERT_EQ(2, ranges.size());
+    EXPECT_EQ(50, int_pk_bound(ranges[0].range.upper_bound()));
+    EXPECT_EQ(20, int_pk_bound(ranges[0].range.lower_bound()));
+    EXPECT_EQ(80, int_pk_bound(ranges[1].range.upper_bound()));
+
+    int64_t rows = 0;
+    int64_t bytes = 0;
+    int64_t dels = 0;
+    for (const auto& range : ranges) {
+        auto it = range.rowset_stats.find(7);
+        ASSERT_NE(range.rowset_stats.end(), it);
+        rows += it->second.num_rows;
+        bytes += it->second.data_size;
+        dels += it->second.num_dels;
+    }
+    EXPECT_EQ(101, rows);
+    EXPECT_EQ(1001, bytes);
+    EXPECT_EQ(11, dels);
+}
+
+TEST(TabletSplitterTest, pk_index_samples_reject_insufficient_distinct_keys) {
+    auto metadata = make_pk_order_by_metadata();
+    auto samples = encode_int_pk_samples(metadata, {10, 10, 20});
+    std::vector<TabletRangeInfo> ranges;
+    auto status = get_tablet_split_ranges_from_pk_index_samples(/*tablet_manager=*/nullptr, metadata,
+                                                                /*split_count=*/3, std::move(samples), &ranges);
+    EXPECT_TRUE(status.is_invalid_argument());
+    EXPECT_TRUE(ranges.empty());
 }
 
 // -----------------------------------------------------------------------------

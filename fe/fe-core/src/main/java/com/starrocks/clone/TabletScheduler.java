@@ -2180,7 +2180,7 @@ public class TabletScheduler extends LeaderDaemon {
 
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex idx
-                                    : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                    : physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                                 if (!idx.isTabletBalanced()) {
                                     mediumBalanceTypes.add(Pair.create(medium, idx.getBalanceType()));
                                 }

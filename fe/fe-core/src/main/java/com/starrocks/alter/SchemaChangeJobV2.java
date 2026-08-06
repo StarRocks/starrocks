@@ -973,7 +973,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                     // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                     // in globalStateMgr.
-                    MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
+                    MaterializedIndex shadowIdx = physicalPartition.getWritableIndex(shadowIdxMetaId);
                     Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
                     List<MaterializedIndex> droppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
                     Preconditions.checkState(!droppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);

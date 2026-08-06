@@ -4846,7 +4846,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         System.out.println(result);
         Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()) {
+                .getDefaultPhysicalPartition().getWritableBaseIndex().getTablets()) {
             Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 

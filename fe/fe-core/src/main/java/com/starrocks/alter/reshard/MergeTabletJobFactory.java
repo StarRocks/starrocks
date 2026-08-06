@@ -156,7 +156,7 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex oldIndex : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                         List<List<Long>> mergeTabletGroupsForIndex =
                                 createMergeTabletGroups(physicalPartition, oldIndex, targetSize, parallelismFloor);
                         if (mergeTabletGroupsForIndex.isEmpty()) {

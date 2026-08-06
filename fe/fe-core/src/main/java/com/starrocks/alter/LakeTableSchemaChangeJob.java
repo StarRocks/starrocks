@@ -884,7 +884,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
                     OlapTable table = getTableOrThrow();
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                    originMaterializedIndices = physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE);
                 }
 
                 for (MaterializedIndex index : originMaterializedIndices) {
@@ -965,7 +965,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     // partition gone (concurrent drop); nothing to advance, skip.
                     continue;
                 }
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                     regularTablets.addAll(index.getTablets());
                 }
             }
@@ -1186,7 +1186,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                 // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                 // in globalStateMgr.
-                MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
+                MaterializedIndex shadowIdx = physicalPartition.getWritableIndex(shadowIdxMetaId);
                 Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
                 List<MaterializedIndex> partDroppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
                 Preconditions.checkState(!partDroppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);

@@ -986,7 +986,7 @@ public class PartitionSampleGrouperTest {
         when(baseIndex.getRowCount()).thenReturn(rowCount);
         when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
         when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
-        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(partitionName)).thenReturn(partition);

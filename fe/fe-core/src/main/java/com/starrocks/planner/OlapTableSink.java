@@ -780,7 +780,7 @@ public class OlapTableSink extends DataSink {
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
                         List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                                physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL),
                                 physicalPartition, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
@@ -863,7 +863,7 @@ public class OlapTableSink extends DataSink {
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
                         List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                                physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL),
                                 physicalPartition, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
@@ -908,7 +908,7 @@ public class OlapTableSink extends DataSink {
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
                     List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
+                            physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL),
                             physicalPartition, targetWriteIndexId);
                     setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
@@ -1080,7 +1080,7 @@ public class OlapTableSink extends DataSink {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
                 List<MaterializedIndex> indexes = (txnState != null)
                         ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                        : physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
@@ -1105,7 +1105,7 @@ public class OlapTableSink extends DataSink {
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
             List<MaterializedIndex> indexes = (txnState != null)
                     ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                    : physicalPartition.getWritableMaterializedIndices(IndexExtState.ALL);
             for (MaterializedIndex index : indexes) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);

@@ -463,8 +463,9 @@ public class CreateLakeTableTest {
             LakeTable lakeTable = getLakeTable("lake_test", "table_with_rollup");
             Assertions.assertEquals(2, lakeTable.getShardGroupIds().size());
 
-            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().
-                    get().getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+            Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                    .getDefaultPhysicalPartition().getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
+                    .size());
 
         }
     }
@@ -540,7 +541,7 @@ public class CreateLakeTableTest {
         LakeTable lakeTable = getLakeTable("lake_test", "rd_table_with_rollup");
         Assertions.assertTrue(lakeTable.isRangeDistribution());
         Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
-                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+                .getDefaultPhysicalPartition().getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
     }
 
     @Test
@@ -749,7 +750,7 @@ public class CreateLakeTableTest {
                         "distributed by hash(c0) buckets 2"));
         LakeTable lakeTable = getLakeTable("lake_test", "tablet_metadata_rpc_test");
         Partition partition = lakeTable.getPartitions().stream().findFirst().get();
-        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
         long tabletId = index.getTablets().get(0).getId();
 
         FrontendServiceImpl impl = new FrontendServiceImpl(null);
@@ -823,7 +824,7 @@ public class CreateLakeTableTest {
                 Assertions.assertTrue(rangeTable.isRangeDistribution());
 
                 Partition rangePart = rangeTable.getPartitions().stream().findFirst().get();
-                MaterializedIndex rangeIndex = rangePart.getDefaultPhysicalPartition().getLatestBaseIndex();
+                MaterializedIndex rangeIndex = rangePart.getDefaultPhysicalPartition().getWritableBaseIndex();
                 int numTablets = rangeIndex.getTablets().size();
                 long rangeTabletId = rangeIndex.getTablets().get(0).getId();
                 TGetTabletMetadataRequest req = new TGetTabletMetadataRequest();
@@ -938,7 +939,7 @@ public class CreateLakeTableTest {
                         "distributed by hash(c0) buckets 2"));
         LakeTable lakeTable = getLakeTable("lake_test", "tablet_metadata_batch_reject_test");
         Partition partition = lakeTable.getPartitions().stream().findFirst().get();
-        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getWritableBaseIndex();
 
         FrontendServiceImpl impl = new FrontendServiceImpl(null);
         TBatchGetTabletMetadataRequest batchReq = new TBatchGetTabletMetadataRequest();

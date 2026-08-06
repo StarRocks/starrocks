@@ -177,7 +177,7 @@ public class ShowExecutorSimpleTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getLatestBaseIndex();
+                physicalPartition.getWritableBaseIndex();
                 minTimes = 0;
                 result = index1;
             }

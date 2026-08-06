@@ -203,7 +203,7 @@ public class PreSplitTargetsTest {
                 tablets.add(tablet);
             }
             when(baseIndex.getTablets()).thenReturn(tablets);
-            when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+            when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                     .thenReturn(List.of(baseIndex));
         }
         return table;
@@ -294,7 +294,7 @@ public class PreSplitTargetsTest {
         when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
         MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
         PhysicalPartition partition = mock(PhysicalPartition.class);
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
 
         Column sortKey = new Column("k", IntegerType.BIGINT);
@@ -318,7 +318,7 @@ public class PreSplitTargetsTest {
         MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
         PhysicalPartition partition = mock(PhysicalPartition.class);
         // Rollup listed before base in the source list -- base must still resolve first.
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(rollupIndex, baseIndex));
 
         Column baseSortKey = new Column("k", IntegerType.BIGINT);
@@ -345,7 +345,7 @@ public class PreSplitTargetsTest {
         when(rollupIndex.getMetaId()).thenReturn(ROLLUP_INDEX_META_ID);
         when(rollupIndex.getTablets()).thenReturn(List.of(mock(Tablet.class), mock(Tablet.class)));
         PhysicalPartition partition = mock(PhysicalPartition.class);
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex, rollupIndex));
 
         Column baseSortKey = new Column("k", IntegerType.BIGINT);
@@ -364,7 +364,7 @@ public class PreSplitTargetsTest {
         MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
         MaterializedIndex rollupIndex = mockIndexWithOneTablet(ROLLUP_INDEX_META_ID, 2001L);
         PhysicalPartition partition = mock(PhysicalPartition.class);
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex, rollupIndex));
 
         Column baseSortKey = new Column("k", IntegerType.BIGINT);
@@ -388,7 +388,7 @@ public class PreSplitTargetsTest {
         MaterializedIndex baseIndex = mockIndexWithOneTablet(BASE_INDEX_META_ID, 1001L);
         when(baseIndex.getRowCount()).thenReturn(999L);
         PhysicalPartition partition = mock(PhysicalPartition.class);
-        when(partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(List.of(baseIndex));
 
         Column sortKey = new Column("k", IntegerType.BIGINT);

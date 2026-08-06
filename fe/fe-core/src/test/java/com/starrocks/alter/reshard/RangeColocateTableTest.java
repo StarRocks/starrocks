@@ -93,7 +93,7 @@ public class RangeColocateTableTest {
         // Verify tablets were created as LakeTablet
         PhysicalPartition partition = table.getPartitions().iterator().next()
                 .getDefaultPhysicalPartition();
-        MaterializedIndex index = partition.getLatestBaseIndex();
+        MaterializedIndex index = partition.getWritableBaseIndex();
         List<Tablet> tablets = index.getTablets();
         Assertions.assertEquals(1, tablets.size());
         Assertions.assertInstanceOf(LakeTablet.class, tablets.get(0));

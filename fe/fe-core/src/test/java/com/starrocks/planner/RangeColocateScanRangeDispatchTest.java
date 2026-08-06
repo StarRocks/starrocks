@@ -102,7 +102,7 @@ public class RangeColocateScanRangeDispatchTest {
         Assertions.assertNotNull(dispatch);
         var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         scanNode.setTabletId2BucketSeq(new HashMap<>(
-                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()))));
+                dispatch.computeBucketSeq(physicalPartition.getWritableIndex(table.getBaseIndexMetaId()))));
 
         // Initial state: ColocateRangeMgr seeded with [MIN, MAX) -> 1 PACK shard group,
         // and createRangeColocateLakeTablets created exactly 1 tablet per partition.
@@ -239,7 +239,7 @@ public class RangeColocateScanRangeDispatchTest {
         Assertions.assertNotNull(dispatch);
         var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         Map<Long, Integer> aligned =
-                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
+                dispatch.computeBucketSeq(physicalPartition.getWritableIndex(table.getBaseIndexMetaId()));
         Assertions.assertNotNull(aligned, "single default range should be aligned");
 
         // Built assignment matches the aligned mapping -> getBucketNums returns the bucket count.

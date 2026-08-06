@@ -924,7 +924,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
         // check state
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
+            MaterializedIndex baseIndex = partition.getWritableIndex(baseIndexMetaId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
         }
@@ -1029,7 +1029,7 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(mvSchemaHash != -1);
 
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
+            MaterializedIndex materializedIndex = partition.getWritableIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
 

@@ -161,7 +161,7 @@ public class ColocateChecker {
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 for (MaterializedIndex index :
-                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                     List<HashCode> tabletParts = new ArrayList<>();
                     for (Tablet tablet : index.getTablets()) {
                         tabletParts.add(SIGNATURE_HASH.hashInt(
@@ -434,7 +434,7 @@ public class ColocateChecker {
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 for (MaterializedIndex index :
-                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         if (tablet.getRange() != null) {
                             tabletIdToRange.put(tablet.getId(), tablet.getRange().getRange());
@@ -605,7 +605,7 @@ public class ColocateChecker {
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 for (MaterializedIndex index :
-                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                     // Each visible index (base + every rollup/MV) can have its own sort-key arity.
                     // Using the base index's sort key for an MV with a shorter prefix would compute
                     // boundaries the MV's tablets can never align with — alignment iteration would

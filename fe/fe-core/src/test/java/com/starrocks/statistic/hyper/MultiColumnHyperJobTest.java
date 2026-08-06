@@ -70,7 +70,7 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
         table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
 
         for (Partition partition : ((OlapTable) table).getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(10000);
+            partition.getDefaultPhysicalPartition().getWritableBaseIndex().setRowCount(10000);
         }
     }
 

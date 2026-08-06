@@ -117,7 +117,7 @@ public class TabletTaskExecutor {
             List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex),
                     computeResource, option);
             int partitionCount = endIndex - i;
-            int indexCountPerPartition = partitions.get(i).getLatestMaterializedIndices(IndexExtState.VISIBLE).size();
+            int indexCountPerPartition = partitions.get(i).getWritableMaterializedIndices(IndexExtState.VISIBLE).size();
             int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
@@ -143,7 +143,7 @@ public class TabletTaskExecutor {
         long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(
-                partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
+                partition -> partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
         if (option.isEnableTabletCreationOptimization()) {
@@ -244,10 +244,11 @@ public class TabletTaskExecutor {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
         // TabletCreationOptimization must ensure that the schemas of all tablets under a partition are consistent. 
         // If multiple indexes exist in the partition, disable TabletCreationOptimization.
-        if (physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
+        if (physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
             option.setEnableTabletCreationOptimization(false);
         }
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index :
+                physicalPartition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
         return tasks;

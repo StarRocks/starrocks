@@ -324,7 +324,7 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameByMetaId(index.getMetaId());

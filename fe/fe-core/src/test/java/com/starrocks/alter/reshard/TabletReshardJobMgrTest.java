@@ -213,7 +213,7 @@ public class TabletReshardJobMgrTest {
 
         // Grab the single tablet from the default partition.
         Tablet t = reshardTable.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+                .getDefaultPhysicalPartition().getWritableBaseIndex().getTablets().get(0);
         oversizedTablet = (LakeTablet) t;
     }
 

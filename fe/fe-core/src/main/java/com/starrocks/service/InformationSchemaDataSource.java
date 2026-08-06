@@ -867,7 +867,7 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            MaterializedIndex baseIndex = partition.getQueryableBaseIndex();
             totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
             totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }

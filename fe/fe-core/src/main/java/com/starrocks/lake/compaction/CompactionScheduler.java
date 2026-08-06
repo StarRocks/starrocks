@@ -567,7 +567,8 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
-        List<MaterializedIndex> visibleIndexes = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        List<MaterializedIndex> visibleIndexes =
+                partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -605,7 +606,7 @@ public class CompactionScheduler extends Daemon {
         // not the latest (which may change due to tablet split).
         TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
         if (txnState != null) {
-            List<Long> indexIds = physicalPartition.getLatestMaterializedIndices(
+            List<Long> indexIds = physicalPartition.getWritableMaterializedIndices(
                     MaterializedIndex.IndexExtState.VISIBLE)
                     .stream().map(MaterializedIndex::getId)
                     .collect(Collectors.toList());

@@ -178,7 +178,7 @@ final class PreSplitTargets {
      */
     static List<IndexPreSplitTarget> resolveVisibleIndexTargets(OlapTable table, PhysicalPartition partition) {
         List<MaterializedIndex> visibleIndices =
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                partition.getWritableMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         IndexPreSplitTarget baseTarget = null;
         List<IndexPreSplitTarget> rollupTargets = new ArrayList<>();
         for (MaterializedIndex index : visibleIndices) {

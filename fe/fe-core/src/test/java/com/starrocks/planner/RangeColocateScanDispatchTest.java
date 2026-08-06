@@ -81,7 +81,7 @@ public class RangeColocateScanDispatchTest {
     private static MaterializedIndex baseIndexOf(OlapTable table) {
         PhysicalPartition partition = table.getPartitions().iterator().next()
                 .getDefaultPhysicalPartition();
-        return partition.getLatestBaseIndex();
+        return partition.getWritableBaseIndex();
     }
 
     private static LakeTablet makeLakeTabletWithRange(long tabletId, Range<Tuple> colocateRange) {
@@ -298,7 +298,7 @@ public class RangeColocateScanDispatchTest {
                 table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         // The built assignment matches the aligned mapping -> no throw.
         Map<Long, Integer> builtBucketSeq =
-                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
+                dispatch.computeBucketSeq(physicalPartition.getWritableIndex(table.getBaseIndexMetaId()));
         Assertions.assertDoesNotThrow(() -> dispatch.requireAligned(
                 List.of(physicalPartition), table.getBaseIndexMetaId(), builtBucketSeq));
     }

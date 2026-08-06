@@ -76,10 +76,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     @Override
     public TabletReshardJob createTabletReshardJob() throws StarRocksException {
         validateTableLevel(db, table);
-        if (hasSeparatePrimaryKeySortKey(table)) {
-            throw new StarRocksException("Tablet split with ORDER BY different from the primary key requires "
-                    + "FE-supplied primary-key boundaries in the initial implementation");
-        }
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = createReshardingPhysicalPartitions();
         if (reshardingPhysicalPartitions.isEmpty()) {
@@ -443,7 +439,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex oldIndex : physicalPartition.getWritableMaterializedIndices(IndexExtState.VISIBLE)) {
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
                         for (Tablet tablet : oldIndex.getTablets()) {

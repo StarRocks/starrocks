@@ -110,7 +110,7 @@ public class SplitTabletJobTest {
         installLakeServiceMock(this::addDataDrivenRanges);
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
         List<Long> oldTabletIds = new ArrayList<>();
         for (Tablet tablet : materializedIndex.getTablets()) {
             oldTabletIds.add(tablet.getId());
@@ -142,7 +142,7 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getWritableBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -161,6 +161,40 @@ public class SplitTabletJobTest {
 
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
+        }
+    }
+
+    @Test
+    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
+        boolean oldEnablePkOrderBy = Config.tablet_reshard_enable_pk_order_by;
+        Config.tablet_reshard_enable_pk_order_by = true;
+        try {
+            starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
+                    + "(pk1 int not null, pk2 int not null, sort_col int not null) "
+                    + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
+                    + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+            OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "pk_order_by_split");
+            PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
+            long tabletId = physicalPartition.getWritableBaseIndex().getTablets().get(0).getId();
+
+            SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                    Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+            clause.setTabletReshardTargetSize(-2);
+            SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
+                    .createTabletReshardJob();
+
+            SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
+                    .flatMap(partition -> partition.getReshardingIndexes().values().stream())
+                    .flatMap(index -> index.getReshardingTablets().stream())
+                    .map(ReshardingTablet::getSplittingTablet)
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst().orElseThrow();
+            Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
+                    "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
+            Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
+        } finally {
+            Config.tablet_reshard_enable_pk_order_by = oldEnablePkOrderBy;
         }
     }
 
@@ -193,7 +227,7 @@ public class SplitTabletJobTest {
         installLakeServiceMock(this::addFallbackToIdenticalRanges);
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -217,7 +251,7 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getWritableBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() == materializedIndex.getTablets().size());
@@ -226,7 +260,7 @@ public class SplitTabletJobTest {
     @Test
     public void testReplayTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -258,7 +292,7 @@ public class SplitTabletJobTest {
         // but without proper ranges (they have default Range.all() with null bounds).
         // We need to set proper contiguous ranges for the new tablets to satisfy
         // the strict validation in shareAdjacentTabletRangeBounds().
-        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getWritableBaseIndex();
         List<Tablet> newTablets = newMaterializedIndex.getTablets();
         List<Long> newTabletIds = new ArrayList<>();
         for (Tablet tablet : newTablets) {
@@ -400,7 +434,7 @@ public class SplitTabletJobTest {
         installLakeServiceMock(this::addEchoedRanges);
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
         Tablet oldTablet = materializedIndex.getTablets().get(0);
         long oldTabletId = oldTablet.getId();
         long oldVersion = physicalPartition.getVisibleVersion();
@@ -458,7 +492,7 @@ public class SplitTabletJobTest {
         // Net effect: the index gained K-1 tablets; the chosen old tablet is
         // gone; the K new tablets carry the FE-supplied ranges (echoed by the
         // mocked BE).
-        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getWritableBaseIndex();
         Assertions.assertEquals(oldTabletCount + (newTabletRanges.size() - 1),
                 newMaterializedIndex.getTablets().size());
         // The old tablet is retained (parked in the recycle bin with the superseded index), not deleted
@@ -482,7 +516,7 @@ public class SplitTabletJobTest {
     @Test
     public void testForExternalBoundariesRejectsTooFewRanges() {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        long oldTabletId = physicalPartition.getWritableBaseIndex().getTablets().get(0).getId();
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> SplitTabletJobFactory.forExternalBoundaries(db, table,
                         Map.of(oldTabletId, List.of(tabletRange(0, 100)))));
@@ -500,7 +534,7 @@ public class SplitTabletJobTest {
     @Test
     public void testForExternalBoundariesRejectsTooManyRanges() {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        long oldTabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        long oldTabletId = physicalPartition.getWritableBaseIndex().getTablets().get(0).getId();
 
         int oversize = Config.tablet_reshard_max_split_count + 1;
         List<TabletRange> tooMany = new ArrayList<>(oversize);
@@ -652,7 +686,7 @@ public class SplitTabletJobTest {
         // Find the tablet with the given ID from the table
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
             for (MaterializedIndex index : partition
-                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getWritableMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (tablet.getId() == oldTabletId) {
                         TabletRange tabletRange = tablet.getRange();
@@ -760,7 +794,7 @@ public class SplitTabletJobTest {
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex materializedIndex = physicalPartition.getWritableBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
         TabletList tabletList = new TabletList(List.of(tabletId));

@@ -193,7 +193,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      */
     private void refreshTabletStatsAndMarkReshardCandidate(PhysicalPartition partition,
             Map<Long, TabletStatPB> tabletStats, Database db, long versionTime) {
-        List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+        List<MaterializedIndex> indexes = partition.getWritableMaterializedIndices(IndexExtState.VISIBLE);
         long maxTabletSize = 0L;
         // Walk only the tablets this publish actually reported, not every tablet in the partition: this
         // runs under the table write lock, so resolve each reported id directly (O(1) per index).
