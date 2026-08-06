@@ -79,6 +79,7 @@ set(EXEC_FILES
         ./exprs/variant_functions_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/table_function/java_udtf_factory_test.cpp
+        ./exprs/table_function/test_parquet_read_rows.cpp
         ./exprs/dict_expr_test.cpp
         ./exprs/dict_functions_test.cpp
         ./formats/json/binary_column_test.cpp
