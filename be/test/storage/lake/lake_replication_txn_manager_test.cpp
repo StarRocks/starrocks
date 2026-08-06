@@ -718,6 +718,8 @@ protected:
 struct SourceBundleReadCounters {
     int read_all_calls = 0;
     int64_t read_at_fully_bytes = 0;
+    int open_calls = 0;
+    bool all_opens_skip_disk_cache = true;
 };
 
 class CountingSeekableInputStream final : public io::SeekableInputStreamWrapper {
@@ -749,6 +751,8 @@ public:
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& url) override {
+        ++_counters->open_calls;
+        _counters->all_opens_skip_disk_cache &= opts.skip_disk_cache;
         ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, url));
         auto stream = std::make_shared<CountingSeekableInputStream>(file->stream(), _counters);
         return std::make_unique<RandomAccessFile>(std::move(stream), url);
@@ -857,6 +861,27 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_only_requested_source_bun
     EXPECT_EQ(0, counters.read_all_calls);
     EXPECT_GT(counters.read_at_fully_bytes, 0);
     EXPECT_LT(counters.read_at_fully_bytes, bundle_content.size());
+    EXPECT_GT(counters.open_calls, 0);
+    EXPECT_TRUE(counters.all_opens_skip_disk_cache);
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, standalone_source_read_bypasses_disk_cache) {
+    SourceBundleReadCounters counters;
+    auto source_fs = std::make_shared<CountingMemoryFileSystem>(&counters);
+    const std::string meta_dir = "/remote/source/meta";
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    std::string content;
+    ASSERT_TRUE(_tablet_metadata->SerializeToString(&content));
+    ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+    ASSERT_OK(source_fs->create_file(metadata_path));
+    ASSERT_OK(source_fs->append_file(metadata_path, Slice(content)));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_GT(counters.open_calls, 0);
+    EXPECT_TRUE(counters.all_opens_skip_disk_cache);
 }
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_malformed_source_bundle_envelope) {

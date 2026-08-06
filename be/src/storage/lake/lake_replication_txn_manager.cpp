@@ -56,11 +56,24 @@ namespace {
 // to avoid adding more pressure to an already saturated pool.
 constexpr int kParallelCopyMaxQueuePerThread = 8;
 
+StatusOr<TabletMetadataPtr> load_source_standalone_tablet_metadata(const std::string& metadata_path,
+                                                                   const std::shared_ptr<FileSystem>& source_fs) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, metadata_path));
+    ASSIGN_OR_RETURN(auto content, input_file->read_all());
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    RETURN_IF_ERROR(ProtobufFileWithHeader::load_from_buffer(metadata.get(), content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                             /*allow_plain_protobuf_fallback=*/true));
+    normalize_tablet_metadata_after_load(metadata.get());
+    return metadata;
+}
+
 StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const std::string& meta_dir,
                                                                const std::shared_ptr<FileSystem>& source_fs) {
     const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true, .skip_disk_cache = true};
     ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
     ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
 
@@ -614,18 +627,14 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
 #endif
 
     const auto src_tablet_meta_path = join_path(meta_dir, tablet_metadata_filename(src_tablet_id, version));
-    auto src_tablet_meta = std::make_shared<TabletMetadataPB>();
-    ProtobufFileWithHeader file(src_tablet_meta_path, shared_src_fs, LAKE_META_HEADER_MAGIC_NUMBER,
-                                /*allow_plain_protobuf_fallback=*/true);
-    auto status = file.load(src_tablet_meta.get(), /*fill_cache=*/false);
-    if (status.ok()) {
-        normalize_tablet_metadata_after_load(src_tablet_meta.get());
+    auto src_tablet_meta = load_source_standalone_tablet_metadata(src_tablet_meta_path, shared_src_fs);
+    if (src_tablet_meta.ok()) {
         return src_tablet_meta;
     }
-    if (!status.is_not_found()) {
+    if (!src_tablet_meta.status().is_not_found()) {
         VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                << ", src_tablet_id: " << src_tablet_id << ", error: " << status;
-        return status;
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta.status();
+        return src_tablet_meta;
     }
     return load_source_bundle_tablet_metadata(src_tablet_id, version, meta_dir, shared_src_fs);
 }
