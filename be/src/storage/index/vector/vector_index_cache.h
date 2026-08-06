@@ -91,7 +91,6 @@ private:
     Cache _cache;
     VectorIndexCacheMetrics* _metrics = nullptr;
     std::atomic<int64_t> _expire_seconds{0};
-    std::atomic<int64_t> _last_expiration_sweep_ms;
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};
 };

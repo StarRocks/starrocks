@@ -657,6 +657,17 @@ void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* 
     return nullptr;
 }
 
+void StorageEngine::_expire_caches(int64_t vector_cache_now) {
+    _update_manager->expire_cache();
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
+#endif
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache != nullptr) {
+        vector_index_cache->ClearExpired(vector_cache_now);
+    }
+}
+
 void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
@@ -678,13 +689,7 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
             sleep_sec = std::min<int64_t>(sleep_sec, std::max<int64_t>(1, vector_index_cache->expire_seconds() / 2));
         }
         SLEEP_IN_BG_WORKER(sleep_sec);
-        _update_manager->expire_cache();
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        StorageEnv::GetInstance()->lake_update_manager()->expire_cache();
-#endif
-        if (vector_index_cache != nullptr) {
-            vector_index_cache->ClearExpired();
-        }
+        _expire_caches(MonotonicMillis());
     }
 
     return nullptr;

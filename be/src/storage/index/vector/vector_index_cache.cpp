@@ -41,9 +41,7 @@ int64_t expire_time_ms(int64_t expire_seconds) {
 } // namespace
 
 VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics)
-        : _cache(capacity),
-          _metrics(metrics == nullptr ? VectorIndexCacheMetrics::instance() : metrics),
-          _last_expiration_sweep_ms(MonotonicMillis()) {
+        : _cache(capacity), _metrics(metrics == nullptr ? VectorIndexCacheMetrics::instance() : metrics) {
     // The HNSW/tenann index lives in the normal heap, so the global allocator hook
     // already charges its bytes to the process tracker once during load. Accounting
     // them additively on the vector_index tracker (a child of process) would count
@@ -99,18 +97,7 @@ void VectorIndexCache::SetExpireSeconds(int64_t expire_seconds) {
 }
 
 bool VectorIndexCache::ClearExpired(int64_t now) {
-    const int64_t expire_sec = expire_seconds();
-    if (expire_sec <= 0) {
-        return false;
-    }
-
-    constexpr int64_t kMillisPerSecond = 1000;
-    const int64_t sweep_interval_ms = expire_sec > std::numeric_limits<int64_t>::max() / kMillisPerSecond
-                                              ? std::numeric_limits<int64_t>::max()
-                                              : expire_sec * kMillisPerSecond;
-    int64_t last_sweep_ms = _last_expiration_sweep_ms.load(std::memory_order_relaxed);
-    if (now < last_sweep_ms || now - last_sweep_ms < sweep_interval_ms ||
-        !_last_expiration_sweep_ms.compare_exchange_strong(last_sweep_ms, now, std::memory_order_relaxed)) {
+    if (expire_seconds() <= 0) {
         return false;
     }
 

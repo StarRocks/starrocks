@@ -329,10 +329,11 @@ TEST_F(VectorIndexCacheTest, TTL_StartsAfterLastHandleRelease) {
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 
     handle = tenann::IndexCacheHandle{};
-    EXPECT_FALSE(cache_->ClearExpired(base_time + 1800 * 1000L));
+    const int64_t released_at = MonotonicMillis();
+    EXPECT_TRUE(cache_->ClearExpired(released_at + 899 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 
-    EXPECT_TRUE(cache_->ClearExpired(base_time + 1802 * 1000L));
+    EXPECT_TRUE(cache_->ClearExpired(released_at + 901 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
 }
 
@@ -359,15 +360,18 @@ TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
     EXPECT_EQ(0, cache_->memory_usage());
 }
 
-TEST_F(VectorIndexCacheTest, TTL_SweepsAtOwnExpireInterval) {
-    cache_->SetExpireSeconds(900);
+TEST_F(VectorIndexCacheTest, TTL_ConsecutiveSweepsHonorDeadline) {
+    cache_->SetExpireSeconds(10);
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/consecutive-sweeps.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
     const int64_t base_time = MonotonicMillis();
 
-    EXPECT_FALSE(cache_->ClearExpired(base_time));
-    EXPECT_FALSE(cache_->ClearExpired(base_time + 899 * 1000L));
-    EXPECT_TRUE(cache_->ClearExpired(base_time + 901 * 1000L));
-    EXPECT_FALSE(cache_->ClearExpired(base_time + 1800 * 1000L));
-    EXPECT_TRUE(cache_->ClearExpired(base_time + 1802 * 1000L));
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_TRUE(cache_->ClearExpired(base_time + 11 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
 }
 
 TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
@@ -396,8 +400,10 @@ TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateOnlyAffectsFutureReleases) {
     // A later release uses the new 10-second TTL for this entry only.
     ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/updated-ttl.vi"), &handle));
     handle = tenann::IndexCacheHandle{};
-    EXPECT_FALSE(cache_->ClearExpired(base_time + 20 * 1000L));
-    EXPECT_TRUE(cache_->ClearExpired(base_time + 22 * 1000L));
+    const int64_t released_at = MonotonicMillis();
+    EXPECT_TRUE(cache_->ClearExpired(released_at + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_TRUE(cache_->ClearExpired(released_at + 11 * 1000L));
     EXPECT_EQ(0, cache_->memory_usage());
 }
 
@@ -408,7 +414,7 @@ TEST_F(VectorIndexCacheTest, TTL_HugeValueDoesNotOverflow) {
     cache_->Insert(tenann::CacheKey("/huge-ttl.vi"), make_dummy_ref(), &handle);
     handle = tenann::IndexCacheHandle{};
 
-    EXPECT_FALSE(cache_->ClearExpired(std::numeric_limits<int64_t>::max()));
+    EXPECT_TRUE(cache_->ClearExpired(MonotonicMillis() + 24 * 60 * 60 * 1000L));
     EXPECT_EQ(kDummyBytes, cache_->memory_usage());
 }
 
