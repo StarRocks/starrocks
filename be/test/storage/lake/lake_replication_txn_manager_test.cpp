@@ -758,6 +758,23 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
 }
 
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_source_tablet_from_bundle) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_EQ(_version, (*result)->version());
+    ASSERT_TRUE((*result)->has_schema());
+    EXPECT_EQ(1, (*result)->schema().column_size());
+    EXPECT_EQ("c0", (*result)->schema().column(0).name());
+}
+
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
     _replication_txn_manager.reset();
     _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
@@ -770,9 +787,6 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasse
     stale_metadata->set_version(_version);
     stale_metadata->set_gtid(101);
     _tablet_mgr->metacache()->cache_tablet_metadata(metadata_path, stale_metadata);
-    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
-    ASSERT_NE(nullptr, cached);
-    ASSERT_EQ(101, cached->gtid());
 
     auto source_fs_a = std::make_shared<MemoryFileSystem>();
     auto source_fs_b = std::make_shared<MemoryFileSystem>();
@@ -794,7 +808,7 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasse
     ASSERT_OK(result_b);
     EXPECT_EQ(202, result_a.value()->gtid());
     EXPECT_EQ(303, result_b.value()->gtid());
-    cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
+    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(101, cached->gtid());
 }

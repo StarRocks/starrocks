@@ -34,13 +34,15 @@
 #include "storage/del_file_stream_converter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/protobuf_file.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
+#include "storage/utils.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 #include "types/logical_type.h"
 #include "vacuum.h"
@@ -51,6 +53,70 @@ namespace {
 // Parallel copy is disabled when queue depth exceeds num_threads * this factor
 // to avoid adding more pressure to an already saturated pool.
 constexpr int kParallelCopyMaxQueuePerThread = 8;
+
+StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                               const std::string& meta_dir,
+                                                               const std::shared_ptr<FileSystem>& source_fs) {
+    const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
+    ASSIGN_OR_RETURN(auto serialized, input_file->read_all());
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, serialized));
+
+    auto page_it = bundle->tablet_meta_pages().find(tablet_id);
+    if (page_it == bundle->tablet_meta_pages().end()) {
+        return Status::NotFound(
+                fmt::format("Tablet {} is absent from source metadata bundle {}", tablet_id, bundle_path));
+    }
+    const uint64_t offset = page_it->second.offset();
+    const uint32_t size = page_it->second.size();
+    if (offset > serialized.size() || size > serialized.size() - static_cast<size_t>(offset)) {
+        return Status::Corruption(fmt::format("Invalid source tablet metadata page in {}, offset={}, size={}",
+                                              bundle_path, offset, size));
+    }
+
+    const std::string_view page(serialized.data() + offset, size);
+    auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
+    if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {
+        return Status::Corruption(
+                fmt::format("Mismatched checksum for tablet {} metadata in {}", tablet_id, bundle_path));
+    }
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (!metadata->ParseFromArray(page.data(), page.size())) {
+        return Status::Corruption(fmt::format("Failed to parse tablet {} metadata from {}", tablet_id, bundle_path));
+    }
+    if (metadata->id() != tablet_id) {
+        return Status::Corruption(fmt::format("Tablet ID mismatch in {}, expected={}, actual={}", bundle_path,
+                                              tablet_id, metadata->id()));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+
+    auto schema_id_it = bundle->tablet_to_schema().find(tablet_id);
+    if (schema_id_it == bundle->tablet_to_schema().end()) {
+        return Status::Corruption(
+                fmt::format("Schema mapping for tablet {} is absent from {}", tablet_id, bundle_path));
+    }
+    auto schema_it = bundle->schemas().find(schema_id_it->second);
+    if (schema_it == bundle->schemas().end()) {
+        return Status::Corruption(
+                fmt::format("Schema {} for tablet {} is absent from {}", schema_id_it->second, tablet_id, bundle_path));
+    }
+    metadata->mutable_schema()->CopyFrom(schema_it->second);
+    (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
+    force_cloud_native_pk_persistent_index(metadata.get());
+
+    for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
+        auto historical_schema_it = bundle->schemas().find(historical_schema_id);
+        if (historical_schema_it == bundle->schemas().end()) {
+            return Status::Corruption(fmt::format("Historical schema {} for tablet {} is absent from {}",
+                                                  historical_schema_id, tablet_id, bundle_path));
+        }
+        (*metadata->mutable_historical_schemas())[historical_schema_id].CopyFrom(historical_schema_it->second);
+    }
+    return metadata;
+}
 } // namespace
 
 #ifdef USE_STAROS
@@ -520,18 +586,21 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
     }
 #endif
 
-    auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
-    auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
-    // The explicit source filesystem owns the path authority. Always read durable source metadata:
-    // a target-local or previous-source metacache entry with the same logical path is not valid here.
-    const CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true};
-    auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, cache_opts, 0, shared_src_fs);
-    if (!src_tablet_meta_or.ok()) {
-        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
-        return src_tablet_meta_or;
+    const auto src_tablet_meta_path = join_path(meta_dir, tablet_metadata_filename(src_tablet_id, version));
+    auto src_tablet_meta = std::make_shared<TabletMetadataPB>();
+    ProtobufFileWithHeader file(src_tablet_meta_path, shared_src_fs, LAKE_META_HEADER_MAGIC_NUMBER,
+                                /*allow_plain_protobuf_fallback=*/true);
+    auto status = file.load(src_tablet_meta.get(), /*fill_cache=*/false);
+    if (status.ok()) {
+        normalize_tablet_metadata_after_load(src_tablet_meta.get());
+        return src_tablet_meta;
     }
-    return src_tablet_meta_or.value();
+    if (!status.is_not_found()) {
+        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << status;
+        return status;
+    }
+    return load_source_bundle_tablet_metadata(src_tablet_id, version, meta_dir, shared_src_fs);
 }
 
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(
