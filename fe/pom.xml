@@ -82,6 +82,8 @@ under the License.
         <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
+        <!-- aligned with the google-libraries-bom version iceberg 1.10 builds against -->
+        <google-auth-library.version>1.37.1</google-auth-library.version>
         <staros.version>4.2-rc2</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
@@ -1574,6 +1576,20 @@ under the License.
                 <groupId>org.apache.iceberg</groupId>
                 <artifactId>iceberg-aws</artifactId>
                 <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-gcp</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+
+            <!-- iceberg-gcp declares the google SDK as compileOnly; GoogleAuthManager needs
+                 google-auth-library at runtime for Application Default Credentials -->
+            <dependency>
+                <groupId>com.google.auth</groupId>
+                <artifactId>google-auth-library-oauth2-http</artifactId>
+                <version>${google-auth-library.version}</version>
             </dependency>
 
             <dependency>

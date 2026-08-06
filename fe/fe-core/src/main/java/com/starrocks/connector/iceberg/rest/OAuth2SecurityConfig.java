@@ -21,6 +21,7 @@ import java.net.URI;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.GOOGLE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
@@ -139,6 +140,10 @@ class OAuth2SecurityConfigBuilder {
             config.setSecurity(JWT);
         } else if (strSecurity.equalsIgnoreCase(OAUTH2.name())) {
             config = config.setSecurity(OAUTH2);
+        } else if (strSecurity.equalsIgnoreCase(GOOGLE.name())) {
+            // google auth needs neither a credential nor a token (Application Default Credentials),
+            // so return before the oauth2 field population and the credential/token validation below
+            return config.setSecurity(GOOGLE);
         } else {
             throw new StarRocksConnectorException("Invalid security: %s", strSecurity);
         }

@@ -77,6 +77,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         NONE,
         OAUTH2,
         JWT,
+        GOOGLE,
     }
 
     private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
@@ -132,9 +133,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         restCatalogProperties.putAll(securityProperties.get());
 
-        // only an OAuth2 client credential lets us mint a new token; per-user JWTs cannot be renewed by the FE
+        // only an OAuth2 client credential lets us mint a new token; per-user JWTs cannot be renewed
+        // by the FE, and google credentials are refreshed internally by GoogleAuthManager
         authRecoveryEnabled = restCatalogProperties.containsKey(OAuth2Properties.CREDENTIAL)
-                && securityConfig.getSecurity() != Security.JWT;
+                && securityConfig.getSecurity() != Security.JWT
+                && securityConfig.getSecurity() != Security.GOOGLE;
 
         try {
             RESTSessionCatalog restCatalog = new RESTSessionCatalog();

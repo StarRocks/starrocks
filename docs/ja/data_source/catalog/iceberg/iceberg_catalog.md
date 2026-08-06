@@ -284,7 +284,7 @@ REST catalog 用の `MetastoreParams`:
 
 - `iceberg.catalog.security`
   - 必須: いいえ
-  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2` および `JWT`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`、`JWT`、および `GOOGLE`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。この項目が `GOOGLE` に設定されている場合、StarRocks は Google Cloud（例: Lakehouse for Apache Iceberg REST catalog、旧称 BigLake）に対して Application Default Credentials で認証します。`gcp.auth.credentials-path` が指定されている場合は、サービスアカウントキーファイルを使用します。
 
 - `iceberg.catalog.oauth2.token`
   - 必須: いいえ
@@ -301,6 +301,14 @@ REST catalog 用の `MetastoreParams`:
 - `iceberg.catalog.oauth2.server-uri`
   - 必須: いいえ
   - 説明: OAuth2 サーバーからアクセストークンを取得するためのエンドポイント。
+
+- `iceberg.catalog.gcp.auth.credentials-path`
+  - 必須: いいえ
+  - 説明: FE ノード上の Google Cloud サービスアカウントキーファイル（JSON）へのパス。`security` が `GOOGLE` に設定されている場合にのみ適用されます。省略した場合は Application Default Credentials が使用されます。
+
+- `iceberg.catalog.gcp.auth.scopes`
+  - 必須: いいえ
+  - 説明: Google Cloud 認証でリクエストする OAuth2 スコープ（カンマ区切り）。`security` が `GOOGLE` に設定されている場合にのみ適用されます。デフォルト: `https://www.googleapis.com/auth/cloud-platform`。
 
 - `iceberg.catalog.vended-credentials-enabled`
   - 必須: いいえ
@@ -389,6 +397,23 @@ SHOW DATABASES FROM r2;
 ```
 
 `<r2_warehouse_name>`,`<r2_api_token>`, および `<r2_catalog_uri>` の値は、 [Cloudflare ダッシュボードの詳細](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites) から取得します。
+
+次の例は、Google Cloud Lakehouse for Apache Iceberg REST catalog（旧称 BigLake。API エンドポイントは従来の `biglake` 名を使用）をメタストアとして使用する Iceberg catalog `lakehouse` を作成します。
+
+```SQL
+CREATE EXTERNAL CATALOG lakehouse
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bl://projects/<project_id>/catalogs/<catalog_id>",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.header.x-goog-user-project" = "<project_id>"
+);
+```
+
+StarRocks は Application Default Credentials を使用して Google Cloud に認証します。サービスアカウントキーファイルを使用する場合は、`"iceberg.catalog.gcp.auth.credentials-path" = "/path/to/service_account.json"` を設定してください。資格情報のベンディング（`iceberg.catalog.vended-credentials-enabled`）はデフォルトで有効になっているため、StarRocks は Catalog からベンディングされた資格情報を使用して基盤となる Cloud Storage データにアクセスします。Lakehouse catalog 側でもベンディングを有効にする必要があり（作成時に `--credential-mode=vended-credentials` を指定）、Catalog が自動作成するサービスアカウントには、関連する Cloud Storage バケットに対する Storage Object User ロール（`roles/storage.objectUser`）が必要です。ベンディングを無効にした場合は、`StorageCredentialParams` でストレージアクセスを個別に設定してください（例: `"gcp.gcs.use_compute_engine_service_account" = "true"`）。
 
 </TabItem>
 
