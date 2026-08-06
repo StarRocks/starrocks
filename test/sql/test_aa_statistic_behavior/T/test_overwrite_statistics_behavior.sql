@@ -1,4 +1,4 @@
--- name: test_overwrite_statistics_behavior @sequential @slow
+-- name: test_overwrite_statistics_behavior @sequential @slow @no_asan
 drop database if exists test_overwrite_statistics_behavior;
 create database test_overwrite_statistics_behavior;
 use test_overwrite_statistics_behavior;

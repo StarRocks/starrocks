@@ -31,6 +31,7 @@ ALTER TABLE users_basic ADD COLUMN flag_true BOOLEAN DEFAULT 'true';
 ALTER TABLE users_basic ADD COLUMN flag_false BOOLEAN DEFAULT 'false';
 ALTER TABLE users_basic ADD COLUMN flag_1 BOOLEAN DEFAULT '1';
 ALTER TABLE users_basic ADD COLUMN flag_0 BOOLEAN DEFAULT '0';
+function: wait_alter_table_finish()
 
 -- Query old data with new columns
 SELECT id, name, flag_true, flag_false, flag_1, flag_0 FROM users_basic ORDER BY id;
