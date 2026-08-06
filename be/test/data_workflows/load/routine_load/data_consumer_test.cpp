@@ -79,7 +79,9 @@ public:
     const std::string* key() const override { return nullptr; }
     void* msg_opaque() const override { return nullptr; }
     int64_t latency() const override { return 0; }
-    struct rd_kafka_message_s* c_ptr() override { return nullptr; }
+    struct rd_kafka_message_s* c_ptr() override {
+        return nullptr;
+    }
     RdKafka::Message::Status status() const override { return RdKafka::Message::MSG_STATUS_PERSISTED; }
     int32_t broker_id() const override { return 0; }
     int32_t leader_epoch() const override { return 0; }
