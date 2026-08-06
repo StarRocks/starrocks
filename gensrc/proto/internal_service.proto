@@ -225,6 +225,11 @@ message PTabletWriterOpenRequest {
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
     optional bytes encryption_meta = 37;
+    // SDCG flexible partial update: tells the BE tablet writer that incoming chunks
+    // carry a hidden per-row "__cset__" set-id column (immediately before "__op") and
+    // that the rowset must be written with a per-row heterogeneous column-set
+    // dictionary. Mirrors TOlapTableSink.flexible_partial_update (field 36).
+    optional bool flexible_partial_update = 38;
 };
 
 message PTabletWriterOpenResult {
@@ -252,6 +257,24 @@ message PTabletWriterAddBatchRequest {
     repeated int64 partition_ids = 8;
 };
 
+// SDCG flexible partial update: the per-load set-id dictionary. Each row of a flexible
+// partial-update load declares its own subset of value columns; the distinct subsets are
+// interned into a dense set-id space and the set-id is written per row into the hidden
+// "__cset__" column. This dictionary maps set-id (== index in `sets`) -> the sorted list of
+// value-column NAMES in that set. It is computed at runtime by the JSON scanner on the load
+// coordinator and shipped to every remote tablet-writer BE on the eos add-chunk request so the
+// delta writers can fold it into RowsetTxnMetaPB.distinct_column_sets (translating names->uids
+// against the full tablet schema). Column NAMES (not uids) are sent so the writer-side
+// name->uid translation is unchanged. Declared before PTabletWriterAddChunkRequest so the type
+// resolves for jprotobuf's top-down parse.
+message PColumnSetPB {
+    repeated string column_names = 1;
+}
+message PColumnSetDictPB {
+    // index == set-id; each entry is the sorted column-NAME list (ColumnSetDict::snapshot() order).
+    repeated PColumnSetPB sets = 1;
+}
+
 message PTabletWriterAddChunkRequest {
     optional PUniqueId id = 1;
     optional int64 index_id = 2;
@@ -274,6 +297,11 @@ message PTabletWriterAddChunkRequest {
     optional bool wait_all_sender_close = 11 [default = false];
     // for multi olap table sink
     optional int64 sink_id = 12 [default = 0];
+    // SDCG flexible partial update: per-load set-id dictionary (column-NAME sets, set-id order).
+    // Set ONLY on the eos request of a flexible load (the dict is complete only after the scan
+    // ends), keyed implicitly by txn_id (field 9). Absent on non-flexible loads and ignored by
+    // older BEs (both degrade safely to a homogeneous union partial update).
+    optional PColumnSetDictPB column_set_dict = 13;
 };
 
 message PTabletWriterAddChunksRequest {

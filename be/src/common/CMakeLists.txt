@@ -26,6 +26,7 @@ set(COMMON_FILES
   config_update_registry.cpp
   config.cpp
   crash_watchdog.cpp
+  flexible_partial_update.cpp
   glog_init.cpp
   greplog.cpp
   memory/column_allocator.cpp

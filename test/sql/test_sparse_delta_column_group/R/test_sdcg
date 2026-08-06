@@ -1,0 +1,268 @@
+-- name: test_sdcg_column_mode_sparse @cloud
+create database test_sdcg_col;
+-- result:
+-- !result
+use test_sdcg_col;
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_col/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_col/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by pk;
+-- result:
+1	999	10	10
+2	999	20	20
+3	30	30	30
+4	40	40	40
+5	50	50	50
+-- !result
+drop database test_sdcg_col force;
+-- result:
+-- !result
+-- name: test_sdcg_auto_mode @cloud
+create database test_sdcg_auto;
+-- result:
+-- !result
+use test_sdcg_auto;
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_auto/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:auto" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_auto/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by pk;
+-- result:
+1	999	10	10
+2	999	20	20
+3	30	30	30
+4	40	40	40
+5	50	50	50
+-- !result
+drop database test_sdcg_auto force;
+-- result:
+-- !result
+-- name: test_sdcg_flexible @cloud
+create database test_sdcg_flex;
+-- result:
+-- !result
+use test_sdcg_flex;
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_flex/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex.json ${url}/api/test_sdcg_flex/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by pk;
+-- result:
+1	999	10	10
+2	20	888	20
+3	777	30	777
+4	40	40	40
+5	50	50	50
+-- !result
+drop database test_sdcg_flex force;
+-- result:
+-- !result
+-- name: test_sdcg_flexible_reject_merge_condition @cloud
+create database test_sdcg_flex_mc;
+-- result:
+-- !result
+use test_sdcg_flex_mc;
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "merge_condition:c1" -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex_one.json ${url}/api/test_sdcg_flex_mc/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Flexible partial update combined with merge_condition is not supported"
+}
+-- !result
+drop database test_sdcg_flex_mc force;
+-- result:
+-- !result
+-- name: test_sdcg_flexible_reject_auto_increment @cloud
+create database test_sdcg_flex_ai;
+-- result:
+-- !result
+use test_sdcg_flex_ai;
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, ai BIGINT NOT NULL AUTO_INCREMENT, c1 BIGINT, c2 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "columns:pk,c1,c2" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex_one.json ${url}/api/test_sdcg_flex_ai/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Flexible partial update is not supported on a table with an auto-increment column"
+}
+-- !result
+drop database test_sdcg_flex_ai force;
+-- result:
+-- !result
+-- name: test_sdcg_reject_unknown_mode @cloud
+create database test_sdcg_badmode;
+-- result:
+-- !result
+use test_sdcg_badmode;
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:Column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Unknown partial_update_mode: Column (expected one of: row, column, auto, flexible, flexible_row)"
+}
+-- !result
+drop database test_sdcg_badmode force;
+-- result:
+-- !result
+-- name: test_sdcg_gin_column_forces_row @cloud
+create database test_sdcg_gin;
+-- result:
+-- !result
+use test_sdcg_gin;
+-- result:
+-- !result
+admin set frontend config ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- result:
+-- !result
+CREATE TABLE t (pk BIGINT NOT NULL, g VARCHAR(32) NOT NULL DEFAULT "",
+  INDEX gin_g (g) USING GIN ("parser" = "english"))
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,g" -T ${root_path}/lib/../common/data/stream_load/sdcg_gin_base.csv ${url}/api/test_sdcg_gin/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,g" -T ${root_path}/lib/../common/data/stream_load/sdcg_gin_upd.csv ${url}/api/test_sdcg_gin/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select pk, g from t order by pk;
+-- result:
+1	zulu
+2	zulu
+3	bravo
+-- !result
+select pk from t where g match 'zulu' order by pk;
+-- result:
+1
+2
+-- !result
+select pk from t where g match 'bravo' order by pk;
+-- result:
+3
+-- !result
+select pk from t where g match 'alpha' order by pk;
+-- result:
+-- !result
+drop database test_sdcg_gin force;
+-- result:
+-- !result

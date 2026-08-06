@@ -61,6 +61,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -375,5 +376,31 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
 
         assertNotEquals(params1.hashCode(), params3.hashCode());
         assertNotEquals(params1, params3);
+    }
+    // SDCG: partial_update_mode "flexible" -> COLUMN mode + flexible bit; "flexible_row" -> ROW mode +
+    // flexible bit; "auto" (partial + json) is flexible-aware; an unknown mode is rejected.
+    @Test
+    public void testFlexiblePartialUpdateMode() {
+        Map<String, String> m = new HashMap<>();
+        m.put(HTTP_PARTIAL_UPDATE, "true");
+        m.put(HTTP_FORMAT, "json");
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible");
+        StreamLoadKvParams flex = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE, flex.getPartialUpdateMode().orElse(null));
+        assertTrue(flex.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible_row");
+        StreamLoadKvParams flexRow = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.ROW_MODE, flexRow.getPartialUpdateMode().orElse(null));
+        assertTrue(flexRow.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "auto");
+        StreamLoadKvParams auto = new StreamLoadKvParams(m);
+        assertTrue(auto.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "bogus");
+        StreamLoadKvParams bad = new StreamLoadKvParams(m);
+        assertThrows(RuntimeException.class, bad::getPartialUpdateMode);
     }
 }
