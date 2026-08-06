@@ -732,7 +732,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: `remove_orphan_files` procedure 的 `older_than` 参数允许的最小保留窗口。该 procedure 先根据载入时的表状态收集可达文件集合，之后才列举存储，因此在这两步之间写入的文件——包括尚未提交的 INSERT 的数据文件——与孤儿文件无法区分。由 `older_than` 推导出的修改时间截止点正是保护这类文件的机制，因此比该窗口更接近当前时间的 `older_than` 会被拒绝。此配置仅约束显式传入的 `older_than` 参数；不传该参数时仍使用其自身的 7 天默认值。该默认值相对「合法写入持有未提交文件」的最长窗口留有充足余量——后者由 `insert_timeout` 约束，默认 4 小时。允许更长写入的部署可调高此值；仅当确认没有写入会与该 procedure 并发时，才降低此值。
+- 描述: `remove_orphan_files` procedure 的 `older_than` 参数必须指定的最小时间距离。更接近当前时间的 `older_than` 会被拒绝，因为删除这么新的文件可能删掉并发写入尚未提交的数据，导致表不可读。此配置仅约束显式传入的 `older_than`；不传该参数时仍使用该 procedure 自身的 7 天默认值。仅当 procedure 运行期间该表没有任何写入时，才降低此值。
 - 引入版本: v4.2.0
 
 ### lake_balance_tablets_threshold

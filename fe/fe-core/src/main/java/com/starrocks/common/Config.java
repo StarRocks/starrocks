@@ -3252,21 +3252,11 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_queue_max_size = 1000;
 
     /**
-     * The minimum retention window, in seconds, accepted for the `older_than` argument of the
-     * `remove_orphan_files` procedure.
+     * The minimum age, in seconds, that the `older_than` argument of the `remove_orphan_files` procedure must
+     * specify. A more recent `older_than` is rejected, because deleting files that young can remove data a
+     * concurrent write has not committed yet and leave the table unreadable.
      * <p>
-     * The procedure collects the files reachable from the table state it loaded and only afterwards lists
-     * storage, so a file written in between - including a data file of an INSERT that has not committed yet -
-     * is indistinguishable from an orphan. The modification time cutoff derived from `older_than` is what
-     * keeps such a file safe, so an `older_than` closer to now than this window is rejected.
-     * <p>
-     * This bounds the explicit `older_than` argument only; omitting the argument keeps its own 7 day default.
-     * <p>
-     * The default leaves a wide margin over the longest window in which a legitimate write can hold
-     * uncommitted files, which `insert_timeout` bounds at 4 hours by default. It also stays clear of the
-     * procedure's own 7 day default so that cleaning up recent orphans does not require reconfiguring the
-     * cluster. Raise it for deployments that allow longer writes, and lower it only when no write can run
-     * concurrently with the procedure.
+     * Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7 day default.
      * <p>
      * Default: 86400 (24 hours)
      */

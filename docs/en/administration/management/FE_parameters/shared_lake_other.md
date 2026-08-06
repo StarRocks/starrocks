@@ -733,7 +733,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The minimum retention window accepted for the `older_than` argument of the `remove_orphan_files` procedure. The procedure collects the files reachable from the table state it loaded and only afterwards lists storage, so a file written in between - including a data file of an INSERT that has not committed yet - is indistinguishable from an orphan. The modification time cutoff derived from `older_than` is what keeps such a file safe, so an `older_than` closer to the current time than this window is rejected. This bounds the explicit `older_than` argument only; omitting the argument keeps its own 7-day default. The default leaves a wide margin over the longest window in which a legitimate write can hold uncommitted files, which `insert_timeout` bounds at 4 hours by default. Raise it for deployments that allow longer writes, and lower it only when no write can run concurrently with the procedure.
+- Description: The minimum age that the `older_than` argument of the `remove_orphan_files` procedure must specify. A more recent `older_than` is rejected, because deleting files that young can remove data that a concurrent write has not committed yet and leave the table unreadable. Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7-day default. Lower this value only when nothing writes to the table while the procedure runs.
 - Introduced in: v4.2.0
 
 ##### lake_balance_tablets_threshold
