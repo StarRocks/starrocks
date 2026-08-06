@@ -113,7 +113,18 @@ public class UpdatePlanner {
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            for (Column column : targetTable.getFullSchema()) {
+            List<Column> outputSchema = targetTable.getFullSchema();
+            if (targetTable instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) targetTable;
+                // UpdateAnalyzer builds the output expressions from baseSchema. Only a real schema change
+                // needs fullSchema so concurrent writes can target its shadow indexes. Online OPTIMIZE can
+                // leave duplicate generated-column entries in fullSchema, including entries without the
+                // shadow-name prefix, so filtering by Column.isShadowColumn() is not sufficient here.
+                outputSchema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                        ? targetTable.getFullSchema()
+                        : targetTable.getBaseSchema();
+            }
+            for (Column column : outputSchema) {
                 if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                         !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                     // When using partial update, skip columns which aren't key column and not be assign, except for
