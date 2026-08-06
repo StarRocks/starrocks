@@ -39,6 +39,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -54,6 +55,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public abstract class StatisticsCollectJob {
@@ -236,6 +238,13 @@ public abstract class StatisticsCollectJob {
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
             throws Exception {
+        collectStatisticSync(
+                () -> SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable()),
+                context, analyzeStatus);
+    }
+
+    protected void collectStatisticSync(Supplier<StatementBase> statementSupplier, ConnectContext context,
+                                        AnalyzeStatus analyzeStatus) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {
@@ -243,14 +252,15 @@ public abstract class StatisticsCollectJob {
             // Calculate and set remaining timeout for this SQL task
             calculateAndSetRemainingTimeout(context, analyzeStatus);
 
+            StatementBase statement = statementSupplier.get();
+            String sql = statement.getOrigStmt().getOrigStmt();
             context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
             Stopwatch watch = Stopwatch.createStarted();
-            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, statement);
 
             // set default session variables for stats context
             setDefaultSessionVariable(context);
@@ -277,6 +287,14 @@ public abstract class StatisticsCollectJob {
         } while (count < maxRetryTimes);
 
         throw new DdlException(context.getState().getErrorMessage());
+    }
+
+    protected List<TStatisticData> queryStatisticSync(
+            String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws DdlException {
+        checkCancelled(analyzeStatus);
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+        setDefaultSessionVariable(context);
+        return new StatisticExecutor().executeStatisticDQL(context, sql);
     }
 
     protected String getMinMaxFunction(Type columnType, String name, boolean isMax) {

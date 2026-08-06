@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
@@ -28,11 +29,15 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticAutoCollector;
+import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticsCollectJob;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -129,7 +134,19 @@ public class AnalyzeCreateAnalyzeJobTest {
 
     @Test
     public void testCreateHistogram() throws Exception {
-        // mock execution
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                TStatisticData data = new TStatisticData();
+                if (sql.toLowerCase().contains("group by")) {
+                    data.columnName = "1";
+                    data.histogram = "10";
+                } else {
+                    data.histogram = "[[\"1\",\"2\",\"3\",\"4\"]]";
+                }
+                return Lists.newArrayList(data);
+            }
+        };
         UtFrameUtils.mockQueryExecute(() -> {
         });
         UtFrameUtils.mockDML();

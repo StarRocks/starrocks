@@ -2604,6 +2604,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+    @ConfField(mutable = true, comment = "Whether to batch insert histogram statistics for multiple columns")
+    public static boolean enable_batch_insert_histogram_statistics = true;
+
+    @ConfField(mutable = true, comment = "Maximum buffered SQL size in bytes for one histogram statistics batch insert")
+    public static long histogram_batch_insert_buffer_size = 20L * 1024 * 1024;
+
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
 
