@@ -96,7 +96,7 @@ static std::vector<std::string> encode_int_pk_samples(const TabletMetadataPtr& m
     CHECK_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
     PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), encoded.get(),
                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
-    const auto& binary = down_cast<const BinaryColumn&>(*encoded);
+    const auto& binary = down_cast<BinaryColumn&>(*encoded);
     std::vector<std::string> result;
     result.reserve(binary.size());
     for (size_t i = 0; i < binary.size(); ++i) {

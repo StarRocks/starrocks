@@ -402,7 +402,7 @@ StatusOr<Filter> TabletRangeHelper::create_primary_key_range_filter(const Tablet
     PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), encoded_keys.get(), encoding_type);
     RETURN_IF(!encoded_keys->is_binary(), Status::InternalError("V2-encoded primary key must be binary"));
 
-    const auto& binary_keys = down_cast<const BinaryColumn&>(*encoded_keys);
+    const auto& binary_keys = down_cast<BinaryColumn&>(*encoded_keys);
     Filter filter(chunk.num_rows(), 1);
     for (size_t i = 0; i < chunk.num_rows(); ++i) {
         const Slice key = binary_keys.get_slice(i);
