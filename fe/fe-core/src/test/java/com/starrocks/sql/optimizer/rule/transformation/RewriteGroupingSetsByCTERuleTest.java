@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -29,7 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.IntegerType;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -56,15 +57,15 @@ public class RewriteGroupingSetsByCTERuleTest {
         for (int pad = 0; pad < 32; pad++) {
             ColumnRefFactory factory = new ColumnRefFactory();
             for (int p = 0; p < pad; p++) {
-                factory.create("pad", IntegerType.BIGINT, false);
+                factory.create("pad", Type.BIGINT, false);
             }
-            ColumnRefOperator v1 = factory.create("v1", IntegerType.BIGINT, true);
-            ColumnRefOperator v2 = factory.create("v2", IntegerType.BIGINT, true);
-            ColumnRefOperator v3 = factory.create("v3", IntegerType.BIGINT, true);
-            ColumnRefOperator groupingV1 = factory.create("grouping_v1", IntegerType.BIGINT, false);
-            ColumnRefOperator groupingV2 = factory.create("grouping_v2", IntegerType.BIGINT, false);
-            ColumnRefOperator cnt = factory.create("count", IntegerType.BIGINT, false);
-            ColumnRefOperator uv = factory.create("count_distinct", IntegerType.BIGINT, false);
+            ColumnRefOperator v1 = factory.create("v1", Type.BIGINT, true);
+            ColumnRefOperator v2 = factory.create("v2", Type.BIGINT, true);
+            ColumnRefOperator v3 = factory.create("v3", Type.BIGINT, true);
+            ColumnRefOperator groupingV1 = factory.create("grouping_v1", Type.BIGINT, false);
+            ColumnRefOperator groupingV2 = factory.create("grouping_v2", Type.BIGINT, false);
+            ColumnRefOperator cnt = factory.create("count", Type.BIGINT, false);
+            ColumnRefOperator uv = factory.create("count_distinct", Type.BIGINT, false);
 
             // select v1, v2, count(*), count(distinct v3), grouping(v1), grouping(v2)
             // from t group by grouping sets ((v1, v2), (v1), (v2), ())
@@ -78,8 +79,8 @@ public class RewriteGroupingSetsByCTERuleTest {
                     ImmutableList.of(groupingV1, groupingV2), repeatColumnRefList, groupingIds, Maps.newHashMap());
 
             Map<ColumnRefOperator, CallOperator> aggregations = new LinkedHashMap<>();
-            aggregations.put(cnt, new CallOperator("count", IntegerType.BIGINT, ImmutableList.of()));
-            aggregations.put(uv, new CallOperator("count", IntegerType.BIGINT,
+            aggregations.put(cnt, new CallOperator("count", Type.BIGINT, ImmutableList.of()));
+            aggregations.put(uv, new CallOperator("count", Type.BIGINT,
                     ImmutableList.of((ScalarOperator) v3), null, true));
             LogicalAggregationOperator aggregate = new LogicalAggregationOperator(AggType.GLOBAL,
                     new ArrayList<>(ImmutableList.of(v1, v2, groupingV1, groupingV2)), aggregations);
