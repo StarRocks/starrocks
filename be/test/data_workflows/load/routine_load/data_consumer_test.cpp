@@ -337,8 +337,8 @@ TEST(PulsarDataConsumerGroupTest, format_arrow_append_as_message_flag) {
     StreamLoadContext ctx(exec_env->load_stream_mgr());
     ctx.format = TFileFormatType::FORMAT_ARROW;
     ctx.pulsar_info = std::make_unique<PulsarLoadInfo>(t_pulsar);
-    ctx.max_interval_s = 0;   // left_time = 0 * 1000 = 0 -> exits immediately
-    ctx.max_batch_size = 0;   // left_bytes = 0 -> also forces early exit
+    ctx.max_interval_s = 0; // left_time = 0 * 1000 = 0 -> exits immediately
+    ctx.max_batch_size = 0; // left_bytes = 0 -> also forces early exit
 
     // PulsarConsumerPipe = KafkaConsumerPipe
     ctx.body_sink = std::make_shared<KafkaConsumerPipe>();

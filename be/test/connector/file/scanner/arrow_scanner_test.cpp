@@ -1607,8 +1607,7 @@ struct StreamScannerContext {
 };
 
 static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_context(
-        const SlotTypeDescInfoArray& slot_infos, UniqueId load_id,
-        std::shared_ptr<StreamLoadPipe> pipe) {
+        const SlotTypeDescInfoArray& slot_infos, UniqueId load_id, std::shared_ptr<StreamLoadPipe> pipe) {
     auto ctx = std::make_unique<StreamScannerContext>();
     ctx->load_id = load_id;
     ctx->pipe = pipe;
@@ -1628,11 +1627,9 @@ static StatusOr<std::unique_ptr<StreamScannerContext>> make_stream_scanner_conte
     ctx->runtime_services.load_stream_mgr = &ctx->load_stream_mgr;
     ctx->qes.runtime = &ctx->runtime_services;
 
-    ctx->state = ctx->obj_pool.add(
-            new RuntimeState(TUniqueId(), query_options, query_globals, &ctx->qes, nullptr));
+    ctx->state = ctx->obj_pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &ctx->qes, nullptr));
 
-    DescriptorTbl* desc_tbl =
-            DescTblHelper::generate_desc_tbl(ctx->state, ctx->obj_pool, {slot_infos, slot_infos});
+    DescriptorTbl* desc_tbl = DescTblHelper::generate_desc_tbl(ctx->state, ctx->obj_pool, {slot_infos, slot_infos});
     ctx->state->set_desc_tbl(desc_tbl);
     ctx->state->init_instance_mem_tracker();
     ctx->state->set_db("test_db");
