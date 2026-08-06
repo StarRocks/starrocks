@@ -792,19 +792,28 @@ public class FragmentNormalizer {
             return false;
         }
 
-        // Not cacheable if an AggregationNode of the leftmost path builds runtime filters itself
-        // (AGG_IN_FILTER/TOPN_FILTER). Such a filter probes the OlapScanNode that feeds the cache
-        // interpolation point, so the per-tablet results that get populated only contain the rows that
-        // survived it. Its content is decided at run time -- it depends on which tablets this instance
-        // happened to scan, in which order, and which of them were served from the cache -- so unlike a
-        // JoinNode's runtime filter, whose build side is packed into the digest together with the data
-        // versions of its OlapScanNodes, there is nothing here that could be packed into the cache key.
-        // A populated entry would therefore not be a function of the cache key, and would produce wrong
-        // results as soon as it is read back by a query that needs the rows the filter dropped.
-        boolean aggBuildsRuntimeFilters = leftNodesTopDown.stream()
-                .filter(node -> node instanceof AggregationNode)
-                .anyMatch(node -> !((AggregationNode) node).getBuildRuntimeFilters().isEmpty());
-        if (aggBuildsRuntimeFilters) {
+        // Not cacheable if a node of the leftmost path builds a runtime filter of its own. Such a filter
+        // probes the OlapScanNode that feeds the cache interpolation point, so the per-tablet results
+        // that get populated only contain the rows that survived it. Its content is decided at run time
+        // -- it depends on which tablets this instance happened to scan, in which order, and which of
+        // them were served from the cache -- so unlike a JoinNode's runtime filter, whose build side is
+        // packed into the digest together with the data versions of its OlapScanNodes, there is nothing
+        // here that could be packed into the cache key. A populated entry would therefore not be a
+        // function of the cache key, and would produce wrong results as soon as it is read back by a
+        // query that needs the rows the filter dropped.
+        // Both of the nodes that can build such a filter have to be checked, because the two are
+        // mutually exclusive and depend on whether PushDownTopNToPreAggRule fired:
+        //   - AggregationNode builds an AGG_IN_FILTER when it carries a LIMIT of its own, and a
+        //     TOPN_FILTER when the rule attached the TopN to it (SortNode.perPipeline is then true and
+        //     the SortNode builds nothing);
+        //   - SortNode builds the TOPN_FILTER in every other shape, e.g. `group by k order by k limit n`
+        //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
+        //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
+        // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
+        boolean buildsRuntimeFilters = leftNodesTopDown.stream()
+                .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
+                .anyMatch(node -> !((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().isEmpty());
+        if (buildsRuntimeFilters) {
             return false;
         }
 

@@ -28,7 +28,8 @@ import java.util.Optional;
 
 // Guards the two cache-key invariants that the query cache relies on:
 // 1. nothing below the cache interpolation point may filter rows by something that is decided at
-//    run time and is absent from the cache key (a runtime filter built by the aggregation itself);
+//    run time and is absent from the cache key (a runtime filter the fragment builds for itself,
+//    whether by the AggregationNode or by the SortNode above it);
 // 2. session variables that change how the BE evaluates the plan must be part of the digest.
 public class QueryCacheRuntimeFilterAndTimeZoneTest {
     private static ConnectContext ctx;
@@ -96,10 +97,30 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
         Assertions.assertTrue(cacheParamOf(
                         "select c1, sum(v1) from t2 where dt between '2022-01-01' and '2022-02-01' group by c1")
                 .isPresent(), "the two-phase baseline must stay cacheable");
-        // The other filter an aggregation can build, TOPN_FILTER, goes through the very same branch.
-        // It is not asserted here because PushDownTopNToPreAggRule needs table statistics this test
-        // environment does not have; it is covered end-to-end by
+    }
+
+    @Test
+    public void testTopNBuiltRuntimeFilterDisablesQueryCache() throws Exception {
+        // TOPN_FILTER has two mutually exclusive builders, decided by whether PushDownTopNToPreAggRule
+        // fired. Here it cannot: c1 is both the distribution key and the group-by key, so the plan is a
+        // one-phase aggregation and the rule's TopN -> Agg(GLOBAL) -> Agg(LOCAL) pattern does not match.
+        // The filter is then built by the SortNode sitting above the cache interpolation point (its
+        // `perPipeline` is false, which is exactly the case SortNode.buildRuntimeFilters handles), and
+        // it probes the scan feeding that cache point all the same.
+        // This is the shape that escaped the first version of the check, which only looked at
+        // AggregationNode; end-to-end coverage lives in
         // test/sql/test_query_cache/T/test_query_cache_topn_filter_stale_entry.
+        Assertions.assertFalse(cacheParamOf(
+                        "select c1, sum(v1) from t1 where dt between '2022-01-01' and '2022-02-01' " +
+                                "group by c1 order by c1 limit 10")
+                .isPresent(), "a SortNode building a TOPN_FILTER below the cache point must not be cached");
+
+        // The very same query without the TopN keeps the same cache point and must stay cacheable, so
+        // the assertion above cannot pass merely because this shape is uncacheable for other reasons.
+        Assertions.assertTrue(cacheParamOf(
+                        "select c1, sum(v1) from t1 where dt between '2022-01-01' and '2022-02-01' " +
+                                "group by c1")
+                .isPresent(), "the one-phase baseline without a TopN must stay cacheable");
     }
 
 
