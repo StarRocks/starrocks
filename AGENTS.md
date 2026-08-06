@@ -32,6 +32,12 @@ Agent entrypoint for this repository. Start with the nearest nested `AGENTS.md`;
 
 # Run SQL integration tests
 cd test && python3 run.py -v
+
+# Format all changed C++ files (MUST run before every commit that touches be/)
+# CI enforces clang-format-10; run this locally and include the result in the commit.
+CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh
+# If clang-format-10 is unavailable, use the system clang-format and let the CI
+# bot auto-commit any residual diff — but prefer matching the CI version exactly.
 ```
 
 ## Repo-Wide Invariants
@@ -41,6 +47,11 @@ cd test && python3 run.py -v
 - Thrift fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
 - When editing any file under `docs/`, read `docs/CLAUDE.md` for documentation-specific rules before making changes.
+- **Every commit that touches `be/src/` or `be/test/` MUST be clang-format clean.**
+  Run `CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh` and
+  stage the result before committing. The CI `ci-clang-format` workflow will reject
+  any PR where the diff is not already formatted. A bot auto-commit is not a substitute
+  for formatting locally — it creates an unsigned commit that pollutes the PR history.
 
 ## PR Contract
 
