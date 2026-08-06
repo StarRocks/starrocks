@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+struct OlapReaderStatistics;
+
 class VectorIndexReaderFactory {
 #ifdef WITH_TENANN
 public:
@@ -30,7 +32,8 @@ public:
     // file is never opened and size stays unset — VectorIndexFileReader::open() resolves it
     // lazily if the entry happens to be evicted before init_searcher runs.
     static Status create_from_file(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                   std::shared_ptr<VectorIndexReader>* vector_index_reader);
+                                   std::shared_ptr<VectorIndexReader>* vector_index_reader,
+                                   OlapReaderStatistics* stats = nullptr);
 #endif
 };
 

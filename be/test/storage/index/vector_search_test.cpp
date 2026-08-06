@@ -58,6 +58,7 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
@@ -79,6 +80,7 @@
 #include "storage_primitive/predicate_tree/predicate_tree.h"
 #include "storage_primitive/roaring2range.h"
 #include "storage_primitive/schema_helper.h"
+#include "storage_primitive/storage_stats.h"
 #include "storage_primitive/vector_search_option.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
@@ -418,6 +420,56 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
+}
+
+TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/profile_stats_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, empty_query_params));
+    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
+
+    MemTracker cache_tracker(-1, "vector_index_profile_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    auto* saved_cache = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(&cache);
+    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved_cache); });
+
+    OlapReaderStatistics cold_stats;
+    FileInfo cold_vi_file{.path = index_path, .fs = _fs};
+    std::shared_ptr<VectorIndexReader> cold_reader;
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&cold_vi_file, index_meta, &cold_reader, &cold_stats));
+    ASSERT_OK(cold_reader->init_searcher(*index_meta, cold_vi_file, &cold_stats));
+    EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, cold_stats.vector_index_cache_miss_count);
+    EXPECT_GT(cold_stats.vector_index_cache_lookup_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_file_open_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_read_file_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_init_index_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_searcher_init_ns, 0);
+
+    OlapReaderStatistics warm_stats;
+    FileInfo warm_vi_file{.path = index_path, .fs = _fs};
+    std::shared_ptr<VectorIndexReader> warm_reader;
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&warm_vi_file, index_meta, &warm_reader, &warm_stats));
+    ASSERT_OK(warm_reader->init_searcher(*index_meta, warm_vi_file, &warm_stats));
+    EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(0, warm_stats.vector_index_cache_miss_count);
+    EXPECT_GT(warm_stats.vector_index_cache_lookup_ns, 0);
+    EXPECT_EQ(0, warm_stats.vector_index_file_open_ns);
+    EXPECT_EQ(0, warm_stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, warm_stats.vector_index_init_index_ns);
+    EXPECT_GT(warm_stats.vector_index_searcher_init_ns, 0);
 }
 
 #endif // WITH_TENANN
@@ -1730,6 +1782,8 @@ protected:
     struct ResidualCaseResult {
         std::vector<int64_t> ids;
         std::vector<float> distances; // appended ANN distance column values, when present
+        int64_t load_ns = -1;
+        int64_t vector_stage_ns = -1;
         int64_t search_ns = -1;
         int64_t raw_rows_read = -1;
         int64_t del_pruned = -1;   // rows the delete-predicate zone-map prune skipped from row-level eval
@@ -1949,6 +2003,8 @@ protected:
         }
         it->close();
         result->ids = got;
+        result->load_ns = stats.vector_index_load_ns;
+        result->vector_stage_ns = stats.get_row_ranges_by_vector_index_timer;
         // vector_search_timer accumulates ONLY inside the ANN search block; it stays exactly 0 when the
         // cardinality short-circuit skipped the search (a deterministic marker, not a timing assertion).
         result->search_ns = stats.vector_search_timer;
@@ -2153,6 +2209,8 @@ TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/true);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.load_ns, 0);
+    EXPECT_GT(res.vector_stage_ns, 0);
 }
 
 // `filter_col >= <value>` variant of make_ge4_tree, for the short-circuit cardinality cases.
