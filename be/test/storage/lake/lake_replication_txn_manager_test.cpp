@@ -775,6 +775,79 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_source_tablet_from_bundle
     EXPECT_EQ("c0", (*result)->schema().column(0).name());
 }
 
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reports_missing_source_tablet_in_bundle) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto other_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    other_metadata->set_id(_src_tablet_id + 1);
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(other_metadata->id(), *other_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_not_found()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("absent from source metadata bundle"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_source_bundle_page_with_mismatched_checksum) {
+    BoolConfigGuard checksum_guard(&config::lake_enable_protobuf_file_checksum);
+    config::lake_enable_protobuf_file_checksum = true;
+
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(_src_tablet_id, _version);
+    ASSIGN_OR_ABORT(auto input_file, _shared_fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto content, input_file->read_all());
+    ASSERT_FALSE(content.empty());
+    content[0] ^= 0xFF;
+    WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_ABORT(auto output_file, _shared_fs->new_writable_file(opts, bundle_path));
+    ASSERT_OK(output_file->append(Slice(content)));
+    ASSERT_OK(output_file->close());
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Mismatched checksum"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_mismatched_source_tablet_id_in_bundle_page) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto mismatched_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    mismatched_metadata->set_id(_src_tablet_id + 1);
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *mismatched_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Tablet ID mismatch"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, does_not_hide_corrupt_source_metadata_with_bundle_fallback) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    ASSIGN_OR_ABORT(auto output_file, _shared_fs->new_writable_file(metadata_path));
+    ASSERT_OK(output_file->append(Slice("\xff", 1)));
+    ASSERT_OK(output_file->close());
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+}
+
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
     _replication_txn_manager.reset();
     _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
