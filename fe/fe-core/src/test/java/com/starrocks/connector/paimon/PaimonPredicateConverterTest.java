@@ -410,7 +410,7 @@ public class PaimonPredicateConverterTest {
         // return f0 = 44 OR f0 <= 46 OR f0 <= 20
         BinaryPredicateOperator op2 = new BinaryPredicateOperator(
                 BinaryType.EQ, F0, ConstantOperator.createInt(44));
-        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(IntegerType.INT, op2, null,
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(Type.INT, op2, null,
                 Lists.newArrayList(op2, ConstantOperator.createVarchar("test")));
         BinaryPredicateOperator test =
                 new BinaryPredicateOperator(BinaryType.EQ, caseWhenOperator, ConstantOperator.createVarchar("test"));
