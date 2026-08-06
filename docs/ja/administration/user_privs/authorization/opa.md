@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 45
+description: OPA を使った StarRocks の認可設定、リクエスト形式、行フィルター、列マスキングについて説明します。
 ---
 
 # Open Policy Agent で権限を管理する

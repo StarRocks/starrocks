@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 45
+description: 介绍如何通过 OPA 集成 StarRocks 权限控制，包括配置、请求格式、行过滤与列掩码策略。
 ---
 
 # 使用 Open Policy Agent 管理权限

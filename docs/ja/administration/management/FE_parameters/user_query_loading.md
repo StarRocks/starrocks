@@ -62,6 +62,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
 - 導入時期：v3.5.6
 
+### `access_control`
+
+- デフォルト：native
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：StarRocks が使用するアクセスコントローラー。有効な値は `native`、`ranger`、`opa` です。グローバル値を変更した場合、デフォルトのアクセスコントローラーを有効にするには、すべての FE ノードを再起動する必要があります。
+- 導入時期：v3.1.9
+
+### `opa_policy_url`
+
+- デフォルト：空の文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：許可または拒否の認可チェックに使用する OPA Data API の URL。`access_control` を `opa` に設定する場合、この項目は必須です。
+- 導入時期：v4.1.0
+
+### `opa_row_filters_url`
+
+- デフォルト：空の文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：行アクセスポリシー式の取得に使用する任意の OPA Data API URL。この項目が空の場合、OPA による行フィルタリングは無効になります。
+- 導入時期：v4.1.0
+
+### `opa_column_masking_url`
+
+- デフォルト：空の文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：列ごとにマスキング式を取得するための任意の OPA Data API URL。この項目と `opa_batch_column_masking_url` の両方が空の場合、OPA による列マスキングは無効になります。
+- 導入時期：v4.1.0
+
+### `opa_batch_column_masking_url`
+
+- デフォルト：空の文字列
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：複数の列のマスキング式を 1 回のリクエストで取得するための任意の OPA Data API URL。この項目を設定すると、StarRocks は `opa_column_masking_url` の代わりにこの項目を使用します。
+- 導入時期：v4.1.0
+
+### `opa_connect_timeout_ms`
+
+- デフォルト：5000
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：No
+- 説明：OPA HTTP リクエストの接続タイムアウト。認可リクエストがタイムアウトした場合、StarRocks はチェック対象の操作を拒否します。
+- 導入時期：v4.1.0
+
+### `opa_read_timeout_ms`
+
+- デフォルト：5000
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：No
+- 説明：OPA HTTP リクエストの読み取りタイムアウト。認可リクエストがタイムアウトした場合、StarRocks はチェック対象の操作を拒否します。
+- 導入時期：v4.1.0
+
 ### `privilege_max_role_depth`
 
 - デフォルト：16

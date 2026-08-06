@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 45
+description: Manage StarRocks authorization with OPA, including setup, requests, row filters, and column masks.
 ---
 
 # Manage permissions with Open Policy Agent
