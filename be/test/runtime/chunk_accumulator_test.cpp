@@ -102,9 +102,8 @@ TEST(ChunkAccumulatorTest, Accumulator) {
     EXPECT_TRUE(accumulator.reach_limit());
 }
 
-// memory_usage() is capacity-based (Column::container_memory_usage counts capacity, and
-// _tmp_chunk is created with clone_empty(_desired_size) which reserves the full desired
-// size), so the tests below only assert relations: monotonicity, non-zero, and drain-to-zero.
+// memory_usage() is capacity-based (_tmp_chunk reserves _desired_size up front), so the tests
+// below assert relations only: monotonicity, non-zero, drain-to-zero.
 
 TEST(ChunkAccumulatorTest, MemoryUsageEmpty) {
     ChunkAccumulator accumulator(4096);
@@ -120,8 +119,7 @@ TEST(ChunkAccumulatorTest, MemoryUsageMonotonicOnPush) {
         ASSERT_TRUE(accumulator.push(make_chunk(1025)).ok());
         pushed_rows += 1025;
         size_t usage = accumulator.memory_usage();
-        // Capacity accounting may keep the value flat while _tmp_chunk fills up,
-        // but without a pull it must never decrease.
+        // May stay flat while _tmp_chunk fills, but without a pull it must never decrease
         EXPECT_GE(usage, prev_usage);
         EXPECT_GE(usage, pushed_rows * sizeof(int32_t));
         prev_usage = usage;
@@ -151,8 +149,7 @@ TEST(ChunkAccumulatorTest, MemoryUsageDrainsToZeroWithoutFinalize) {
     }
     while (ChunkPtr output = accumulator.pull()) {
     }
-    // _tmp_chunk still holds the tail rows
-    EXPECT_GT(accumulator.memory_usage(), 0u);
+    EXPECT_GT(accumulator.memory_usage(), 0u); // _tmp_chunk still holds the tail rows
 
     accumulator.finalize();
     while (ChunkPtr output = accumulator.pull()) {
@@ -192,20 +189,16 @@ TEST(ChunkAccumulatorTest, MemoryUsageIncludesTmpChunk) {
     constexpr size_t kDesiredSize = 4096;
     ChunkAccumulator accumulator(kDesiredSize);
     ASSERT_TRUE(accumulator.push(make_chunk(100)).ok());
-    // All the data lives in _tmp_chunk: _output is still empty
-    EXPECT_TRUE(accumulator.empty());
+    EXPECT_TRUE(accumulator.empty()); // everything is still in _tmp_chunk
     EXPECT_GT(accumulator.memory_usage(), 0u);
 }
 
 TEST(ChunkAccumulatorTest, MemoryUsageJsonSchemaMismatchFlush) {
-    // A JSON schema mismatch makes push() flush the half-full _tmp_chunk into _output
-    // through a dedicated branch (the fifth _memory_usage maintenance point), which the
-    // Int32-only tests can never reach.
+    // A schema mismatch flushes the half-full _tmp_chunk through its own branch, which the
+    // Int32-only tests never reach.
     constexpr size_t kDesiredSize = 4096;
     ChunkAccumulator accumulator(kDesiredSize);
     ASSERT_TRUE(accumulator.push(make_plain_json_chunk(100)).ok());
-    // Plain vs flat JSON is schema-incompatible: the 100-row _tmp_chunk is flushed
-    // to _output even though it never reached _desired_size
     ASSERT_TRUE(accumulator.push(make_flat_json_chunk(50)).ok());
     EXPECT_FALSE(accumulator.empty());
 

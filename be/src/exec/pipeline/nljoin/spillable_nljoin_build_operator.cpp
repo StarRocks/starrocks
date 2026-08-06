@@ -26,10 +26,10 @@
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(NLJoinBuildOperator::prepare(state));
-    _spill_channel->spiller()->set_metrics(
+    _spiller->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
-    RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
-    _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
+    RETURN_IF_ERROR(_spiller->prepare(state));
+    _cross_join_context->input_channel(_driver_sequence).set_spiller(_spiller);
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
@@ -44,18 +44,22 @@ bool SpillableNLJoinBuildOperator::need_input() const {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return NLJoinBuildOperator::need_input();
     }
-    return !_is_finished && !_spill_channel->spiller()->is_full();
+    // A queued task drains the input channel's accumulator concurrently; stay blocked until it finishes.
+    return !_is_finished && _spiller != nullptr && !_spiller->is_full() && !_spill_channel->has_task();
 }
 
 bool SpillableNLJoinBuildOperator::is_finished() const {
-    if (!_spill_channel->spiller()->spilled()) {
+    if (_spiller == nullptr) {
+        return _is_finished || NLJoinBuildOperator::is_finished();
+    }
+    if (!_spiller->spilled()) {
         return NLJoinBuildOperator::is_finished();
     }
     return _is_finished;
 }
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
-    auto spiller = _spill_channel->spiller();
+    const auto& spiller = _spiller;
 
     // On cancellation, do not run spiller->flush() during teardown. The not-spilled branch below
     // already delegates to NLJoinBuildOperator::set_finishing, which early-returns when cancelled;
@@ -80,14 +84,20 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     auto flush_task = [this](RuntimeState* state) {
-        auto spiller = _spill_channel->spiller();
+        const auto& spiller = _spiller;
         return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
-    // this ref is for the case of query-cannel, make sure the context will be release after the callback finish.
+    // Keep the context alive until the callback runs; a cancel could otherwise release it first.
     _cross_join_context->ref();
     auto callback_task = [this](RuntimeState* state) {
-        auto spiller = _spill_channel->spiller();
+        const auto& spiller = _spiller;
+        if (spiller == nullptr) {
+            auto defer = DeferOp([&]() { _cross_join_context->unref(state); });
+            RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
+            _is_finished = true;
+            return Status::OK();
+        }
         return spiller->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _cross_join_context->unref(state); });
@@ -128,7 +138,7 @@ void SpillableNLJoinBuildOperator::set_execute_mode(int performance_level) {
 }
 
 Status SpillableNLJoinBuildOperator::_spill_buffered_chunks(RuntimeState* state, bool should_finalize) {
-    auto spiller = _spill_channel->spiller();
+    const auto& spiller = _spiller;
     auto iter = _cross_join_context->input_channel(_driver_sequence).buffered_chunk_iterator(should_finalize);
 
     while (!spiller->is_full()) {
@@ -177,6 +187,7 @@ OperatorPtr SpillableNLJoinBuildOperatorFactory::create(int32_t degree_of_parall
     auto build_operator = std::make_shared<SpillableNLJoinBuildOperator>(
             this, _id, _plan_node_id, driver_sequence, _cross_join_context, "spillable_nestloop_join_build");
     build_operator->set_channel(spill_channel);
+    build_operator->set_spiller(spiller);
     return build_operator;
 }
 } // namespace starrocks::pipeline

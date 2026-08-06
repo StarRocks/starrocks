@@ -40,13 +40,15 @@ public:
     void set_execute_mode(int performance_level) override;
 
     void set_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 
 private:
     Status _spill_buffered_chunks(RuntimeState* state, bool should_finalize);
 
 private:
-    bool _is_finished = false;
     SpillProcessChannelPtr _spill_channel;
+    // Private handle: the channel's own copy is moved out by close() on the spill-process pipeline.
+    std::shared_ptr<spill::Spiller> _spiller;
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
     bool _should_spill_buffered_chunks = true;
 };

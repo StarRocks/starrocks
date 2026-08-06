@@ -51,10 +51,8 @@ public:
     size_t output_amplification_factor() const override;
     OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
-private:
-    std::atomic<bool> _is_finished = false;
-
 protected:
+    std::atomic<bool> _is_finished = false;
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 };
 

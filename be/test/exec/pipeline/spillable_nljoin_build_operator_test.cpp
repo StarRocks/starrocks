@@ -20,13 +20,13 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "compute_env/spill/operator_mem_resource_manager.h"
 #include "compute_env/spill/options.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
+#include "exec/pipeline/spill_process_channel.h"
 
-// The test object library is compiled with -fno-access-control, so the tests can reach the
-// private members (_spill_strategy, _is_finished, NLJoinContext::_input_channel) directly.
-// This covers the operator-side AUTO-spill wiring that needs no spiller or driver scheduling:
-// the spill-strategy state machine and the revocable-memory report on the NO_SPILL path.
+// The test object library is built with -fno-access-control, so private members are reachable.
+// Scope: operator-side AUTO-spill wiring that needs no spiller or driver scheduling.
 
 namespace starrocks::pipeline {
 
@@ -55,14 +55,12 @@ class SpillableNLJoinBuildOperatorTest : public testing::Test {
 protected:
     void SetUp() override {
         _ctx = make_context();
-        // The factory only serves as the Operator base's OperatorRuntimeAccess; its
-        // spill options stay unset because the tests never go through factory->create()
+        // Only used as the Operator base's OperatorRuntimeAccess; spill options stay unset
         _factory = std::make_unique<SpillableNLJoinBuildOperatorFactory>(0, 1, _ctx);
         _op = std::make_unique<SpillableNLJoinBuildOperator>(_factory.get(), /*id=*/0, /*plan_node_id=*/1,
                                                              /*driver_sequence=*/0, _ctx,
                                                              "spillable_nestloop_join_build");
-        // prepare() is not called (it would need a RuntimeState and a spiller), so
-        // install the input channel the way NLJoinContext::incr_builder would
+        // prepare() needs a RuntimeState and a spiller, so install the channel by hand
         _ctx->_input_channel.emplace_back(std::make_unique<NJJoinBuildInputChannel>(kChunkSize));
     }
 
@@ -71,8 +69,7 @@ protected:
     std::unique_ptr<SpillableNLJoinBuildOperator> _op;
 };
 
-// Regression guard: _spill_strategy used to be an uninitialized member, so a freshly
-// created operator could start in an arbitrary strategy. It must start in NO_SPILL.
+// Regression: _spill_strategy used to be uninitialized, so it could start in any strategy.
 TEST_F(SpillableNLJoinBuildOperatorTest, SpillStrategyInitializedToNoSpill) {
     EXPECT_EQ(spill::SpillStrategy::NO_SPILL, _op->_spill_strategy);
     EXPECT_TRUE(_op->spillable());
@@ -92,8 +89,48 @@ TEST_F(SpillableNLJoinBuildOperatorTest, SetExecuteModeIgnoredAfterFinished) {
     EXPECT_EQ(spill::SpillStrategy::NO_SPILL, _op->_spill_strategy);
 }
 
-// The AUTO-spill decision loop reads revocable_mem_bytes, so the NO_SPILL push path must
-// keep it in sync with the input channel's buffered memory.
+// Regression for a production SIGSEGV: the two pipelines close in nondeterministic order, so
+// is_finished() could run after SpillProcessChannel::close() moved the channel's spiller away.
+TEST_F(SpillableNLJoinBuildOperatorTest, IsFinishedSurvivesNullSpiller) {
+    // set_spiller() is never called here, so the operator's own handle stays null
+    auto channel = std::make_shared<SpillProcessChannel>();
+    _op->set_channel(channel);
+    ASSERT_TRUE(_op->_spiller == nullptr);
+
+    EXPECT_FALSE(_op->is_finished());
+    EXPECT_EQ(_op->NLJoinBuildOperator::is_finished(), _op->is_finished());
+
+    // close() moves out the channel's spiller; the operator reads its own handle, so nothing changes
+    channel->close();
+    ASSERT_TRUE(_op->_spiller == nullptr);
+    EXPECT_FALSE(_op->is_finished());
+    EXPECT_EQ(_op->NLJoinBuildOperator::is_finished(), _op->is_finished());
+}
+
+TEST_F(SpillableNLJoinBuildOperatorTest, NeedInputSurvivesNullSpiller) {
+    auto channel = std::make_shared<SpillProcessChannel>();
+    channel->close();
+    _op->set_channel(channel);
+
+    // Flip to SPILL_ALL so need_input() takes the spiller-dependent branch
+    _op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+    ASSERT_EQ(spill::SpillStrategy::SPILL_ALL, _op->_spill_strategy);
+
+    // No spiller handle -> cannot accept data, and must not crash
+    EXPECT_FALSE(_op->need_input());
+    EXPECT_FALSE(_op->is_finished());
+}
+
+TEST_F(SpillableNLJoinBuildOperatorTest, NeedInputUsesBaseWhenNoSpill) {
+    // No spiller on the channel: an unguarded touch on the NO_SPILL path would crash here
+    _op->set_channel(std::make_shared<SpillProcessChannel>());
+    ASSERT_EQ(spill::SpillStrategy::NO_SPILL, _op->_spill_strategy);
+
+    EXPECT_TRUE(_op->need_input());
+    EXPECT_EQ(_op->NLJoinBuildOperator::need_input(), _op->need_input());
+}
+
+// The AUTO-spill decision reads revocable_mem_bytes, so the NO_SPILL path must keep it fresh.
 TEST_F(SpillableNLJoinBuildOperatorTest, PushChunkReportsRevocableMemBytes) {
     EXPECT_EQ(0u, _op->revocable_mem_bytes());
 

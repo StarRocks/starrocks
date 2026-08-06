@@ -36,9 +36,7 @@ ChunkPtr make_chunk(size_t num_rows) {
     return chunk;
 }
 
-// Drain the iterator until EndOfFile and return the total number of rows pulled.
-// Every produced chunk must be non-null and non-empty: the iterator feeds
-// Spiller::spill, which DCHECKs !chunk->is_empty() on each input chunk.
+// Chunks must be non-null and non-empty: the iterator feeds Spiller::spill, which DCHECKs that.
 size_t drain_rows(const std::function<StatusOr<ChunkPtr>()>& iter) {
     size_t rows = 0;
     while (true) {
@@ -58,8 +56,7 @@ size_t drain_rows(const std::function<StatusOr<ChunkPtr>()>& iter) {
 
 TEST(NJJoinBuildInputChannelTest, IteratorDrainsAllChunks) {
     NJJoinBuildInputChannel channel(kChunkSize);
-    // 3 * 3000 = 9000 rows: two full 4096-row chunks buffered, 808 rows kept
-    // in the accumulator's half-full tail chunk
+    // 3 * 3000 = 9000 rows: two full 4096-row chunks, 808 left in the tail chunk
     for (int i = 0; i < 3; i++) {
         ASSERT_TRUE(channel.add_chunk(make_chunk(3000)).ok());
     }
@@ -87,7 +84,6 @@ TEST(NJJoinBuildInputChannelTest, IteratorFinalizeIncludesTmpChunk) {
         EXPECT_TRUE(res.status().is_end_of_file());
     }
     {
-        // Contrast: without finalize the half-full tail chunk is not pulled
         NJJoinBuildInputChannel channel(kChunkSize);
         ASSERT_TRUE(channel.add_chunk(make_chunk(100)).ok());
         auto iter = channel.buffered_chunk_iterator(false);
@@ -107,14 +103,12 @@ TEST(NJJoinBuildInputChannelTest, IteratorEmptyChannel) {
 
 TEST(NJJoinBuildInputChannelTest, IteratorReturnsNonEmptyChunks) {
     NJJoinBuildInputChannel channel(kChunkSize);
-    // Empty input chunks are dropped at the door and must not surface as
-    // empty output chunks
+    // Empty input must not surface as empty output chunks
     ASSERT_TRUE(channel.add_chunk(make_chunk(0)).ok());
     ASSERT_TRUE(channel.add_chunk(make_chunk(kChunkSize)).ok());
     ASSERT_TRUE(channel.add_chunk(make_chunk(0)).ok());
     ASSERT_TRUE(channel.add_chunk(make_chunk(1)).ok());
 
-    // drain_rows asserts every chunk is non-null and non-empty
     size_t rows = drain_rows(channel.buffered_chunk_iterator(true));
     EXPECT_EQ(kChunkSize + 1, rows);
 }
@@ -147,8 +141,7 @@ TEST(NJJoinBuildInputChannelTest, CanKeepPushingAfterFinalize) {
     ASSERT_TRUE(channel.add_chunk(make_chunk(100)).ok());
     EXPECT_EQ(100u, drain_rows(channel.buffered_chunk_iterator(true)));
 
-    // ChunkAccumulator::finalize() is not a terminal state: the channel must
-    // keep accepting input and expose it through a fresh iterator
+    // finalize() is not terminal: the channel must keep accepting input
     ASSERT_TRUE(channel.add_chunk(make_chunk(50)).ok());
     EXPECT_EQ(50u, drain_rows(channel.buffered_chunk_iterator(true)));
     EXPECT_EQ(150u, channel.num_rows());
