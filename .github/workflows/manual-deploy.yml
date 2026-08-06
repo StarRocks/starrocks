@@ -135,8 +135,8 @@ jobs:
       FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR != '' && inputs.FE_OUTPUT_TAR || needs.build.outputs.fe_tar }}
       BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR != '' && inputs.BE_OUTPUT_TAR || needs.build.outputs.be_tar }}
     outputs:
-      fe: ${{ steps.cluster_info.outputs.fe }}
-      be: ${{ steps.cluster_info.outputs.be }}
+      fe: ${{ steps.deploy_sr.outputs.fe }}
+      be: ${{ steps.deploy_sr.outputs.be }}
       cluster_name: ${{ env.CLUSTER_NAME }}
     steps:
       - name: Validate tars
@@ -168,22 +168,16 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Deploy SR
+        id: deploy_sr
         if: steps.apply.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
           echo "##### FE: ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           echo "##### BE: ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          # deploy-cluster.sh writes fe=/be= to $GITHUB_OUTPUT itself; consume those
+          # (the previous grep of starrocks_deploy.conf returned empty for shared-data,
+          # leaving FE_NODE/BE_NODE blank so SQL-Tester could not connect).
           ./bin/deploy-cluster.sh -c "${CLUSTER_NAME}" --with-coverage
-
-      - name: Export cluster info
-        id: cluster_info
-        if: steps.apply.outcome == 'success'
-        run: |
-          cd ci-tool
-          fe=$(grep '^fe =' conf/starrocks_deploy.conf | awk '{print $3}')
-          be=$(grep '^be_list =' conf/starrocks_deploy.conf | awk '{print $3}')
-          echo "fe=${fe}" >> $GITHUB_OUTPUT
-          echo "be=${be}" >> $GITHUB_OUTPUT
 
       - name: Renew cluster lease
         if: success() && !inputs.DELETE_AFTER && inputs.KEEP_HOURS != '0' && inputs.KEEP_HOURS != ''
