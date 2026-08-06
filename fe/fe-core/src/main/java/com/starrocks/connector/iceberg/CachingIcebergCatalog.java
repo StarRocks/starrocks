@@ -346,7 +346,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                               ConnectorViewDefinition connectorViewDefinition,
                               boolean replace) {
         boolean created = delegate.createView(connectContext, catalogName, connectorViewDefinition, replace);
-        // A create-or-replace can overwrite an existing definition, so we drop any stale cached entry.
+        // A create/replace can overwrite an existing definition, so we drop any stale cached entry.
         views.invalidate(viewCacheKey(connectorViewDefinition.getDatabaseName(),
                 connectorViewDefinition.getViewName()));
         return created;
