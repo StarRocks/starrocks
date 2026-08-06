@@ -45,6 +45,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchViewException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.view.View;
 import org.junit.jupiter.api.Assertions;
@@ -632,6 +633,39 @@ public class CachingIcebergCatalogTest {
         LoadingCache<?, ?> viewCache = Deencapsulation.getField(cachingIcebergCatalog, "views");
         long refreshSec = viewCache.policy().refreshAfterWrite().get().getExpiresAfter(TimeUnit.SECONDS);
         Assertions.assertEquals(DEFAULT_CATALOG_PROPERTIES.getIcebergTableCacheRefreshIntervalSec(), refreshSec);
+    }
+
+    @Test
+    public void testViewCacheEvictsWhenViewDroppedOnRefresh(@Mocked IcebergCatalog delegate, @Mocked View view)
+            throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations() {
+            {
+                delegate.getView((ConnectContext) any, "db", "v");
+                result = new Delegate<View>() {
+                    View get(ConnectContext c, String db, String v) {
+                        // First call populates the cache; the reload sees the view as dropped.
+                        if (calls.getAndIncrement() == 0) {
+                            return view;
+                        }
+                        throw new NoSuchViewException("dropped");
+                    }
+                };
+            }
+        };
+        ExecutorService refreshExecutor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, refreshExecutor);
+        LoadingCache<Object, Object> viewCache = Deencapsulation.getField(cachingIcebergCatalog, "views");
+
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Object key = viewCache.asMap().keySet().iterator().next();
+        viewCache.refresh(key);
+        // refresh dispatches reload() onto refreshExecutor; this FIFO barrier returns once it has run.
+        refreshExecutor.submit(() -> { }).get();
+        Assertions.assertNull(viewCache.getIfPresent(key),
+                "a view dropped out-of-band must be evicted on refresh, not kept until the TTL");
     }
 
     @Test

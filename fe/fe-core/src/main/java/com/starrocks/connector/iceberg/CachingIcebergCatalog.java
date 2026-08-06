@@ -49,6 +49,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NoSuchViewException;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -129,6 +130,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     public View reload(ViewCacheKey key, View oldValue) {
                         try {
                             return delegate.getView(new ConnectContext(), key.dbName, key.viewName);
+                        } catch (NoSuchViewException e) {
+                            // The view was dropped out-of-band. Returning null evicts the entry; returning
+                            // oldValue would reset the write time and keep the stale definition past the TTL.
+                            LOG.info("iceberg view {}.{} no longer exists, evicting from cache",
+                                    key.dbName, key.viewName);
+                            return null;
                         } catch (Exception e) {
                             LOG.warn("refresh view {}.{} failed", key.dbName, key.viewName, e);
                             return oldValue;
