@@ -85,18 +85,12 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
-<<<<<<< HEAD
-    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
-            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-dict");
-=======
     private static boolean shouldRegisterMetric(boolean needRegisterMetric) {
         return needRegisterMetric && !GlobalStateMgr.isCheckpointThread();
     }
 
-    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
-            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-stats"
-            );
->>>>>>> e6e6b32679 ([BugFix] Skip checkpoint thread pool metrics (#77367))
+    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-dict");
 
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL_FOR_LAKE =
             ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_for_lake_size,
