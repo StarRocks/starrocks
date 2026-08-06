@@ -196,6 +196,41 @@ public class RemoveOrphanFilesProcedureTest {
     }
 
     /**
+     * The configuration is parsed as a plain long, so a negative value is accepted by the config layer. A
+     * negative minimum would turn the retention check into a window that reaches into the future and would
+     * silently admit exactly the `older_than` values this guard exists to reject, so refuse to run instead.
+     */
+    @Test
+    void testNegativeMinRetentionConfigThrows() {
+        long savedMinRetention = Config.iceberg_remove_orphan_files_min_retention_seconds;
+        Config.iceberg_remove_orphan_files_min_retention_seconds = -Duration.ofDays(1).getSeconds();
+        try {
+            RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+            Table table = Mockito.mock(Table.class);
+            Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+            when(table.location()).thenReturn(TABLE_LOCATION);
+            when(table.currentSnapshot()).thenReturn(snapshot);
+
+            Map<String, ConstantOperator> args = new HashMap<>();
+            args.put(RemoveOrphanFilesProcedure.OLDER_THAN,
+                    ConstantOperator.createDatetime(LocalDateTime.now().plusHours(1)));
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                    () -> procedure.execute(context, args));
+
+            assertTrue(ex.getMessage().contains("iceberg_remove_orphan_files_min_retention_seconds"),
+                    "message should name the offending configuration; got: " + ex.getMessage());
+            assertTrue(ex.getMessage().contains("negative"),
+                    "message should say the configuration must not be negative; got: " + ex.getMessage());
+        } finally {
+            Config.iceberg_remove_orphan_files_min_retention_seconds = savedMinRetention;
+        }
+    }
+
+    /**
      * The minimum retention bounds the explicit argument only. Omitting `older_than` keeps the procedure's
      * own 7 day default, so raising the configuration past that default must not break the default call.
      */

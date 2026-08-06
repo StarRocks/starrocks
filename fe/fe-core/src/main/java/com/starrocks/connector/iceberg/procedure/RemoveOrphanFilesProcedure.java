@@ -63,6 +63,8 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     private static final String PROCEDURE_NAME = "remove_orphan_files";
 
+    private static final String MIN_RETENTION_CONF = "iceberg_remove_orphan_files_min_retention_seconds";
+
     // We only need each content file's path to build the set of reachable file names
     private static final List<String> MANIFEST_ENTRY_PROJECTION = List.of("file_path");
 
@@ -174,12 +176,17 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
      */
     private static void validateRetentionInterval(long olderThanMillis) {
         long minRetentionSeconds = Config.iceberg_remove_orphan_files_min_retention_seconds;
+        if (minRetentionSeconds < 0) {
+            throw new StarRocksConnectorException("invalid FE configuration `%s`: %d, it must not be negative. A " +
+                    "negative minimum retention stretches the window into the future and would admit exactly the %s " +
+                    "values this check exists to reject.", MIN_RETENTION_CONF, minRetentionSeconds, OLDER_THAN);
+        }
         if (System.currentTimeMillis() - olderThanMillis < Duration.ofSeconds(minRetentionSeconds).toMillis()) {
             throw new StarRocksConnectorException("invalid argument value for %s, it must be at least the minimum " +
                     "retention of %d seconds before now. Removing orphan files with a shorter interval may delete " +
                     "files that concurrent writes have not committed yet and leave the table unreadable. Adjust the " +
-                    "FE configuration `iceberg_remove_orphan_files_min_retention_seconds` if no concurrent write can " +
-                    "be affected.", OLDER_THAN, minRetentionSeconds);
+                    "FE configuration `%s` if no concurrent write can be affected.",
+                    OLDER_THAN, minRetentionSeconds, MIN_RETENTION_CONF);
         }
     }
 
