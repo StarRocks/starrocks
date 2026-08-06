@@ -22,6 +22,7 @@
 namespace starrocks {
 
 struct OlapReaderStatistics;
+class VectorIndexCache;
 
 class VectorIndexReaderFactory {
 #ifdef WITH_TENANN
@@ -33,7 +34,8 @@ public:
     // lazily if the entry happens to be evicted before init_searcher runs.
     static Status create_from_file(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& index_meta,
                                    std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                   OlapReaderStatistics* stats = nullptr);
+                                   OlapReaderStatistics* stats = nullptr,
+                                   VectorIndexCache* vector_index_cache = nullptr);
 #endif
 };
 

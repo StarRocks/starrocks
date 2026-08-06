@@ -15,10 +15,12 @@
 #ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
 
+#include "common/config_vector_index_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann_index_reader.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage_primitive/storage_stats.h"
 #include "tenann/index/index_cache.h"
@@ -27,13 +29,36 @@ namespace starrocks {
 
 static Status create_from_file_impl(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
                                     std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                    OlapReaderStatistics* stats) {
+                                    OlapReaderStatistics* stats, VectorIndexCache* vector_index_cache) {
     const std::string& index_path = vi_file->path;
+    const bool async_load_on_miss =
+            config::enable_vector_index_cache_async_load_on_miss && vector_index_cache != nullptr;
+
+    if (async_load_on_miss) {
+        VectorIndexCacheProbeResult probe;
+        {
+            int64_t ignored_ns = 0;
+            SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_cache_lookup_ns : &ignored_ns);
+            probe = vector_index_cache->ProbeForQuery(tenann::CacheKey(index_path));
+        }
+        if (probe.state == VectorIndexCacheProbeState::kReady) {
+            (*vector_index_reader) =
+                    std::make_shared<TenANNReader>(vector_index_cache, true, false, std::move(probe.handle));
+            return Status::OK();
+        }
+        if (probe.state == VectorIndexCacheProbeState::kLoading) {
+            // A real load is already in progress. Do not repeat file metadata
+            // I/O or build another loader for this query.
+            (*vector_index_reader) = std::make_shared<TenANNReader>(vector_index_cache, true, true);
+            return Status::OK();
+        }
+    }
+
     // Warm path: an entry in the cache means the .vi file exists and is not
     // an empty-mark placeholder, so we can skip the OSS/S3 HEAD round-trips
     // (path_exist + new_random_access_file + get_size) that the cold path runs.
     auto* cache = tenann::GetGlobalIndexCache();
-    if (cache != nullptr) {
+    if (!async_load_on_miss && cache != nullptr) {
         tenann::IndexCacheHandle probe;
         bool cache_hit = false;
         {
@@ -83,15 +108,15 @@ static Status create_from_file_impl(FileInfo* vi_file, const std::shared_ptr<ten
             return Status::OK();
         }
     }
-    (*vector_index_reader) = std::make_shared<TenANNReader>();
+    (*vector_index_reader) = std::make_shared<TenANNReader>(vector_index_cache, async_load_on_miss, false);
     return Status::OK();
 }
 
 Status VectorIndexReaderFactory::create_from_file(FileInfo* vi_file,
                                                   const std::shared_ptr<tenann::IndexMeta>& index_meta,
                                                   std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                                  OlapReaderStatistics* stats) {
-    return create_from_file_impl(vi_file, index_meta, vector_index_reader, stats);
+                                                  OlapReaderStatistics* stats, VectorIndexCache* vector_index_cache) {
+    return create_from_file_impl(vi_file, index_meta, vector_index_reader, stats, vector_index_cache);
 }
 
 } // namespace starrocks

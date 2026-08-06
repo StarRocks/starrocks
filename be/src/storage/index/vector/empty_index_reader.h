@@ -23,9 +23,9 @@ class EmptyIndexReader final : public VectorIndexReader {
 public:
     ~EmptyIndexReader() override = default;
 
-    Status init_searcher(const tenann::IndexMeta& /*meta*/, const FileInfo& /*vi_file*/,
-                         OlapReaderStatistics* /*stats*/ = nullptr) override {
-        return Status::NotSupported("EmptyIndexReader does not support this operation");
+    StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& /*meta*/, const FileInfo& /*vi_file*/,
+                                                        OlapReaderStatistics* /*stats*/ = nullptr) override {
+        return VectorIndexReaderInitResult::kFallback;
     }
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,

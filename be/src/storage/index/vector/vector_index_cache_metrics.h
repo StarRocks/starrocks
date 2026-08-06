@@ -46,6 +46,20 @@ public:
     METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_hit_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_dynamic_hit_ratio, MetricUnit::PERCENT);
 
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_async_load_inflight, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_submitted, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_deduplicated, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_rejected, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_success, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_failure, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_cancelled, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_ns, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_probe_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_probe_ns, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_entry_lock_wait_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_entry_lock_wait_ns, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_empty_entry_removed, MetricUnit::NOUNIT);
+
 private:
     static uint64_t _delta_since_last_refresh(uint64_t current, uint64_t previous);
 

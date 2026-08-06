@@ -34,7 +34,10 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "common/status.h"
+#include "common/statusor.h"
 #include "fs/fs.h" // FileInfo
 #ifdef WITH_TENANN
 #include "tenann/common/seq_view.h"
@@ -45,6 +48,11 @@
 namespace starrocks {
 
 struct OlapReaderStatistics;
+
+enum class VectorIndexReaderInitResult : uint8_t {
+    kReady,
+    kFallback,
+};
 
 class VectorIndexReader {
 public:
@@ -61,13 +69,14 @@ public:
     // resolved. A null `vi_file.fs` means read the path from the local filesystem. The
     // FileSystem is held by shared_ptr because the reader built from it is stored in the
     // tenann index cache and outlives the SegmentIterator that started the load.
-    virtual Status init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file,
-                                 OlapReaderStatistics* stats = nullptr) = 0;
+    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file,
+                                                                OlapReaderStatistics* stats = nullptr) = 0;
 
     // Per-segment context for apply_adaptive_ef_search(). Default forwards
     // to the row-count-unaware form for readers without adaptive scaling.
-    virtual Status init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file, size_t segment_num_rows,
-                                 int query_k, bool user_set_ef, OlapReaderStatistics* stats = nullptr) {
+    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file,
+                                                                size_t segment_num_rows, int query_k, bool user_set_ef,
+                                                                OlapReaderStatistics* stats = nullptr) {
         return init_searcher(meta, vi_file, stats);
     }
 

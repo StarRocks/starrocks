@@ -668,9 +668,9 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_
     ASSERT_NE(reader, nullptr);
     ASSERT_EQ(IndexDescriptor::mark_word_len, vi_file.size);
 
-    // EmptyIndexReader.init_searcher returns NotSupported
     auto status = reader->init_searcher(*index_meta, vi_file);
-    ASSERT_TRUE(status.is_not_supported());
+    ASSERT_TRUE(status.ok()) << status.status();
+    ASSERT_EQ(VectorIndexReaderInitResult::kFallback, status.value());
 }
 
 // Test that FS-aware create_from_file returns NotFound for non-existent path.

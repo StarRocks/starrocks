@@ -14,7 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
@@ -204,8 +206,8 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &ann_reader);
 
         auto init_status = ann_reader->init_searcher(*index_meta, vi_file);
-
-        ASSERT_TRUE(!init_status.is_not_supported());
+        ASSERT_TRUE(init_status.ok()) << init_status.status();
+        ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_status.value());
 
         constexpr int kTopK = 1;
         Status st;
@@ -261,7 +263,8 @@ TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
         FileInfo vi_file{.path = index_path};
         VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &ann_reader);
         auto init_status = ann_reader->init_searcher(*index_meta, vi_file);
-        ASSERT_TRUE(!init_status.is_not_supported());
+        ASSERT_TRUE(init_status.ok()) << init_status.status();
+        ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_status.value());
 
         constexpr int kTopK = 1;
         std::vector<int64_t> result_ids(kTopK);
@@ -415,8 +418,8 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
 
         TenANNReader tenann_reader;
         // Null vi_file.fs selects the local-filesystem branch.
-        Status status = tenann_reader.init_searcher(ann_meta, FileInfo{.path = ann_path});
-        EXPECT_TRUE(status.ok()) << status;
+        auto status = tenann_reader.init_searcher(ann_meta, FileInfo{.path = ann_path});
+        EXPECT_TRUE(status.ok()) << status.status();
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
@@ -470,6 +473,68 @@ TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss
     EXPECT_EQ(0, warm_stats.vector_index_read_file_ns);
     EXPECT_EQ(0, warm_stats.vector_index_init_index_ns);
     EXPECT_GT(warm_stats.vector_index_searcher_init_ns, 0);
+}
+
+TEST_F(VectorIndexSearchTest, async_cache_miss_falls_back_then_next_reader_uses_loaded_index) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/async_cache_miss_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, empty_query_params));
+    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
+
+    MemTracker cache_tracker(-1, "vector_index_async_query_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    ASSERT_OK(cache.init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    auto* saved_cache = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(&cache);
+    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved_cache); });
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = true;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    OlapReaderStatistics cold_stats;
+    FileInfo cold_vi_file{.path = index_path, .fs = _fs};
+    std::shared_ptr<VectorIndexReader> cold_reader;
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&cold_vi_file, index_meta, &cold_reader, &cold_stats, &cache));
+    auto cold_init = cold_reader->init_searcher(*index_meta, cold_vi_file, &cold_stats);
+    ASSERT_TRUE(cold_init.ok()) << cold_init.status();
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, cold_init.value());
+    EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, cold_stats.vector_index_cache_miss_count);
+
+    bool cache_ready = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto probe = cache.ProbeForQuery(tenann::CacheKey(index_path));
+        if (probe.state == VectorIndexCacheProbeState::kReady) {
+            cache_ready = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    ASSERT_TRUE(cache_ready) << "background vector index load did not publish READY";
+
+    OlapReaderStatistics warm_stats;
+    FileInfo warm_vi_file{.path = index_path, .fs = _fs};
+    std::shared_ptr<VectorIndexReader> warm_reader;
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&warm_vi_file, index_meta, &warm_reader, &warm_stats, &cache));
+    auto warm_init = warm_reader->init_searcher(*index_meta, warm_vi_file, &warm_stats);
+    ASSERT_TRUE(warm_init.ok()) << warm_init.status();
+    EXPECT_EQ(VectorIndexReaderInitResult::kReady, warm_init.value());
+    EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(0, warm_stats.vector_index_cache_miss_count);
+    EXPECT_EQ(0, warm_stats.vector_index_file_open_ns);
 }
 
 #endif // WITH_TENANN

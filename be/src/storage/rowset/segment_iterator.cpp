@@ -76,6 +76,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -1257,7 +1258,8 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
     _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
     // create_from_file backfills vi_file->size on the cold path; init_searcher reuses it.
     auto create_st = VectorIndexReaderFactory::create_from_file(vi_file, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, _opts.stats);
+                                                                &_vector_index_ctx->ann_reader, _opts.stats,
+                                                                StorageEnv::GetInstance()->vector_index_cache());
     // .vi file not found — caller will set up brute-force fallback
     if (create_st.is_not_found()) {
         _vector_index_ctx->use_vector_index = false;
@@ -1276,15 +1278,14 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
             break;
         }
     }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), *vi_file,
-                                                                 static_cast<size_t>(_segment->num_rows()),
-                                                                 _vector_index_ctx->k, user_set_ef, _opts.stats);
-    // empty ann reader — caller will set up brute-force fallback
-    if (status.is_not_supported()) {
+    ASSIGN_OR_RETURN(auto init_result,
+                     _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), *vi_file,
+                                                                  static_cast<size_t>(_segment->num_rows()),
+                                                                  _vector_index_ctx->k, user_set_ef, _opts.stats));
+    if (init_result == VectorIndexReaderInitResult::kFallback) {
         _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
     }
-    return status;
+    return Status::OK();
 #else
     return Status::OK();
 #endif
