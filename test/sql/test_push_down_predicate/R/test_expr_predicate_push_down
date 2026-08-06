@@ -51,7 +51,7 @@ INSERT INTO division_monotonicity_${uuid0} VALUES (5, 100);
 -- !result
 SELECT id, c, 10 DIV c AS quotient FROM division_monotonicity_${uuid0} WHERE 10 DIV c > 5 ORDER BY id;
 -- result:
-2\t1\t10
+2	1	10
 -- !result
 SELECT id, c, c DIV 10 AS quotient FROM division_monotonicity_${uuid0} WHERE c DIV 10 > 5 ORDER BY id;
 -- result:

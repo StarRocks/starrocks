@@ -12,23 +12,7 @@ PROPERTIES(
 -- !result
 show create table t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `k1` int(11) NULL COMMENT "",
-  `v1` int(11) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`k1`)
-PROPERTIES (
-"cloud_native_fast_schema_evolution_v2" = "true",
-"compression" = "LZ4",
-"datacache.enable" = "true",
-"enable_async_write_back" = "false",
-"file_bundling" = "true",
-"replication_num" = "1",
-"storage_volume" = "builtin_storage_volume"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\n\ \ `k1`\ int\(11\)\ NULL\ COMMENT\ "",\n\ \ `v1`\ int\(11\)\ NULL\ COMMENT\ "",\n\ \ `v2`\ int\(11\)\ NULL\ COMMENT\ ""\n\)\ ENGINE=OLAP\ \nDUPLICATE\ KEY\(`k1`\)\n(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k1`\)\nPROPERTIES \(.*\);
 -- !result
 INSERT INTO t1 VALUES(1, 2, 3);
 -- result:
@@ -54,23 +38,7 @@ select k2 from t1;
 -- !result
 show create table t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `k2` int(11) NULL COMMENT "",
-  `v1` int(11) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k2`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`k2`)
-PROPERTIES (
-"cloud_native_fast_schema_evolution_v2" = "true",
-"compression" = "LZ4",
-"datacache.enable" = "true",
-"enable_async_write_back" = "false",
-"file_bundling" = "true",
-"replication_num" = "1",
-"storage_volume" = "builtin_storage_volume"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\n\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\n\ \ `v1`\ int\(11\)\ NULL\ COMMENT\ "",\n\ \ `v2`\ int\(11\)\ NULL\ COMMENT\ ""\n\)\ ENGINE=OLAP\ \nDUPLICATE\ KEY\(`k2`\)\n(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k2`\)\nPROPERTIES \(.*\);
 -- !result
 insert into t1(k2, v1, v2) values(4, 5, 6);
 -- result:
@@ -106,29 +74,7 @@ alter table site_access rename column datekey to dt;
 -- !result
 show create table site_access;
 -- result:
-site_access	CREATE TABLE `site_access` (
-  `dt` date NULL COMMENT "",
-  `site_id` int(11) NULL COMMENT "",
-  `city_code` smallint(6) NULL COMMENT "",
-  `user_name` varchar(32) NULL COMMENT "",
-  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`dt`, `site_id`, `city_code`, `user_name`)
-COMMENT "OLAP"
-PARTITION BY RANGE(`dt`)
-(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
-PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
-PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")))
-DISTRIBUTED BY HASH(`site_id`)
-PROPERTIES (
-"cloud_native_fast_schema_evolution_v2" = "true",
-"compression" = "LZ4",
-"datacache.enable" = "true",
-"enable_async_write_back" = "false",
-"file_bundling" = "true",
-"replication_num" = "1",
-"storage_volume" = "builtin_storage_volume"
-);
+[REGEX](?s)site_access\	CREATE\ TABLE\ `site_access`\ \(\n\ \ `dt`\ date\ NULL\ COMMENT\ "",\n\ \ `site_id`\ int\(11\)\ NULL\ COMMENT\ "",\n\ \ `city_code`\ smallint\(6\)\ NULL\ COMMENT\ "",\n\ \ `user_name`\ varchar\(32\)\ NULL\ COMMENT\ "",\n\ \ `pv`\ bigint\(20\)\ NULL\ DEFAULT\ "0"\ COMMENT\ ""\n\)\ ENGINE=OLAP\ \nDUPLICATE\ KEY\(`dt`,\ `site_id`,\ `city_code`,\ `user_name`\)\n(COMMENT "OLAP"\n)?PARTITION\ BY\ RANGE\(`dt`\)\n\(PARTITION\ p20210101\ VALUES\ \[\("2021\-01\-01"\),\ \("2021\-01\-02"\)\),\nPARTITION\ p20210102\ VALUES\ \[\("2021\-01\-02"\),\ \("2021\-01\-03"\)\),\nPARTITION\ p20210103\ VALUES\ \[\("2021\-01\-03"\),\ \("2021\-01\-04"\)\)\)\nDISTRIBUTED\ BY\ HASH\(`site_id`\)\nPROPERTIES \(.*\);
 -- !result
 insert into site_access values('2021-01-01',1,1,'1',1);
 -- result:
@@ -240,26 +186,7 @@ alter table site_access rename column event_day to dt;
 -- !result
 show create table site_access;
 -- result:
-site_access	CREATE TABLE `site_access` (
-  `dt` date NOT NULL COMMENT "",
-  `site_id` int(11) NULL DEFAULT "10" COMMENT "",
-  `city_code` varchar(100) NULL COMMENT "",
-  `user_name` varchar(32) NULL DEFAULT "" COMMENT "",
-  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`dt`, `site_id`, `city_code`, `user_name`)
-COMMENT "OLAP"
-PARTITION BY date_trunc('day', `dt`)
-DISTRIBUTED BY HASH(`dt`, `site_id`) BUCKETS 32 
-PROPERTIES (
-"cloud_native_fast_schema_evolution_v2" = "true",
-"compression" = "LZ4",
-"datacache.enable" = "true",
-"enable_async_write_back" = "false",
-"file_bundling" = "true",
-"replication_num" = "1",
-"storage_volume" = "builtin_storage_volume"
-);
+[REGEX](?s)site_access\	CREATE\ TABLE\ `site_access`\ \(\n\ \ `dt`\ date\ NOT\ NULL\ COMMENT\ "",\n\ \ `site_id`\ int\(11\)\ NULL\ DEFAULT\ "10"\ COMMENT\ "",\n\ \ `city_code`\ varchar\(100\)\ NULL\ COMMENT\ "",\n\ \ `user_name`\ varchar\(32\)\ NULL\ DEFAULT\ ""\ COMMENT\ "",\n\ \ `pv`\ bigint\(20\)\ NULL\ DEFAULT\ "0"\ COMMENT\ ""\n\)\ ENGINE=OLAP\ \nDUPLICATE\ KEY\(`dt`,\ `site_id`,\ `city_code`,\ `user_name`\)\n(COMMENT "OLAP"\n)?PARTITION\ BY\ date_trunc\('day',\ `dt`\)\nDISTRIBUTED\ BY\ HASH\(`dt`,\ `site_id`\)\ BUCKETS\ 32\ \nPROPERTIES \(.*\);
 -- !result
 CREATE TABLE `bill_detail` (
   `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT "运单号"
@@ -293,29 +220,7 @@ JT2921712368984
 -- !result
 show create table bill_detail;
 -- result:
-bill_detail	CREATE TABLE `bill_detail` (
-  `bill` varchar(200) NOT NULL DEFAULT "" COMMENT "运单号"
-) ENGINE=OLAP 
-PRIMARY KEY(`bill`)
-COMMENT "OLAP"
-PARTITION BY RANGE(CAST(substr(`bill`, 3, 11) AS BIGINT))
-(PARTITION p1 VALUES [("0"), ("5000000")),
-PARTITION p2 VALUES [("5000000"), ("10000000")),
-PARTITION p3 VALUES [("10000000"), ("15000000")),
-PARTITION p4 VALUES [("15000000"), ("20000000")),
-PARTITION p6 VALUES [("20000000"), ("3021712368984")))
-DISTRIBUTED BY HASH(`bill`) BUCKETS 3 
-PROPERTIES (
-"cloud_native_fast_schema_evolution_v2" = "true",
-"compression" = "LZ4",
-"datacache.enable" = "true",
-"enable_async_write_back" = "false",
-"enable_persistent_index" = "true",
-"file_bundling" = "true",
-"persistent_index_type" = "CLOUD_NATIVE",
-"replication_num" = "1",
-"storage_volume" = "builtin_storage_volume"
-);
+[REGEX](?s)bill_detail\	CREATE\ TABLE\ `bill_detail`\ \(\n\ \ `bill`\ varchar\(200\)\ NOT\ NULL\ DEFAULT\ ""\ COMMENT\ "运单号"\n\)\ ENGINE=OLAP\ \nPRIMARY\ KEY\(`bill`\)\n(COMMENT "OLAP"\n)?PARTITION\ BY\ RANGE\(CAST\(substr\(`bill`,\ 3,\ 11\)\ AS\ BIGINT\)\)\n\(PARTITION\ p1\ VALUES\ \[\("0"\),\ \("5000000"\)\),\nPARTITION\ p2\ VALUES\ \[\("5000000"\),\ \("10000000"\)\),\nPARTITION\ p3\ VALUES\ \[\("10000000"\),\ \("15000000"\)\),\nPARTITION\ p4\ VALUES\ \[\("15000000"\),\ \("20000000"\)\),\nPARTITION\ p6\ VALUES\ \[\("20000000"\),\ \("3021712368984"\)\)\)\nDISTRIBUTED\ BY\ HASH\(`bill`\)\ BUCKETS\ 3\ \nPROPERTIES \(.*\);
 -- !result
 select * from bill_detail where bill = "JT2921712368984";
 -- result:

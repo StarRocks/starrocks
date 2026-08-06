@@ -186,19 +186,15 @@ CREATE TABLE ss( event_day DATE, pv BIGINT, cc int) DUPLICATE KEY(event_day) PAR
 insert into ss values('2002-01-01', 1, 2);
 insert into ss values('2002-01-02', 1, 2);
 alter table ss modify column cc INT AFTER event_day;
+-- Wait for schema change to finish before auto-creating new partitions.
+-- Concurrent insert during SC is flaky on shared-data (auto partition rejected).
+function: wait_alter_table_finish()
 insert into ss values('2002-01-03', 1, 2);
-select sleep(3);
 insert into ss values('2002-01-04', 1, 2);
-select sleep(3);
 insert into ss values('2002-01-05', 1, 2);
-select sleep(3);
 insert into ss values('2002-01-06', 1, 2);
-select sleep(3);
 insert into ss values('2002-01-07', 1, 2);
-select sleep(3);
 insert into ss values('2002-01-08', 1, 2);
-select sleep(3);
-function: wait_alter_table_not_pending()
 
 -- name: test_time_slice_with_minute_granularity
 create table tt(k datetime) partition by time_slice(k, interval 10 minute);

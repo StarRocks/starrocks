@@ -29,6 +29,10 @@ ALTER TABLE t_json_schema_change ADD COLUMN col5 int;
 ALTER TABLE t_json_schema_change ADD COLUMN col6 int;
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE t_json_schema_change DROP COLUMN col1;
 -- result:
 -- !result
@@ -37,6 +41,10 @@ ALTER TABLE t_json_schema_change DROP COLUMN col2;
 -- !result
 ALTER TABLE t_json_schema_change DROP COLUMN col3;
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE t_json_schema_change ADD COLUMN col7 int;
 -- result:

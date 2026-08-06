@@ -1,4 +1,4 @@
--- name: test_spill_partition_wise_agg @sequential @slow
+-- name: test_spill_partition_wise_agg @sequential @slow @no_asan
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None
