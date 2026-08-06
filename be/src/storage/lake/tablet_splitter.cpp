@@ -826,8 +826,7 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
 }
 
 Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_manager,
-                                                          const TabletMetadataPtr& tablet_metadata,
-                                                          int32_t split_count,
+                                                          const TabletMetadataPtr& tablet_metadata, int32_t split_count,
                                                           std::vector<std::string> encoded_samples,
                                                           std::vector<TabletRangeInfo>* split_ranges,
                                                           int32_t colocate_column_count) {
@@ -866,21 +865,22 @@ Status get_tablet_split_ranges_from_pk_index_samples_impl(TabletManager* tablet_
     };
     std::sort(encoded_samples.begin(), encoded_samples.end(), encoded_less);
     encoded_samples.erase(std::unique(encoded_samples.begin(), encoded_samples.end()), encoded_samples.end());
-    encoded_samples.erase(
-            std::remove_if(encoded_samples.begin(), encoded_samples.end(), [&](const std::string& key) {
-                if (key.empty()) return true;
-                if (!tablet_sst_range.seek_key.empty() &&
-                    Slice(key).compare(Slice(tablet_sst_range.seek_key)) <= 0) {
-                    return true;
-                }
-                return !tablet_sst_range.stop_key.empty() &&
-                       Slice(key).compare(Slice(tablet_sst_range.stop_key)) >= 0;
-            }),
-            encoded_samples.end());
+    encoded_samples.erase(std::remove_if(encoded_samples.begin(), encoded_samples.end(),
+                                         [&](const std::string& key) {
+                                             if (key.empty()) return true;
+                                             if (!tablet_sst_range.seek_key.empty() &&
+                                                 Slice(key).compare(Slice(tablet_sst_range.seek_key)) <= 0) {
+                                                 return true;
+                                             }
+                                             return !tablet_sst_range.stop_key.empty() &&
+                                                    Slice(key).compare(Slice(tablet_sst_range.stop_key)) >= 0;
+                                         }),
+                          encoded_samples.end());
     if (encoded_samples.size() < static_cast<size_t>(split_count)) {
-        return Status::InvalidArgument(fmt::format("Not enough distinct PK-index samples: requested {} splits, got {} "
-                                                   "strict-interior keys",
-                                                   split_count, encoded_samples.size()));
+        return Status::InvalidArgument(
+                fmt::format("Not enough distinct PK-index samples: requested {} splits, got {} "
+                            "strict-interior keys",
+                            split_count, encoded_samples.size()));
     }
 
     auto encoded_column = BinaryColumn::create();
@@ -967,23 +967,22 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
     std::vector<std::string> encoded_samples;
     auto* block_cache = tablet_manager->update_mgr()->block_cache();
     for (const auto& sstable_pb : tablet_metadata->sstable_meta().sstables()) {
-        if (!sstable_pb.has_range() || sstable_pb.range().start_key().empty() ||
-            sstable_pb.range().end_key().empty()) {
+        if (!sstable_pb.has_range() || sstable_pb.range().start_key().empty() || sstable_pb.range().end_key().empty()) {
             return Status::Corruption(fmt::format("PK-index SST {} has no usable key range", sstable_pb.filename()));
         }
         encoded_samples.push_back(sstable_pb.range().start_key());
         encoded_samples.push_back(sstable_pb.range().end_key());
-        ASSIGN_OR_RETURN(auto sstable,
-                         PersistentIndexSstable::new_sstable(
-                                 sstable_pb, tablet_manager->sst_location(tablet_metadata->id(), sstable_pb.filename()),
-                                 block_cache ? block_cache->cache() : nullptr, false, nullptr, tablet_metadata,
-                                 tablet_manager));
+        ASSIGN_OR_RETURN(
+                auto sstable,
+                PersistentIndexSstable::new_sstable(
+                        sstable_pb, tablet_manager->sst_location(tablet_metadata->id(), sstable_pb.filename()),
+                        block_cache ? block_cache->cache() : nullptr, false, nullptr, tablet_metadata, tablet_manager));
         RETURN_IF_ERROR(sstable->sample_data_keys(&encoded_samples, sample_interval));
     }
 
     return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
-                                                               std::move(encoded_samples), split_ranges,
-                                                               colocate_column_count);
+                                                              std::move(encoded_samples), split_ranges,
+                                                              colocate_column_count);
 }
 
 // Builds a single new-tablet metadata that is "identical" to the old tablet —
@@ -1765,8 +1764,8 @@ Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manag
                                                      std::vector<TabletRangeInfo>* split_ranges,
                                                      int32_t colocate_column_count) {
     return get_tablet_split_ranges_from_pk_index_samples_impl(tablet_manager, tablet_metadata, split_count,
-                                                               std::move(encoded_samples), split_ranges,
-                                                               colocate_column_count);
+                                                              std::move(encoded_samples), split_ranges,
+                                                              colocate_column_count);
 }
 
 // -----------------------------------------------------------------------------
