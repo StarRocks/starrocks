@@ -162,9 +162,17 @@ public class UpdatePlanner {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
         long tableId = targetTable.getId();
+        OlapTable olapTable = (OlapTable) targetTable;
 
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        for (Column column : targetTable.getFullSchema()) {
+        // UpdateAnalyzer builds the output expressions from baseSchema. Only a real schema change
+        // needs fullSchema so concurrent writes can target its shadow indexes. Online OPTIMIZE can
+        // leave duplicate generated-column entries in fullSchema, including entries without the
+        // shadow-name prefix, so filtering by Column.isShadowColumn() is not sufficient here.
+        List<Column> outputSchema = olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                ? targetTable.getFullSchema()
+                : targetTable.getBaseSchema();
+        for (Column column : outputSchema) {
             if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                     !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                 continue;
@@ -183,7 +191,6 @@ public class UpdatePlanner {
         }
         olapTuple.computeMemLayout();
 
-        OlapTable olapTable = (OlapTable) targetTable;
         List<Long> partitionIds = Lists.newArrayList();
         for (Partition partition : olapTable.getPartitions()) {
             partitionIds.add(partition.getId());
