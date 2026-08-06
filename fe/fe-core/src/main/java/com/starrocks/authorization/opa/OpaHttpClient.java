@@ -23,6 +23,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -56,13 +57,10 @@ class OpaHttpClient implements OpaPolicyClient {
 
     OpaHttpClient(String policyUrl, String rowFiltersUrl, String columnMaskingUrl, String batchColumnMaskingUrl,
                   int connectTimeoutMs, int readTimeoutMs) {
-        if (Strings.isNullOrEmpty(policyUrl)) {
-            throw new IllegalArgumentException("opa_policy_url must be set when OPA access control is enabled");
-        }
-        this.policyUrl = policyUrl;
-        this.rowFiltersUrl = emptyToNull(rowFiltersUrl);
-        this.columnMaskingUrl = emptyToNull(columnMaskingUrl);
-        this.batchColumnMaskingUrl = emptyToNull(batchColumnMaskingUrl);
+        this.policyUrl = validateUrl("opa_policy_url", policyUrl, true);
+        this.rowFiltersUrl = validateUrl("opa_row_filters_url", rowFiltersUrl, false);
+        this.columnMaskingUrl = validateUrl("opa_column_masking_url", columnMaskingUrl, false);
+        this.batchColumnMaskingUrl = validateUrl("opa_batch_column_masking_url", batchColumnMaskingUrl, false);
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(connectTimeoutMs, TimeUnit.MILLISECONDS)
                 .readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
@@ -74,7 +72,7 @@ class OpaHttpClient implements OpaPolicyClient {
         try {
             return parseBooleanResult(post(policyUrl, request));
         } catch (OpaQueryException e) {
-            LOG.warn("OPA authorization request failed", e);
+            LOG.warn("OPA authorization request failed: {}", e.getMessage());
             return false;
         }
     }
@@ -118,14 +116,13 @@ class OpaHttpClient implements OpaPolicyClient {
         String requestBody = gson.toJson(new OpaEnvelope(request));
         Request httpRequest = new Request.Builder()
                 .url(url)
-                .post(RequestBody.create(JSON, requestBody))
+                .post(RequestBody.create(requestBody, JSON))
                 .build();
         try (Response response = httpClient.newCall(httpRequest).execute()) {
             ResponseBody body = response.body();
             String responseBody = body == null ? "" : body.string();
             if (!response.isSuccessful()) {
-                throw new OpaQueryException(
-                        "OPA server returned HTTP " + response.code() + " for " + url);
+                throw new OpaQueryException("OPA server returned HTTP " + response.code());
             }
             JsonElement responseJson = JsonParser.parseString(responseBody);
             if (!responseJson.isJsonObject()) {
@@ -135,7 +132,7 @@ class OpaHttpClient implements OpaPolicyClient {
         } catch (OpaQueryException e) {
             throw e;
         } catch (IOException | RuntimeException e) {
-            throw new OpaQueryException("failed to query OPA at " + url, e);
+            throw new OpaQueryException("failed to query OPA: " + e.getClass().getSimpleName());
         }
     }
 
@@ -146,8 +143,8 @@ class OpaHttpClient implements OpaPolicyClient {
     }
 
     private List<String> parseRowFilters(JsonObject response) {
-        JsonElement result = response.get("result");
-        if (result == null || result.isJsonNull()) {
+        JsonElement result = requireResult(response, "row filters");
+        if (result.isJsonNull()) {
             return List.of();
         }
         if (!result.isJsonArray()) {
@@ -155,22 +152,22 @@ class OpaHttpClient implements OpaPolicyClient {
         }
         ImmutableList.Builder<String> filters = ImmutableList.builder();
         for (JsonElement item : result.getAsJsonArray()) {
-            parseExpression(item).ifPresent(filters::add);
+            filters.add(parseExpression(item));
         }
         return filters.build();
     }
 
     private Optional<String> parseColumnMask(JsonObject response) {
-        JsonElement result = response.get("result");
-        if (result == null || result.isJsonNull()) {
+        JsonElement result = requireResult(response, "column masking");
+        if (result.isJsonNull()) {
             return Optional.empty();
         }
-        return parseExpression(result);
+        return Optional.of(parseExpression(result));
     }
 
     private Map<String, String> parseBatchColumnMasks(JsonObject response, List<String> columnNames) {
-        JsonElement result = response.get("result");
-        if (result == null || result.isJsonNull()) {
+        JsonElement result = requireResult(response, "batch column masking");
+        if (result.isJsonNull()) {
             return Map.of();
         }
         if (!result.isJsonArray()) {
@@ -182,20 +179,17 @@ class OpaHttpClient implements OpaPolicyClient {
                 throw new OpaQueryException("OPA batch column masking item must be an object");
             }
             JsonObject itemObject = item.getAsJsonObject();
-            Optional<String> expression = parseExpression(itemObject);
-            if (expression.isEmpty()) {
-                continue;
-            }
+            String expression = parseExpression(itemObject);
             JsonElement columnElement = itemObject.get("column");
             if (columnElement != null && columnElement.isJsonPrimitive()) {
-                columnToMask.put(columnElement.getAsString(), expression.get());
+                columnToMask.put(columnElement.getAsString(), expression);
                 continue;
             }
             JsonElement indexElement = itemObject.get("index");
             if (indexElement != null && indexElement.isJsonPrimitive() && indexElement.getAsJsonPrimitive().isNumber()) {
                 int index = indexElement.getAsInt();
                 if (index >= 0 && index < columnNames.size()) {
-                    columnToMask.put(columnNames.get(index), expression.get());
+                    columnToMask.put(columnNames.get(index), expression);
                     continue;
                 }
             }
@@ -204,27 +198,50 @@ class OpaHttpClient implements OpaPolicyClient {
         return columnToMask;
     }
 
-    private Optional<String> parseExpression(JsonElement element) {
+    private String parseExpression(JsonElement element) {
         if (element == null || element.isJsonNull()) {
-            return Optional.empty();
+            throw new OpaQueryException("OPA result expression must be a non-blank string");
         }
         if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
-            return Optional.of(element.getAsString());
+            return requireNonBlankExpression(element.getAsString());
         }
         if (element.isJsonObject()) {
             JsonElement expression = element.getAsJsonObject().get("expression");
             if (expression == null || expression.isJsonNull()) {
-                return Optional.empty();
+                throw new OpaQueryException("OPA result expression must be a non-blank string");
             }
             if (expression.isJsonPrimitive() && expression.getAsJsonPrimitive().isString()) {
-                return Optional.of(expression.getAsString());
+                return requireNonBlankExpression(expression.getAsString());
             }
         }
-        throw new OpaQueryException("OPA result expression must be a string");
+        throw new OpaQueryException("OPA result expression must be a non-blank string");
     }
 
-    private static String emptyToNull(String value) {
-        return Strings.isNullOrEmpty(value) ? null : value;
+    private String requireNonBlankExpression(String expression) {
+        if (expression.isBlank()) {
+            throw new OpaQueryException("OPA result expression must be a non-blank string");
+        }
+        return expression;
+    }
+
+    private static JsonElement requireResult(JsonObject response, String policyType) {
+        if (!response.has("result")) {
+            throw new OpaQueryException("OPA " + policyType + " response must contain result");
+        }
+        return response.get("result");
+    }
+
+    private static String validateUrl(String configName, String value, boolean required) {
+        if (Strings.isNullOrEmpty(value)) {
+            if (required) {
+                throw new IllegalArgumentException(configName + " must be set when OPA access control is enabled");
+            }
+            return null;
+        }
+        if (value.isBlank() || HttpUrl.parse(value) == null) {
+            throw new IllegalArgumentException(configName + " must be a valid HTTP or HTTPS URL");
+        }
+        return value;
     }
 
     private static class OpaEnvelope {
