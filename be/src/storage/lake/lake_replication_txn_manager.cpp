@@ -860,10 +860,9 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
-            ASSIGN_OR_RETURN(
-                    auto destination_file_shared,
-                    destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed,
-                                       src_seg_meta.has_bundle_file_offset()));
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed,
+                                                src_seg_meta.has_bundle_file_offset()));
             new_seg_meta->set_shared(destination_file_shared);
 
             // Add encryption metadata for files
