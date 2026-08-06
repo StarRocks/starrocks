@@ -68,9 +68,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples),
-          _resource_profile(tnode.resource_profile),
-
+          _record_descriptor(descs, tnode.row_tuples),
           _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
@@ -78,29 +76,6 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
 ExecNode::~ExecNode() {
     if (runtime_state() != nullptr) {
         ExecNode::close(_runtime_state);
-    }
-}
-
-void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
-    if (_type != TPlanNodeType::AGGREGATION_NODE) {
-        for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs);
-            if (expr_ctxs->size() == 0) {
-                return;
-            }
-        }
-    }
-
-    auto iter = expr_ctxs->begin();
-    while (iter != expr_ctxs->end()) {
-        if ((*iter)->root()->is_bound(_tuple_ids)) {
-            WARN_IF_ERROR((*iter)->prepare(state), "prepare expression failed");
-            WARN_IF_ERROR((*iter)->open(state), "open expression failed");
-            _conjunct_ctxs.push_back(*iter);
-            iter = expr_ctxs->erase(iter);
-        } else {
-            ++iter;
-        }
     }
 }
 
@@ -217,75 +192,6 @@ Status ExecNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 StatusOr<pipeline::OpFactories> ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     pipeline::OpFactories operators;
     return operators;
-}
-
-// specific_get_next to get chunks, It's implemented in subclass.
-// if pre chunk is nullptr current chunk size >= chunk_size / 2, direct return the current chunk
-// if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
-// if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
-Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
-                                    const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
-    size_t chunk_size = state->chunk_size();
-
-    while (true) {
-        bool cur_eos = false;
-        ChunkPtr cur_chunk = nullptr;
-
-        RETURN_IF_ERROR(specific_get_next(state, &cur_chunk, &cur_eos));
-        TRY_CATCH_ALLOC_SCOPE_START()
-        if (cur_eos) {
-            if (pre_output_chunk != nullptr) {
-                *eos = false;
-                *chunk = std::move(pre_output_chunk);
-                return Status::OK();
-            } else {
-                *eos = true;
-                return Status::OK();
-            }
-        } else {
-            size_t cur_size = cur_chunk->num_rows();
-            if (cur_size <= 0) {
-                continue;
-            } else if (pre_output_chunk == nullptr) {
-                if (cur_size >= chunk_size / 2) {
-                    // the probe chunk size of read from right child >= chunk_size, direct return
-                    *eos = false;
-                    *chunk = std::move(cur_chunk);
-                    return Status::OK();
-                } else {
-                    pre_output_chunk = std::move(cur_chunk);
-                    continue;
-                }
-            } else {
-                if (cur_size + pre_output_chunk->num_rows() > chunk_size) {
-                    // the two chunk size > chunk_size, return the first reserved chunk
-                    *eos = false;
-                    *chunk = std::move(pre_output_chunk);
-                    pre_output_chunk = std::move(cur_chunk);
-                    return Status::OK();
-                } else {
-                    // TODO: copy the small chunk to big chunk
-                    auto& src_columns = cur_chunk->columns();
-                    size_t num_rows = cur_size;
-                    // copy the new read chunk to the reserved
-                    auto& dest_columns = pre_output_chunk->columns();
-                    for (size_t i = 0; i < dest_columns.size(); i++) {
-                        dest_columns[i]->as_mutable_raw_ptr()->append(*src_columns[i], 0, num_rows);
-                    }
-                    continue;
-                }
-            }
-        }
-        TRY_CATCH_ALLOC_SCOPE_END()
-    }
-}
-
-Status ExecNode::reset(RuntimeState* state) {
-    _num_rows_returned = 0;
-    for (auto& i : _children) {
-        RETURN_IF_ERROR(i->reset(state));
-    }
-    return Status::OK();
 }
 
 Status ExecNode::collect_query_statistics(QueryStatistics* statistics) {

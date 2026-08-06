@@ -123,6 +123,29 @@ public:
     const Observable& observes() const { return _sources_observes; }
     Observable& observes() { return _sources_observes; }
 
+    // Targeted source-observer wakeup indexed by driver_sequence. Each driver registers its
+    // observer here during prepare (serial, like observes().add_observer), so the vector is
+    // read-only during execution. Shared scan uses notify_source_observer() to wake exactly
+    // the consumer driver that owns the round-robin chunk-buffer slot a chunk was produced
+    // into, instead of fanning out to every sibling driver on every chunk.
+    void register_source_observer(int32_t driver_sequence, PipelineObserver* observer) {
+        if (observer == nullptr || driver_sequence < 0) {
+            return;
+        }
+        if (static_cast<size_t>(driver_sequence) >= _indexed_source_observers.size()) {
+            _indexed_source_observers.resize(driver_sequence + 1, nullptr);
+        }
+        _indexed_source_observers[driver_sequence] = observer;
+    }
+    void notify_source_observer(int32_t driver_sequence) {
+        if (driver_sequence < 0 || static_cast<size_t>(driver_sequence) >= _indexed_source_observers.size()) {
+            return;
+        }
+        if (auto* observer = _indexed_source_observers[driver_sequence]; observer != nullptr) {
+            observer->source_trigger();
+        }
+    }
+
 protected:
     size_t _degree_of_parallelism = 1;
     bool _could_local_shuffle = true;
@@ -140,6 +163,8 @@ protected:
     EventPtr _adaptive_blocking_event = nullptr;
 
     Observable _sources_observes;
+    // Indexed by driver_sequence; see register_source_observer/notify_source_observer.
+    std::vector<PipelineObserver*> _indexed_source_observers;
 };
 
 class SourceOperator : public Operator {
@@ -160,6 +185,7 @@ public:
         RETURN_IF_ERROR(Operator::prepare(state));
         _observable.add_observer(state, _observer);
         _source_factory()->observes().add_observer(state, _observer);
+        _source_factory()->register_source_observer(get_driver_sequence(), _observer);
         return Status::OK();
     }
 

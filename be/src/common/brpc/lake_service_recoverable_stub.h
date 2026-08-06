@@ -23,7 +23,8 @@ namespace starrocks {
 class LakeService_RecoverableStub : public LakeService,
                                     public std::enable_shared_from_this<LakeService_RecoverableStub> {
 public:
-    LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
+    LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "",
+                                int64_t connection_group_seed = 0);
     ~LakeService_RecoverableStub() override;
 
     Status reset_channel(int64_t next_connection_group = 0);
@@ -48,6 +49,8 @@ private:
     std::shared_ptr<starrocks::LakeService_Stub> _stub;
     const butil::EndPoint _endpoint;
     std::atomic<int64_t> _connection_group = 0;
+    // Distinguishes stubs that share the same endpoint.
+    const int64_t _connection_group_seed = 0;
     mutable std::shared_mutex _mutex;
     std::string _protocol;
 };

@@ -131,11 +131,21 @@ public:
 // GNU libstdc++ with new CXX11 ABI
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
+// Page-aligned (4096) backing store ONCE HEAP-ALLOCATED, required for O_DIRECT spill writes where
+// pwritev needs iov_base aligned to the device logical block size. Short contents stay inline in
+// the string object and never reach the allocator, so a caller that needs the alignment must size
+// the buffer past that (the O_DIRECT spill path always resizes to ALIGN_UP(n, page), clearing it).
+// NOTE: RawAllocator's second parameter is TRAILING PADDING, not alignment -- the alignment
+// comes from composing AlignmentAllocator as the underlying allocator.
+using RawStringPage =
+        std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0, AlignmentAllocator<char, 4096>>>;
 #elif defined(_LIBCPP_VERSION)
 // LLVM libc++ (used on macOS and some Linux systems)
 // libc++ never used COW semantics, so RawString optimization is safe
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
+using RawStringPage =
+        std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0, AlignmentAllocator<char, 4096>>>;
 #else
 // Old GNU libstdc++ ABI (COW semantics) - not compatible with RawString optimization
 #error "Cannot use RawString optimization with old CXX11 ABI"

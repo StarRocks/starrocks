@@ -1212,6 +1212,78 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     EXPECT_TRUE(res.status().is_corruption());
 }
 
+// The bundle file is the complete metadata of one version and is written with truncate semantics,
+// so persisting a map that is short a tablet corrupts that version permanently: FE makes it
+// visible, and every later publish must read exactly that version as its base, so no retry can
+// ever repair it. Refuse the write instead; the version stays unpublished and the publish is
+// retryable.
+TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_rejects_incomplete_bundle) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    const int64_t t1 = next_id();
+    const int64_t t2 = next_id();
+    const int64_t t3 = next_id();
+    const std::set<int64_t> expected{t1, t2, t3};
+
+    auto make_meta = [&](int64_t tablet_id) {
+        TabletMetadataPB meta;
+        meta.set_id(tablet_id);
+        meta.set_version(2);
+        meta.mutable_schema()->CopyFrom(schema_pb);
+        return meta;
+    };
+    auto fs = FileSystem::Default();
+    // All three ids live in the same partition directory, so any of them names the same bundle file.
+    auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(t1, 2);
+
+    // Short by one tablet: rejected, and nothing is left on disk.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(t1, make_meta(t1));
+        metadatas.emplace(t2, make_meta(t2));
+        auto st = _tablet_manager->put_bundle_tablet_metadata(metadatas, expected);
+        ASSERT_FALSE(st.ok());
+        EXPECT_TRUE(MatchPattern(st.message(), fmt::format("*missing 1 of 3 tablets*{}*", t3))) << st.message();
+        EXPECT_TRUE(fs->path_exists(bundle_path).is_not_found());
+    }
+
+    // An empty expected set skips the check: callers that cannot state the tablet set up front still
+    // get their bundle written.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(t1, make_meta(t1));
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+        EXPECT_TRUE(fs->path_exists(bundle_path).ok());
+        ASSERT_OK(fs->delete_file(bundle_path));
+        _tablet_manager->metacache()->prune();
+    }
+
+    // Complete: written, and every expected tablet is readable at that version.
+    {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        for (int64_t tablet_id : expected) {
+            metadatas.emplace(tablet_id, make_meta(tablet_id));
+        }
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas, expected));
+        EXPECT_TRUE(fs->path_exists(bundle_path).ok());
+        for (int64_t tablet_id : expected) {
+            ASSIGN_OR_ABORT(auto metadata, _tablet_manager->get_single_tablet_metadata(tablet_id, 2));
+            EXPECT_EQ(tablet_id, metadata->id());
+            EXPECT_EQ(2, metadata->version());
+        }
+    }
+}
+
 // Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
 // lack filename, with the real names only in deprecated_segments. put_bundle_tablet_metadata must
 // persist metadata whose segment filename survives (reproduces old-worker -> new-aggregator).

@@ -61,16 +61,18 @@ struct FieldFuncState {
     std::map<RunTimeCppType<T>, int> mp;
 };
 
-struct StringFunctionsState {
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
-                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
-                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+// Per-execution-thread compiled RE2 for a constant pattern, obtained via
+// FunctionContext::get_or_create_thread_state<>() so each worker matches on its own RE2 instance
+// (avoiding contention on RE2's internal DFA cache_mutex) without a per-thread ExprContext clone.
+struct StringRe2ThreadState : FunctionThreadState {
+    std::unique_ptr<re2::RE2> re2;
+};
 
+struct StringFunctionsState {
     std::string pattern;
     std::unique_ptr<re2::RE2> regex;
     std::unique_ptr<re2::RE2::Options> options;
     bool const_pattern{false};
-    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
     bool use_hyperscan_vec = false;
@@ -87,26 +89,6 @@ struct StringFunctionsState {
     hs_scratch_t* scratch = nullptr;
 
     StringFunctionsState() : regex(), options() {}
-
-    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
-    re2::RE2* get_or_prepare_regex() {
-        DCHECK(const_pattern);
-        int32_t driver_id = CurrentThread::current().get_driver_id();
-        if (driver_id == 0) {
-            return regex.get();
-        }
-        re2::RE2* res = nullptr;
-        driver_regex_map.lazy_emplace_l(
-                driver_id, [&](auto& value) { res = value.get(); },
-                [&](auto build) {
-                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
-                    DCHECK(regex->ok());
-                    res = regex.get();
-                    build(driver_id, std::move(regex));
-                });
-        DCHECK(!!res);
-        return res;
-    }
 
     ~StringFunctionsState() {
         if (scratch != nullptr) {

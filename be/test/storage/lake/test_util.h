@@ -155,6 +155,9 @@ struct PrimaryKeyParam {
     PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
     bool enable_transparent_data_encryption = false;
+    // When true, the tablet's sort key differs from the primary key (ORDER BY != PK), which exercises
+    // the separate-sort-key load-spill + unsort-SST-writer path.
+    bool separate_sort_key = false;
 };
 
 template <typename T>

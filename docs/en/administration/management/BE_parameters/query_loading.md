@@ -109,7 +109,7 @@ This topic introduces the following types of BE configurations:
 
 ### enable_json_flat
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
@@ -319,7 +319,7 @@ This topic introduces the following types of BE configurations:
 - Default: 10
 - Type: Int
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values `> 0` and `< 1000` enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
@@ -409,7 +409,7 @@ This topic introduces the following types of BE configurations:
 - Default: -1
 - Type: Int
 - Unit: Milliseconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
@@ -418,7 +418,7 @@ This topic introduces the following types of BE configurations:
 - Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: No
+- Is mutable: Yes
 - Description: A boolean value to control whether to enable the late materialization of Parquet reader to improve performance. `true` indicates enabling late materialization, and `false` indicates disabling it.
 - Introduced in: -
 
@@ -674,6 +674,42 @@ This topic introduces the following types of BE configurations:
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
+### enable_vector_index_block_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to cache IVFPQ indexes by inverted-list block. When enabled, StarRocks loads and caches only the IVFPQ blocks needed by a query. When disabled, it caches the whole IVFPQ index file. This configuration does not change HNSW caching.
+- Introduced in: -
+
+### config_vector_index_build_concurrency
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Number of OpenMP threads used by each vector index build. StarRocks clamps the effective value to at least `1`. Together with `vector_index_build_max_cpu_ratio`, this item also determines the size of the asynchronous vector index build thread pool.
+- Introduced in: -
+
+### config_vector_index_default_build_threshold
+
+- Default: 10000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Default minimum number of rows in a Segment required to build a vector index. The index property `index_build_threshold` overrides this value. For IVFPQ, the effective threshold is at least `nlist` so that the index has enough rows for training.
+- Introduced in: -
+
+### vector_index_build_max_cpu_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Target fraction of BE/CN CPU cores available to asynchronous vector index builds. The build CPU budget is `max(2, floor(cpu_cores * value))`, and the build pool size is derived from this budget and `config_vector_index_build_concurrency`. Because the minimum budget is `2`, small machines or small ratios can exceed the configured fraction.
+- Introduced in: -
+
 ### enable_vector_adaptive_search
 
 - Default: true
@@ -690,6 +726,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Total capacity of the SR-owned vector index cache, which holds HNSW whole-index entries and IVF-PQ per-list block entries (when `enable_vector_index_block_cache=true`) in a single LRU. Applied at BE startup and on every HTTP `/api/update_config` call. Accepts absolute bytes (e.g. `4294967296`), units (`4G`, `512M`), or a percentage of the BE process memory limit (`20%`). **Behavior change in v4.2.0:** prior versions accepted only an absolute byte count (default 512MB); upgrading without changing this config will resize the cache to 20% of BE memory.
 - Introduced in: v3.4.0
+
+### enable_vector_index_cache_on_build
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether building a vector index also inserts the index it just built into the vector index cache sized by `vector_query_cache_capacity`. Disabled by default, because the cache is sized for the query working set: letting loads and compactions push freshly built indexes into it evicts entries that running queries depend on, in exchange for warming indexes that may never be queried. The query path still populates the cache on demand the first time an index is read. Enable this only when index build and queries run on the same node and newly built data is queried immediately, to save that first read-back of the index file. A change takes effect for index builds started after it.
+- Introduced in: v4.2.0
 
 ### vector_adaptive_ef_alpha
 
@@ -716,6 +761,24 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Upper bound on the adaptive `ef_search` multiplier. Caps the worst-case CPU and latency cost of the scaling formula even on extremely large segments. Effective only when `enable_vector_adaptive_search` is true.
+- Introduced in: -
+
+### vector_index_brute_selectivity_threshold
+
+- Default: 0.01
+- Type: Double
+- Unit: Ratio
+- Is mutable: Yes
+- Description: Selectivity threshold for routing a vector query with residual scalar filters to exact scoring instead of a filtered HNSW traversal. If the matched rows are no more than this fraction of the Segment, StarRocks scores the filtered candidates directly. Set to `0` to disable this ratio check. The separate short circuit for a candidate count no greater than the query `k` remains enabled.
+- Introduced in: -
+
+### vector_index_build_flush_threshold_rows
+
+- Default: 262144
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Maximum rows held in each vector index builder's staging buffer before the rows are added to the in-memory index. This bounds the staging-buffer memory used when building HNSW Flat indexes, but does not limit the trained index itself. Set to `0` to disable intermediate flushing and buffer the whole Segment.
 - Introduced in: -
 
 ### vector_chunk_size

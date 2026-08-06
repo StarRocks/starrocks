@@ -142,6 +142,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
@@ -2282,6 +2283,16 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(tableRenameClause);
         metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
 
+        new Verifications() {
+            {
+                List<ConnectContext> renameContexts = new ArrayList<>();
+                icebergHiveCatalog.renameTable(withCapture(renameContexts), anyString, anyString, anyString);
+                Assertions.assertFalse(renameContexts.isEmpty(), "renameTable should have been invoked");
+                renameContexts.forEach(renameContext ->
+                        Assertions.assertNotNull(renameContext, "rename must pass a non-null ConnectContext"));
+            }
+        };
+
         // modify table properties/comment
         clauses.clear();
         Map<String, String> newProperties = new HashMap<>();
@@ -3998,6 +4009,105 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastStaleHandle() throws Exception {
+        // The FE serves the native table from a cross-query cache, so executeMetadataDelete can run against a
+        // handle that lags behind the real table. The cast-on-string-partition branch enumerates the files to
+        // delete (and decides whether to commit at all) from that handle, so it must refresh first: otherwise a
+        // file appended by an external writer after the handle was cached is silently left behind while the
+        // DELETE reports success.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable cachedHandle = create(SCHEMA_J, spec, "tbDeleteStrPartStale", 1);
+        cachedHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0608.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-08").withRecordCount(3).build())
+                .commit();
+        cachedHandle.refresh();
+
+        // An external writer appends the partition the DELETE targets; the cached handle does not see it.
+        TestTables.TestTable writerHandle = TestTables.load(tableDir, "tbDeleteStrPartStale");
+        writerHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(4).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, cachedHandle, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext);
+
+        writerHandle.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(writerHandle.newScan().planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size(),
+                "the externally appended 2020-06-14 file must be deleted despite the stale cached handle");
+        Assertions.assertEquals("PartitionData{k2=2020-06-08}", fileScanTasks.get(0).file().partition().toString(),
+                "only the pre-existing 2020-06-08 partition must remain");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastRefreshFailure() {
+        // If the pre-scan refresh in the residual branch fails (e.g. remote metadata unavailable), the delete
+        // must surface a StarRocksConnectorException carrying table context, consistent with the other failure
+        // paths in executeMetadataDelete, rather than propagating a raw Iceberg exception.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartRefreshFail", 1);
+        table.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/rf-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(3).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+        // Make the residual branch's pre-scan refresh fail.
+        new MockUp<BaseTable>() {
+            @Mock
+            public void refresh() {
+                throw new RuntimeException("mock metastore unavailable");
+            }
+        };
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext));
+        Assertions.assertTrue(e.getMessage().contains("Failed to refresh Iceberg table"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    @Test
     public void testMetadataDeleteNodeExplainString() {
         // Test that IcebergMetadataDeleteNode generates correct EXPLAIN output
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
@@ -4289,8 +4399,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(traits.get(0).isAppendOnly());
         Assertions.assertTrue(traits.get(1).isAppendOnly());
 
-        // Verify contiguous delta boundaries: snap2→snap3, snap4→snap4
-        // (snap3 is the REPLACE snapshot ID — used as boundary but not emitted as a trait)
+        // A mid-range REPLACE keeps owning the boundary: cutting a refresh batch at snap3 covers snap2's
+        // appends and nothing more, which is exactly what this trait's stats account for.
         TvrTableDelta delta0 = traits.get(0).getTvrDelta();
         Assertions.assertEquals(snap2.snapshotId(), delta0.start().get());
         Assertions.assertEquals(snap3.snapshotId(), delta0.end().get());
@@ -4301,7 +4411,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testListTableDeltaTraitsAllReplaceReturnsEmpty() {
+    public void testListTableDeltaTraitsAllReplaceSpansWholeRangeWithoutStats() {
         // snap1: APPEND (used as exclusive start)
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
         Snapshot snap1 = mockedNativeTableA.currentSnapshot();
@@ -4323,8 +4433,53 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
 
-        // Only REPLACE in range — should return empty
-        Assertions.assertTrue(traits.isEmpty());
+        // Compaction-only range: one append-only delta spanning it, carrying no rows. An empty list would
+        // read as "no delta derivable" and permanently break the incremental refresh.
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+        Assertions.assertEquals(snap1.snapshotId(), traits.get(0).getTvrDelta().start().get());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().end().get());
+        Assertions.assertEquals(0, traits.get(0).getTvrDeltaStats().getAddedRows());
+        Assertions.assertEquals(0, traits.get(0).getTvrDeltaStats().getAddedFileSize());
+    }
+
+    @Test
+    public void testListTableDeltaTraitsTrailingConsecutiveReplacesKeepRangeEnd() {
+        // snap1: APPEND (used as exclusive start)
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+
+        // snap2: APPEND — the only logical change in range
+        mockedNativeTableA.newAppend().appendFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        // snap3, snap4: two back-to-back compactions closing the range
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap3.operation());
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A_2).addFile(FILE_A).commit();
+        Snapshot snap4 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap4.operation());
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap4.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+
+        // MVIVMRefreshProcessor rejects the refresh unless the newest delta ends exactly at the range end,
+        // so a trailing run of skipped REPLACEs must not pull that boundary back onto one of them.
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+        Assertions.assertEquals(snap2.snapshotId(), traits.get(0).getTvrDelta().start().get());
+        Assertions.assertEquals(snap4.snapshotId(), traits.get(0).getTvrDelta().end().get());
+        Assertions.assertNotEquals(snap3.snapshotId(), traits.get(0).getTvrDelta().end().get());
     }
 
     @Test

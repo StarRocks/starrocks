@@ -1156,7 +1156,7 @@ public class AnalyzerUtils {
     private static class CopyUnsafeTablesCollector extends TableCollector {
 
         private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
-                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
+                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG, Table.TableType.FLUSS);
 
         public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
             super(tables);

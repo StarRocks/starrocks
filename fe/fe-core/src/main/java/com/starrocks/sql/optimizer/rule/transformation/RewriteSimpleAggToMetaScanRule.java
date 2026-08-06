@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -351,6 +352,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
+                QueryDumpInfo.captureColumnMinMax(context.getConnectContext(), table, c.getName(), minMax.get());
 
                 ConstantOperator mm;
                 if (call.getFnName().equals(FunctionSet.MAX)) {

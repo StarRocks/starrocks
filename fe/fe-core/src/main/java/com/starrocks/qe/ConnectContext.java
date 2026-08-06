@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -257,6 +258,7 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+    private StatisticsLoadBudget statisticsLoadBudget;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -290,6 +292,10 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // An optimize rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean optimizeRewrite = false;
+
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
     // Null means no override (normal visible-version path).
@@ -301,6 +307,14 @@ public class ConnectContext {
 
     public Map<Long, Long> getScanVersionOverride() {
         return scanVersionOverride;
+    }
+
+    public void setOptimizeRewrite(boolean optimizeRewrite) {
+        this.optimizeRewrite = optimizeRewrite;
+    }
+
+    public boolean isOptimizeRewrite() {
+        return optimizeRewrite;
     }
 
     public void setTxnId(long txnId) {
@@ -1327,6 +1341,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public StatisticsLoadBudget getStatisticsLoadBudget() {
+        return statisticsLoadBudget;
+    }
+
+    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
+        this.statisticsLoadBudget = statisticsLoadBudget;
     }
 
     public QuerySource getQuerySource() {

@@ -40,6 +40,7 @@ import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,6 +84,10 @@ public class ThreadPoolManager {
             "completed_task_count"};
 
     private static final long KEEP_ALIVE_TIME = 60L;
+
+    private static boolean shouldRegisterMetric(boolean needRegisterMetric) {
+        return needRegisterMetric && !GlobalStateMgr.isCheckpointThread();
+    }
 
     private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
             ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-stats"
@@ -177,7 +182,7 @@ public class ThreadPoolManager {
         PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, 0,
                 TimeUnit.SECONDS, new PriorityBlockingQueue<>(queueSize), threadFactory,
                 new BlockedPolicy(poolName, 60));
-        if (needRegisterMetric) {
+        if (shouldRegisterMetric(needRegisterMetric)) {
             nameToThreadPoolMap.put(poolName, threadPool);
         }
         return threadPool;
@@ -195,7 +200,7 @@ public class ThreadPoolManager {
         ThreadPoolExecutor threadPool =
                 new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory,
                         handler);
-        if (needRegisterMetric) {
+        if (shouldRegisterMetric(needRegisterMetric)) {
             nameToThreadPoolMap.put(poolName, threadPool);
         }
         return threadPool;
@@ -209,7 +214,7 @@ public class ThreadPoolManager {
         ThreadFactory threadFactory = namedThreadFactory(poolName);
         ScheduledThreadPoolExecutor scheduledThreadPoolExecutor =
                 new ScheduledThreadPoolExecutor(corePoolSize, threadFactory);
-        if (needRegisterMetric) {
+        if (shouldRegisterMetric(needRegisterMetric)) {
             nameToThreadPoolMap.put(poolName, scheduledThreadPoolExecutor);
         }
         return scheduledThreadPoolExecutor;
@@ -316,4 +321,3 @@ public class ThreadPoolManager {
         return Integer.max(2, cpuCores() * 3 / 4);
     }
 }
-

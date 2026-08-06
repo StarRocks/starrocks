@@ -159,6 +159,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
@@ -197,6 +198,7 @@ set(STORAGE_FILES
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
+    lake/pk_tablet_unsort_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp

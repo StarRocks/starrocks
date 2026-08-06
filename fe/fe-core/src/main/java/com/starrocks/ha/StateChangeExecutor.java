@@ -20,6 +20,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,96 +88,136 @@ public class StateChangeExecutor extends Daemon {
                 return;
             }
 
-            /*
-             * INIT -> LEADER: transferToLeader
-             * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
-             * UNKNOWN -> LEADER: transferToLeader
-             * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
-             * FOLLOWER -> LEADER: transferToLeader
-             * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
-             */
-            switch (feType) {
-                case INIT: {
-                    switch (newType) {
-                        case LEADER: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader();
-                            }
-                            break;
-                        }
-                        case FOLLOWER:
-                        case OBSERVER: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToNonLeader(newType);
-                            }
-                            break;
-                        }
-                        case UNKNOWN:
-                            break;
-                        default:
-                            break;
-                    }
-                    break;
-                }
-                case UNKNOWN: {
-                    switch (newType) {
-                        case LEADER: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader();
-                            }
-                            break;
-                        }
-                        case FOLLOWER:
-                        case OBSERVER: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToNonLeader(newType);
-                            }
-                            break;
-                        }
-                        default:
-                            break;
-                    }
-                    break;
-                }
-                case FOLLOWER: {
-                    switch (newType) {
-                        case LEADER: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader();
-                            }
-                            break;
-                        }
-                        case UNKNOWN: {
-                            for (StateChangeExecution execution : executions) {
-                                execution.transferToNonLeader(newType);
-                            }
-                            break;
-                        }
-                        default:
-                            break;
-                    }
-                    break;
-                }
-                case OBSERVER: {
-                    if (newType == FrontendNodeType.UNKNOWN) {
-                        for (StateChangeExecution execution : executions) {
-                            execution.transferToNonLeader(newType);
-                        }
-                    }
-                    break;
-                }
-                case LEADER: {
-                    // exit if leader changed to any other type
-                    String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
-                    LOG.error(msg);
-                    Util.stdoutWithTime(msg);
-                    System.exit(-1);
-                }
-                default:
-                    break;
-            } // end switch formerFeType
+            try {
+                dispatchStateChange(feType, newType);
+            } catch (Throwable t) {
+                // A state transition must either complete fully or the process must not survive it: a
+                // half-done transferToLeader/transferToNonLeader leaves half-initialized state (lease
+                // published, WAL gate open, daemons started) that cannot be rolled back reliably.
+                // Fail fast to a clean restart; the node rejoins in its BDB-assigned role.
+                String msg = "failed to transfer FE type from " + feType + " to " + newType + ". exit";
+                LOG.error(msg, t);
+                Util.stdoutWithTime(msg);
+                System.exit(-1);
+            }
 
             LOG.info("finished to transfer FE type from {} to {}", feType, newType);
         }
     } // end runOneCycle
+
+    private void dispatchStateChange(FrontendNodeType feType, FrontendNodeType newType) {
+        /*
+         * INIT -> LEADER: transferToLeader
+         * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
+         * UNKNOWN -> LEADER: transferToLeader
+         * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
+         * FOLLOWER -> LEADER: transferToLeader
+         * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
+         */
+        switch (feType) {
+            case INIT: {
+                switch (newType) {
+                    case LEADER: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToLeader();
+                        }
+                        break;
+                    }
+                    case FOLLOWER:
+                    case OBSERVER: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToNonLeader(newType);
+                        }
+                        break;
+                    }
+                    case UNKNOWN:
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            }
+            case UNKNOWN: {
+                switch (newType) {
+                    case LEADER: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToLeader();
+                        }
+                        break;
+                    }
+                    case FOLLOWER:
+                    case OBSERVER: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToNonLeader(newType);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+                break;
+            }
+            case FOLLOWER: {
+                switch (newType) {
+                    case LEADER: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToLeader();
+                        }
+                        break;
+                    }
+                    case UNKNOWN: {
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToNonLeader(newType);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+                break;
+            }
+            case OBSERVER: {
+                if (newType == FrontendNodeType.UNKNOWN) {
+                    for (StateChangeExecution execution : executions) {
+                        execution.transferToNonLeader(newType);
+                    }
+                }
+                break;
+            }
+            case LEADER: {
+                switch (newType) {
+                    case FOLLOWER:
+                    case OBSERVER:
+                    case UNKNOWN: {
+                        if (RunMode.isSharedDataMode()) {
+                            // Graceful in-place leader demotion is not supported in shared-data mode yet:
+                            // StarMgr writes its own journal (StarOSBDBJEJournalSystem) with no WALApplier,
+                            // so its in-flight state is not fenced/drained by the demotion. Exit for a clean
+                            // restart as a non-leader (the pre-graceful-demotion behavior): the new process
+                            // re-initializes StarMgr and replays the journal.
+                            String msg = "graceful leader demotion is not supported in shared-data mode; "
+                                    + "exit to restart as " + newType.name();
+                            LOG.warn(msg);
+                            Util.stdoutWithTime(msg);
+                            System.exit(-1);
+                        }
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToNonLeader(newType);
+                        }
+                        break;
+                    }
+                    default: {
+                        String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
+                        LOG.error(msg);
+                        Util.stdoutWithTime(msg);
+                        System.exit(-1);
+                        break;
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        } // end switch formerFeType
+    }
 }

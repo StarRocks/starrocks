@@ -114,6 +114,9 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
     case SHORT_KEY_PAGE:
         CHECK(footer.has_short_key_page_footer());
         break;
+    case SORT_KEY_PAGE:
+        CHECK(footer.has_sort_key_page_footer());
+        break;
     default:
         CHECK(false) << "Invalid page footer type: " << footer.type();
         break;

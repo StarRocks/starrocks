@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：行
 - 是否动态：是
-- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。此行数包含 Segment 行数以及 del 文件中记录的 tombstone（删除）行数，因此产生少量大型 del 文件的删除密集型负载也会计入该阈值；旧版本写入、未记录行数的 del 文件按 0 计。
 - 引入版本：-
 
 ### download_buffer_size
@@ -109,6 +109,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### lake_pk_compaction_base_delete_ratio_threshold
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`、或手动执行 `ALTER TABLE ... COMPACT` 强制 Base Compaction 时触发。将两个阈值都调至足够大可关闭自动触发。
+- 引入版本：v4.2
+
+### lake_pk_compaction_base_delete_rows_threshold
+
+- 默认值：10000000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 引入版本：v4.2
 
 ### enable_lake_pk_compaction_score_gate
 

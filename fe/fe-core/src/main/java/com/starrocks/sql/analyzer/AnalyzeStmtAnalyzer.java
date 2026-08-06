@@ -51,6 +51,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -210,20 +211,34 @@ public class AnalyzeStmtAnalyzer {
             // ANALYZE TABLE xxx PREDICATE COLUMNS
             if (statement.isUsePredicateColumns()) {
                 // check if the table type is supported
-                if (!analyzeTable.isNativeTableOrMaterializedView()) {
-                    throw new SemanticException("Only OLAP table can support ANALYZE PREDICATE COLUMNS");
+                if (!analyzeTable.isNativeTableOrMaterializedView() && !analyzeTable.isAnalyzableExternalTable()) {
+                    throw new SemanticException("Only analyzable table can support ANALYZE PREDICATE COLUMNS");
                 }
 
                 List<String> targetColumns = Lists.newArrayList();
 
-                TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                        tableRef.getTableName(), tableRef.getPos());
-                List<ColumnUsage> predicateColumns =
-                        PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
-                for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
-                    Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
-                    if (realColumn != null) {
-                        targetColumns.add(realColumn.getName());
+                if (analyzeTable.isNativeTableOrMaterializedView()) {
+                    TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                            tableRef.getTableName(), tableRef.getPos());
+                    List<ColumnUsage> predicateColumns =
+                            PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
+                    for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
+                        Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                } else {
+                    for (ExternalColumnUsage col : ListUtils.emptyIfNull(
+                            PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(analyzeTable))) {
+                        Column realColumn = analyzeTable.getColumn(col.getColumnName());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                    if (targetColumns.isEmpty()) {
+                        throw new SemanticException("No predicate columns found for external table '%s'",
+                                analyzeTable.getName());
                     }
                 }
 
@@ -443,12 +458,26 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
                 }
+                // Explicitly-listed columns: reject unsupported types outright.
                 for (Expr column : columns) {
-                    if (column.getType().isComplexType()
-                            || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()) {
+                    if (StatisticUtils.isUnsupportedHistogramColumnType(column.getType())) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
+                    }
+                }
+
+                // Filters out unsupported types from the list of columns to analyze, if no columns were explicitly listed.
+                if (columns.isEmpty() && statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    if (CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                        List<String> supported = analyzeStmt.getColumnNames().stream()
+                                .filter(name -> {
+                                    Column col = analyzeTable.getColumn(name);
+                                    return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
+                                })
+                                .collect(Collectors.toList());
+
+                        analyzeStmt.setColumnNames(supported);
                     }
                 }
 

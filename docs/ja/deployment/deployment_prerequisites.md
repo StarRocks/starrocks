@@ -37,7 +37,9 @@ StarRocks クラスター内のノード間で安定したデータ伝送を確�
 
 ## オペレーティングシステム
 
-StarRocks は、Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、Ubuntu Linux 22.04、または Ubuntu Linux 24.04 でのデプロイメントをサポートしています。
+StarRocks v4.1 以前でサポートされるオペレーティングシステムには、Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、Ubuntu Linux 22.04、および Ubuntu Linux 24.04 が含まれます。
+
+StarRocks v4.2 以降、Rocky Linux 9 でビルドされたバイナリには glibc 2.34 以降が必要です。そのため、これらのバイナリは、EL7 および EL8 ディストリビューション、CentOS 8、Alibaba Cloud Linux 3、Kylin OS V10、Amazon Linux 2 など、glibc が 2.34 より前のオペレーティングシステムでは実行できません。
 
 ## ソフトウェア
 

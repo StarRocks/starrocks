@@ -825,6 +825,18 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
     _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
     _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+    _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
+    _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns += prepare_stats.get_row_ranges_by_vector_index_timer;
+    _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
+    _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
+    _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
+    _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
+    _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
+    _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
+    _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
+    _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
+    _stats.lake_prepared_seed_process_vector_distance_and_id_ns += prepare_stats.process_vector_distance_and_id_timer;
+    _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
     _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
     _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
     _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
@@ -947,17 +959,16 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset_idx, rowset]() {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
 #ifdef BE_TEST
-                        Status injected_st;
-                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                        if (!injected_st.ok()) {
-                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                        }
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
 #endif
-                        return enhance_error_prompt(rowset->read(schema(), rs_opts));
-                    });
+                return enhance_error_prompt(rowset->read(schema(), rs_opts));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));

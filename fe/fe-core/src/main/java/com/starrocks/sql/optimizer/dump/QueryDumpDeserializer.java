@@ -26,9 +26,11 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -65,6 +67,35 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         JsonObject tableMeta = dumpJsonObject.getAsJsonObject("table_meta");
         for (Map.Entry<String, JsonElement> entry : tableMeta.entrySet()) {
             dumpInfo.addTableCreateStmt(entry.getKey(), entry.getValue().getAsString());
+        }
+        // external-catalog table -> catalog name (newer dumps only; older dumps omit it and replay infers
+        // the catalog from the SQL). Keyed like table_meta (db.table).
+        if (dumpJsonObject.has("external_table_catalog")) {
+            JsonObject externalCatalog = dumpJsonObject.getAsJsonObject("external_table_catalog");
+            for (Map.Entry<String, JsonElement> entry : externalCatalog.entrySet()) {
+                dumpInfo.addExternalTableCatalog(entry.getKey(), entry.getValue().getAsString());
+            }
+        }
+        if (dumpJsonObject.has("external_table_row_count")) {
+            JsonObject externalRowCount = dumpJsonObject.getAsJsonObject("external_table_row_count");
+            for (Map.Entry<String, JsonElement> entry : externalRowCount.entrySet()) {
+                dumpInfo.addExternalTableRowCount(entry.getKey(), entry.getValue().getAsLong());
+            }
+        }
+        if (dumpJsonObject.has("external_table_partition_names")) {
+            JsonObject specObj = dumpJsonObject.has("external_table_partition_spec")
+                    ? dumpJsonObject.getAsJsonObject("external_table_partition_spec") : new JsonObject();
+            JsonObject namesObj = dumpJsonObject.getAsJsonObject("external_table_partition_names");
+            for (Map.Entry<String, JsonElement> entry : namesObj.entrySet()) {
+                String key = entry.getKey();
+                List<String> names = new ArrayList<>();
+                entry.getValue().getAsJsonArray().forEach(e -> names.add(e.getAsString()));
+                List<String> spec = new ArrayList<>();
+                if (specObj.has(key)) {
+                    specObj.getAsJsonArray(key).forEach(e -> spec.add(e.getAsString()));
+                }
+                dumpInfo.addExternalTablePartitions(key, spec, names);
+            }
         }
         // hive meta store table info
         if (dumpJsonObject.has("hms_table")) {
@@ -143,6 +174,34 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                     Histogram histogram = HistogramUtils.deserializeHistogram(histogramStr);
                     dumpInfo.addTableStatistics(tableKey, columnKey,
                             ColumnStatistic.buildFrom(base).setHistogram(histogram).build());
+                }
+            }
+        }
+        // low-cardinality global dictionary captured for the query; replay seeds it so the dict-encoding
+        // (Decode-node) optimization reproduces offline. Optional section (older dumps lack it), guarded by has().
+        if (dumpJsonObject.has("global_dict")) {
+            JsonObject tableGlobalDict = dumpJsonObject.getAsJsonObject("global_dict");
+            for (String tableKey : tableGlobalDict.keySet()) {
+                JsonObject columnDicts = tableGlobalDict.get(tableKey).getAsJsonObject();
+                for (String columnKey : columnDicts.keySet()) {
+                    dumpInfo.addTableGlobalDict(tableKey, columnKey,
+                            ColumnDict.fromJson(columnDicts.get(columnKey).getAsString()));
+                }
+            }
+        }
+        // column min/max captured for replay (meta-scan / group-by-compressed-key rewrites). Optional section
+        // (older dumps don't have it), guarded by has(); mirror of global_dict keyed db.table -> column.
+        if (dumpJsonObject.has("column_min_max")) {
+            JsonObject tableColumnMinMax = dumpJsonObject.getAsJsonObject("column_min_max");
+            for (String tableKey : tableColumnMinMax.keySet()) {
+                JsonObject columnMinMaxes = tableColumnMinMax.get(tableKey).getAsJsonObject();
+                for (String columnKey : columnMinMaxes.keySet()) {
+                    JsonObject minMax = columnMinMaxes.get(columnKey).getAsJsonObject();
+                    String min = minMax.has("min") && !minMax.get("min").isJsonNull()
+                            ? minMax.get("min").getAsString() : null;
+                    String max = minMax.has("max") && !minMax.get("max").isJsonNull()
+                            ? minMax.get("max").getAsString() : null;
+                    dumpInfo.addColumnMinMax(tableKey, columnKey, new IMinMaxStatsMgr.ColumnMinMax(min, max));
                 }
             }
         }

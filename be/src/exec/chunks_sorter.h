@@ -57,7 +57,8 @@ public:
                  const bool is_topn);
     virtual ~ChunksSorter();
 
-    static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
+    static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk,
+                                                            const RecordDescriptor& materialized_record_desc,
                                                             const SortExecExprs& sort_exec_exprs,
                                                             const std::vector<OrderByType>& order_by_types);
 

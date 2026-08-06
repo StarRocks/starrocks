@@ -178,7 +178,20 @@ public final class ProfileKeyDictionary {
     public static final String SHORT_KEY_RANGE_NUMBER = "ShortKeyRangeNumber";
     public static final String BITMAP_INDEX_FILTER_ROWS = "BitmapIndexFilterRows";
     public static final String BLOOM_FILTER_ROWS = "BloomFilterRows";
+    public static final String VECTOR_INDEX = "VectorIndex";
+    public static final String VECTOR_INDEX_LOAD = "VectorIndexLoad";
+    public static final String VECTOR_INDEX_CACHE_LOOKUP = "VectorIndexCacheLookup";
+    public static final String VECTOR_INDEX_FILE_OPEN_AND_GET_SIZE = "VectorIndexFileOpenAndGetSize";
+    public static final String VECTOR_INDEX_FILE_READ = "VectorIndexFileRead";
+    public static final String VECTOR_INDEX_DESERIALIZE = "VectorIndexDeserialize";
+    public static final String VECTOR_INDEX_SEARCHER_CREATE = "VectorIndexSearcherCreate";
+    public static final String VECTOR_INDEX_CACHE_HIT = "VectorIndexCacheHit";
+    public static final String VECTOR_INDEX_CACHE_MISS = "VectorIndexCacheMiss";
+    public static final String VECTOR_INDEX_SEARCH = "VectorIndexSearch";
+    public static final String VECTOR_ANN_SEARCH = "VectorANNSearch";
+    public static final String VECTOR_RESULT_PROCESS = "VectorResultProcess";
     public static final String VECTOR_INDEX_FILTER_ROWS = "VectorIndexFilterRows";
+    // Kept in the static dictionary so profiles collected from an older BE during rolling upgrade remain compact.
     public static final String VECTOR_SEARCH_TIME = "VectorSearchTime";
     public static final String ROWSETS_READ_COUNT = "RowsetsReadCount";
     public static final String SEGMENTS_READ_COUNT = "SegmentsReadCount";
@@ -370,6 +383,18 @@ public final class ProfileKeyDictionary {
             SHORT_KEY_RANGE_NUMBER,
             BITMAP_INDEX_FILTER_ROWS,
             BLOOM_FILTER_ROWS,
+            VECTOR_INDEX,
+            VECTOR_INDEX_LOAD,
+            VECTOR_INDEX_CACHE_LOOKUP,
+            VECTOR_INDEX_FILE_OPEN_AND_GET_SIZE,
+            VECTOR_INDEX_FILE_READ,
+            VECTOR_INDEX_DESERIALIZE,
+            VECTOR_INDEX_SEARCHER_CREATE,
+            VECTOR_INDEX_CACHE_HIT,
+            VECTOR_INDEX_CACHE_MISS,
+            VECTOR_INDEX_SEARCH,
+            VECTOR_ANN_SEARCH,
+            VECTOR_RESULT_PROCESS,
             VECTOR_INDEX_FILTER_ROWS,
             VECTOR_SEARCH_TIME,
             ROWSETS_READ_COUNT,

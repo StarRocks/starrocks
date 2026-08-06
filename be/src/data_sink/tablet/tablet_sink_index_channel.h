@@ -315,8 +315,6 @@ private:
     // data sending is finished
     bool _finished{false};
 
-    std::unique_ptr<RowDescriptor> _row_desc;
-
     std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 

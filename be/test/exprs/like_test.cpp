@@ -56,7 +56,7 @@ TEST_F(LikeTest, startConstPatternLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -72,7 +72,7 @@ TEST_F(LikeTest, startConstPatternLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -95,7 +95,7 @@ TEST_F(LikeTest, endConstPatternLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -118,7 +118,7 @@ TEST_F(LikeTest, endConstPatternLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -139,7 +139,7 @@ TEST_F(LikeTest, substringConstPatternLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -155,7 +155,7 @@ TEST_F(LikeTest, substringConstPatternLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -172,14 +172,14 @@ TEST_F(LikeTest, haystackConstantLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -207,14 +207,14 @@ TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -242,7 +242,7 @@ TEST_F(LikeTest, haystackNullableLike) {
     columns.emplace_back(std::move(pattern));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -260,7 +260,7 @@ TEST_F(LikeTest, haystackNullableLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -281,7 +281,7 @@ TEST_F(LikeTest, patternEmptyLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -293,7 +293,7 @@ TEST_F(LikeTest, patternEmptyLike) {
         ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -314,7 +314,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -326,7 +326,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
         ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -348,7 +348,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -360,7 +360,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
         ASSERT_TRUE(v->immutable_data()[l]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -377,14 +377,14 @@ TEST_F(LikeTest, patternOnlyNullLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_TRUE(result->is_nullable());
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -411,7 +411,7 @@ TEST_F(LikeTest, rowsPatternLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -427,7 +427,7 @@ TEST_F(LikeTest, rowsPatternLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -458,7 +458,7 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
 
@@ -477,7 +477,7 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -499,7 +499,7 @@ TEST_F(LikeTest, rowsPatternRegex) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
@@ -515,8 +515,9 @@ TEST_F(LikeTest, rowsPatternRegex) {
         }
     }
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueLike) {
@@ -545,7 +546,7 @@ TEST_F(LikeTest, constValueLike) {
     columns.emplace_back(std::move(pattern_col));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
@@ -556,7 +557,7 @@ TEST_F(LikeTest, constValueLike) {
         ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -580,7 +581,7 @@ TEST_F(LikeTest, constValueRegexp) {
     columns.emplace_back(std::move(pattern_col));
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
     ASSERT_TRUE(result->is_numeric());
@@ -591,8 +592,9 @@ TEST_F(LikeTest, constValueRegexp) {
         ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
@@ -616,15 +618,16 @@ TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
@@ -649,15 +652,16 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::regex(context, columns).value();
 
     ASSERT_TRUE(result->is_constant());
     ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                        .ok());
+    ASSERT_TRUE(
+            LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
 }
 
 TEST_F(LikeTest, backslashEscapeConstSubstring) {
@@ -678,7 +682,7 @@ TEST_F(LikeTest, backslashEscapeConstSubstring) {
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -688,7 +692,7 @@ TEST_F(LikeTest, backslashEscapeConstSubstring) {
     ASSERT_TRUE(v->get_data()[2]);  // star\ matches
     ASSERT_TRUE(v->get_data()[3]);  // \start matches
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -710,7 +714,7 @@ TEST_F(LikeTest, backslashEscapeConstEndsWith) {
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -720,7 +724,7 @@ TEST_F(LikeTest, backslashEscapeConstEndsWith) {
     ASSERT_FALSE(v->get_data()[2]);
     ASSERT_FALSE(v->get_data()[3]);
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -742,7 +746,7 @@ TEST_F(LikeTest, backslashEscapeConstStartsWith) {
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -752,7 +756,7 @@ TEST_F(LikeTest, backslashEscapeConstStartsWith) {
     ASSERT_FALSE(v->get_data()[2]);
     ASSERT_FALSE(v->get_data()[3]);
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -774,7 +778,7 @@ TEST_F(LikeTest, backslashEscapeConstEquals) {
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -784,7 +788,7 @@ TEST_F(LikeTest, backslashEscapeConstEquals) {
     ASSERT_FALSE(v->get_data()[2]);
     ASSERT_FALSE(v->get_data()[3]);
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -805,7 +809,7 @@ TEST_F(LikeTest, backslashEscapeConstEqualsEscapedPercent) {
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -814,7 +818,7 @@ TEST_F(LikeTest, backslashEscapeConstEqualsEscapedPercent) {
     ASSERT_FALSE(v->get_data()[1]);
     ASSERT_FALSE(v->get_data()[2]);
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -862,7 +866,7 @@ TEST_F(LikeTest, backslashEscapeRowPattern) {
     columns.emplace_back(std::move(pat));
 
     context->set_constant_columns(columns);
-    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = LikePredicate::like_fn(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
@@ -876,7 +880,7 @@ TEST_F(LikeTest, backslashEscapeRowPattern) {
     ASSERT_TRUE(v->get_data()[6]);  // "ab" matches "a\b"
     ASSERT_FALSE(v->get_data()[7]); // "a\b" does not match "a\b" pattern
 
-    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 

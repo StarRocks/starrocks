@@ -95,7 +95,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             op = std::make_shared<ResultSinkOperatorFactory>(
                     context->next_operator_id(), dop, result_sink->get_sink_type(), result_sink->isBinaryFormat(),
                     result_sink->get_format_type(), result_sink->get_output_exprs(), fragment_ctx,
-                    result_sink->get_row_desc(), result_sink->get_output_column_names());
+                    result_sink->get_output_column_names());
         }
         // Add result sink operator to last pipeline
         prev_operators.emplace_back(op);
@@ -270,10 +270,9 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
     } else if (typeid(*this) == typeid(MemoryScratchSink)) {
         auto* memory_scratch_sink = down_cast<MemoryScratchSink*>(this);
         auto output_expr = memory_scratch_sink->get_output_expr();
-        auto row_desc = memory_scratch_sink->get_row_desc();
         DCHECK_EQ(dop, 1);
-        OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
-                                                                             output_expr, fragment_ctx);
+        OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(
+                context->next_operator_id(), memory_scratch_sink->get_record_desc(), output_expr, fragment_ctx);
 
         prev_operators.emplace_back(op);
         context->add_pipeline(prev_operators);

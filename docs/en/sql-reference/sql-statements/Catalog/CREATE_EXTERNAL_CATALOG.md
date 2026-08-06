@@ -14,6 +14,7 @@ CREATE EXTERNAL CATALOG creates an external catalog. You can use external catalo
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md): used to query data from Apache Paimon. Paimon catalogs are supported from v3.1 onwards.
+- [Fluss catalog](../../../data_source/catalog/fluss_catalog.md): used to query data from Apache Fluss.
 - [Unified catalog](../../../data_source/catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
 > **NOTE**
@@ -35,7 +36,7 @@ PROPERTIES ("key"="value", ...)
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. For the naming conventions, see [System limits](../../System_limit.md). |
 | comment       | No           | The description of the external catalog. |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md). |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md), and [Fluss catalog](../../../data_source/catalog/fluss_catalog.md). |
 
 ## Examples
 

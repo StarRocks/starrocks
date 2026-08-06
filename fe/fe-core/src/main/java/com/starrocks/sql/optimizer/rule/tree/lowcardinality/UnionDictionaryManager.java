@@ -73,7 +73,8 @@ public class UnionDictionaryManager {
                 || uniques.isEmpty()) {
             return null;
         }
-        List<ByteBuffer> sortedValues = uniques.stream().sorted().toList();
+        // Sort unsigned to match BE's memcmp order; plain sorted() is signed on JDK 8. See ColumnDict.UNSIGNED_LEX.
+        List<ByteBuffer> sortedValues = uniques.stream().sorted(ColumnDict.UNSIGNED_LEX).toList();
         ImmutableMap.Builder<ByteBuffer, Integer> builder = ImmutableMap.builder();
         for (int i = 0; i < sortedValues.size(); ++i) {
             builder.put(sortedValues.get(i), i + 1);
@@ -193,10 +194,10 @@ public class UnionDictionaryManager {
         return ConstantOperator.createInt(index);
     }
 
-    List<Map<ColumnRefOperator, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
+    List<Map<Integer, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
                                                                                List<List<ColumnRefOperator>> childColumns,
                                                                                ColumnRefSet allStringColumns) {
-        List<Map<ColumnRefOperator, ConstantOperator>> result = Lists.newArrayList();
+        List<Map<Integer, ConstantOperator>> result = Lists.newArrayList();
         childColumns.forEach(c -> result.add(Maps.newHashMap()));
         for (int i = 0; i < outputColumns.size(); ++i) {
             if (!allStringColumns.contains(outputColumns.get(i).getId())) {
@@ -210,7 +211,7 @@ public class UnionDictionaryManager {
             for (int j = 0; j < childColumns.size(); ++j) {
                 ColumnRefOperator c = childColumns.get(j).get(i);
                 if (constantColumns.containsKey(c.getId())) {
-                    result.get(j).put(c, generateConstantOperator(c, dictData));
+                    result.get(j).put(i, generateConstantOperator(c, dictData));
                 }
             }
         }

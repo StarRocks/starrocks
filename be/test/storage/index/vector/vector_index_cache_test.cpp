@@ -37,6 +37,7 @@
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
+#include "storage_primitive/storage_stats.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
 #include "tenann/index/index_cache.h"
@@ -63,6 +64,20 @@ tenann::IndexMeta make_minimal_meta() {
     meta.SetIndexFamily(tenann::IndexFamily::kVectorIndex);
     meta.SetIndexType(tenann::IndexType::kFaissHnsw);
     return meta;
+}
+
+// FileInfo holds its FileSystem by shared_ptr; these tests keep the FS on the stack,
+// so hand out a non-owning alias instead of transferring ownership.
+std::shared_ptr<FileSystem> borrowed_fs(FileSystem* fs) {
+    return std::shared_ptr<FileSystem>(fs, [](FileSystem*) {});
+}
+
+FileInfo local_vi(std::string path) {
+    return FileInfo{.path = std::move(path)};
+}
+
+FileInfo remote_vi(std::string path, FileSystem* fs) {
+    return FileInfo{.path = std::move(path), .fs = borrowed_fs(fs)};
 }
 } // namespace
 
@@ -450,21 +465,21 @@ TEST(VectorIndexFileReaderTest, OpenSucceedsOnMemoryFs) {
     MemoryFileSystem fs;
     ASSERT_OK(fs.create_dir("/tmp"));
     ASSERT_OK(fs.append_file("/tmp/idx.vi", Slice("abcd", 4)));
-    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(&fs, "/tmp/idx.vi"));
+    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(remote_vi("/tmp/idx.vi", &fs)));
     ASSERT_NE(nullptr, reader);
     EXPECT_EQ(4, reader->GetSize());
 }
 
 TEST(VectorIndexFileReaderTest, OpenFailsOnMissingFile) {
     MemoryFileSystem fs;
-    auto r = VectorIndexFileReader::open(&fs, "/no/such/path.vi");
+    auto r = VectorIndexFileReader::open(remote_vi("/no/such/path.vi", &fs));
     EXPECT_FALSE(r.ok());
 }
 
 TEST(EmptyIndexReaderTest, AllMethodsReturnNotSupported) {
     EmptyIndexReader r;
     tenann::IndexMeta meta;
-    EXPECT_TRUE(r.init_searcher(meta, "/x.vi", /*fs=*/nullptr).is_not_supported());
+    EXPECT_TRUE(r.init_searcher(meta, local_vi("/x.vi")).is_not_supported());
     EXPECT_TRUE(r.search(tenann::PrimitiveSeqView{}, /*k=*/1, nullptr, nullptr).is_not_supported());
     std::vector<int64_t> ids;
     std::vector<float> dists;
@@ -477,7 +492,7 @@ TEST(TenANNReaderTest, InitSearcher_NoGlobalCache_ReturnsInternalError) {
     tenann::SetGlobalIndexCache(nullptr);
     TenANNReader r;
     tenann::IndexMeta meta;
-    auto st = r.init_searcher(meta, "/x.vi", /*fs=*/nullptr);
+    auto st = r.init_searcher(meta, local_vi("/x.vi"));
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
     tenann::SetGlobalIndexCache(saved);
 }
@@ -495,8 +510,14 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     MemoryFileSystem fs;
     TenANNReader r;
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/no/such/index.vi", &fs);
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs), &stats);
     EXPECT_TRUE(st.is_not_found()) << st.to_string();
+    EXPECT_EQ(0, stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+    EXPECT_GT(stats.vector_index_file_open_ns, 0);
+    EXPECT_EQ(0, stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, stats.vector_index_init_index_ns);
 
     tenann::SetGlobalIndexCache(saved);
 }
@@ -519,7 +540,7 @@ TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
 
     TenANNReader r;
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/tmp/garbage.vi", &fs);
+    auto st = r.init_searcher(meta, remote_vi("/tmp/garbage.vi", &fs));
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
 
     tenann::SetGlobalIndexCache(saved);
@@ -578,7 +599,7 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
         TenANNReader r;
         auto meta = make_minimal_meta();
         // Load runs the probe fs, then fails NotFound (return ignored).
-        (void)r.init_searcher(meta, "/no/such/probe.vi", &fs);
+        (void)r.init_searcher(meta, remote_vi("/no/such/probe.vi", &fs));
     }
     tenann::SetGlobalIndexCache(saved);
 

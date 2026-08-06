@@ -36,7 +36,7 @@ You can filter results by using the WHERE clause. The statement returns the foll
 
 ```SQL
 -- View all the custom collection tasks.
-SHOW ANALYZE JOB
+SHOW ANALYZE JOB;
 
 -- View custom collection tasks of database `test`.
 SHOW ANALYZE JOB where `database` = 'test';

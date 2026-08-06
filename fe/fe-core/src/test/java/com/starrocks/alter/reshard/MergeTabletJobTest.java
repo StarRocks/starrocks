@@ -37,6 +37,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -71,6 +72,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -357,7 +359,8 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds) {
+            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+                    Set<Long> excludeTransactionIds) {
                 return false;
             }
         };
@@ -378,13 +381,65 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds)
-                    throws AnalysisException {
+            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+                    Set<Long> excludeTransactionIds) throws AnalysisException {
                 throw new AnalysisException("mock");
             }
         };
 
         try {
+            mergeJob.runCleaningJob();
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+        } finally {
+            table.setState(original);
+        }
+    }
+
+    @Test
+    public void testRunCleaningCancelsPreviousCompactions() throws Exception {
+        Map<Long, ReshardingPhysicalPartition> reshardingPartitions = new HashMap<>();
+        reshardingPartitions.put(-1L, new ReshardingPhysicalPartition(-1L, new HashMap<>()));
+        MergeTabletJob mergeJob = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), reshardingPartitions);
+        mergeJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        mergeJob.endTransactionId = 5000L;
+        OlapTable.OlapTableState original = table.getState();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+
+        Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
+        AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
+        AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
+        boolean[] waitFinished = {false};
+        new MockUp<CompactionMgr>() {
+            @Mock
+            public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                    Set<Long> includePartitionIds) {
+                Assertions.assertEquals(5000L, endTransactionId);
+                Assertions.assertEquals(db.getId(), dbId);
+                Assertions.assertEquals(table.getId(), tableId);
+                includePartitionIdsArg.set(includePartitionIds);
+                return ignoredCompactionTxnIds;
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+                    Set<Long> excludeTransactionIds) {
+                excludeTxnIdsArg.set(excludeTransactionIds);
+                return waitFinished[0];
+            }
+        };
+
+        try {
+            // Cycle 1: cancel is invoked with the reshard job's physical partitions, its returned ignored
+            // txn ids are forwarded to the wait, and while the wait is unsatisfied the job stays CLEANING.
+            mergeJob.runCleaningJob();
+            Assertions.assertEquals(mergeJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+            Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, mergeJob.getJobState());
+
+            // Cycle 2: once the remaining transactions have drained, CLEANING completes.
+            waitFinished[0] = true;
             mergeJob.runCleaningJob();
             Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
         } finally {

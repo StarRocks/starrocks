@@ -21,16 +21,19 @@
 
 namespace starrocks {
 
-class FileSystem;
+struct OlapReaderStatistics;
 
 class VectorIndexReaderFactory {
 #ifdef WITH_TENANN
 public:
-    static Status create_from_file(const std::string& index_path, const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                   std::shared_ptr<VectorIndexReader>* vector_index_reader);
-
-    static Status create_from_file(const std::string& index_path, const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                   std::shared_ptr<VectorIndexReader>* vector_index_reader, FileSystem* fs);
+    // `vi_file` is in/out: the caller supplies path (and fs, null for the local filesystem);
+    // on the cold path this fills in vi_file->size from the get_size() it has to do anyway,
+    // so the subsequent init_searcher does not repeat the HEAD/stat. On the warm path the
+    // file is never opened and size stays unset — VectorIndexFileReader::open() resolves it
+    // lazily if the entry happens to be evicted before init_searcher runs.
+    static Status create_from_file(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& index_meta,
+                                   std::shared_ptr<VectorIndexReader>* vector_index_reader,
+                                   OlapReaderStatistics* stats = nullptr);
 #endif
 };
 

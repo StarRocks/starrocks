@@ -76,7 +76,7 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, Stream
             metrics, [this] { return _runtime_filter_worker == nullptr ? nullptr : _runtime_filter_worker->metrics(); },
             [this] { return _runtime_filter_worker == nullptr ? 0 : _runtime_filter_worker->queue_size(); });
 
-    _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics, _fragment_mgr.get());
+    _external_scan_context_mgr = std::make_unique<ExternalScanContextMgr>(exec_env, metrics);
     _external_scan_orchestrator =
             std::make_unique<ExternalScanOrchestrator>(exec_env, _external_scan_context_mgr.get());
 

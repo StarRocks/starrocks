@@ -41,7 +41,6 @@
 namespace starrocks {
 
 class HashJoinNode;
-class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterCache;
 
@@ -79,7 +78,7 @@ public:
         return true;
     }
     LogicalType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
-    void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
+    void replace_probe_expr_ctx(RuntimeState* state, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     bool is_local() const { return _is_local; }
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }

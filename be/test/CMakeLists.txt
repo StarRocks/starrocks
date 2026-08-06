@@ -1,6 +1,7 @@
 add_subdirectory(testutil)
 
 set(EXEC_FILES
+        ./exec/aggregator_limited_mem_state_test.cpp
         ./agent/agent_metrics_test.cpp
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
@@ -29,6 +30,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
@@ -38,6 +40,8 @@ set(EXEC_FILES
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -135,6 +139,8 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
+        ./storage/seek_tuple_test.cpp
+        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -254,6 +260,7 @@ SET(DW_TEST_FILES
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
     ./storage/index/vector/vector_index_cache_test.cpp
+    ./storage/index/vector/vector_index_file_reader_test.cpp
     ./storage/index/vector/vector_index_cache_metrics_test.cpp
     ./storage/index/builtin_inverted_index_test.cpp
     ./storage/kv_store_test.cpp
@@ -363,6 +370,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
+    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
@@ -379,6 +387,7 @@ SET(DW_TEST_FILES
     ./storage/segment_stream_converter_test.cpp
     ./storage/del_file_stream_converter_test.cpp
     ./storage/size_tiered_compaction_policy_test.cpp
+    ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
