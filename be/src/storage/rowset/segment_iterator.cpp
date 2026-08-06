@@ -1087,16 +1087,34 @@ Status SegmentIterator::_init_internal() {
 
     /// the calling order matters, do not change unless you know why.
 
-    _segment->turn_on_batch_update_cache_size();
-    DeferOp op([&] { _segment->turn_off_batch_update_cache_size(); });
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_cache_size_ns);
+        _segment->turn_on_batch_update_cache_size();
+    }
+    DeferOp op([&] {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_cache_size_ns);
+        _segment->turn_off_batch_update_cache_size();
+    });
     // init stage
     // The main task is to do some initialization,
     // initialize the iterator and check if certain optimizations can be applied
-    _init_column_access_paths();
-    RETURN_IF_ERROR(_init_ann_reader());
-    RETURN_IF_ERROR(_check_low_cardinality_optimization());
-    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-    RETURN_IF_ERROR(_init_scan_range_and_context());
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_access_path_ns);
+        _init_column_access_paths();
+    }
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_ann_reader_ns);
+        RETURN_IF_ERROR(_init_ann_reader());
+    }
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_low_card_ns);
+        RETURN_IF_ERROR(_check_low_cardinality_optimization());
+    }
+    RETURN_IF_ERROR(_init_column_iterators<true>(_schema)); // timed by column_iterator_init_ns
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->seg_init_scan_range_ns);
+        RETURN_IF_ERROR(_init_scan_range_and_context());
+    }
 
     _one_time_setup_done = true;
     return Status::OK();

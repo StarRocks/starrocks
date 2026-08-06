@@ -32,6 +32,11 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     io_bytes_read_local_disk = reader_stats.compressed_bytes_read_local_disk;
     segment_init_ns = reader_stats.segment_init_ns;
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
+    seg_init_access_path_ns = reader_stats.seg_init_access_path_ns;
+    seg_init_ann_reader_ns = reader_stats.seg_init_ann_reader_ns;
+    seg_init_low_card_ns = reader_stats.seg_init_low_card_ns;
+    seg_init_scan_range_ns = reader_stats.seg_init_scan_range_ns;
+    seg_init_cache_size_ns = reader_stats.seg_init_cache_size_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
     // Note: read_segment_count is managed explicitly in compaction task code
@@ -52,6 +57,11 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.io_bytes_read_local_disk += that.io_bytes_read_local_disk;
     diff.segment_init_ns += that.segment_init_ns;
     diff.column_iterator_init_ns += that.column_iterator_init_ns;
+    diff.seg_init_access_path_ns += that.seg_init_access_path_ns;
+    diff.seg_init_ann_reader_ns += that.seg_init_ann_reader_ns;
+    diff.seg_init_low_card_ns += that.seg_init_low_card_ns;
+    diff.seg_init_scan_range_ns += that.seg_init_scan_range_ns;
+    diff.seg_init_cache_size_ns += that.seg_init_cache_size_ns;
     diff.io_count_local_disk += that.io_count_local_disk;
     diff.io_count_remote += that.io_count_remote;
     diff.read_segment_count += that.read_segment_count;
@@ -72,6 +82,11 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.io_bytes_read_local_disk -= that.io_bytes_read_local_disk;
     diff.segment_init_ns -= that.segment_init_ns;
     diff.column_iterator_init_ns -= that.column_iterator_init_ns;
+    diff.seg_init_access_path_ns -= that.seg_init_access_path_ns;
+    diff.seg_init_ann_reader_ns -= that.seg_init_ann_reader_ns;
+    diff.seg_init_low_card_ns -= that.seg_init_low_card_ns;
+    diff.seg_init_scan_range_ns -= that.seg_init_scan_range_ns;
+    diff.seg_init_cache_size_ns -= that.seg_init_cache_size_ns;
     diff.io_count_local_disk -= that.io_count_local_disk;
     diff.io_count_remote -= that.io_count_remote;
     diff.read_segment_count -= that.read_segment_count;
@@ -95,6 +110,21 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("segment_init_sec", rapidjson::Value(s.segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("column_iterator_init_sec", rapidjson::Value(s.column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
                    allocator);
+    // segment_init breakdown, in ms: these steps are individually sub-second in healthy runs and
+    // would truncate to 0 under the *_sec fields, which is exactly what made the black box opaque.
+    static constexpr long TIME_UNIT_NS_PER_MS = 1000000;
+    root.AddMember("seg_init_access_path_ms", rapidjson::Value(s.seg_init_access_path_ns / TIME_UNIT_NS_PER_MS),
+                   allocator);
+    root.AddMember("seg_init_ann_reader_ms", rapidjson::Value(s.seg_init_ann_reader_ns / TIME_UNIT_NS_PER_MS),
+                   allocator);
+    root.AddMember("seg_init_low_card_ms", rapidjson::Value(s.seg_init_low_card_ns / TIME_UNIT_NS_PER_MS), allocator);
+    root.AddMember("seg_init_col_iter_ms", rapidjson::Value(s.column_iterator_init_ns / TIME_UNIT_NS_PER_MS),
+                   allocator);
+    root.AddMember("seg_init_scan_range_ms", rapidjson::Value(s.seg_init_scan_range_ns / TIME_UNIT_NS_PER_MS),
+                   allocator);
+    root.AddMember("seg_init_cache_size_ms", rapidjson::Value(s.seg_init_cache_size_ns / TIME_UNIT_NS_PER_MS),
+                   allocator);
+    root.AddMember("segment_init_ms", rapidjson::Value(s.segment_init_ns / TIME_UNIT_NS_PER_MS), allocator);
     root.AddMember("read_segment_count", rapidjson::Value(s.read_segment_count), allocator);
     root.AddMember("write_segment_count", rapidjson::Value(s.write_segment_count), allocator);
     root.AddMember("write_remote_mb", rapidjson::Value(s.write_segment_bytes / BYTES_UNIT_MB), allocator);

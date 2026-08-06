@@ -49,6 +49,12 @@ struct CompactionTaskStats {
     int64_t io_bytes_read_local_disk = 0;
     int64_t segment_init_ns = 0;
     int64_t column_iterator_init_ns = 0;
+    // Breakdown of segment_init_ns, see StorageStats for why.
+    int64_t seg_init_access_path_ns = 0;
+    int64_t seg_init_ann_reader_ns = 0;
+    int64_t seg_init_low_card_ns = 0;
+    int64_t seg_init_scan_range_ns = 0;
+    int64_t seg_init_cache_size_ns = 0;
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
     int64_t in_queue_time_sec = 0;
