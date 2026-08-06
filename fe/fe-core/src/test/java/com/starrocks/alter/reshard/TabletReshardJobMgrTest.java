@@ -52,6 +52,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TabletReshardJobMgrTest {
@@ -195,8 +196,8 @@ public class TabletReshardJobMgrTest {
     }
 
     private static class CountingTabletReshardJob extends TestNormalTabletReshardJob {
-        private final transient AtomicInteger initCount = new AtomicInteger();
-        private final transient AtomicInteger rollbackCount = new AtomicInteger();
+        protected final transient AtomicInteger initCount = new AtomicInteger();
+        protected final transient AtomicInteger rollbackCount = new AtomicInteger();
 
         private CountingTabletReshardJob(long jobId) {
             super(jobId, TabletReshardJob.JobType.SPLIT_TABLET);
@@ -236,6 +237,33 @@ public class TabletReshardJobMgrTest {
                 throw new IllegalStateException("interrupted waiting to release job-id getter", e);
             }
             return super.getJobId();
+        }
+    }
+
+    private static class FailingPublicationTabletReshardJob extends CountingTabletReshardJob {
+        private final transient IllegalStateException publicationFailure =
+                new IllegalStateException("injected manager publication failure");
+        private final transient AtomicBoolean reservationHeld = new AtomicBoolean();
+
+        private FailingPublicationTabletReshardJob(long jobId) {
+            super(jobId);
+        }
+
+        @Override
+        public void init() {
+            super.init();
+            reservationHeld.set(true);
+        }
+
+        @Override
+        protected void replayAbortedJob() {
+            reservationHeld.set(false);
+            super.replayAbortedJob();
+        }
+
+        @Override
+        public long getJobId() {
+            throw publicationFailure;
         }
     }
 
@@ -336,6 +364,18 @@ public class TabletReshardJobMgrTest {
 
     @Test
     public void testExternalBoundaryFactoryRejectsFollowerBeforeIdAllocation() {
+        assertExternalBoundaryFactoryRejectedBeforeIdAllocation(false, true,
+                "follower rejection must precede every id allocation");
+    }
+
+    @Test
+    public void testExternalBoundaryFactoryRejectsClosedAdmissionBeforeIdAllocation() {
+        assertExternalBoundaryFactoryRejectedBeforeIdAllocation(true, false,
+                "closed admission rejection must precede every id allocation");
+    }
+
+    private void assertExternalBoundaryFactoryRejectedBeforeIdAllocation(
+            boolean leader, boolean admissionOpen, String assertionMessage) {
         oversizedTablet.setRange(new TabletRange());
         Map<Long, List<TabletRange>> boundaries = Map.of(oversizedTablet.getId(), List.of(
                 new TabletRange(Range.lt(createTuple(0))),
@@ -345,12 +385,12 @@ public class TabletReshardJobMgrTest {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public boolean isLeader() {
-                return false;
+                return leader;
             }
 
             @Mock
             public boolean isLeaderWorkAdmissionOpen() {
-                return false;
+                return admissionOpen;
             }
 
             @Mock
@@ -361,7 +401,7 @@ public class TabletReshardJobMgrTest {
 
         Assertions.assertThrows(StarRocksException.class,
                 () -> SplitTabletJobFactory.forExternalBoundaries(reshardDb, reshardTable, boundaries));
-        Assertions.assertEquals(0, nextIdCalls.get(), "follower rejection must precede every id allocation");
+        Assertions.assertEquals(0, nextIdCalls.get(), assertionMessage);
     }
 
     @Test
@@ -380,6 +420,44 @@ public class TabletReshardJobMgrTest {
                         "a reservation that never started must not roll back"),
                 () -> Assertions.assertTrue(journalQueue.isEmpty()),
                 () -> Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty()));
+    }
+
+    @Test
+    public void testAddJobRejectedBeforeInitWhenLeaderAdmissionClosed() throws Exception {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, true);
+        mockAdmissionWithEditLog(editLog, true, false);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        CountingTabletReshardJob job = new CountingTabletReshardJob(41_005L);
+
+        CompletableFuture<Throwable> submission = submitJobAsync(jobMgr, job);
+        JournalTask unexpectedTask = null;
+        try {
+            unexpectedTask = journalQueue.poll(500, TimeUnit.MILLISECONDS);
+            if (unexpectedTask != null && !unexpectedTask.isDone()) {
+                unexpectedTask.markAbort(new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, "unexpected manager-guard bypass"));
+            }
+            Throwable failure = submission.get(5, TimeUnit.SECONDS);
+            JournalTask finalUnexpectedTask = unexpectedTask;
+
+            Assertions.assertAll(
+                    () -> Assertions.assertInstanceOf(StarRocksException.class, failure),
+                    () -> Assertions.assertEquals(0, job.initCount.get(),
+                            "closed leader admission must reject before reservation init"),
+                    () -> Assertions.assertEquals(0, job.rollbackCount.get(),
+                            "a reservation that never started must not roll back"),
+                    () -> Assertions.assertNull(finalUnexpectedTask,
+                            "manager rejection must not submit an initial WAL record"),
+                    () -> Assertions.assertTrue(journalQueue.isEmpty()),
+                    () -> Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty()));
+        } finally {
+            if (unexpectedTask != null && !unexpectedTask.isDone()) {
+                unexpectedTask.markAbort(new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, "test cleanup"));
+            }
+            submission.get(5, TimeUnit.SECONDS);
+        }
     }
 
     @Test
@@ -432,6 +510,46 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
+    public void testPostDurablePublicationFailureDoesNotRollbackAndDrains() throws Exception {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
+        EditLog editLog = new EditLog(journalQueue, true);
+        mockLeaderAdmissionWithEditLog(editLog);
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        FailingPublicationTabletReshardJob job = new FailingPublicationTabletReshardJob(41_006L);
+
+        CompletableFuture<Throwable> submission = submitJobAsync(jobMgr, job);
+        JournalTask task = null;
+        try {
+            task = journalQueue.poll(5, TimeUnit.SECONDS);
+            Assertions.assertNotNull(task, "initial reshard WAL record must be submitted");
+            Assertions.assertEquals(1, job.initCount.get());
+
+            task.markSucceed();
+            Throwable failure = submission.get(5, TimeUnit.SECONDS);
+            editLog.closeWalGate();
+            editLog.awaitWalDrained(5000L);
+
+            Assertions.assertAll(
+                    () -> Assertions.assertSame(job.publicationFailure, failure),
+                    () -> Assertions.assertEquals(0, job.rollbackCount.get(),
+                            "a durable reservation must not roll back after publication failure"),
+                    () -> Assertions.assertTrue(job.reservationHeld.get(),
+                            "the durable reservation must remain held for replay/recovery"),
+                    () -> Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty(),
+                            "a failed manager-map applier must not partially publish the job"));
+        } finally {
+            if (task == null) {
+                task = journalQueue.poll(5, TimeUnit.SECONDS);
+            }
+            if (task != null && !task.isDone()) {
+                task.markAbort(new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, "test cleanup"));
+            }
+            submission.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     public void testWalDrainWaitsForInitialJobPublication() throws Exception {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(4);
         EditLog editLog = new EditLog(journalQueue, true);
@@ -454,9 +572,13 @@ public class TabletReshardJobMgrTest {
             Assertions.assertTrue(getterEntered.await(5, TimeUnit.SECONDS),
                     "post-commit manager-map applier must read jobId");
             editLog.closeWalGate();
-            Assertions.assertThrows(IllegalStateException.class,
+            IllegalStateException drainTimeout = Assertions.assertThrows(IllegalStateException.class,
                     () -> editLog.awaitWalDrained(100L),
                     "demotion drain must wait for post-commit manager publication");
+            Assertions.assertAll(
+                    () -> Assertions.assertTrue(drainTimeout.getMessage()
+                            .contains("timed out waiting for leader WAL writes to drain")),
+                    () -> Assertions.assertTrue(drainTimeout.getMessage().contains("inFlight=1")));
             Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
 
             releaseGetter.countDown();
@@ -481,15 +603,19 @@ public class TabletReshardJobMgrTest {
     }
 
     private void mockLeaderAdmissionWithEditLog(EditLog editLog) {
+        mockAdmissionWithEditLog(editLog, true, true);
+    }
+
+    private void mockAdmissionWithEditLog(EditLog editLog, boolean leader, boolean admissionOpen) {
         new MockUp<GlobalStateMgr>() {
             @Mock
             public boolean isLeader() {
-                return true;
+                return leader;
             }
 
             @Mock
             public boolean isLeaderWorkAdmissionOpen() {
-                return true;
+                return admissionOpen;
             }
 
             @Mock
