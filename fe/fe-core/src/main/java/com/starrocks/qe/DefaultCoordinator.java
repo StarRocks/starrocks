@@ -138,6 +138,8 @@ public class DefaultCoordinator extends Coordinator {
     private static final Logger LOG = LogManager.getLogger(DefaultCoordinator.class);
 
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
+    // Cap on how many pending instances are named individually, so a wide fan-out cannot blow up the log.
+    private static final int MAX_LOGGED_UNREPORTED_INSTANCES = 20;
     private static final ExecutorService EXTERNAL_RESOURCE_CLEANUP_EXECUTOR =
             ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "external-resource-cleanup", false);
 
@@ -1197,6 +1199,73 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    /**
+     * Log the fragment instances that have not sent their final report yet, if any.
+     * <p>
+     * An instance is only counted down by a {@code done=true} report, so an instance whose worker stops
+     * finalizing never leaves this set and {@link #join} keeps waiting for it after cancellation. Naming these
+     * instances identifies the affected worker when the cancellation grace period expires.
+     */
+    private void logUnreportedInstances(String context) {
+        try {
+            UnreportedInstanceSummary summary = summarizeUnreportedInstances();
+            if (summary.total() == 0) {
+                return;
+            }
+            LOG.warn("query {} {}, {} instance(s) have not reported yet, pending per worker: {}, first {}: {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), context, summary.total(),
+                    summary.pendingPerWorker(), summary.sample().size(), summary.sample());
+        } catch (Throwable e) {
+            // join() calls this without the coordinator lock, and phased scheduling can add executions
+            // concurrently. Diagnostics must never break the wait they are describing.
+            LOG.warn("failed to summarize unreported instances of query {}",
+                    DebugUtil.printId(jobSpec.getQueryId()), e);
+        }
+    }
+
+    /**
+     * Summarize instances still missing from the profile latch without formatting every instance in a wide
+     * fan-out. Per-worker counts identify the affected nodes, while the formatted sample stays bounded.
+     */
+    @VisibleForTesting
+    public UnreportedInstanceSummary summarizeUnreportedInstances() {
+        List<String> unreportedIds = queryProfile.getUnfinishedInstanceIds();
+        if (unreportedIds.isEmpty()) {
+            return new UnreportedInstanceSummary(0, Collections.emptyMap(), Collections.emptyList());
+        }
+
+        Set<String> unmatchedIds = Sets.newHashSet(unreportedIds);
+        Map<Long, Long> pendingPerWorker = Maps.newTreeMap();
+        List<String> sample = Lists.newArrayListWithCapacity(
+                Math.min(unreportedIds.size(), MAX_LOGGED_UNREPORTED_INSTANCES));
+        for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
+            String instanceId = DebugUtil.printId(execState.getInstanceId());
+            if (!unmatchedIds.remove(instanceId)) {
+                continue;
+            }
+
+            ComputeNode worker = execState.getWorker();
+            String workerId = worker == null ? "not-deployed" : String.valueOf(worker.getId());
+            if (worker != null) {
+                pendingPerWorker.merge(worker.getId(), 1L, Long::sum);
+            }
+            if (sample.size() < MAX_LOGGED_UNREPORTED_INSTANCES) {
+                sample.add(String.format("%s@%s(%s)", instanceId, workerId, execState.getState()));
+            }
+        }
+
+        for (String instanceId : unmatchedIds) {
+            if (sample.size() >= MAX_LOGGED_UNREPORTED_INSTANCES) {
+                break;
+            }
+            sample.add(instanceId + "@not-deployed(UNKNOWN)");
+        }
+        return new UnreportedInstanceSummary(unreportedIds.size(), pendingPerWorker, sample);
+    }
+
+    @VisibleForTesting
+    public record UnreportedInstanceSummary(int total, Map<Long, Long> pendingPerWorker, List<String> sample) {}
+
     @Override
     public void clearExternalResources() {
         if (!externalResourcesCleared.compareAndSet(false, true)) {
@@ -1361,8 +1430,11 @@ public class DefaultCoordinator extends Coordinator {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
             if (!status.isSuppressedError()) {
-                LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                        status, DebugUtil.printId(jobSpec.getQueryId()),
+                // The report itself arrived; it is the reported execution that failed. Say so explicitly,
+                // and include done= because only a done=true report retires the instance.
+                LOG.warn("received failed exec state report, status={}, done={}, query_id={}, instance_id={}, " +
+                                "backend_id={}",
+                        status, params.isDone(), DebugUtil.printId(jobSpec.getQueryId()),
                         DebugUtil.printId(params.getFragment_instance_id()),
                         params.getBackend_id());
             }
@@ -1570,10 +1642,7 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         long waitedMs = System.currentTimeMillis() - cancelledAtMs;
-        List<String> unreported = queryProfile.getUnfinishedInstanceIds();
-        LOG.warn("query {} was cancelled {}ms ago and {} instance(s) still have not reported, " +
-                        "giving up on their profile: {}",
-                DebugUtil.printId(jobSpec.getQueryId()), waitedMs, unreported.size(), unreported);
+        logUnreportedInstances(String.format("was cancelled %dms ago; giving up on the remaining profile", waitedMs));
         // Release the latch so isDone() holds and the caller does not mistake this for a timeout.
         queryProfile.finishAllInstances(Status.OK);
         return true;
