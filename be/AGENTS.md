@@ -64,8 +64,13 @@ Useful core binaries for fast iterations:
   ```
   Stage the formatted files and include them in the same commit. The CI
   `ci-clang-format` action uses clang-format-10 and will reject PRs that are
-  not already clean. Do not rely on the CI bot auto-commit \u2014 it creates an
+  not already clean. Do not rely on the CI bot auto-commit — it creates an
   unsigned commit and signals that local formatting was skipped.
+  Install the CI-identical static binary if `clang-format-10` is not on your PATH:
+  ```bash
+  wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 \
+    -O ~/.local/bin/clang-format-10 && chmod +x ~/.local/bin/clang-format-10
+  ```
 - Prefer `#pragma once`.
 - Keep include order: corresponding header, C system, C++ stdlib, third-party, StarRocks.
 - Use `Status` and `StatusOr` for recoverable errors.

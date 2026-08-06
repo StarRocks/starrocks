@@ -36,8 +36,9 @@ cd test && python3 run.py -v
 # Format all changed C++ files (MUST run before every commit that touches be/)
 # CI enforces clang-format-10; run this locally and include the result in the commit.
 CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh
-# If clang-format-10 is unavailable, use the system clang-format and let the CI
-# bot auto-commit any residual diff — but prefer matching the CI version exactly.
+# If clang-format-10 is unavailable, install it (static binary, CI-identical):
+#   wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 \
+#     -O ~/.local/bin/clang-format-10 && chmod +x ~/.local/bin/clang-format-10
 ```
 
 ## Repo-Wide Invariants
@@ -52,6 +53,11 @@ CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh
   stage the result before committing. The CI `ci-clang-format` workflow will reject
   any PR where the diff is not already formatted. A bot auto-commit is not a substitute
   for formatting locally — it creates an unsigned commit that pollutes the PR history.
+  Install the CI-identical binary if needed:
+  ```bash
+  wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 \
+    -O ~/.local/bin/clang-format-10 && chmod +x ~/.local/bin/clang-format-10
+  ```
 
 ## PR Contract
 
