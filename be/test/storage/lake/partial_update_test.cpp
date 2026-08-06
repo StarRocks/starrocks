@@ -35,7 +35,11 @@
 #include "common/logging.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "storage/del_vector.h"
+=======
+#include "storage/lake/column_mode_partial_update_handler.h"
+>>>>>>> 2f91b5ef0f7... [Enhancement] Stream source segments for lake column updates (#77275)
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
@@ -284,6 +288,77 @@ TEST_P(LakePartialUpdateTest, test_write) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+}
+
+TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads source segments while generating DCGs";
+    }
+
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+
+    const auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+    ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    int64_t upt_memory_usage_per_row = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row",
+                                          [&](void* arg) { upt_memory_usage_per_row = *static_cast<int64_t*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit",
+                                          [&](void* arg) {
+                                              const auto* container = static_cast<StreamChunkContainer*>(arg);
+                                              emitted_ranges.emplace_back(container->start_rowid, container->end_rowid);
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    EXPECT_GE(upt_memory_usage_per_row, static_cast<int64_t>(sizeof(int32_t) * 2));
+    EXPECT_EQ((std::vector<std::pair<uint32_t, uint32_t>>{{0, 4}, {4, 8}, {8, 12}}), emitted_ranges);
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
 // Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
