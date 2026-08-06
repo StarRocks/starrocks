@@ -300,12 +300,9 @@ StarRocks SQLAlchemy ダイアレクトは以下を完全にサポートしま�
 デフォルトでは、この一時ビューは比較対象オブジェクトのスキーマに作成されるため、移行ユーザーはビュー/MV を含むすべてのスキーマでビューを作成する権限が必要です。ユーザーの権限が制限されている場合は、`starrocks_temp_view_schema` を専用のスキーマ 1 つに設定し、そのスキーマにのみ必要な権限を付与してください。`__…__` 形式の名前（例: `__alembic_canon__`）を使うとスキーマの用途が明確になります。ユーザーが書き込めるスキーマであれば何でもよく、既存のスキーマ（`version_table_schema` など）を再利用することもできます:
 
 ```python
-# env.py — run_migrations_offline() と run_migrations_online() の両方で設定
+# env.py
 context.configure(
-    connection=connection,
-    target_metadata=target_metadata,
-    render_item=render_column_type,
-    include_object=include_object_for_view_mv,
+    # ... 既存のパラメータ（render_item、include_object など）...
     starrocks_temp_view_schema="__alembic_canon__",  # 一時比較ビューをここに作成
 )
 ```

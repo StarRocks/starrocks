@@ -300,12 +300,9 @@ StarRocks SQLAlchemy 方言提供对以下功能的全面支持：
 默认情况下，该临时视图会创建在被比较对象所在的 schema 中，因此迁移用户需要在每个包含视图或物化视图的 schema 中都具备创建视图的权限。如果您的用户权限受限，可以将 `starrocks_temp_view_schema` 设置为一个专用的 schema，并只在该 schema 上授予所需权限。使用 `__…__` 风格的名称（例如 `__alembic_canon__`）可以让该 schema 的用途更清晰；它可以是用户有写入权限的任意 schema，也可以复用现有的 schema（例如您的 `version_table_schema`）：
 
 ```python
-# env.py —— 在 run_migrations_offline() 和 run_migrations_online() 中均需配置
+# env.py
 context.configure(
-    connection=connection,
-    target_metadata=target_metadata,
-    render_item=render_column_type,
-    include_object=include_object_for_view_mv,
+    # ... 您已有的参数（render_item、include_object 等）...
     starrocks_temp_view_schema="__alembic_canon__",  # 在此 schema 中创建临时比较视图
 )
 ```

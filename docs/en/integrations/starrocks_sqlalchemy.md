@@ -300,12 +300,9 @@ On StarRocks versions before 4.0.6, a view or materialized-view definition is st
 By default that temporary view is created in the schema of the object being compared, so the migration user needs privileges to create views in every schema that contains a view or MV. If your user is locked down, set `starrocks_temp_view_schema` to a single dedicated schema and grant the required privileges only there. A `__…__` style name (for example `__alembic_canon__`) makes the schema's purpose clear; it can be any schema the user can write to, including an existing one such as your `version_table_schema`:
 
 ```python
-# env.py — in both run_migrations_offline() and run_migrations_online()
+# env.py
 context.configure(
-    connection=connection,
-    target_metadata=target_metadata,
-    render_item=render_column_type,
-    include_object=include_object_for_view_mv,
+    # ... your existing parameters (render_item, include_object, etc.) ...
     starrocks_temp_view_schema="__alembic_canon__",  # host the transient comparison view here
 )
 ```
