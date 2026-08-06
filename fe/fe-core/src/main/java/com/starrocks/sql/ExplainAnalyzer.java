@@ -1130,6 +1130,25 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "DefaultChunkBufferCapacity");
         popIndent();
 
+        appendDetailLine("VectorIndex:");
+        pushIndent(GraphElement.LEAF_METRIC_INDENT);
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndex");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexLoad");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheLookup");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheHit");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexCacheMiss");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexFileOpenAndGetSize");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexFileRead");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexDeserialize");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexSearcherCreate");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorIndexSearch");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorANNSearch");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorResultProcess");
+        // Legacy names kept visible for profiles produced during rolling upgrades.
+        appendMetric(uniqueMetrics, nodeInfo, "ProcessVectorDistanceAndIdTime");
+        appendMetric(uniqueMetrics, nodeInfo, "VectorSearchTime");
+        popIndent();
+
         appendGroupedMetricsOthers(uniqueMetrics, nodeInfo, getScanKnownMetrics());
 
         popIndent(); // main indent
