@@ -1133,6 +1133,21 @@ protected:
                 metadata.idg_meta().idgs().at(base + 6).entries(0).encryption_meta()};
     }
 
+    static void seed_test_encryption_keys() {
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        ASSERT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
+    }
+
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert(
             const TabletMetadataPtr& source, const TabletMetadataPtr& target, int64_t data_version,
             const std::string& source_data_dir, std::unordered_map<std::string, size_t>* segment_sizes = nullptr,
@@ -1259,18 +1274,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_a
 }
 
 TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_are_rejected) {
-    EncryptionKeyPB pb;
-    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-    pb.set_plain_key("0000000000000000");
-    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-    auto val_st = root_encryption_key->generate_key();
-    ASSERT_TRUE(val_st.ok());
-    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
-    encryption_key->set_id(2);
-    KeyCache::instance().add_key(root_encryption_key);
-    KeyCache::instance().add_key(encryption_key);
+    seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = true;
 
@@ -1285,18 +1289,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_ar
 }
 
 TEST_F(LakeReplicationMetadataConversionTest, range_existing_shared_files_with_tde_reuse_encryption_meta) {
-    EncryptionKeyPB pb;
-    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-    pb.set_plain_key("0000000000000000");
-    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-    auto val_st = root_encryption_key->generate_key();
-    ASSERT_TRUE(val_st.ok());
-    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
-    encryption_key->set_id(2);
-    KeyCache::instance().add_key(root_encryption_key);
-    KeyCache::instance().add_key(encryption_key);
+    seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = true;
 
@@ -1319,18 +1312,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_existing_shared_files_with_t
 }
 
 TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_metadata) {
-    EncryptionKeyPB pb;
-    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-    pb.set_plain_key("0000000000000000");
-    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-    auto val_st = root_encryption_key->generate_key();
-    ASSERT_TRUE(val_st.ok());
-    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
-    encryption_key->set_id(2);
-    KeyCache::instance().add_key(root_encryption_key);
-    KeyCache::instance().add_key(encryption_key);
+    seed_test_encryption_keys();
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = true;
 
