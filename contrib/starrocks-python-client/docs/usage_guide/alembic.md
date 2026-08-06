@@ -157,10 +157,7 @@ schema and grant the required privileges only there.
 ```python
 # alembic/env.py
 context.configure(
-    connection=connection,
-    target_metadata=target_metadata,
-    render_item=render_column_type,
-    include_object=include_object_for_view_mv,
+    # ... your existing parameters (render_item, include_object, etc.) ...
     starrocks_temp_view_schema="__alembic_canon__",  # host the transient comparison view here
 )
 ```
