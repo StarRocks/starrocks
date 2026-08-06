@@ -19,8 +19,31 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 
 import java.nio.ByteBuffer;
+import java.util.Comparator;
 
 public final class ColumnDict {
+    /**
+     * Unsigned-byte lexicographic comparator. BE sorts dictionary strings via memcmp, which the C
+     * standard defines to compare bytes as unsigned char. ByteBuffer.compareTo on JDK 8 instead
+     * compares bytes as signed (Java 9 fixed this to unsigned), so any UTF-8 string with a high-bit
+     * byte (Cyrillic, CJK, etc.) sorts the opposite way on the two sides. Always use this comparator
+     * when ordering dictionary keys on the FE so the result matches BE regardless of JDK version.
+     */
+    public static final Comparator<ByteBuffer> UNSIGNED_LEX = (a, b) -> {
+        int aPos = a.position();
+        int bPos = b.position();
+        int aLen = a.limit() - aPos;
+        int bLen = b.limit() - bPos;
+        int n = Math.min(aLen, bLen);
+        for (int i = 0; i < n; i++) {
+            int diff = (a.get(aPos + i) & 0xff) - (b.get(bPos + i) & 0xff);
+            if (diff != 0) {
+                return diff;
+            }
+        }
+        return aLen - bLen;
+    };
+
     private final ImmutableMap<ByteBuffer, Integer> dict;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
