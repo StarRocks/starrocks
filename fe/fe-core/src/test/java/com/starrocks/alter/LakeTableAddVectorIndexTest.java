@@ -412,10 +412,12 @@ public class LakeTableAddVectorIndexTest {
      * <pre>
      *   1. createTable + alterTable  →  PENDING job, physicalPartitionIndexMap has shadow
      *      LakeTablets with vibv = vSnap.
-     *   2. GSON round-trip of the job (simulate edit-log persist + reload).
-     *   3. Set deserialisedJob.state = WAITING_TXN, watershedTxnId = 1 (any non-(-1) value).
-     *   4. Clear the handler's in-memory job map (simulate fresh FE — no prior in-memory job).
-     *   5. replayAlterJobV2(deserialisedJob)  →  addShadowIndexToCatalog  →  shadow index
+     *   2. Clear the handler's in-memory job map (simulate fresh FE — no prior in-memory job),
+     *      which also stops the handler's daemon from advancing the job we just captured.
+     *   3. GSON round-trip of the job (simulate edit-log persist + reload).
+     *   4. Set deserialisedJob.state = WAITING_TXN, watershedTxnId = 1 (any non-(-1) value).
+     *   5. Detach the shadow index if the daemon attached it before step 2, then
+     *      replayAlterJobV2(deserialisedJob)  →  addShadowIndexToCatalog  →  shadow index
      *      added to physical partition.
      *   6. Assert: partition shadow indexes have tablets with vibv == vSnap (not 0).
      * </pre>
@@ -434,7 +436,15 @@ public class LakeTableAddVectorIndexTest {
         // Retrieve the in-memory PENDING job and sanity-check it has shadow tablets.
         LakeTableSchemaChangeJob pendingJob = getSinglePendingJob(table);
 
-        // ---- Step 2: GSON round-trip to simulate edit-log persist + reload ----
+        // ---- Step 2: clear the handler's job map (simulate fresh FE with no prior job) ----
+        // This must happen before anything else: the handler's daemon owns the job captured
+        // above, and once it advances the job (PENDING -> WAITING_TXN) it calls
+        // addShadowIndexToCatalog itself. The replay driven below would then attach the same
+        // index a second time and trip createRollupIndex's "index meta id %d already exists".
+        GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().clearJobs();
+
+        // ---- Step 3: GSON round-trip to simulate edit-log persist + reload ----
         LakeTableSchemaChangeJob deserialisedJob = gsonRoundTrip(pendingJob);
 
         // Confirm the deserialisedJob carries shadow tablets (inherited from GSON round-trip).
@@ -442,17 +452,28 @@ public class LakeTableAddVectorIndexTest {
         Assertions.assertFalse(desMap.isEmpty(),
                 "deserialisedJob physicalPartitionIndexMap must not be empty");
 
-        // ---- Step 3: advance deserialisedJob to WAITING_TXN ----
+        // ---- Step 4: advance deserialisedJob to WAITING_TXN ----
         // In a real restart the WAITING_TXN edit-log entry is the one replayed; here we
         // simulate it by advancing the deserialisedJob's state + setting watershedTxnId.
         deserialisedJob.setJobState(AlterJobV2.JobState.WAITING_TXN);
         Deencapsulation.setField(deserialisedJob, "watershedTxnId", 1L);
 
-        // ---- Step 4: clear the handler's job map (simulate fresh FE with no prior job) ----
-        GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().clearJobs();
-
         // ---- Step 5: drive the replay — this is the actual failover path ----
+        // Undo a premature attach first: the daemon may have advanced the original job in the
+        // window before step 2 (or from a cycle already in flight), and a fresh FE replaying
+        // WAITING_TXN by definition has no shadow index attached yet. deleteMaterializedIndexByMetaId
+        // is a no-op when the meta id is absent, which is the normal case.
+        Table<Long, Long, MaterializedIndex> pendingMap = getPartitionIndexMap(pendingJob);
+        for (long physicalPartitionId : pendingMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null) {
+                continue;
+            }
+            for (MaterializedIndex shadowIndex : pendingMap.row(physicalPartitionId).values()) {
+                physicalPartition.deleteMaterializedIndexByMetaId(shadowIndex.getMetaId());
+            }
+        }
+
         // replayAlterJobV2 finds no existing job → calls deserialisedJob.replay(deserialisedJob)
         // → WAITING_TXN branch → addShadowIndexToCatalog → shadow index attached to partition.
         GlobalStateMgr.getCurrentState().getAlterJobMgr()
