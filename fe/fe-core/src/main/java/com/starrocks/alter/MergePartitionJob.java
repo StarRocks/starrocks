@@ -541,7 +541,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             Collection<String> sourcePartitionNames = tempPartitionNameToSourcePartitionNames.get(tmpPartitionName);
             final String finalPartitionName = tmpPartitionName;
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                        + ParseUtil.backquote(finalPartitionName) + ") select " + Joiner.on(", ").join(finalTableColumnNames)
+                        + ParseUtil.backquote(finalPartitionName) + ") ("
+                        + Joiner.on(", ").join(finalTableColumnNames) + ") select "
+                        + Joiner.on(", ").join(finalTableColumnNames)
                         + " from " + ParseUtil.backquote(tableName) + " partition ("
                         + Joiner.on(", ").join(sourcePartitionNames.stream()
                             .map(name -> ParseUtil.backquote(name))
