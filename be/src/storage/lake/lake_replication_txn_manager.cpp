@@ -792,21 +792,24 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids));
 
     const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
-    auto destination_shared = [&existed_filename_uuids, preserve_source_shared](const std::string& source_filename,
-                                                                                bool source_shared,
-                                                                                bool existed) -> StatusOr<bool> {
+    auto destination_shared = [&existed_filename_uuids, preserve_source_shared](
+                                      const std::string& source_filename, bool source_shared, bool existed,
+                                      bool source_bundled = false) -> StatusOr<bool> {
+        // Bundled segments can share one physical object across tablet tasks regardless of the
+        // distribution type. Range split children also share one partition data path. Separate
+        // tasks cannot safely encrypt a new shared object with independently generated DEKs;
+        // existing objects are safe because their destination encryption metadata is reused.
+        if (config::enable_transparent_data_encryption && !existed &&
+            (source_bundled || (preserve_source_shared && source_shared))) {
+            return Status::NotSupported(
+                    "Copying new shared or bundled physical files with transparent data encryption is not "
+                    "supported");
+        }
         // For aligned range tablets, a source-shared segment can contain rows for multiple
         // split children. The shared bit makes each child apply its tablet range while reading.
         // The corresponding target children also use one physical copied file, so preserve the
         // bit for all associated sidecars as well.
         if (preserve_source_shared && source_shared) {
-            // Split children share one partition data path. Separate replication tasks cannot
-            // safely encrypt a newly copied shared object with independently generated DEKs.
-            // Existing objects are safe because their destination encryption metadata is reused.
-            if (config::enable_transparent_data_encryption && !existed) {
-                return Status::NotSupported(
-                        "Copying new shared range files with transparent data encryption is not supported");
-            }
             return true;
         }
         if (!existed) {
@@ -857,8 +860,10 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
-            ASSIGN_OR_RETURN(auto destination_file_shared,
-                             destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed));
+            ASSIGN_OR_RETURN(
+                    auto destination_file_shared,
+                    destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed,
+                                       src_seg_meta.has_bundle_file_offset()));
             new_seg_meta->set_shared(destination_file_shared);
 
             // Add encryption metadata for files
