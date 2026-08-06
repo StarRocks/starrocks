@@ -688,6 +688,18 @@ public class FragmentNormalizer {
         }
     }
 
+    // Ids of every PlanNode of the subtree rooted at `node` that still belongs to this fragment. The
+    // recursion stops at an ExchangeNode's children, which live in another fragment.
+    private void collectNodeIdsOfSameFragment(PlanNode node, Set<Integer> ids) {
+        if (node.getFragment() != fragment) {
+            return;
+        }
+        ids.add(node.getId().asInt());
+        for (PlanNode child : node.getChildren()) {
+            collectNodeIdsOfSameFragment(child, ids);
+        }
+    }
+
     public static void collectRightSiblingFragments(PlanNode root, List<PlanFragment> siblings,
                                                     Set<PlanFragmentId> visitedMultiCastFragments) {
         if (root.getChildren().isEmpty()) {
@@ -810,10 +822,21 @@ public class FragmentNormalizer {
         //     over a table distributed by k, which is planned as a one-phase aggregation that the rule's
         //     TopN->Agg(GLOBAL)->Agg(LOCAL) pattern cannot match.
         // Neither is visible to the alien-GRF check below: both are onlyLocal/non-remote filters.
-        boolean buildsRuntimeFilters = leftNodesTopDown.stream()
+        // Only a filter that actually probes inside the cached subtree matters, though. When a JoinNode
+        // sits between the builder and the cache point, the filter may land entirely on the other input
+        // -- `... join r on l.k = r.k order by r.v limit n` builds a TOPN_FILTER on r.v that only r's
+        // scan can probe. That one cannot change a single row the cache point produces, so rejecting it
+        // would give up the cache for nothing.
+        Set<Integer> cachedSubtreeNodeIds = Sets.newHashSet();
+        collectNodeIdsOfSameFragment(firstAggNode, cachedSubtreeNodeIds);
+        boolean filtersCachedRows = leftNodesTopDown.stream()
                 .filter(node -> node instanceof RuntimeFilterBuildNode && !(node instanceof JoinNode))
-                .anyMatch(node -> !((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().isEmpty());
-        if (buildsRuntimeFilters) {
+                .flatMap(node -> ((RuntimeFilterBuildNode) node).getBuildRuntimeFilters().stream())
+                // an empty probe map should not happen -- a filter with no target is never added to the
+                // build list -- but treat it as unknown, hence unsafe, rather than as harmless.
+                .anyMatch(rf -> rf.getNodeIdToProbeExpr().isEmpty() ||
+                        rf.getNodeIdToProbeExpr().keySet().stream().anyMatch(cachedSubtreeNodeIds::contains));
+        if (filtersCachedRows) {
             return false;
         }
 

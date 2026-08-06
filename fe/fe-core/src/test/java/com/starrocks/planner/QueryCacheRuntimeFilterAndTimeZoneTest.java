@@ -95,6 +95,28 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
         for (Partition partition : t3.getAllPartitions()) {
             partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(40);
         }
+        // A colocate pair for the join shapes. j1 is made huge and j2 tiny so that the aggregated j1
+        // side is chosen as the probe (left) input, which is what puts the aggregation -- and hence the
+        // cache interpolation point -- on the leftmost path below the join.
+        for (String name : new String[] {"j1", "j2"}) {
+            starRocksAssert.withTable("" +
+                    "CREATE TABLE " + name + "(\n" +
+                    "dt DATE NOT NULL,\n" +
+                    "c1 INT NOT NULL,\n" +
+                    "v1 BIGINT NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`dt`, `c1`)\n" +
+                    "PARTITION BY RANGE(dt) (\n" +
+                    "  START (\"2022-01-01\") END (\"2022-02-01\") EVERY (INTERVAL 1 day))\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 4\n" +
+                    "PROPERTIES(\"replication_num\" = \"1\", \"colocate_with\" = \"cg_qc_join\");");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDb("qc_rf_db").getTable(name);
+            long rows = name.equals("j1") ? 10000000L : 20L;
+            for (Partition partition : table.getAllPartitions()) {
+                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rows);
+            }
+        }
     }
 
     private Optional<TCacheParam> cacheParamOf(String sql) throws Exception {
@@ -144,6 +166,24 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
                         "select c1, sum(v1) from t1 where dt between '2022-01-01' and '2022-02-01' " +
                                 "group by c1")
                 .isPresent(), "the one-phase baseline without a TopN must stay cacheable");
+    }
+
+    @Test
+    public void testTopNFilterLandingOutsideTheCachedSubtreeKeepsTheCache() throws Exception {
+        String join = "select a.c1, a.s, j2.v1 from (select c1, sum(v1) s from j1 group by c1) a " +
+                "join j2 on a.c1 = j2.c1 ";
+        // Baseline: this shape is cacheable, the aggregation sits on the leftmost path below the join.
+        Assertions.assertTrue(cacheParamOf(join).isPresent(), "the join baseline must be cacheable");
+
+        // Ordering by a column only the right input has: the TOPN_FILTER can only be probed by the
+        // right scan, so no row the cache point produces is affected and the cache must survive.
+        Assertions.assertTrue(cacheParamOf(join + "order by j2.v1 limit 10").isPresent(),
+                "a TopN filter that cannot probe the cached subtree must not disable the cache");
+
+        // Ordering by the join column instead: equivalence propagates the filter onto the left scan
+        // too, which does truncate what gets populated, so this one has to stay uncached.
+        Assertions.assertFalse(cacheParamOf(join + "order by a.c1 limit 10").isPresent(),
+                "a TopN filter probing the cached subtree must disable the cache");
     }
 
     @Test
