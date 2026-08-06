@@ -3496,6 +3496,105 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastStaleHandle() throws Exception {
+        // The FE serves the native table from a cross-query cache, so executeMetadataDelete can run against a
+        // handle that lags behind the real table. The cast-on-string-partition branch enumerates the files to
+        // delete (and decides whether to commit at all) from that handle, so it must refresh first: otherwise a
+        // file appended by an external writer after the handle was cached is silently left behind while the
+        // DELETE reports success.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable cachedHandle = create(SCHEMA_J, spec, "tbDeleteStrPartStale", 1);
+        cachedHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0608.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-08").withRecordCount(3).build())
+                .commit();
+        cachedHandle.refresh();
+
+        // An external writer appends the partition the DELETE targets; the cached handle does not see it.
+        TestTables.TestTable writerHandle = TestTables.load(tableDir, "tbDeleteStrPartStale");
+        writerHandle.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/stale-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(4).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, cachedHandle, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext);
+
+        writerHandle.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(writerHandle.newScan().planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size(),
+                "the externally appended 2020-06-14 file must be deleted despite the stale cached handle");
+        Assertions.assertEquals("PartitionData{k2=2020-06-08}", fileScanTasks.get(0).file().partition().toString(),
+                "only the pre-existing 2020-06-08 partition must remain");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteStringDatePartitionCastRefreshFailure() {
+        // If the pre-scan refresh in the residual branch fails (e.g. remote metadata unavailable), the delete
+        // must surface a StarRocksConnectorException carrying table context, consistent with the other failure
+        // paths in executeMetadataDelete, rather than propagating a raw Iceberg exception.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbDeleteStrPartRefreshFail", 1);
+        table.newFastAppend()
+                .appendFile(DataFiles.builder(spec).withPath("/path/to/rf-0614.parquet").withFileSizeInBytes(20)
+                        .withPartitionPath("k2=2020-06-14").withRecordCount(3).build())
+                .commit();
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+        // Make the residual branch's pre-scan refresh fail.
+        new MockUp<BaseTable>() {
+            @Mock
+            public void refresh() {
+                throw new RuntimeException("mock metastore unavailable");
+            }
+        };
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.executeMetadataDelete(icebergTable, k2EqDate(2020, 6, 14), connectContext));
+        Assertions.assertTrue(e.getMessage().contains("Failed to refresh Iceberg table"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    @Test
     public void testMetadataDeleteNodeExplainString() {
         // Test that IcebergMetadataDeleteNode generates correct EXPLAIN output
         mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
