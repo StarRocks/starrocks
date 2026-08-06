@@ -633,11 +633,12 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_shared_data_path) {
     auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
 
     std::shared_ptr<VectorIndexReader> reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(vector_index_path, index_meta, &reader, _fs.get()));
+    FileInfo vi_file{.path = vector_index_path, .fs = _fs};
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &reader));
     ASSERT_NE(reader, nullptr);
 
     // init_searcher with FileSystem should succeed
-    ASSERT_OK(reader->init_searcher(*index_meta, vector_index_path, _fs.get()));
+    ASSERT_OK(reader->init_searcher(*index_meta, vi_file));
 }
 
 // Test that reading an empty mark .vi file via FS-aware path returns EmptyIndexReader.
@@ -663,11 +664,13 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_
     auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
 
     std::shared_ptr<VectorIndexReader> reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(vector_index_path, index_meta, &reader, _fs.get()));
+    FileInfo vi_file{.path = vector_index_path, .fs = _fs};
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &reader));
     ASSERT_NE(reader, nullptr);
+    ASSERT_EQ(IndexDescriptor::mark_word_len, vi_file.size);
 
     // EmptyIndexReader.init_searcher returns NotSupported
-    auto status = reader->init_searcher(*index_meta, vector_index_path, _fs.get());
+    auto status = reader->init_searcher(*index_meta, vi_file);
     ASSERT_TRUE(status.is_not_supported());
 }
 
@@ -677,7 +680,8 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_not_found) {
     auto index_meta = std::make_shared<tenann::IndexMeta>();
 
     std::shared_ptr<VectorIndexReader> reader;
-    auto status = VectorIndexReaderFactory::create_from_file(non_existent_path, index_meta, &reader, _fs.get());
+    FileInfo vi_file{.path = non_existent_path, .fs = _fs};
+    auto status = VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &reader);
     ASSERT_TRUE(status.is_not_found());
 }
 
