@@ -16,7 +16,11 @@
 
 #include <array>
 #include <atomic>
+<<<<<<< HEAD
 #include <unordered_map>
+=======
+#include <sstream>
+>>>>>>> b7d85a949aa... [Enhancement] Add vector index query profile statistics (#77353)
 #include <vector>
 
 #include "base/string/slice.h"
@@ -1668,6 +1672,55 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
             EXPECT_EQ(c->value(), 0) << name;
         }
     }
+    for (const auto* name : {"VectorIndex",
+                             "VectorIndexLoad",
+                             "VectorIndexSearch",
+                             "VectorIndexCacheLookup",
+                             "VectorIndexFileOpenAndGetSize",
+                             "VectorIndexFileRead",
+                             "VectorIndexDeserialize",
+                             "VectorIndexSearcherCreate",
+                             "VectorIndexCacheHit",
+                             "VectorIndexCacheMiss",
+                             "VectorANNSearch",
+                             "VectorResultProcess",
+                             "VectorIndexFilterRows",
+                             "SeedVectorIndex",
+                             "SeedVectorIndexLoad",
+                             "SeedVectorIndexSearch",
+                             "SeedVectorIndexCacheLookup",
+                             "SeedVectorIndexFileOpenAndGetSize",
+                             "SeedVectorIndexFileRead",
+                             "SeedVectorIndexDeserialize",
+                             "SeedVectorIndexSearcherCreate",
+                             "SeedVectorIndexCacheHit",
+                             "SeedVectorIndexCacheMiss",
+                             "SeedVectorANNSearch",
+                             "SeedVectorResultProcess",
+                             "SeedVectorIndexFilterRows"}) {
+        auto* c = profile->get_counter(name);
+        EXPECT_NE(c, nullptr) << name;
+        if (c != nullptr) {
+            EXPECT_EQ(c->value(), 0) << name;
+        }
+    }
+
+    std::stringstream rendered;
+    profile->pretty_print(&rendered);
+    const auto text = rendered.str();
+    EXPECT_NE(text.find("     - VectorIndex: 0.000ns\n"
+                        "       - VectorIndexLoad: 0.000ns\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("         - VectorIndexCacheLookup: 0.000ns\n"
+                        "           - VectorIndexCacheHit: 0\n"
+                        "           - VectorIndexCacheMiss: 0\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("       - VectorIndexSearch: 0.000ns\n"
+                        "         - VectorANNSearch: 0.000ns\n"),
+              std::string::npos)
+            << text;
 }
 
 TEST_F(LakeDataSourceTest, reopen_reader_requires_initialized_reader) {

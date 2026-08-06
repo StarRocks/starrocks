@@ -1375,6 +1375,33 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_name, segment_init_name);
+    _vector_index_load_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_load_name, vector_index_name);
+    _get_row_ranges_by_vector_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorANNSearch", vector_index_search_name);
+    _process_vector_distance_and_id_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorResultProcess", vector_index_search_name);
+    _vector_index_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
+
     const std::string gin_filter_name = "GinFilter";
     _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
     _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
@@ -1434,6 +1461,36 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _lake_seed_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedIOTime", "SeedPrepareTime");
     _lake_seed_io_count_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedIOCount", TUnit::UNIT, "SeedPrepareTime");
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
+
+    const std::string seed_vector_index_name = "SeedVectorIndex";
+    const std::string seed_vector_index_load_name = "SeedVectorIndexLoad";
+    const std::string seed_vector_index_cache_lookup_name = "SeedVectorIndexCacheLookup";
+    const std::string seed_vector_index_search_name = "SeedVectorIndexSearch";
+    _lake_seed_vector_index_timer = ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_name, "SeedSegmentInitTime");
+    _lake_seed_vector_index_load_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_load_name, seed_vector_index_name);
+    _lake_seed_get_row_ranges_by_vector_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_search_name, seed_vector_index_name);
+    _lake_seed_vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, seed_vector_index_cache_lookup_name, seed_vector_index_load_name);
+    _lake_seed_vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileOpenAndGetSize", seed_vector_index_load_name);
+    _lake_seed_vector_index_read_file_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexFileRead", seed_vector_index_load_name);
+    _lake_seed_vector_index_init_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexDeserialize", seed_vector_index_load_name);
+    _lake_seed_vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorIndexSearcherCreate", seed_vector_index_load_name);
+    _lake_seed_vector_index_cache_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexCacheHit",
+                                                                  TUnit::UNIT, seed_vector_index_cache_lookup_name);
+    _lake_seed_vector_index_cache_miss_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexCacheMiss",
+                                                                   TUnit::UNIT, seed_vector_index_cache_lookup_name);
+    _lake_seed_vector_search_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorANNSearch", seed_vector_index_search_name);
+    _lake_seed_process_vector_distance_and_id_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "SeedVectorResultProcess", seed_vector_index_search_name);
+    _lake_seed_vector_index_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedVectorIndexFilterRows",
+                                                                 TUnit::UNIT, seed_vector_index_search_name);
     _lake_seed_zonemap_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedZoneMapFilterTime", "SeedPrepareTime");
     _lake_seed_zonemap_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SeedZoneMapFilteredRows", TUnit::UNIT, "SeedPrepareTime");
@@ -1543,6 +1600,20 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_vector_index_timer,
+                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_load_timer, _reader->stats().vector_index_load_ns);
+    COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
+    COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
+    COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
+    COUNTER_UPDATE(_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
     COUNTER_UPDATE(_lake_prepared_rowsets_counter, _reader->stats().lake_prepared_rowsets);
     COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
@@ -1557,6 +1628,31 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_seed_io_timer, _reader->stats().lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, _reader->stats().lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_segment_init_timer, _reader->stats().lake_prepared_seed_segment_init_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_load_ns +
+                           _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_load_timer, _reader->stats().lake_prepared_seed_vector_index_load_ns);
+    COUNTER_UPDATE(_lake_seed_get_row_ranges_by_vector_index_timer,
+                   _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_lookup_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_file_open_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_file_open_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_read_file_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_read_file_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_init_index_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_init_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_searcher_init_timer,
+                   _reader->stats().lake_prepared_seed_vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_hit_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_hit_count);
+    COUNTER_UPDATE(_lake_seed_vector_index_cache_miss_counter,
+                   _reader->stats().lake_prepared_seed_vector_index_cache_miss_count);
+    COUNTER_UPDATE(_lake_seed_vector_search_timer, _reader->stats().lake_prepared_seed_vector_search_ns);
+    COUNTER_UPDATE(_lake_seed_process_vector_distance_and_id_timer,
+                   _reader->stats().lake_prepared_seed_process_vector_distance_and_id_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_filtered_counter,
+                   _reader->stats().lake_prepared_seed_rows_vector_index_filtered);
     COUNTER_UPDATE(_lake_seed_zonemap_timer, _reader->stats().lake_prepared_seed_zonemap_ns);
     COUNTER_UPDATE(_lake_seed_zonemap_filtered_counter, _reader->stats().lake_prepared_seed_zonemap_filtered_rows);
     COUNTER_UPDATE(_lake_seed_bf_timer, _reader->stats().lake_prepared_seed_bf_ns);

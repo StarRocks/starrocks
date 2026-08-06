@@ -37,6 +37,7 @@
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
+#include "storage_primitive/storage_stats.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
 #include "tenann/index/index_cache.h"
@@ -509,8 +510,14 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     MemoryFileSystem fs;
     TenANNReader r;
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs));
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs), &stats);
     EXPECT_TRUE(st.is_not_found()) << st.to_string();
+    EXPECT_EQ(0, stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+    EXPECT_GT(stats.vector_index_file_open_ns, 0);
+    EXPECT_EQ(0, stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, stats.vector_index_init_index_ns);
 
     tenann::SetGlobalIndexCache(saved);
 }
