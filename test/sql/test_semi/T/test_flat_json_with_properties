@@ -116,6 +116,8 @@ select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "
 ALTER TABLE js1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
 ALTER TABLE js1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
 
+function: wait_alter_table_finish()
+
 select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from js1 order by v1 limit 2;
 select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from js1 order by v1 limit 2;
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from js1 order by v1 limit 2;
@@ -141,6 +143,8 @@ select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j2, "
 
 ALTER TABLE js1 DROP COLUMN j1;
 ALTER TABLE js1 DROP COLUMN j4;
+
+function: wait_alter_table_finish()
 
 select JSON_EXISTS(j2, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from js1 order by v1 limit 2;
 select JSON_LENGTH(j2, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 order by v1 limit 2;

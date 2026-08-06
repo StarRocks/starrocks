@@ -27,14 +27,15 @@ INSERT INTO t_json_schema_change VALUES
 ALTER TABLE t_json_schema_change ADD COLUMN col4 int;
 ALTER TABLE t_json_schema_change ADD COLUMN col5 int;
 ALTER TABLE t_json_schema_change ADD COLUMN col6 int;
+function: wait_alter_table_finish()
 
 ALTER TABLE t_json_schema_change DROP COLUMN col1;
 ALTER TABLE t_json_schema_change DROP COLUMN col2;
 ALTER TABLE t_json_schema_change DROP COLUMN col3;
+function: wait_alter_table_finish()
 
 ALTER TABLE t_json_schema_change ADD COLUMN col7 int;
 ALTER TABLE t_json_schema_change ADD COLUMN col8 int;
-
 function: wait_alter_table_finish()
 
 INSERT INTO t_json_schema_change (id, data, col4, col5, col6, col7, col8) VALUES

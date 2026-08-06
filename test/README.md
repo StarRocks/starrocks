@@ -341,6 +341,16 @@ Usage: Add the `@native`(shared_nothing deployment) or `@cloud`(shared_data depl
 ...
 ```
 
+### 6.1 SKIP CASES ON ASAN BUILDS
+ASAN CI already passes attr `!no_asan`. Tag cases that are too slow/unstable under ASAN
+(e.g. large stream-load / long background jobs that hit case timeout) with `@no_asan`
+so they still run on Release but are skipped on ASAN:
+
+```sql
+-- name: ${case name} @slow @sequential @no_asan
+...
+```
+
 ### 7. EXECUTE QUERIES ON OTHER SQL ENGINES
 All sqls are executed by the StarRocks cluster by default. Besides, you can also execute queries on other SQL engines. As of now, we support hive, spark, and trino. 
 

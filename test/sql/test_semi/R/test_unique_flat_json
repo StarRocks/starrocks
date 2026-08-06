@@ -211,6 +211,10 @@ ALTER TABLE ujs1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
 ALTER TABLE ujs1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from ujs1 order by v1 limit 2;
 -- result:
 value42	None	None
@@ -302,6 +306,10 @@ ALTER TABLE ujs1 DROP COLUMN j1;
 -- !result
 ALTER TABLE ujs1 DROP COLUMN j4;
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 select JSON_EXISTS(j2, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from ujs1 order by v1 limit 2;
 -- result:

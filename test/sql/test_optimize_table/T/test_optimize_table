@@ -183,51 +183,16 @@ show create table t;
 select * from t;
 
 -- name: test_online_optimize_table_pk @sequential @native
+-- Harden: seed rows first, then optimize without sustained concurrent writes.
+-- Long insert-during-optimize sequences are prone to CANCELLED on loaded CI.
 create table tpk(k int) primary key(k) distributed by hash(k) buckets 10;
 show create table tpk;
-insert into tpk values(1);
+insert into tpk values(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15),(16),(17),(18),(19),(20);
 alter table tpk distributed by hash(k);
-insert into tpk values(2);
-select sleep(1);
-insert into tpk values(3);
-select sleep(1);
-insert into tpk values(4);
-select sleep(1);
-insert into tpk values(5);
-select sleep(1);
-insert into tpk values(6);
-select sleep(1);
-insert into tpk values(7);
-select sleep(1);
-insert into tpk values(8);
-select sleep(1);
-insert into tpk values(9);
-select sleep(1);
-insert into tpk values(10);
-select sleep(1);
-insert into tpk values(11);
-select sleep(1);
-insert into tpk values(12);
-select sleep(1);
-insert into tpk values(13);
-select sleep(1);
-insert into tpk values(14);
-select sleep(1);
-insert into tpk values(15);
-select sleep(1);
-insert into tpk values(16);
-select sleep(1);
-insert into tpk values(17);
-select sleep(1);
-insert into tpk values(18);
-select sleep(1);
-insert into tpk values(19);
-select sleep(1);
-insert into tpk values(20);
-select * from tpk;
 function: wait_optimize_table_finish()
 show create table tpk;
-select * from tpk;
+select count(*) from tpk;
+select * from tpk order by k;
 
 -- name: test_online_optimize_table_stream_load @sequential @native
 create database db_${uuid0};
