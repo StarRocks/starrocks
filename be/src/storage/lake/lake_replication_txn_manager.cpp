@@ -724,6 +724,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         // The corresponding target children also use one physical copied file, so preserve the
         // bit for all associated sidecars as well.
         if (preserve_source_shared && source_shared) {
+            // Split children share one partition data path. Separate replication tasks cannot
+            // safely encrypt a newly copied shared object with independently generated DEKs.
+            // Existing objects are safe because their destination encryption metadata is reused.
+            if (config::enable_transparent_data_encryption && !existed) {
+                return Status::NotSupported(
+                        "Copying new shared range files with transparent data encryption is not supported");
+            }
             return true;
         }
         if (!existed) {
