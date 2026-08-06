@@ -16,11 +16,8 @@
 
 #include <array>
 #include <atomic>
-<<<<<<< HEAD
-#include <unordered_map>
-=======
 #include <sstream>
->>>>>>> b7d85a949aa... [Enhancement] Add vector index query profile statistics (#77353)
+#include <unordered_map>
 #include <vector>
 
 #include "base/string/slice.h"
