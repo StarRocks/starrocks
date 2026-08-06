@@ -17,11 +17,13 @@
 #include <atomic>
 #include <mutex>
 
+#include "base/coding.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/dynamic_cache.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/storage_define.h"
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/staros/starlet_filesystem.h"
@@ -60,8 +62,32 @@ StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id
     const auto bundle_path = join_path(meta_dir, tablet_metadata_filename(0, version));
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto input_file, source_fs->new_random_access_file(opts, bundle_path));
-    ASSIGN_OR_RETURN(auto serialized, input_file->read_all());
-    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, serialized));
+    ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
+
+    constexpr size_t kSizeFieldSize = sizeof(uint64_t);
+    if (file_size < kSizeFieldSize) {
+        return Status::Corruption(
+                fmt::format("Source metadata bundle {} is too small: {} bytes", bundle_path, file_size));
+    }
+
+    std::string size_field(kSizeFieldSize, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(file_size - kSizeFieldSize, size_field.data(), size_field.size()));
+    const uint64_t raw_bundle_metadata_size = decode_fixed64_le(reinterpret_cast<const uint8_t*>(size_field.data()));
+    const bool checksummed = (raw_bundle_metadata_size & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_bundle_metadata_size & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    const size_t footer_suffix_size = kSizeFieldSize + (checksummed ? sizeof(uint32_t) : 0);
+    if (file_size < footer_suffix_size || bundle_metadata_size == 0 ||
+        bundle_metadata_size > static_cast<uint64_t>(file_size - footer_suffix_size)) {
+        return Status::Corruption(
+                fmt::format("Invalid source metadata bundle footer in {}, file_size={}, "
+                            "bundle_metadata_size={}",
+                            bundle_path, file_size, bundle_metadata_size));
+    }
+
+    const uint64_t bundle_metadata_offset = file_size - footer_suffix_size - bundle_metadata_size;
+    std::string footer(bundle_metadata_size + footer_suffix_size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(bundle_metadata_offset, footer.data(), footer.size()));
+    ASSIGN_OR_RETURN(auto bundle, TabletManager::parse_bundle_tablet_metadata(bundle_path, footer));
 
     auto page_it = bundle->tablet_meta_pages().find(tablet_id);
     if (page_it == bundle->tablet_meta_pages().end()) {
@@ -70,12 +96,13 @@ StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id
     }
     const uint64_t offset = page_it->second.offset();
     const uint32_t size = page_it->second.size();
-    if (offset > serialized.size() || size > serialized.size() - static_cast<size_t>(offset)) {
+    if (offset > bundle_metadata_offset || size > bundle_metadata_offset - offset) {
         return Status::Corruption(fmt::format("Invalid source tablet metadata page in {}, offset={}, size={}",
                                               bundle_path, offset, size));
     }
 
-    const std::string_view page(serialized.data() + offset, size);
+    std::string page(size, '\0');
+    RETURN_IF_ERROR(input_file->read_at_fully(offset, page.data(), page.size()));
     auto checksum_it = bundle->tablet_meta_page_checksum().find(tablet_id);
     if (checksum_it != bundle->tablet_meta_page_checksum().end() &&
         olap_adler32(ADLER32_INIT, page.data(), page.size()) != checksum_it->second) {

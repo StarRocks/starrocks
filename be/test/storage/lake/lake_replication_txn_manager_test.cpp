@@ -715,6 +715,49 @@ protected:
     TTransactionId _txn_id = 12345;
 };
 
+struct SourceBundleReadCounters {
+    int read_all_calls = 0;
+    int64_t read_at_fully_bytes = 0;
+};
+
+class CountingSeekableInputStream final : public io::SeekableInputStreamWrapper {
+public:
+    CountingSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream, SourceBundleReadCounters* counters)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _counters(counters) {}
+
+    StatusOr<std::string> read_all() override {
+        ++_counters->read_all_calls;
+        return _stream->read_all();
+    }
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
+        _counters->read_at_fully_bytes += count;
+        return Status::OK();
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    SourceBundleReadCounters* _counters;
+};
+
+class CountingMemoryFileSystem final : public MemoryFileSystem {
+public:
+    explicit CountingMemoryFileSystem(SourceBundleReadCounters* counters) : _counters(counters) {}
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& url) override {
+        ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, url));
+        auto stream = std::make_shared<CountingSeekableInputStream>(file->stream(), _counters);
+        return std::make_unique<RandomAccessFile>(std::move(stream), url);
+    }
+
+private:
+    SourceBundleReadCounters* _counters;
+};
+
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_fallback_to_legacy2_format_success) {
     // Create metadata ONLY at legacy2 format path (without db_id and partition_id)
     // This forces all three attempts to be tried
@@ -773,6 +816,71 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_source_tablet_from_bundle
     ASSERT_TRUE((*result)->has_schema());
     EXPECT_EQ(1, (*result)->schema().column_size());
     EXPECT_EQ("c0", (*result)->schema().column(0).name());
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_only_requested_source_bundle_page) {
+    BoolConfigGuard checksum_guard(&config::lake_enable_protobuf_file_checksum);
+    config::lake_enable_protobuf_file_checksum = false;
+
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto other_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    other_metadata->set_id(_src_tablet_id + 1);
+    auto* rowset = other_metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(4096);
+    for (int i = 0; i < 32; ++i) {
+        rowset->add_segment_metas()->set_filename(fmt::format("segment-{}", i));
+    }
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    tablet_metas.emplace(other_metadata->id(), *other_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(_src_tablet_id, _version);
+    ASSIGN_OR_ABORT(auto local_bundle_file, _shared_fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto bundle_content, local_bundle_file->read_all());
+
+    SourceBundleReadCounters counters;
+    auto source_fs = std::make_shared<CountingMemoryFileSystem>(&counters);
+    const std::string meta_dir = "/remote/source/meta";
+    const auto source_bundle_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(0, _version));
+    ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+    ASSERT_OK(source_fs->create_file(source_bundle_path));
+    ASSERT_OK(source_fs->append_file(source_bundle_path, Slice(bundle_content)));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_EQ(0, counters.read_all_calls);
+    EXPECT_GT(counters.read_at_fully_bytes, 0);
+    EXPECT_LT(counters.read_at_fully_bytes, bundle_content.size());
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_malformed_source_bundle_envelope) {
+    std::string oversized_footer(sizeof(uint64_t), '\0');
+    oversized_footer[0] = 1;
+    const std::vector<std::pair<std::string, std::string>> cases = {
+            {"tiny", "is too small"},
+            {oversized_footer, "Invalid source metadata bundle footer"},
+    };
+
+    const std::string meta_dir = "/remote/source/meta";
+    const auto bundle_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(0, _version));
+    for (const auto& [content, expected_message] : cases) {
+        SCOPED_TRACE(expected_message);
+        auto source_fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+        ASSERT_OK(source_fs->create_file(bundle_path));
+        ASSERT_OK(source_fs->append_file(bundle_path, Slice(content)));
+
+        auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+        ASSERT_TRUE(result.status().is_corruption()) << result.status();
+        EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr(expected_message));
+    }
 }
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reports_missing_source_tablet_in_bundle) {
