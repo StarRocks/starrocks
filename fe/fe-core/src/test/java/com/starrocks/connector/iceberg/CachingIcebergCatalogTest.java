@@ -624,6 +624,17 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testViewCacheRefreshesOnInterval(@Mocked IcebergCatalog icebergCatalog) {
+        // The view cache must refresh on the meta cache interval so an out-of-band view change is reloaded
+        // in the background instead of being served stale until the TTL expires.
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        LoadingCache<?, ?> viewCache = Deencapsulation.getField(cachingIcebergCatalog, "views");
+        long refreshSec = viewCache.policy().refreshAfterWrite().get().getExpiresAfter(TimeUnit.SECONDS);
+        Assertions.assertEquals(DEFAULT_CATALOG_PROPERTIES.getIcebergTableCacheRefreshIntervalSec(), refreshSec);
+    }
+
+    @Test
     public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
         ConnectContext ctx = new ConnectContext();
         ctx.setAuthToken("token");

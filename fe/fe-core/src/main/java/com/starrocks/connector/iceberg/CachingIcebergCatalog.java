@@ -111,15 +111,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+        // Refresh on the same interval as the table cache so a view replaced out-of-band (without a peer
+        // invalidation) is reloaded in the background rather than served stale until the TTL expires.
         this.views = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
-                NEVER_CACHE, DEFAULT_CACHE_NUM)
+                icebergProperties.getIcebergTableCacheRefreshIntervalSec(), DEFAULT_CACHE_NUM)
+                .executor(executorService)
                 .build(new com.github.benmanes.caffeine.cache.CacheLoader<ViewCacheKey, View>() {
                     @Override
                     public View load(ViewCacheKey key) {
                         ConnectContext context = VIEW_LOAD_CONTEXT.get();
                         return delegate.getView(context != null ? context : new ConnectContext(),
                                 key.dbName, key.viewName);
+                    }
+
+                    @Override
+                    public View reload(ViewCacheKey key, View oldValue) {
+                        try {
+                            return delegate.getView(new ConnectContext(), key.dbName, key.viewName);
+                        } catch (Exception e) {
+                            LOG.warn("refresh view {}.{} failed", key.dbName, key.viewName, e);
+                            return oldValue;
+                        }
                     }
                 });
         long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
