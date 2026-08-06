@@ -97,9 +97,10 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
                                                                      int64_t version_, bool force_base_compaction_,
                                                                      bool skip_write_txnlog_,
                                                                      std::shared_ptr<CompactionTaskCallback> cb_,
-                                                                     int32_t subtask_id_) {
+                                                                     int32_t subtask_id_,
+                                                                     CompactionModePB mode_ = COMPACTION_MODE_DEFAULT) {
         auto ctx = std::make_unique<CompactionTaskContext>(txn_id_, tablet_id_, version_, force_base_compaction_,
-                                                           skip_write_txnlog_, std::move(cb_));
+                                                           skip_write_txnlog_, std::move(cb_), 0, 0, mode_);
         ctx->subtask_id = subtask_id_;
         return ctx;
     }

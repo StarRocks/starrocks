@@ -884,7 +884,9 @@ public class CompactionSchedulerTest {
         AggregateCompactRequest deshardRequest = (AggregateCompactRequest) requestField.get(deshardTask);
         for (CompactRequest req : deshardRequest.requests) {
             Assertions.assertEquals(CompactionModePB.COMPACTION_MODE_DESHARD, req.mode);
-            Assertions.assertNull(req.parallelConfig);
+            Assertions.assertNotNull(req.parallelConfig);
+            Assertions.assertTrue(req.parallelConfig.enableParallel);
+            Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
             Assertions.assertFalse(req.allowPartialSuccess);
         }
     }

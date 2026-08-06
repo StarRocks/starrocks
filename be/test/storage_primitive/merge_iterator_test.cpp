@@ -368,6 +368,67 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
     }
 }
 
+TEST_F(MergeIteratorTest, mask_merge_with_selection) {
+    auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 3, 5}));
+    auto sub2 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{2, 4, 6}));
+
+    std::vector<RowSourceMask> source_masks;
+    for (uint16_t source : std::vector<uint16_t>{0, 1, 0, 1, 0, 1}) {
+        source_masks.emplace_back(source, false);
+    }
+    std::vector<RowSourceMask> selections;
+    for (uint16_t selected : std::vector<uint16_t>{0, 1, 1, 0, 0, 1}) {
+        selections.emplace_back(selected, false);
+    }
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    std::vector<int32_t> actual;
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    while (iter->get_next(chunk.get()).ok()) {
+        const auto& column = chunk->get_column_by_index(0);
+        for (size_t i = 0; i < column->size(); ++i) {
+            actual.push_back(column->get(i).get_int32());
+        }
+        chunk->reset();
+    }
+    EXPECT_EQ((std::vector<int32_t>{2, 3, 6}), actual);
+}
+
+TEST_F(MergeIteratorTest, mask_merge_single_child_with_selection) {
+    auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(std::vector<int32_t>{1, 2, 3, 4}));
+    std::vector<RowSourceMask> source_masks(4, RowSourceMask{0, false});
+    std::vector<RowSourceMask> selections{RowSourceMask{0, false}, RowSourceMask{1, false}, RowSourceMask{0, false},
+                                          RowSourceMask{1, false}};
+
+    RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(mask_buffer.write(source_masks).ok());
+    ASSERT_TRUE(mask_buffer.flush().ok());
+    ASSERT_TRUE(mask_buffer.flip_to_read().ok());
+    RowSourceMaskBuffer selection_buffer(0, config::storage_root_path);
+    ASSERT_TRUE(selection_buffer.write(selections).ok());
+    ASSERT_TRUE(selection_buffer.flush().ok());
+    ASSERT_TRUE(selection_buffer.flip_to_read().ok());
+
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub}, &mask_buffer, &selection_buffer);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(2, chunk->get_column_by_index(0)->get(0).get_int32());
+    EXPECT_EQ(4, chunk->get_column_by_index(0)->get(1).get_int32());
+}
+
 TEST_F(MergeIteratorTest, mask_merge_exhausted_iterator) {
     std::vector<int32_t> v1{1, 2}; // Only 2 elements
     std::vector<int32_t> v2{10, 11};

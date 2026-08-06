@@ -75,7 +75,7 @@ public:
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                 std::shared_ptr<const TabletSchema> tablet_schema);
+                 std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer = nullptr);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -169,6 +169,7 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 
     std::shared_ptr<VersionedTablet> _tablet;
 

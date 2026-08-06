@@ -156,10 +156,10 @@ StatusOr<std::vector<RowsetPtr>> DeshardCompactionPolicy::pick_rowsets() {
 
 StatusOr<CompactionAlgorithm> DeshardCompactionPolicy::choose_compaction_algorithm(
         const std::vector<RowsetPtr>& rowsets) {
-    // Row-level PK-range routing must use one mask across every output column and its
-    // rssid/rowid vector. Keep the first implementation horizontal; an empty sibling
-    // still uses the index-only no-op task.
-    return rowsets.empty() ? CLOUD_NATIVE_INDEX_COMPACTION : HORIZONTAL_COMPACTION;
+    if (rowsets.empty()) {
+        return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+    return CompactionPolicy::choose_compaction_algorithm(rowsets);
 }
 
 // Return true if segment number meet the requirement of min input

@@ -288,7 +288,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     // Check if parallel compaction is enabled
     bool has_parallel_config = request->has_parallel_config();
     bool enable_parallel = has_parallel_config && request->parallel_config().enable_parallel() &&
-                           request->mode() == COMPACTION_MODE_DEFAULT;
+                           (request->mode() == COMPACTION_MODE_DEFAULT || request->mode() == COMPACTION_MODE_DESHARD);
 
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
@@ -361,7 +361,7 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
     for (auto tablet_id : request->tablet_ids()) {
         auto result = _parallel_mgr->create_parallel_tasks(
                 tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
-                request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+                request->force_base_compaction(), _threads.get(), acquire_token, release_token, request->mode());
 
         if (result.ok() && result.value() > 0) {
             // Parallel compaction tasks created successfully

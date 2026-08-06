@@ -540,7 +540,7 @@ public class CompactionScheduler extends Daemon {
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
-            if (maxParallel > 0 && priority != PartitionStatistics.CompactionPriority.DESHARD) {
+            if (maxParallel > 0) {
                 com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
                 parallelConfig.enableParallel = true;
                 parallelConfig.maxParallelPerTablet = maxParallel;
