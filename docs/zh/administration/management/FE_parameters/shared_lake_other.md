@@ -732,7 +732,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: `remove_orphan_files` procedure 的 `older_than` 参数必须指定的最小时间距离。更接近当前时间的 `older_than` 会被拒绝，因为删除这么新的文件可能删掉并发写入尚未提交的数据，导致表不可读。此配置仅约束显式传入的 `older_than`；不传该参数时仍使用该 procedure 自身的 7 天默认值。仅当 procedure 运行期间该表没有任何写入时，才降低此值。
+- 描述: `remove_orphan_files` procedure 的 `older_than` 必须早于 `当前时间 - 该值`，更晚的 `older_than` 会被拒绝 —— 因为删除这么新的文件可能删掉并发写入尚未提交的数据，导致表不可读。此配置仅约束显式传入的 `older_than`；不传该参数时仍使用该 procedure 自身的 7 天默认值。仅当 procedure 运行期间该表没有任何写入时，才降低此值。
 - 引入版本: v4.2.0
 
 ### lake_balance_tablets_threshold

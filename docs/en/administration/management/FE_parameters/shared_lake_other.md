@@ -733,7 +733,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The minimum age that the `older_than` argument of the `remove_orphan_files` procedure must specify. A more recent `older_than` is rejected, because deleting files that young can remove data that a concurrent write has not committed yet and leave the table unreadable. Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7-day default. Lower this value only when nothing writes to the table while the procedure runs.
+- Description: The `older_than` argument of the `remove_orphan_files` procedure must be earlier than `current time - this value`. A later `older_than` is rejected, because deleting files that recent can remove data that a concurrent write has not committed yet and leave the table unreadable. Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7-day default. Lower this value only when nothing writes to the table while the procedure runs.
 - Introduced in: v4.2.0
 
 ##### lake_balance_tablets_threshold
