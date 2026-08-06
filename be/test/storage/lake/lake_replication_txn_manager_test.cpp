@@ -1258,6 +1258,66 @@ TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_a
     expect_file_set_shared(**result, 0, 0, true);
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_are_rejected) {
+    EncryptionKeyPB pb;
+    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    pb.set_plain_key("0000000000000000");
+    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+    auto val_st = root_encryption_key->generate_key();
+    ASSERT_TRUE(val_st.ok());
+    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+    encryption_key->set_id(2);
+    KeyCache::instance().add_key(root_encryption_key);
+    KeyCache::instance().add_key(encryption_key);
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    auto source = make_metadata(53021, 2, true);
+    auto target = make_metadata(53022, 1, true);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+    add_file_set(source.get(), 0, true);
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_not_supported()) << result.status();
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, range_existing_shared_files_with_tde_reuse_encryption_meta) {
+    EncryptionKeyPB pb;
+    pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    pb.set_plain_key("0000000000000000");
+    std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+    auto val_st = root_encryption_key->generate_key();
+    ASSERT_TRUE(val_st.ok());
+    std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+    encryption_key->set_id(2);
+    KeyCache::instance().add_key(root_encryption_key);
+    KeyCache::instance().add_key(encryption_key);
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    auto source = make_metadata(53031, 2, true);
+    auto target = make_metadata(53032, 1, true);
+    add_file_set(target.get(), 0, true);
+    set_file_set_encryption_meta(target.get(), 0, 0, "target-reused");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    add_file_set(source.get(), 0, true);
+    set_file_set_encryption_meta(source.get(), 0, 0, "source-reused");
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_OK(result.status());
+    const std::array<std::string, 6> expected_reused = {"target-reused-segment", "target-reused-del",
+                                                        "target-reused-sst",     "target-reused-delvec",
+                                                        "target-reused-dcg",     "target-reused-idg"};
+    EXPECT_EQ(expected_reused, file_set_encryption_meta(**result, 0, 0));
+    expect_file_set_shared(**result, 0, 0, true);
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_metadata) {
     EncryptionKeyPB pb;
     pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
