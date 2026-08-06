@@ -500,7 +500,7 @@ if [[ -d $TP_SOURCE_DIR/$ROCKSDB_SOURCE ]] ; then
     echo "Finished patching $ROCKSDB_SOURCE"
 fi
 
-# brpc patch to disable shared library
+# brpc patches
 if [[ -d $TP_SOURCE_DIR/$BRPC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.5" ]; then
@@ -519,6 +519,8 @@ if [[ -d $TP_SOURCE_DIR/$BRPC_SOURCE ]] ; then
     fi
     if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
         patch < $TP_PATCH_DIR/brpc-1.9.0.patch
+        # apache/brpc#3384: reclaim unscheduled timer tasks.
+        patch -p1 < $TP_PATCH_DIR/brpc-1.9.0-timer-reclaim.patch
         touch $PATCHED_MARK
     fi
     cd -
