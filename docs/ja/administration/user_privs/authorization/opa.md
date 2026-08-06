@@ -29,13 +29,15 @@ OPA 認可は fail-closed です。OPA サービスが `false` を返す、`resu
 access_control = opa
 opa_policy_url = http://opa.example.com:8181/v1/data/starrocks/allow
 
-# Optional policy endpoints.
+# オプションのポリシーエンドポイント。
 opa_row_filters_url = http://opa.example.com:8181/v1/data/starrocks/row_filters
 opa_column_masking_url = http://opa.example.com:8181/v1/data/starrocks/column_mask
 opa_batch_column_masking_url = http://opa.example.com:8181/v1/data/starrocks/batch_column_masks
 ```
 
 `access_control` または任意の `opa_*` 設定項目を変更した後は、すべての FE ノードを再起動してください。
+
+信頼されたプライベートネットワーク外の OPA エンドポイントには HTTPS を使用してください。StarRocks はユーザー、グループ、クエリ、オブジェクトの詳細をこれらのエンドポイントに送信するため、エンドポイントへのアクセスを制限し、ネットワークセキュリティ対策で接続を保護してください。
 
 External Catalog では、カタログプロパティ `"catalog.access.control" = "opa"` を設定して OPA を有効にすることもできます。このプロパティが設定されていない場合、カタログはグローバルな `access_control` の値を使用します。
 

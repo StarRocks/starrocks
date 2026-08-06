@@ -37,6 +37,8 @@ opa_batch_column_masking_url = http://opa.example.com:8181/v1/data/starrocks/bat
 
 修改 `access_control` 或任何 `opa_*` 配置项后，需要重启所有 FE 节点。
 
+对于可信私有网络之外的 OPA 端点，请使用 HTTPS。StarRocks 会向这些端点发送用户、用户组、查询和对象详情，因此需要限制端点访问，并通过网络安全措施保护连接。
+
 您也可以通过 Catalog 属性 `"catalog.access.control" = "opa"` 为 External Catalog 启用 OPA。如果未设置该属性，Catalog 会使用全局 `access_control` 的值。
 
 ```sql

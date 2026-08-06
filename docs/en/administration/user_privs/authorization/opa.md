@@ -37,6 +37,8 @@ opa_batch_column_masking_url = http://opa.example.com:8181/v1/data/starrocks/bat
 
 Restart all FE nodes after changing `access_control` or any `opa_*` configuration item.
 
+Use HTTPS for OPA endpoints outside a trusted private network. StarRocks sends user, group, query, and object details to these endpoints, so restrict endpoint access and protect the connection with your network security controls.
+
 You can also enable OPA for an External Catalog by setting the catalog property `"catalog.access.control" = "opa"`. If this property is not set, the catalog uses the global `access_control` value.
 
 ```sql
