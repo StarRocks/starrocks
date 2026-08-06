@@ -64,6 +64,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -194,7 +195,8 @@ public class SplitTabletJob extends TabletReshardJob {
         }
         for (Tablet currentTablet : currentIndex.getTablets()) {
             TabletRange recordedRange = recordedOldTabletRanges.get(currentTablet.getId());
-            if (recordedRange == null || !recordedRange.equals(currentTablet.getRange())) {
+            if (!recordedOldTabletRanges.containsKey(currentTablet.getId())
+                    || !Objects.equals(recordedRange, currentTablet.getRange())) {
                 throw new TabletReshardException("Tablet " + currentTablet.getId()
                         + " changed before tablet reshard admission");
             }
