@@ -42,14 +42,36 @@ struct EqualRange {
     EqualRange(Range left, Range right) : left_range(std::move(left)), right_range(std::move(right)) {}
 };
 
+// Compare one row of two columns while merging sorted runs. The returned value is in the ascending
+// space, so the caller still has to flip it by `desc.sort_order`.
+//
+// The position of a row-level NULL is decided by `desc.null_first`, which is already flipped by the
+// sort order to compensate for that final flip. The values are compared with the direction-free
+// `desc.nan_direction()` instead, because that is the hint every run was sorted with (see
+// `ColumnSorter` in column/sorting/sort_column.cpp, which leaves the direction to the sorter). Handing
+// the flipped `null_first` to the value comparison would order NULL elements nested in ARRAY/STRUCT
+// the opposite way of the per-run sort, and merging runs under a NULL semantics they were not sorted
+// with degenerates the output into a concatenation of the runs.
+static int compare_column_row(const SortDesc& desc, const Column& left, size_t lhs_row, const Column& right,
+                              size_t rhs_row) {
+    const bool lhs_null = left.is_null(lhs_row);
+    const bool rhs_null = right.is_null(rhs_row);
+    if (lhs_null || rhs_null) {
+        if (lhs_null && rhs_null) {
+            return 0;
+        }
+        return lhs_null ? desc.null_first : -desc.null_first;
+    }
+    return left.compare_at(lhs_row, rhs_row, right, desc.nan_direction());
+}
+
 // MergeTwoColumn incremental merge two columns
 class MergeTwoColumn final : public ColumnVisitorAdapter<MergeTwoColumn> {
 public:
     MergeTwoColumn(SortDesc desc, const Column* left_col, const Column* right_col, std::vector<EqualRange>* equal_range,
                    Permutation* perm)
             : ColumnVisitorAdapter(this),
-              _sort_order(desc.sort_order),
-              _null_first(desc.null_first),
+              _desc(desc),
               _left_col(left_col),
               _right_col(right_col),
               _equal_ranges(equal_range),
@@ -122,17 +144,17 @@ public:
     template <class ColumnType>
     Status do_visit_slow(const ColumnType&) {
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
-            int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
-            if (_sort_order == -1) {
+            int x = compare_column_row(_desc, *_left_col, lhs_index, *_right_col, rhs_index);
+            if (_desc.sort_order == -1) {
                 x *= -1;
             }
             return x;
         };
         auto equal_left = [&](size_t lhs_index, size_t rhs_index) {
-            return _left_col->compare_at(lhs_index, rhs_index, *_left_col, _null_first) == 0;
+            return compare_column_row(_desc, *_left_col, lhs_index, *_left_col, rhs_index) == 0;
         };
         auto equal_right = [&](size_t lhs_index, size_t rhs_index) {
-            return _right_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first) == 0;
+            return compare_column_row(_desc, *_right_col, lhs_index, *_right_col, rhs_index) == 0;
         };
         return do_merge(cmp, equal_left, equal_right);
     }
@@ -141,7 +163,7 @@ public:
     Status merge_ordinary_column(const Container& left_data, const Container& right_data) {
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = SorterComparator<ValueType>::compare(left_data[lhs_index], right_data[rhs_index]);
-            if (_sort_order == -1) {
+            if (_desc.sort_order == -1) {
                 x *= -1;
             }
             return x;
@@ -192,7 +214,7 @@ public:
             DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
             const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
             const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
-            MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            MergeTwoColumn merge2(_desc, lhs_data, rhs_data, _equal_ranges, _perm);
             merge2.set_use_german_string(is_use_german_string());
             return lhs_data->accept(&merge2);
         }
@@ -208,8 +230,7 @@ private:
     constexpr static uint32_t kLeftIndex = 0;
     constexpr static uint32_t kRightIndex = 1;
 
-    const int _sort_order;
-    const int _null_first;
+    const SortDesc _desc;
     const Column* _left_col;
     const Column* _right_col;
     std::vector<EqualRange>* _equal_ranges;
@@ -420,9 +441,10 @@ int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t l
     DCHECK_LT(lhs_row, range.second);
     DCHECK_LT(rhs_row, rhs.range.second);
     for (int i = 0; i < desc.num_columns(); i++) {
-        int x = get_column(i)->compare_at(lhs_row, rhs_row, *rhs.get_column(i), desc.get_column_desc(i).null_first);
+        const SortDesc col_desc = desc.get_column_desc(i);
+        int x = compare_column_row(col_desc, *get_column(i), lhs_row, *rhs.get_column(i), rhs_row);
         if (x != 0) {
-            return x * desc.get_column_desc(i).sort_order;
+            return x * col_desc.sort_order;
         }
     }
     return 0;
