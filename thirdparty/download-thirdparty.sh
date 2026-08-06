@@ -551,17 +551,6 @@ if [[ -d $TP_SOURCE_DIR/$RYU_SOURCE ]] ; then
     echo "Finished patching $RYU_SOURCE"
 fi
 
-# patch boost-1.75.0 diff
-if [[ -d $TP_SOURCE_DIR/$BOOST_SOURCE ]] ; then
-    cd $TP_SOURCE_DIR/$BOOST_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ "$BOOST_SOURCE" = "boost_1_80_0" ]; then
-        patch -p1 < $TP_PATCH_DIR/boost-1.75.0.patch
-        touch $PATCHED_MARK
-    fi
-    cd -
-    echo "Finished patching $BOOST_SOURCE"
-fi
-
 # patch protobuf-3.5.1
 if [[ -d $TP_SOURCE_DIR/$PROTOBUF_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
