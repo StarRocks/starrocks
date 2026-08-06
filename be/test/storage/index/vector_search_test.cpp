@@ -447,11 +447,14 @@ TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss
     auto* saved_cache = tenann::GetGlobalIndexCache();
     tenann::SetGlobalIndexCache(&cache);
     DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved_cache); });
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = false;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
 
     OlapReaderStatistics cold_stats;
     FileInfo cold_vi_file{.path = index_path, .fs = _fs};
     std::shared_ptr<VectorIndexReader> cold_reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&cold_vi_file, index_meta, &cold_reader, &cold_stats));
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&cold_vi_file, index_meta, &cold_reader, &cold_stats, &cache));
     ASSERT_OK(cold_reader->init_searcher(*index_meta, cold_vi_file, &cold_stats));
     EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
     EXPECT_EQ(1, cold_stats.vector_index_cache_miss_count);
@@ -464,7 +467,7 @@ TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss
     OlapReaderStatistics warm_stats;
     FileInfo warm_vi_file{.path = index_path, .fs = _fs};
     std::shared_ptr<VectorIndexReader> warm_reader;
-    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&warm_vi_file, index_meta, &warm_reader, &warm_stats));
+    ASSERT_OK(VectorIndexReaderFactory::create_from_file(&warm_vi_file, index_meta, &warm_reader, &warm_stats, &cache));
     ASSERT_OK(warm_reader->init_searcher(*index_meta, warm_vi_file, &warm_stats));
     EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
     EXPECT_EQ(0, warm_stats.vector_index_cache_miss_count);

@@ -190,14 +190,14 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
         return false;
     }
 
-    if (entry->value().state() == VectorIndexCacheEntryState::kLoading) {
-        _release_entry(entry);
-        return false;
-    }
-
     tenann::IndexRef ref;
     {
         auto lock = entry->value().guard();
+        // Lookup preserves the synchronous cache contract. Async queries use
+        // ProbeForQuery(), which returns immediately for LOADING.
+        if (entry->value().state(std::memory_order_relaxed) == VectorIndexCacheEntryState::kLoading) {
+            entry->value().wait_until_not_loading(lock);
+        }
         if (entry->value().state(std::memory_order_relaxed) != VectorIndexCacheEntryState::kReady ||
             !entry->value().has_ref()) {
             lock.unlock();
@@ -436,16 +436,6 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
         tenann::IndexRef loaded;
         try {
             loaded = loader();
-        } catch (const tenann::Error& e) {
-            _finish_empty_and_release(entry);
-            _update_metrics();
-            LOG(ERROR) << "VectorIndexCache loader threw for key " << key.to_string() << ": " << e.what();
-            return false;
-        } catch (const std::exception& e) {
-            _finish_empty_and_release(entry);
-            _update_metrics();
-            LOG(ERROR) << "VectorIndexCache loader threw for key " << key.to_string() << ": " << e.what();
-            return false;
         } catch (...) {
             _finish_empty_and_release(entry);
             _update_metrics();
