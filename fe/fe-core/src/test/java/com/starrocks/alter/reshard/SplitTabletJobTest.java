@@ -38,6 +38,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -947,8 +948,11 @@ public class SplitTabletJobTest {
         AtomicBoolean journaled = new AtomicBoolean();
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateTabletReshardJob(TabletReshardJob ignoredJob) {
+            public void logInitTabletReshardJob(TabletReshardJob candidate, WALApplier applier)
+                    throws StarRocksException {
+                candidate.init();
                 journaled.set(true);
+                applier.apply(candidate);
             }
         };
         TabletReshardJobMgr isolatedManager = new TabletReshardJobMgr();
