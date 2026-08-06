@@ -982,6 +982,21 @@ TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix) {
     EXPECT_TRUE((*result)->sstable_meta().sstables(2).filename().ends_with(".sst"));
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_after_copy) {
+    auto source = make_metadata(53011, 2, true);
+    auto target = make_metadata(53012, 1, true);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+    // A split range tablet can reference only a slice of a physical segment. The shared bit
+    // also tells the reader to apply the tablet range, so clearing it after copying the file
+    // would make every split child read the complete physical segment.
+    add_file_set(source.get(), 0, true);
+
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    ASSERT_OK(result.status());
+    expect_file_set_shared(**result, 0, 0, true);
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_metadata) {
     EncryptionKeyPB pb;
     pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
