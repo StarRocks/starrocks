@@ -711,7 +711,8 @@ static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRe
 // merge_tablet is also the range-tablet merge primitive, so it already provides
 // rowset-family deduplication and PK delvec union. Phase one intentionally rejects
 // DCG/IDG instead of copying incomplete metadata into a query-visible parent.
-static Status build_parent_tablet_metadata(TabletManager* tablet_mgr, const AggregatePublishVersionRequest& request,
+static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
+                                           const AggregatePublishVersionRequest& request,
                                            std::map<int64_t, TabletMetadata>* tablet_metas) {
     if (request.parent_tablet_publish_infos().empty()) {
         return Status::OK();
@@ -1673,7 +1674,7 @@ struct AggregateCompactContext {
         }
     }
 
-    Status validate_deshard_result(TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
+    Status validate_deshard_result(lake::TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
         const bool has_deshard_request =
                 std::any_of(request.requests().begin(), request.requests().end(),
                             [](const CompactRequest& req) { return req.mode() == COMPACTION_MODE_DESHARD; });
