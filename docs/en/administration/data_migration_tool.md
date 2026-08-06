@@ -212,7 +212,7 @@ Range distribution does not change shared-data version synchronization. Each rep
 
 :::warning
 
-This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported.
+This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported. When transparent data encryption is enabled on the target cluster, newly copying a physical file shared by split range tablets is unsupported; files that already exist on the target can still be reused with their existing encryption metadata.
 
 :::
 
