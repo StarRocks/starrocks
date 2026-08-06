@@ -1086,8 +1086,8 @@ public class CompactionSchedulerTest {
         long tableId = 200L;
         long otherTableId = 999L;
         long endTransactionId = 2000L;
-        // Partitions 1, 2 and 5 are being resharded; 3 and 4 are not.
-        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L);
+        // Partitions 1, 2, 5 and 7 are being resharded; 3 and 4 are not.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L, 7L);
 
         // Included partition, uncommitted, <= watermark -> abort the task (the scheduler thread aborts the
         // transaction later).
@@ -1106,6 +1106,15 @@ public class CompactionSchedulerTest {
         CompactionJob late = Mockito.mock(CompactionJob.class);
         Mockito.when(late.getTxnId()).thenReturn(3000L);
         compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 5), late);
+
+        // The current reshard's DESHARD transaction can equal the watermark because the job records
+        // peekNextTransactionId() before triggering DESHARD. It must be allowed to finish and publish.
+        CompactionJob deshardAtWatermark = Mockito.mock(CompactionJob.class);
+        Mockito.when(deshardAtWatermark.getTxnId()).thenReturn(endTransactionId);
+        Mockito.when(deshardAtWatermark.isDeshard()).thenReturn(true);
+        Mockito.when(deshardAtWatermark.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(
+                new PartitionIdentifier(dbId, tableId, 7), deshardAtWatermark);
 
         // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
         CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
@@ -1129,6 +1138,7 @@ public class CompactionSchedulerTest {
         Mockito.verify(prepared).abort();
         Mockito.verify(committed, Mockito.never()).abort();
         Mockito.verify(late, Mockito.never()).abort();
+        Mockito.verify(deshardAtWatermark, Mockito.never()).abort();
         Mockito.verify(otherPartitionPrepared, Mockito.never()).abort();
         Mockito.verify(otherPartitionCommitted, Mockito.never()).abort();
         Mockito.verify(otherTable, Mockito.never()).abort();

@@ -697,17 +697,22 @@ public class CompactionScheduler extends Daemon {
      * compaction before cleaning up.
      *
      * <p>For a compaction on an included physical partition ({@code includePartitionIds}, e.g. the
-     * partitions a reshard job is resharding), only an uncommitted one is aborted (a pre-reshard
-     * compaction is dropped when it is cross-published to the child tablets anyway, so aborting loses
-     * nothing); an already-committed compaction has taken a partition version and must still publish so
-     * its version cross-publishes onto the child tablets, hence it is left running for the
-     * previous-transactions wait to drain.
+     * partitions a reshard job is resharding), an uncommitted pre-reshard compaction is aborted (it is
+     * dropped when it is cross-published to the child tablets anyway, so aborting loses nothing). An
+     * already-committed compaction has taken a partition version and must still publish so its version
+     * cross-publishes onto the child tablets, hence it is left running for the previous-transactions wait
+     * to drain.
      *
      * <p>A compaction on a partition NOT in {@code includePartitionIds} is unaffected by the reshard: it
      * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
      * it from the previous-transactions wait.
      *
-     * <p>For an uncommitted compaction this only requests the abort of the compaction task. The
+     * <p>The DESHARD compaction started by the current reshard job is never cancelled. Its transaction
+     * can equal {@code endTransactionId} because the reshard job records the next transaction id before
+     * triggering DESHARD; cancelling that equality case would make a successful DESHARD appear as a
+     * failed compaction in history. It remains part of the previous-transactions wait until it publishes.
+     *
+     * <p>For any other uncommitted compaction this only requests the abort of the compaction task. The
      * compaction scheduler thread then aborts the transaction: {@link #scheduleNewCompaction} aborts an
      * aborted job's transaction even if its task has not finished (e.g. because the best-effort abort RPC
      * was lost), so the previous-transactions wait drains without blocking on the original long-running
@@ -731,7 +736,7 @@ public class CompactionScheduler extends Daemon {
                 ignoredTxnIds.add(job.getTxnId());
                 continue;
             }
-            if (!job.transactionHasCommitted()) {
+            if (!job.isDeshard() && !job.transactionHasCommitted()) {
                 job.abort();
             }
         }
