@@ -715,8 +715,17 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     ExistingFileMap existed_filename_uuids;
     RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids));
 
-    auto destination_shared = [&existed_filename_uuids](const std::string& source_filename,
-                                                        bool existed) -> StatusOr<bool> {
+    const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
+    auto destination_shared = [&existed_filename_uuids, preserve_source_shared](const std::string& source_filename,
+                                                                                bool source_shared,
+                                                                                bool existed) -> StatusOr<bool> {
+        // For aligned range tablets, a source-shared segment can contain rows for multiple
+        // split children. The shared bit makes each child apply its tablet range while reading.
+        // The corresponding target children also use one physical copied file, so preserve the
+        // bit for all associated sidecars as well.
+        if (preserve_source_shared && source_shared) {
+            return true;
+        }
         if (!existed) {
             return false;
         }
@@ -765,7 +774,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
-            ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_segment_filename, is_existed));
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed));
             new_seg_meta->set_shared(destination_file_shared);
 
             // Add encryption metadata for files
@@ -807,7 +817,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
-            ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_del_filename, is_existed));
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_del_filename, src_del.shared(), is_existed));
             new_del->set_shared(destination_file_shared);
 
             if (config::enable_transparent_data_encryption) {
@@ -840,7 +851,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                                                        final_sst_filename, target_tablet_id,
                                                                        src_data_dir, file_locations, filename_map));
             sst->set_filename(final_sst_filename);
-            ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_sst_filename, is_existed));
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_sst_filename, sst->shared(), is_existed));
             sst->set_shared(destination_file_shared);
 
             if (config::enable_transparent_data_encryption) {
@@ -874,7 +886,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                              target_tablet_id, src_data_dir, file_locations, filename_map));
             auto& item = (*dest_meta->mutable_version_to_file())[version];
             item.set_name(final_delvec_filename);
-            ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_delvec_filename, is_existed));
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_delvec_filename, file_meta_pb.shared(), is_existed));
             item.set_shared(destination_file_shared);
 
             if (config::enable_transparent_data_encryption) {
@@ -900,6 +913,11 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         DeltaColumnGroupMetadataPB* dest_meta = new_metadata->mutable_dcg_meta();
         dest_meta->CopyFrom(src_tablet_meta->dcg_meta());
         for (auto& [segment_id, dcg_ver_pb] : *dest_meta->mutable_dcgs()) {
+            std::vector<bool> source_shared_files;
+            source_shared_files.reserve(dcg_ver_pb.column_files_size());
+            for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
+                source_shared_files.emplace_back(i < dcg_ver_pb.shared_files_size() && dcg_ver_pb.shared_files(i));
+            }
             dcg_ver_pb.clear_shared_files();
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
                 auto src_dcg_filename = dcg_ver_pb.column_files(i);
@@ -909,7 +927,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         determine_final_filename(src_dcg_filename, txn_id, existed_filename_uuids, final_dcg_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 dcg_ver_pb.set_column_files(i, final_dcg_filename);
-                ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_dcg_filename, is_existed));
+                ASSIGN_OR_RETURN(auto destination_file_shared,
+                                 destination_shared(src_dcg_filename, source_shared_files[i], is_existed));
                 dcg_ver_pb.add_shared_files(destination_file_shared);
 
                 if (config::enable_transparent_data_encryption) {
@@ -990,7 +1009,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 entry.set_index_file(final_idx_filename);
-                ASSIGN_OR_RETURN(auto destination_file_shared, destination_shared(src_idx_filename, is_existed));
+                ASSIGN_OR_RETURN(auto destination_file_shared,
+                                 destination_shared(src_idx_filename, entry.shared_file(), is_existed));
                 entry.set_shared_file(destination_file_shared);
                 // The source's encryption meta belongs to the source cluster; drop it and
                 // re-derive against the target (matching the segment handling above).
