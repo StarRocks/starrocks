@@ -14,9 +14,15 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
+#include <mutex>
+
+#include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
+#include "storage/chunk_iterator.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
 
@@ -28,6 +34,27 @@ namespace lake {
 
 class LoadSpillBlockManager;
 class TabletWriter;
+
+class SpillMergeCancellation {
+public:
+    void cancel(const Status& status);
+
+    bool is_cancelled() const { return _cancelled.load(std::memory_order_acquire); }
+
+    Status status() const;
+
+private:
+    std::atomic<bool> _cancelled{false};
+    mutable std::mutex _mutex;
+    Status _status;
+};
+
+struct SpillBlockInputTasks {
+    std::vector<ChunkIteratorPtr> iterators;
+    size_t total_blocks = 0;
+    size_t total_block_bytes = 0;
+    size_t group_count = 0;
+};
 
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
@@ -59,7 +86,8 @@ private:
 
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
+    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile,
+                      std::shared_ptr<SpillMergeCancellation> cancellation = nullptr);
     ~SpillMemTableSink() override = default;
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
@@ -71,9 +99,19 @@ public:
 
     Status merge_blocks_to_segments();
 
+    void cancel(const Status& status) { _cancellation->cancel(status); }
+
+    // Parallel merge spill blocks to segments when config enable_load_spill_parallel_merge is true
+    Status merge_blocks_to_segments_parallel(bool do_agg);
+    Status merge_blocks_to_segments_serial(bool do_agg);
+
     spill::Spiller* get_spiller() { return _spiller.get(); }
 
+    RuntimeProfile* profile() const { return _profile; }
+
 private:
+    StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
+                                                                    bool do_sort, bool do_agg);
     Status _prepare(const ChunkPtr& chunk_ptr);
     Status _do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output);
 
@@ -90,6 +128,7 @@ private:
     SchemaPtr _schema;
     // used for spill merge, parent trakcer is compaction tracker
     std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
+    std::shared_ptr<SpillMergeCancellation> _cancellation;
 };
 
 } // namespace lake

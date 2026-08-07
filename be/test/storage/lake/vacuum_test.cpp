@@ -68,7 +68,7 @@ protected:
             full_path = join_path(join_path(kTestDir, kMetadataDirectoryName), name);
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
-        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name)) {
+        } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_compound_index(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -91,6 +91,8 @@ protected:
 TEST_P(LakeVacuumTest, test_vacuum_1) {
     create_data_file("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec");
     create_data_file("00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec");
+    create_data_file("00000000000159e3_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.dat");
+    create_data_file("00000000000159e3_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.idx");
     create_data_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
 
@@ -122,6 +124,10 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
             {
                 "name": "00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec",
                 "size": 128
+            },
+            {
+                "name": "00000000000159e3_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.dat",
+                "size": 128
             }
         ]
         }
@@ -138,13 +144,15 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(3, response.vacuumed_files());
+        EXPECT_EQ(5, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
 
         EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
 
         EXPECT_FALSE(file_exist("00000000000159e3_3ea06130-ccac-4110-9de8-4813512c60d4.delvec"));
         EXPECT_FALSE(file_exist("00000000000159e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
+        EXPECT_FALSE(file_exist("00000000000159e3_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.dat"));
+        EXPECT_FALSE(file_exist("00000000000159e3_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.idx"));
         EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     }

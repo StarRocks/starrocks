@@ -31,6 +31,7 @@
 #include "storage/index/compound_index_common.h"
 #include "storage/index/compound_index_file_reader.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -231,6 +232,59 @@ TEST(SegmentWriterTantivyTest, TwoTantivyColumns) {
     EXPECT_FALSE(l1.value().files.empty());
 }
 
+// Vertical writers finalize one column group at a time. Both groups must be
+// accumulated and packed into one compound .idx during finalize_footer;
+// packing in finalize_columns would make the second group overwrite the first.
+TEST(SegmentWriterTantivyTest, VerticalColumnGroupsPackOneCompoundIndex) {
+    std::string temp_dir = make_tempdir("seg_tantivy_vertical_2col");
+    ASSERT_FALSE(temp_dir.empty());
+    PathCleanup cleanup{temp_dir};
+
+    auto tablet_schema = make_tantivy_schema(2);
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    opts.segment_file_mark.rowset_path_prefix = temp_dir;
+    opts.segment_file_mark.rowset_id = "rs_vertical";
+
+    std::string seg_path = temp_dir + "/rs_vertical_0.dat";
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(seg_path));
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    std::vector<uint32_t> first_group{0, 1};
+    ASSERT_OK(writer.init(first_group, true));
+    auto first_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(tablet_schema, first_group), 3);
+    for (int i = 0; i < 3; ++i) {
+        first_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    first_chunk->get_column_by_index(1)->append_datum(Datum(Slice("alpha one")));
+    first_chunk->get_column_by_index(1)->append_datum(Datum(Slice("alpha two")));
+    first_chunk->get_column_by_index(1)->append_datum(Datum(Slice("alpha three")));
+    ASSERT_OK(writer.append_chunk(*first_chunk));
+
+    uint64_t index_size = 0;
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    std::string compound_path = IndexDescriptor::compound_index_file_path(temp_dir, "rs_vertical", 0);
+    EXPECT_FALSE(std::filesystem::exists(compound_path));
+
+    std::vector<uint32_t> second_group{2};
+    ASSERT_OK(writer.init(second_group, false));
+    auto second_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(tablet_schema, second_group), 3);
+    second_chunk->get_column_by_index(0)->append_datum(Datum(Slice("beta one")));
+    second_chunk->get_column_by_index(0)->append_datum(Datum(Slice("beta two")));
+    second_chunk->get_column_by_index(0)->append_datum(Datum(Slice("beta three")));
+    ASSERT_OK(writer.append_chunk(*second_chunk));
+    ASSERT_OK(writer.finalize_columns(&index_size));
+    EXPECT_FALSE(std::filesystem::exists(compound_path));
+
+    uint64_t file_size = 0;
+    ASSERT_OK(writer.finalize_footer(&file_size));
+    ASSERT_TRUE(std::filesystem::exists(compound_path));
+    ASSIGN_OR_ABORT(auto compound_reader, CompoundIndexFileReader::open(compound_path));
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 100).status());
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 101).status());
+}
+
 // Verify that the segment .dat file is still valid (footer can be parsed).
 TEST(SegmentWriterTantivyTest, SegmentFooterValid) {
     std::string temp_dir = make_tempdir("seg_tantivy_footer");
@@ -270,6 +324,67 @@ TEST(SegmentWriterTantivyTest, SegmentFooterValid) {
     EXPECT_GT(file_size, 0u);
     EXPECT_GT(footer_position, 0u);
     EXPECT_EQ(writer.num_rows(), 2u);
+}
+
+// Row-mode partial update first writes only the supplied indexed columns. The
+// final rewrite must replace that partial sidecar with one containing every
+// Tantivy index declared by the full tablet schema.
+TEST(SegmentWriterTantivyTest, RowModePartialUpdateRebuildsAllTantivyIndexes) {
+    std::string temp_dir = make_tempdir("seg_tantivy_row_mode");
+    ASSERT_FALSE(temp_dir.empty());
+    PathCleanup cleanup{temp_dir};
+
+    auto partial_schema = make_tantivy_schema(1);
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    opts.segment_file_mark.rowset_path_prefix = temp_dir;
+    opts.segment_file_mark.rowset_id = "partial";
+
+    std::string src_path = temp_dir + "/partial_0.dat";
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(src_path));
+    SegmentWriter writer(std::move(wfile), 0, partial_schema, opts);
+    ASSERT_OK(writer.init());
+
+    auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(partial_schema), 3);
+    for (int i = 0; i < 3; ++i) {
+        chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    chunk->get_column_by_index(1)->append_datum(Datum(Slice("old alpha")));
+    chunk->get_column_by_index(1)->append_datum(Datum(Slice("old beta")));
+    chunk->get_column_by_index(1)->append_datum(Datum());
+    ASSERT_OK(writer.append_chunk(*chunk));
+
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    FooterPointerPB partial_footer;
+    partial_footer.set_position(footer_position);
+    partial_footer.set_size(file_size - footer_position);
+
+    auto full_schema = make_tantivy_schema(2);
+    std::vector<uint32_t> missing_column_ids{2};
+    MutableColumns missing_columns;
+    const auto& missing_column = full_schema->column(2);
+    auto new_values = ChunkHelper::column_from_field_type(missing_column.type(), missing_column.is_nullable());
+    new_values->append_datum(Datum(Slice("new one")));
+    new_values->append_datum(Datum());
+    new_values->append_datum(Datum(Slice("new three")));
+    missing_columns.push_back(std::move(new_values));
+
+    std::string dest_path = temp_dir + "/final_0.dat";
+    FileInfo src{.path = src_path, .size = file_size};
+    FileInfo dest{.path = dest_path};
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src, &dest, full_schema, missing_column_ids, missing_columns, 0,
+                                                      partial_footer));
+
+    std::string compound_path = IndexDescriptor::compound_index_file_path_from_segment(dest_path);
+    ASSERT_TRUE(std::filesystem::exists(compound_path));
+    ASSIGN_OR_ABORT(auto compound_reader, CompoundIndexFileReader::open(compound_path));
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 100).status());
+    ASSERT_OK(compound_reader->find_index(CompoundIndexKind::INVERTED_TANTIVY, 101).status());
 }
 
 } // namespace starrocks

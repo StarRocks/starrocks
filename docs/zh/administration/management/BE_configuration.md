@@ -1826,6 +1826,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Transaction Commit RPC 超时的时长。该参数自 v3.2.0 起弃用。
 - 引入版本：-
 
+##### load_spill_memory_usage_per_merge
+
+- 默认值：1073741824
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Spill Merge 期间每次 Merge 操作的最大内存使用量。默认为 1GB (1073741824 字节)。该参数用于控制导入过程中 Spill Merge 时单个 Merge 任务的内存占用，避免内存使用过高。
+- 引入版本：-
+
 ##### max_consumer_num_per_group
 
 - 默认值：3
@@ -1894,6 +1903,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：每个分区内部同时运行的最大事务数量。
+- 引入版本：-
+
+##### enable_load_spill_parallel_merge
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用单个 Tablet 内部的并行 Spill Merge。启用后可以提高导入过程中 Spill Merge 的性能。
 - 引入版本：-
 
 ##### enable_stream_load_verbose_log

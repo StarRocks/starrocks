@@ -50,6 +50,21 @@ public class InvertedIndexParams {
         PARSER("none", true),
 
         /**
+         * Segmentation mode for parsers that expose multiple granularities.
+         */
+        PARSER_MODE("ik_max_word"),
+
+        /**
+         * Minimum token length for the Tantivy ngram parser.
+         */
+        MIN_GRAM("-1"),
+
+        /**
+         * Maximum token length for the Tantivy ngram parser.
+         */
+        MAX_GRAM("-1"),
+
+        /**
          * Whether to omit term frequency and term position when indexing
          */
         OMIT_TERM_FREQ_AND_POSITION("false"),

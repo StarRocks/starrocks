@@ -42,12 +42,21 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
                                      std::unique_ptr<InvertedWriter>* res) {
     auto parser_str = get_parser_string_from_properties(tablet_index->index_properties());
     std::string tokenizer;
-    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH || parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH) {
         tokenizer = "english";
+    } else if (parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+        tokenizer = "standard";
     } else if (parser_str == INVERTED_INDEX_PARSER_CHINESE) {
         tokenizer = "cjk";
     } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {
         tokenizer = "jieba";
+    } else if (parser_str == INVERTED_INDEX_PARSER_IK) {
+        tokenizer =
+                get_parser_mode_string_from_properties(tablet_index->index_properties()) == INVERTED_INDEX_PARSER_SMART
+                        ? "ik_smart"
+                        : "ik";
+    } else if (parser_str == INVERTED_INDEX_PARSER_NGRAM) {
+        ASSIGN_OR_RETURN(tokenizer, get_tantivy_ngram_tokenizer_name(tablet_index->index_properties()));
     } else if (parser_str == INVERTED_INDEX_PARSER_NONE) {
         tokenizer = "raw";
     } else {

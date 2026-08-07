@@ -514,6 +514,10 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 auto st = _fs->delete_file(tmp_segment_file);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << tmp_segment_file << ", " << st.to_string();
+                auto tmp_index_file = IndexDescriptor::compound_index_file_path_from_segment(tmp_segment_file);
+                st = _fs->delete_file(tmp_index_file);
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << tmp_index_file << ", " << st.to_string();
             }
             _tmp_segment_files.clear();
             for (auto i = 0; i < _num_segment; ++i) {
@@ -521,6 +525,10 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
+                auto index_path = IndexDescriptor::compound_index_file_path_from_segment(path);
+                st = _fs->delete_file(index_path);
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << index_path << ", " << st.to_string();
             }
             for (auto i = 0; i < _num_delfile; ++i) {
                 auto path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
@@ -534,6 +542,10 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
+                auto index_path = IndexDescriptor::compound_index_file_path_from_segment(path);
+                st = _fs->delete_file(index_path);
+                LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                        << "Fail to delete file=" << index_path << ", " << st.to_string();
             }
         }
 
@@ -1144,6 +1156,10 @@ Status HorizontalRowsetWriter::_final_merge() {
         auto st = _fs->delete_file(tmp_segment_file);
         LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                 << "Fail to delete segment temp file=" << tmp_segment_file << ", " << st.to_string();
+        auto tmp_index_file = IndexDescriptor::compound_index_file_path_from_segment(tmp_segment_file);
+        st = _fs->delete_file(tmp_index_file);
+        LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                << "Fail to delete segment temp file=" << tmp_index_file << ", " << st.to_string();
     }
     _tmp_segment_files.clear();
 
@@ -1232,6 +1248,10 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
             auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                     << "Fail to delete file=" << path << ", " << st.to_string();
+            auto compound_index_path = IndexDescriptor::compound_index_file_path_from_segment(path);
+            st = _fs->delete_file(compound_index_path);
+            LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
+                    << "Fail to delete file=" << compound_index_path << ", " << st.to_string();
             if (_context.tablet_schema != nullptr) {
                 const auto* indexes = _context.tablet_schema->indexes();
                 if (!indexes->empty()) {

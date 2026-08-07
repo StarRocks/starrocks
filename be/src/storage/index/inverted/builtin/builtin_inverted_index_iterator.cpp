@@ -348,6 +348,26 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
         }
         break;
     }
+    case InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY:
+    case InvertedIndexQueryType::MATCH_ANY_TERMS_QUERY: {
+        const auto* query = reinterpret_cast<const TokenizedQueryValue*>(query_value);
+        bool first = true;
+        roaring::Roaring term_bitmap;
+        for (const auto& predicate : query->terms) {
+            term_bitmap.clear();
+            Slice term(predicate);
+            RETURN_IF_ERROR(_equal_query(&term, &term_bitmap));
+            if (first) {
+                *bitmap = std::move(term_bitmap);
+                first = false;
+            } else if (query_type == InvertedIndexQueryType::MATCH_ALL_TERMS_QUERY) {
+                *bitmap &= term_bitmap;
+            } else {
+                *bitmap |= term_bitmap;
+            }
+        }
+        break;
+    }
     default:
         return Status::InvalidArgument("do not support query type");
     }

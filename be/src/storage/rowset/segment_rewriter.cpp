@@ -9,6 +9,7 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/inverted/tantivy/tantivy_index_rebuilder.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -25,12 +26,15 @@ SegmentRewriter::SegmentRewriter() = default;
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
-                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
+                                               uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+                                               SegmentFileMark segment_file_mark) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
         dest->size = src.size.value_or(0);
-        return fs::copy_file(src.path, dest->path, kBufferSize).status();
+        dest->encryption_meta = src.encryption_meta;
+        RETURN_IF_ERROR(fs::copy_file(src.path, dest->path, kBufferSize).status());
+        return TantivyIndexRebuilder::rebuild(*dest, segment_id, tschema);
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
     RandomAccessFileOptions ropts;
@@ -66,6 +70,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
+    opts.skip_tantivy_index = true;
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
@@ -82,7 +88,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest->size = segment_file_size;
-    return Status::OK();
+    return TantivyIndexRebuilder::rebuild(*dest, segment_id, tschema);
 }
 
 // This function is used when the auto-increment column is not specified in partial update.
@@ -91,7 +97,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                               std::vector<uint32_t>& column_ids, MutableColumns* columns) {
+                                               std::vector<uint32_t>& column_ids, MutableColumns* columns,
+                                               SegmentFileMark segment_file_mark) {
     if (column_ids.size() == 0) {
         DCHECK_EQ(columns, nullptr);
     }
@@ -163,6 +170,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
     }
 
     SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
     SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
     RETURN_IF_ERROR(writer.init(full_column_ids, true));
 

@@ -22,11 +22,36 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/load_spill_block_manager.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/merge_iterator.h"
+#include "storage/storage_engine.h"
+#include "storage/union_iterator.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
+
+void SpillMergeCancellation::cancel(const Status& status) {
+    if (status.ok()) {
+        return;
+    }
+    {
+        std::lock_guard lock(_mutex);
+        if (!_status.ok()) {
+            return;
+        }
+        _status = status;
+    }
+    _cancelled.store(true, std::memory_order_release);
+}
+
+Status SpillMergeCancellation::status() const {
+    if (!is_cancelled()) {
+        return Status::OK();
+    }
+    std::lock_guard lock(_mutex);
+    return _status;
+}
 
 Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
                                          size_t write_num_rows) {
@@ -107,10 +132,11 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
 }
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile) {
+                                     RuntimeProfile* profile, std::shared_ptr<SpillMergeCancellation> cancellation) {
     _block_manager = block_manager;
     _writer = writer;
     _profile = profile;
+    _cancellation = cancellation != nullptr ? std::move(cancellation) : std::make_shared<SpillMergeCancellation>();
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -255,89 +281,195 @@ private:
     size_t _block_idx = 0;
 };
 
-Status SpillMemTableSink::merge_blocks_to_segments() {
-    TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+StatusOr<SpillBlockInputTasks> SpillMemTableSink::generate_spill_block_input_tasks(size_t target_size,
+                                                                                   size_t memory_usage_per_merge,
+                                                                                   bool do_sort, bool do_agg) {
+    SpillBlockInputTasks result;
     auto& groups = _block_manager->block_container()->block_groups();
-    RETURN_IF(groups.empty(), Status::OK());
+    RETURN_IF(groups.empty(), result);
+    result.group_count = groups.size();
+    std::vector<ChunkIteratorPtr> merge_inputs;
+    size_t current_input_bytes = 0;
+    for (auto& group : groups) {
+        RETURN_IF_ERROR(_cancellation->status());
+        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
+        current_input_bytes += group.data_size();
+        result.total_block_bytes += group.data_size();
+        result.total_blocks += group.blocks().size();
+        // We need to stop merging if:
+        // 1. The current input block group size exceed the target_size,
+        //    because we don't want to generate too large segment file.
+        // 2. The input chunks memory usage exceed the load_spill_memory_usage_per_merge,
+        //    because we don't want each thread cost too much memory.
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes >= target_size ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+            RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            result.iterators.push_back(merge_itr);
+            merge_inputs.clear();
+            current_input_bytes = 0;
+        }
+    }
+    if (!merge_inputs.empty()) {
+        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+        RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        result.iterators.push_back(merge_itr);
+    }
+    LOG(INFO) << fmt::format(
+            "SpillMemTableSink generate_spill_block_input_tasks finished, txn:{} tablet:{} "
+            "blockgroups:{} iterators:{} total_blocks:{} total_block_bytes:{}",
+            _block_manager->txn_id(), _block_manager->tablet_id(), groups.size(), result.iterators.size(),
+            result.total_blocks, result.total_block_bytes);
+    return result;
+}
 
-    SCOPED_TIMER(ADD_TIMER(_profile, "SpillMergeTime"));
+Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg) {
+    RETURN_IF_ERROR(_cancellation->status());
     MonotonicStopWatch timer;
     timer.start();
-    // merge process needs to control _writer's flush behavior manually
-    _writer->set_auto_flush(false);
+    auto token =
+            StorageEngine::instance()->load_spill_block_merge_executor()->create_tablet_internal_parallel_merge_token();
+    // 1. Get all spill block iterators
+    ASSIGN_OR_RETURN(
+            auto spill_block_iterator_tasks,
+            generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                             config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg));
+    // 2. Prepare all tablet writers
+    std::vector<std::unique_ptr<TabletWriter>> writers;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        RETURN_IF_ERROR(_cancellation->status());
+        ASSIGN_OR_RETURN(auto writer, _writer->clone());
+        writers.push_back(std::move(writer));
+    }
+    // 3. Prepare all parallel merge tasks
+    std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        RETURN_IF_ERROR(_cancellation->status());
+        tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
+                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(),
+                _schema.get(), i, _cancellation.get()));
+    }
+    // 4. Submit all tasks to thread pool
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        auto cancel_st = _cancellation->status();
+        if (!cancel_st.ok()) {
+            tasks[i]->update_status(cancel_st);
+            break;
+        }
+        auto submit_st = token->submit(tasks[i]);
+        if (!submit_st.ok()) {
+            tasks[i]->update_status(submit_st);
+            break;
+        }
+    }
+    while (!token->wait_for(MonoDelta::FromMilliseconds(50))) {
+        if (_cancellation->is_cancelled()) {
+            // Cancel tasks that have not started yet and wait for running tasks to
+            // observe the shared cancellation state.
+            token->shutdown();
+            break;
+        }
+    }
+    // 5. check all task status
+    for (const auto& task : tasks) {
+        RETURN_IF_ERROR(task->status());
+    }
+    RETURN_IF_ERROR(_cancellation->status());
+    // 6. merge all writers' result
+    RETURN_IF_ERROR(_writer->merge_other_writers(writers));
+    timer.stop();
+
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), spill_block_iterator_tasks.iterators.size());
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), timer.elapsed_time());
+    return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
+    RETURN_IF_ERROR(_cancellation->status());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
-    size_t total_blocks = 0;
-    size_t total_block_bytes = 0;
+    auto write_func = [&char_field_indexes, this](Chunk* chunk) {
+        ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
+        return _writer->write(*chunk, nullptr);
+    };
+    auto flush_func = [this]() { return _writer->flush(); };
+
+    ASSIGN_OR_RETURN(
+            auto spill_block_iterator_tasks,
+            generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                             config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg));
+    MonotonicStopWatch timer;
+    timer.start();
     size_t total_merges = 0;
     size_t total_rows = 0;
     size_t total_chunk = 0;
-
-    std::vector<ChunkIteratorPtr> merge_inputs;
-    size_t current_input_bytes = 0;
-    auto merge_func = [&] {
+    for (const auto& merge_itr : spill_block_iterator_tasks.iterators) {
+        RETURN_IF_ERROR(_cancellation->status());
         total_merges++;
-        // PK shouldn't do agg because pk support order key different from primary key,
-        // in that case, data is sorted by order key and cannot be aggregated by primary key
-        bool do_agg = _schema->keys_type() == KeysType::AGG_KEYS || _schema->keys_type() == KeysType::UNIQUE_KEYS;
-        auto tmp_itr = new_heap_merge_iterator(merge_inputs);
-        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
-        RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
+        TEST_SYNC_POINT("SpillMemTableSink::merge_blocks_to_segments:process");
         while (true) {
+            RETURN_IF_ERROR(_cancellation->status());
             chunk->reset();
             auto st = merge_itr->get_next(chunk);
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                SCOPED_TIMER(_spiller->metrics().write_io_timer);
-                ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
+                RETURN_IF_ERROR(_cancellation->status());
                 total_rows += chunk->num_rows();
                 total_chunk++;
-                RETURN_IF_ERROR(_writer->write(*chunk, nullptr));
+                RETURN_IF_ERROR(write_func(chunk));
             } else {
                 return st;
             }
         }
         merge_itr->close();
-        SCOPED_TIMER(_spiller->metrics().write_io_timer);
-        return _writer->flush();
-    };
-
-    for (size_t i = 0; i < groups.size(); ++i) {
-        auto& group = groups[i];
-        // We need to stop merging if:
-        // 1. The current input block group size exceed the load_spill_max_merge_bytes,
-        //    because we don't want to generate too large segment file.
-        // 2. The input chunks memory usage exceed the load_spill_max_merge_bytes,
-        //    because we don't want each thread cost too much memory.
-        if (merge_inputs.size() > 0 &&
-            (current_input_bytes + group.data_size() >= config::load_spill_max_merge_bytes ||
-             merge_inputs.size() * config::load_spill_max_chunk_bytes >= config::load_spill_max_merge_bytes)) {
-            RETURN_IF_ERROR(merge_func());
-            merge_inputs.clear();
-            current_input_bytes = 0;
-        }
-        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
-        current_input_bytes += group.data_size();
-        total_block_bytes += group.data_size();
-        total_blocks += group.blocks().size();
-    }
-    if (merge_inputs.size() > 0) {
-        RETURN_IF_ERROR(merge_func());
+        RETURN_IF_ERROR(_cancellation->status());
+        RETURN_IF_ERROR(flush_func());
     }
     timer.stop();
     auto duration_ms = timer.elapsed_time() / 1000000;
+    auto& groups = _block_manager->block_container()->block_groups();
     LOG(INFO) << fmt::format(
-            "SpillMemTableSink merge finished, txn:{} tablet:{} blockgroups:{} blocks:{} input_bytes:{} merges:{} "
-            "rows:{} chunks:{} duration:{}ms",
-            _block_manager->txn_id(), _block_manager->tablet_id(), groups.size(), total_blocks, total_block_bytes,
-            total_merges, total_rows, total_chunk, duration_ms);
-    ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT)->update(groups.size());
-    ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES)->update(total_block_bytes);
-    ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT)->update(total_merges);
+            "SpillMemTableSink merge finished, txn:{} tablet:{} blockgroups:{} blocks:{} "
+            "input_bytes:{} merges:{} rows:{} chunks:{} duration:{}ms",
+            _block_manager->txn_id(), _block_manager->tablet_id(), groups.size(),
+            spill_block_iterator_tasks.total_blocks, spill_block_iterator_tasks.total_block_bytes, total_merges,
+            total_rows, total_chunk, duration_ms);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), duration_ms * 1000000);
     return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments() {
+    TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+    RETURN_IF_ERROR(_cancellation->status());
+    auto& groups = _block_manager->block_container()->block_groups();
+    RETURN_IF(groups.empty(), Status::OK());
+
+    SCOPED_TIMER(ADD_TIMER(_profile, "SpillMergeTime"));
+    // merge process needs to control _writer's flush behavior manually
+    _writer->set_auto_flush(false);
+
+    // PK shouldn't do agg because pk support order key different from primary key,
+    // in that case, data is sorted by order key and cannot be aggregated by primary key
+    bool do_agg = _schema->keys_type() == KeysType::AGG_KEYS || _schema->keys_type() == KeysType::UNIQUE_KEYS;
+
+    if (config::enable_load_spill_parallel_merge) {
+        return merge_blocks_to_segments_parallel(do_agg);
+    } else {
+        return merge_blocks_to_segments_serial(do_agg);
+    }
 }
 
 } // namespace starrocks::lake

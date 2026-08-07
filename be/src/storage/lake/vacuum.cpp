@@ -277,6 +277,10 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     }
     for (const auto& file : metadata.orphan_files()) {
         RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
+        if (is_segment(file.name())) {
+            (void)deleter->delete_file(
+                    join_path(base_dir, IndexDescriptor::compound_index_file_path_from_segment(file.name())));
+        }
         *garbage_data_size += file.size();
     }
     return Status::OK();

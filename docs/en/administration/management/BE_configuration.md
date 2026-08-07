@@ -1888,6 +1888,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The timeout for a transaction commit RPC. Since v3.2.0, this parameter is deprecated.
 - Introduced in: -
 
+##### load_spill_memory_usage_per_merge
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum memory usage per merge operation during spill merge. Default is 1 GB (1073741824 bytes). This parameter controls the memory consumption of individual merge tasks during data loading spill merge to prevent excessive memory usage.
+- Introduced in: -
+
 ##### max_consumer_num_per_group
 
 - Default: 3
@@ -1957,6 +1966,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of transactions that can run concurrently in each partition.
+- Introduced in: -
+
+##### enable_load_spill_parallel_merge
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
 - Introduced in: -
 
 ##### enable_stream_load_verbose_log

@@ -12,7 +12,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 从版本 3.3.0 开始，StarRocks 支持全文倒排索引，可以将文本拆分成更小的词，并为每个词创建一个索引条目，显示该词与数据文件中对应行号之间的映射关系。对于全文搜索，StarRocks 根据搜索关键词查询倒排索引，快速定位匹配关键词的数据行。
 
-全文倒排索引尚不支持主键表和存算分离集群。
+全文倒排索引支持多种底层实现。其中，Tantivy 实现支持明细表、主键表，以及存算一体和存算分离集群。
 
 ## 概述
 
@@ -21,6 +21,123 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 例如，如果一行数据包含 "hello world" 且其行号为 123，全文倒排索引根据分词结果和行号构建索引条目：hello->123, world->123。
 
 在全文搜索过程中，StarRocks 可以使用全文倒排索引定位包含搜索关键词的索引条目，然后快速找到关键词出现的行号，显著减少需要扫描的数据行数。
+
+## 使用 Tantivy 倒排索引
+
+### 创建索引
+
+创建索引前，启用 FE 配置 `enable_experimental_gin`：
+
+```sql
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+```
+
+在索引属性中设置 `"imp_lib" = "tantivy"`。以下示例使用英文分词：
+
+```sql
+CREATE TABLE docs (
+    id BIGINT NOT NULL,
+    content VARCHAR(65535),
+    INDEX idx_content (content) USING GIN (
+        "imp_lib" = "tantivy",
+        "parser" = "english"
+    )
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```
+
+也可以在建表后添加索引：
+
+```sql
+CREATE INDEX idx_content ON docs (content) USING GIN (
+    "imp_lib" = "tantivy",
+    "parser" = "english"
+);
+```
+
+### 查询索引
+
+Tantivy 支持以下常用查询：
+
+```sql
+-- 匹配任意分词
+SELECT * FROM docs WHERE content MATCH_ANY 'database search';
+
+-- 匹配全部分词。MATCH 在无通配符时也使用 AND 语义
+SELECT * FROM docs WHERE content MATCH_ALL 'database search';
+
+-- 短语匹配；~1 表示允许一个位置偏移
+SELECT * FROM docs WHERE content MATCH_PHRASE 'full search ~1';
+
+-- BM25 相关度排序
+SELECT *, score()
+FROM docs
+WHERE content MATCH_ANY 'database search'
+ORDER BY score() DESC
+LIMIT 10;
+```
+
+`MATCH`、`MATCH_ANY`、`MATCH_ALL` 和 `MATCH_PHRASE` 必须作为索引列上的 `WHERE` 下推谓词。右侧通常为非空字符串字面量。`MATCH_ANY` 和 `MATCH_ALL` 也可以接收 `tokenize()` 的结果：
+
+```sql
+SELECT * FROM docs
+WHERE content MATCH_ALL tokenize('english', 'Database Search');
+```
+
+系统变量 `enable_gin_filter` 默认为 `true`。如被关闭，需要重新启用：
+
+```sql
+SET enable_gin_filter = true;
+```
+
+### 支持的分词器
+
+| `parser` | 说明 | 专属参数 |
+| --- | --- | --- |
+| `none` | 默认值。不分词，将整段文本作为一个词项。 | - |
+| `english` | 英文分词，转为小写并移除英文停用词；不做词干提取。 | - |
+| `standard` | 兼容 CLucene 语法的通用分词，支持邮箱、缩写等词项；转为小写并移除英文停用词。 | - |
+| `chinese` / `cjk` | CJK 二元分词，生成相邻且重叠的双字词项；ASCII 字符转为小写。`cjk` 是 `chinese` 的别名。 | - |
+| `jieba` | 基于 Jieba 词典的中文搜索模式分词；ASCII 字符转为小写。 | - |
+| `ik` | 基于 IK 词典的中文分词。 | `parser_mode` |
+| `ngram` | 按 Unicode 字符生成连续 N-Gram，并转为小写。 | `min_gram`、`max_gram` |
+
+`english` 会忽略长度超过 40 个字符的词项。`standard` 的单个词项最长为 255 个字符。
+
+可以用 `tokenize()` 查看分词结果。DDL 中 `parser = 'ik'` 对应的两种模式，在 `tokenize()` 中分别使用 `ik` 和 `ik_smart`；N-Gram 使用 `ngram:<min_gram>:<max_gram>`：
+
+```sql
+SELECT tokenize('ik', '中华人民共和国国歌');
+SELECT tokenize('ik_smart', '中华人民共和国国歌');
+SELECT tokenize('ngram:2:3', 'Ab中');
+```
+
+### 索引参数
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `imp_lib` | - | 使用 Tantivy 时必须设为 `tantivy`。在存算分离集群中也必须显式指定。 |
+| `parser` | `none` | 指定分词器。 |
+| `parser_mode` | `ik_max_word` | 仅用于 `parser = 'ik'`。支持 `ik_max_word`（细粒度）和 `ik_smart`（粗粒度）。 |
+| `min_gram` | - | 仅用于 `parser = 'ngram'`。必须与 `max_gram` 同时设置，且为正整数。 |
+| `max_gram` | - | 仅用于 `parser = 'ngram'`。必须大于等于 `min_gram`。 |
+| `support_phrase` | `true` | 是否保存词项位置信息。使用 `MATCH_PHRASE` 时必须为 `true`。 |
+| `support_bm25` | `true` | 是否保存 BM25 所需的 fieldnorm。使用 `score()` 时必须为 `true`。 |
+
+`support_phrase` 和 `support_bm25` 仅适用于 Tantivy，并在建索引时生效。修改后需要重建索引。
+
+### 使用限制
+
+- 每个倒排索引只能包含一个 `CHAR`、`VARCHAR` 或 `STRING` 列。
+- 仅支持明细表和主键表。主键表支持全行写入和行模式部分更新，不支持列模式部分更新。
+- 在存算一体集群中通过 `ALTER TABLE` 或 `CREATE INDEX` 添加索引时，表属性 `replicated_storage` 必须为 `false`。
+- 通配符查询支持 `%` 和 `*`，但通配符表达式不会经过分词。它直接匹配索引中的词项，因此需要考虑分词器的切分和大小写规则。
+- `MATCH_PHRASE` 的偏移量写在查询文本末尾，格式为 `'text ~N'`。`~` 前必须有空格，`N` 为非负整数。
+- `score()` 仅用于非取反的 `MATCH`、`MATCH_ANY` 或 `MATCH_ALL` 查询，不适用于 `MATCH_PHRASE` 和通配符查询。
 
 ## 基本操作
 
@@ -32,7 +149,7 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-此外，全文倒排索引只能在明细表中创建，并且表属性 `replicated_storage` 需要为 `false`。
+全文倒排索引可以在明细表或主键表中创建。使用限制取决于底层实现；Tantivy 的限制请参见[使用限制](#使用限制)。
 
 #### 在创建表时创建全文倒排索引
 
@@ -79,7 +196,7 @@ MySQL [example_db]> SHOW CREATE TABLE t\G
 
 #### 删除全文倒排索引
 
-执行 `ALTER TABLE ADD INDEX` 或 `DROP INDEX` 删除全文倒排索引。
+执行 `ALTER TABLE DROP INDEX` 或 `DROP INDEX` 删除全文倒排索引。
 
 ```SQL
 DROP INDEX idx on t;

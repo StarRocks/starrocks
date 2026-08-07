@@ -172,3 +172,40 @@ SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ANY 'dog';
 SELECT count(*) FROM t_tantivy_compact WHERE content MATCH_ALL 'fox dog';
 DROP TABLE t_tantivy_compact;
 DROP DATABASE ${uuid0};
+
+-- name: test_tantivy_primary_key_dml
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+USE ${uuid0};
+CREATE TABLE t_tantivy_pk (
+    id INT NOT NULL,
+    title VARCHAR(65535),
+    body VARCHAR(65535),
+    INDEX gin_title (title) USING GIN ("parser" = "english", "imp_lib" = "tantivy"),
+    INDEX gin_body (body) USING GIN ("parser" = "english", "imp_lib" = "tantivy")
+) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Full-row insert, upsert and delete use PK delvecs to hide stale Tantivy docs.
+INSERT INTO t_tantivy_pk VALUES
+    (1, 'fox fox fox fox', 'old wolf'),
+    (2, 'fox', 'delete wolf'),
+    (3, 'stable bear', 'stable body');
+INSERT INTO t_tantivy_pk VALUES (1, 'new eagle', 'kept tiger');
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'eagle';
+SELECT id FROM t_tantivy_pk WHERE title MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 1;
+DELETE FROM t_tantivy_pk WHERE id = 2;
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'fox';
+SELECT count(*) FROM t_tantivy_pk WHERE body MATCH_ANY 'delete';
+
+-- Row-mode partial update reconstructs the complete final row and both GIN
+-- entries, including the indexed body column omitted by this INSERT.
+SET partial_update_mode = 'row';
+INSERT INTO t_tantivy_pk (id, title) VALUES (1, 'rowmode phoenix');
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'phoenix';
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'eagle';
+SELECT count(*) FROM t_tantivy_pk WHERE body MATCH_ANY 'tiger';
+SET partial_update_mode = 'auto';
+
+DROP TABLE t_tantivy_pk;
+DROP DATABASE ${uuid0};

@@ -226,3 +226,76 @@ DROP TABLE t_tantivy_compact;
 DROP DATABASE ${uuid0};
 -- result:
 -- !result
+-- name: test_tantivy_primary_key_dml
+CREATE DATABASE IF NOT EXISTS ${uuid0};
+-- result:
+-- !result
+USE ${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_tantivy_pk (
+    id INT NOT NULL,
+    title VARCHAR(65535),
+    body VARCHAR(65535),
+    INDEX gin_title (title) USING GIN ("parser" = "english", "imp_lib" = "tantivy"),
+    INDEX gin_body (body) USING GIN ("parser" = "english", "imp_lib" = "tantivy")
+) PRIMARY KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_tantivy_pk VALUES
+    (1, 'fox fox fox fox', 'old wolf'),
+    (2, 'fox', 'delete wolf'),
+    (3, 'stable bear', 'stable body');
+-- result:
+-- !result
+INSERT INTO t_tantivy_pk VALUES (1, 'new eagle', 'kept tiger');
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'eagle';
+-- result:
+1
+-- !result
+SELECT id FROM t_tantivy_pk WHERE title MATCH_ANY 'fox' ORDER BY score() DESC LIMIT 1;
+-- result:
+2
+-- !result
+DELETE FROM t_tantivy_pk WHERE id = 2;
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'fox';
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE body MATCH_ANY 'delete';
+-- result:
+0
+-- !result
+SET partial_update_mode = 'row';
+-- result:
+-- !result
+INSERT INTO t_tantivy_pk (id, title) VALUES (1, 'rowmode phoenix');
+-- result:
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'phoenix';
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE title MATCH_ANY 'eagle';
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_tantivy_pk WHERE body MATCH_ANY 'tiger';
+-- result:
+1
+-- !result
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+DROP TABLE t_tantivy_pk;
+-- result:
+-- !result
+DROP DATABASE ${uuid0};
+-- result:
+-- !result

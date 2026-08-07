@@ -1011,8 +1011,14 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("left operand of MATCH must be column ref");
             }
 
-            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
-                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
+            boolean isTokenizeCall = node.getChild(1) instanceof FunctionCallExpr &&
+                    ((FunctionCallExpr) node.getChild(1)).getFnName().getFunction().equalsIgnoreCase("tokenize");
+            boolean supportsTokenizeCall = node.getMatchOperator() == MatchExpr.MatchOperator.MATCH_ANY ||
+                    node.getMatchOperator() == MatchExpr.MatchOperator.MATCH_ALL;
+            if ((!(node.getChild(1) instanceof StringLiteral) && !(isTokenizeCall && supportsTokenizeCall)) ||
+                    type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be a non-NULL StringLiteral, or " +
+                        "tokenize() for MATCH_ANY/MATCH_ALL");
             }
 
             // Reject empty pattern at FE to avoid the NULL/empty-string semantic trap:
@@ -1023,10 +1029,12 @@ public class ExpressionAnalyzer {
             // For MATCH_PHRASE the AstBuilder has already split off any "~N" suffix,
             // so an empty pattern here also covers the "MATCH_PHRASE '~3'" case where
             // only a slop marker was supplied.
-            String patternValue = ((StringLiteral) node.getChild(1)).getValue();
-            if (patternValue.isEmpty()) {
-                throw new SemanticException("MATCH pattern must not be empty (operator: "
-                        + node.getMatchOperator().getName() + ")");
+            if (node.getChild(1) instanceof StringLiteral) {
+                String patternValue = ((StringLiteral) node.getChild(1)).getValue();
+                if (patternValue.isEmpty()) {
+                    throw new SemanticException("MATCH pattern must not be empty (operator: "
+                            + node.getMatchOperator().getName() + ")");
+                }
             }
 
             SlotRef slotRef = (SlotRef) node.getChild(0);

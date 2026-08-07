@@ -2763,7 +2763,10 @@ public class SchemaChangeHandler extends AlterHandler {
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
         }
 
-        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+        // Replicated storage is only effective in shared-nothing mode. A cloud-native table may
+        // still carry the legacy table property, but it must not prevent adding a GIN index.
+        if (newIndex.getIndexType() == IndexType.GIN && RunMode.isSharedNothingMode()
+                && olapTable.enableReplicatedStorage()) {
             throw new SemanticException("GIN does not support replicated mode");
         }
 

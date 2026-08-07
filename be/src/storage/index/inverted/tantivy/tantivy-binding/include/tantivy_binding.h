@@ -93,6 +93,14 @@ struct RustF32Array {
 };
 
 /**
+ * C callback that appends a block of BE row ids into the caller-owned bitmap
+ * (the C++ side does `roaring::Roaring::addMany`).
+ * `set_bitset` callback so tantivy hits stream straight into the result bitmap
+ * without a `Vec<u32>` round-trip.
+ */
+using SetBitmapFn = void (*)(void* ctx, const uint32_t* ids, uintptr_t len);
+
+/**
  * Owned array of NUL-terminated C strings. Must be released via
  * `tantivy_free_string_array`.
  */
@@ -219,6 +227,37 @@ RustResult tantivy_phrase_match_query(const void* reader, const FFISlice* terms,
  */
 RustResult tantivy_wildcard_query(const void* reader, const uint8_t* pattern_ptr, uintptr_t pattern_len,
                                   RustU32Array* out);
+
+/**
+ * EQUAL / single-term → bitmap. SAFETY: as `tantivy_term_query`; `ctx`/`append`
+ * must be valid for the duration of the call.
+ */
+RustResult tantivy_term_query_bitmap(const void* reader, const uint8_t* term_ptr, uintptr_t term_len, void* ctx,
+                                     SetBitmapFn append);
+
+/**
+ * MATCH_ANY → bitmap. SAFETY: as `tantivy_match_query`.
+ */
+RustResult tantivy_match_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count, void* ctx,
+                                      SetBitmapFn append);
+
+/**
+ * MATCH_ALL → bitmap. SAFETY: as `tantivy_match_query`.
+ */
+RustResult tantivy_match_all_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count,
+                                          double min_df_ratio, void* ctx, SetBitmapFn append);
+
+/**
+ * MATCH_PHRASE → bitmap. SAFETY: as `tantivy_phrase_match_query`.
+ */
+RustResult tantivy_phrase_match_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count, uint32_t slop,
+                                             void* ctx, SetBitmapFn append);
+
+/**
+ * MATCH_WILDCARD → bitmap. SAFETY: as `tantivy_wildcard_query`.
+ */
+RustResult tantivy_wildcard_query_bitmap(const void* reader, const uint8_t* pattern_ptr, uintptr_t pattern_len,
+                                         void* ctx, SetBitmapFn append);
 
 /**
  * Release a reader handle. Safe on NULL.

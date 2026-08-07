@@ -2445,7 +2445,11 @@ Status SegmentIterator::_apply_inverted_index() {
         if (_inverted_index_ctx->bm25_score_requested) {
             // Push the SQL LIMIT into the scored GIN query so tantivy returns only
             // the top-k rows (see InvertedIndexIterator::set_bm25_topk_limit).
-            inverted_index_iterators[cid]->set_bm25_topk_limit(_inverted_index_ctx->bm25_score_limit);
+            // PK delvec filtering happens outside tantivy. Pushing LIMIT into
+            // tantivy could select deleted rows and under-fill the final result,
+            // so score every match for PK tables and apply LIMIT after delvec.
+            inverted_index_iterators[cid]->set_bm25_topk_limit(
+                    _opts.is_primary_keys ? 0 : _inverted_index_ctx->bm25_score_limit);
             // Push the WHERE score() >/< c threshold so tantivy gates hits by score.
             inverted_index_iterators[cid]->set_bm25_score_range(_inverted_index_ctx->bm25_score_min,
                                                                 _inverted_index_ctx->bm25_score_max);

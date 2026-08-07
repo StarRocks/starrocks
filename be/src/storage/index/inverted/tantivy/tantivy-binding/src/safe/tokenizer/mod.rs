@@ -15,7 +15,7 @@
 //! Tokenizer factory and shared API.
 //!
 //! Each custom `tantivy::Tokenizer` impl lives in its own submodule
-//! (`cjk_bigram`, `jieba`). Tantivy's bundled tokenizers (`SimpleTokenizer`,
+//! (`cjk_bigram`, `ik`, `jieba`). Tantivy's bundled tokenizers (`SimpleTokenizer`,
 //! `RawTokenizer`) are assembled inline below — they have no custom code,
 //! so a separate file would only add jump cost.
 //!
@@ -23,11 +23,14 @@
 //! `build()`; do not duplicate this dispatch elsewhere.
 
 mod cjk_bigram;
+mod ik;
 mod jieba;
+mod standard;
 
+use ik_rs::core::ik_segmenter::TokenMode;
 use tantivy::tokenizer::{
-    Language, LowerCaser, RawTokenizer, RemoveLongFilter, SimpleTokenizer, StopWordFilter,
-    TextAnalyzer,
+    Language, LowerCaser, NgramTokenizer, RawTokenizer, RemoveLongFilter, SimpleTokenizer,
+    StopWordFilter, TextAnalyzer,
 };
 // Note: LowerCaser is still imported for english_analyzer().
 // CJK and jieba handle lowercasing inline to avoid the overhead of
@@ -35,25 +38,39 @@ use tantivy::tokenizer::{
 
 use crate::error::{Result, TantivyBindingError};
 use cjk_bigram::CjkBigramTokenizer;
+use ik::IkTokenizer;
 use jieba::JiebaTokenizer;
+use standard::StandardTokenizer;
 
 pub const TOKENIZER_ENGLISH: &str = "english";
 pub const TOKENIZER_JIEBA: &str = "jieba";
 pub const TOKENIZER_CJK: &str = "cjk";
+pub const TOKENIZER_IK: &str = "ik";
+pub const TOKENIZER_IK_SMART: &str = "ik_smart";
+pub const TOKENIZER_NGRAM: &str = "ngram";
 pub const TOKENIZER_RAW: &str = "raw";
+pub const TOKENIZER_STANDARD: &str = "standard";
 
 pub const TOKENIZER_NAME: &str = "sr_default";
 
 pub fn build(name: &str) -> Result<TextAnalyzer> {
+    if name.starts_with(TOKENIZER_NGRAM) {
+        return ngram_analyzer(name);
+    }
+
     match name {
         TOKENIZER_ENGLISH => Ok(english_analyzer()),
         TOKENIZER_CJK => Ok(TextAnalyzer::builder(CjkBigramTokenizer::default())
             .build()),
         TOKENIZER_JIEBA => Ok(TextAnalyzer::builder(JiebaTokenizer::default())
             .build()),
+        TOKENIZER_IK => Ok(TextAnalyzer::builder(IkTokenizer::default()).build()),
+        TOKENIZER_IK_SMART => Ok(TextAnalyzer::builder(IkTokenizer::new(TokenMode::SEARCH))
+            .build()),
+        TOKENIZER_STANDARD => Ok(standard_analyzer()),
         TOKENIZER_RAW => Ok(TextAnalyzer::builder(RawTokenizer::default()).build()),
         other => Err(TantivyBindingError::InvalidArgument(format!(
-            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_RAW}'"
+            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_IK}', '{TOKENIZER_IK_SMART}', '{TOKENIZER_NGRAM}:<min_gram>:<max_gram>', '{TOKENIZER_STANDARD}', '{TOKENIZER_RAW}'"
         ))),
     }
 }
@@ -80,4 +97,50 @@ fn english_analyzer() -> TextAnalyzer {
                 .expect("english stopwords are bundled in the tantivy crate"),
         )
         .build()
+}
+
+fn standard_analyzer() -> TextAnalyzer {
+    TextAnalyzer::builder(StandardTokenizer)
+        .filter(LowerCaser)
+        .filter(
+            StopWordFilter::new(Language::English)
+                .expect("english stopwords are bundled in the tantivy crate"),
+        )
+        .build()
+}
+
+fn ngram_analyzer(name: &str) -> Result<TextAnalyzer> {
+    let mut parts = name.split(':');
+    if parts.next() != Some(TOKENIZER_NGRAM) {
+        return Err(TantivyBindingError::InvalidArgument(format!(
+            "invalid ngram tokenizer '{name}'"
+        )));
+    }
+    let min_gram = parse_ngram_size(parts.next(), "min_gram", name)?;
+    let max_gram = parse_ngram_size(parts.next(), "max_gram", name)?;
+    if parts.next().is_some() {
+        return Err(TantivyBindingError::InvalidArgument(format!(
+            "invalid ngram tokenizer '{name}'; expected 'ngram:<min_gram>:<max_gram>'"
+        )));
+    }
+
+    let tokenizer = NgramTokenizer::new(min_gram, max_gram, false).map_err(|err| {
+        TantivyBindingError::InvalidArgument(format!("invalid ngram tokenizer '{name}': {err}"))
+    })?;
+    Ok(TextAnalyzer::builder(tokenizer).filter(LowerCaser).build())
+}
+
+fn parse_ngram_size(value: Option<&str>, key: &str, name: &str) -> Result<usize> {
+    value
+        .ok_or_else(|| {
+            TantivyBindingError::InvalidArgument(format!(
+                "invalid ngram tokenizer '{name}'; missing {key}"
+            ))
+        })?
+        .parse::<usize>()
+        .map_err(|_| {
+            TantivyBindingError::InvalidArgument(format!(
+                "invalid ngram tokenizer '{name}'; {key} must be a positive integer"
+            ))
+        })
 }
