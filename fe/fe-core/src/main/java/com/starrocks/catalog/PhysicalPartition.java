@@ -753,8 +753,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public int getActualBucketNum(DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
             MaterializedIndex baseIndex = getLatestBaseIndexOrNull();
-            if (baseIndex != null && !baseIndex.getTablets().isEmpty()) {
-                return baseIndex.getTablets().size();
+            int tabletNum = baseIndex != null ? baseIndex.getTablets().size() : 0;
+            if (tabletNum > 0) {
+                return tabletNum;
             }
         }
         return bucketNum > 0 ? bucketNum : distributionInfo.getBucketNum();
