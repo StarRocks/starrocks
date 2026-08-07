@@ -163,10 +163,27 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                 ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
         COUNTER_SET(mem_tracker_counter, query_mem_limit);
         size_t lowest_limit = parent->lowest_limit();
-        size_t tracker_reserve_limit = -1;
 
-        if (spill_mem_reserve_ratio.has_value()) {
-            tracker_reserve_limit = lowest_limit * spill_mem_reserve_ratio.value();
+        // The effective memory limit of this query is the tightest of the parent chain limit, the
+        // explicit query_mem_limit and the resource group big query limit. It has to be computed
+        // before the reserve limit below, which is derived from it.
+        _static_query_mem_limit = lowest_limit;
+        if (query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+
+        int64_t tracker_reserve_limit = -1;
+        if (spill_mem_reserve_ratio.has_value() && _static_query_mem_limit > 0) {
+            // The reserve limit is the early-warning line probed by the AUTO spill trigger in
+            // PipelineDriver::_adjust_memory_usage, so it must sit below the hard limit this query
+            // is actually checked against. Deriving it from the parent chain alone made it ignore an
+            // explicit and possibly much smaller query_mem_limit: the reservation probe then never
+            // failed, the operator was never switched to the low memory mode, and the query OOMed
+            // instead of spilling.
+            tracker_reserve_limit = _static_query_mem_limit * spill_mem_reserve_ratio.value();
         }
 
         if (wg != nullptr && big_query_mem_limit > 0 &&
@@ -182,13 +199,6 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         }
         _query_runtime_state.set_query_mem_tracker(_mem_tracker.get());
 
-        _static_query_mem_limit = lowest_limit;
-        if (query_mem_limit > 0) {
-            _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
-        }
-        if (big_query_mem_limit > 0) {
-            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
-        }
         _connector_scan_operator_mem_share_arbitrator = _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(
                 _static_query_mem_limit, connector_scan_node_number, connector_scan_default_data_source_mem_bytes));
         if (runtime_state != nullptr && runtime_state->enable_global_late_materialization()) {
