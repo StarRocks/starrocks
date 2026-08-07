@@ -77,7 +77,7 @@ void apply_index_reader_cache_options(tenann::IndexMeta* meta_copy) {
 }
 
 StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, const FileInfo& vi_file,
-                                             tenann::IndexCache* cache, MemTracker* tracker,
+                                             VectorIndexCache& vector_index_cache, MemTracker* tracker,
                                              OlapReaderStatistics* stats) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
     try {
@@ -95,7 +95,7 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
         }
 
         auto reader = tenann::IndexFactory::CreateReaderFromMeta(meta);
-        reader->SetIndexCache(cache);
+        reader->SetIndexCache(&vector_index_cache);
         if (external_file_reader != nullptr) {
             reader->SetFileReader(external_file_reader);
         }
@@ -122,11 +122,11 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
 }
 
 VectorIndexCache::AsyncIndexLoader make_owned_index_loader(tenann::IndexMeta meta, FileInfo vi_file,
-                                                           tenann::IndexCache* cache, MemTracker* tracker,
+                                                           VectorIndexCache& vector_index_cache, MemTracker* tracker,
                                                            OlapReaderStatistics* stats) {
-    return [meta = std::move(meta), vi_file = std::move(vi_file), cache, tracker,
+    return [meta = std::move(meta), vi_file = std::move(vi_file), vector_index_cache = &vector_index_cache, tracker,
             stats]() mutable -> StatusOr<tenann::IndexRef> {
-        return load_vector_index(meta, vi_file, cache, tracker, stats);
+        return load_vector_index(meta, vi_file, *vector_index_cache, tracker, stats);
     };
 }
 
@@ -136,11 +136,6 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
                                                                   const FileInfo& vi_file,
                                                                   OlapReaderStatistics* stats) {
     const std::string& index_path = vi_file.path;
-    tenann::IndexCache* cache = _vector_index_cache != nullptr ? _vector_index_cache : tenann::GetGlobalIndexCache();
-    if (cache == nullptr) {
-        return Status::InternalError(
-                "VectorIndexCache not injected. StorageEnv must initialize the TenANN global index cache.");
-    }
 
     auto meta_copy = meta;
     apply_index_reader_cache_options(&meta_copy);
@@ -158,22 +153,15 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
     auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
 
     if (!_cache_handle.valid()) {
-        if (_loading_observed) {
-            if (stats != nullptr) {
-                ++stats->vector_index_cache_miss_count;
-            }
-            return VectorIndexReaderInitResult::kFallback;
-        }
-
         if (_async_load_on_miss) {
             // The background task owns every captured value. In particular it
             // never keeps query statistics or SegmentIterator stack objects.
-            auto owned_loader = make_owned_index_loader(meta_copy, vi_file, cache, tracker, nullptr);
+            auto owned_loader = make_owned_index_loader(meta_copy, vi_file, _vector_index_cache, tracker, nullptr);
             VectorIndexCacheProbeResult probe;
             {
                 int64_t ignored_ns = 0;
                 SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_cache_lookup_ns : &ignored_ns);
-                probe = _vector_index_cache->TryGetOrSchedule(tenann::CacheKey(index_path), std::move(owned_loader));
+                probe = _vector_index_cache.TryGetOrSchedule(tenann::CacheKey(index_path), std::move(owned_loader));
             }
             if (probe.state != VectorIndexCacheProbeState::kReady) {
                 if (stats != nullptr) {
@@ -192,7 +180,7 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
             auto loader = [&]() -> tenann::IndexRef {
                 loader_invoked = true;
                 SCOPED_RAW_TIMER(&loader_ns);
-                auto loaded_or = load_vector_index(meta_copy, vi_file, cache, tracker, stats);
+                auto loaded_or = load_vector_index(meta_copy, vi_file, _vector_index_cache, tracker, stats);
                 if (!loaded_or.ok()) {
                     load_status = loaded_or.status();
                     return nullptr;
@@ -205,14 +193,10 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
             bool loading = false;
             {
                 SCOPED_RAW_TIMER(&get_or_create_ns);
-                if (_vector_index_cache != nullptr) {
-                    auto result = _vector_index_cache->GetOrCreateForQuery(tenann::CacheKey(index_path), loader);
-                    loading = result.state == VectorIndexCacheProbeState::kLoading;
-                    cache_ok = result.state == VectorIndexCacheProbeState::kReady;
-                    _cache_handle = std::move(result.handle);
-                } else {
-                    cache_ok = cache->GetOrCreate(tenann::CacheKey(index_path), loader, &_cache_handle);
-                }
+                auto result = _vector_index_cache.GetOrCreateForQuery(tenann::CacheKey(index_path), loader);
+                loading = result.state == VectorIndexCacheProbeState::kLoading;
+                cache_ok = result.state == VectorIndexCacheProbeState::kReady;
+                _cache_handle = std::move(result.handle);
             }
             if (stats != nullptr) {
                 // Exclude this caller's loader time so a cold leader reports cache bookkeeping,

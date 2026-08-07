@@ -35,12 +35,10 @@ class VectorIndexCache;
 
 class TenANNReader final : public VectorIndexReader {
 public:
-    TenANNReader() = default;
-    TenANNReader(VectorIndexCache* vector_index_cache, bool async_load_on_miss, bool loading_observed,
+    TenANNReader(VectorIndexCache& vector_index_cache, bool async_load_on_miss,
                  tenann::IndexCacheHandle cache_handle = {})
             : _vector_index_cache(vector_index_cache),
               _async_load_on_miss(async_load_on_miss),
-              _loading_observed(loading_observed),
               _cache_handle(std::move(cache_handle)) {}
     ~TenANNReader() override = default;
 
@@ -64,9 +62,8 @@ public:
 
 private:
     std::shared_ptr<tenann::AnnSearcher> _searcher;
-    VectorIndexCache* _vector_index_cache = nullptr;
+    VectorIndexCache& _vector_index_cache;
     bool _async_load_on_miss = false;
-    bool _loading_observed = false;
     // Pins the cache entry for the reader's lifetime.
     tenann::IndexCacheHandle _cache_handle;
 };

@@ -35,6 +35,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
@@ -44,6 +45,7 @@
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
+#include "storage/tablet_index.h"
 #include "storage_primitive/storage_stats.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
@@ -71,6 +73,24 @@ tenann::IndexMeta make_minimal_meta() {
     meta.SetIndexFamily(tenann::IndexFamily::kVectorIndex);
     meta.SetIndexType(tenann::IndexType::kFaissHnsw);
     return meta;
+}
+
+std::shared_ptr<TabletIndex> make_minimal_tablet_index() {
+    auto tablet_index = std::make_shared<TabletIndex>();
+    TabletIndexPB index_pb;
+    index_pb.set_index_id(0);
+    index_pb.set_index_name("test_index");
+    index_pb.set_index_type(IndexType::VECTOR);
+    index_pb.add_col_unique_id(1);
+    tablet_index->init_from_pb(index_pb);
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+    return tablet_index;
 }
 
 // FileInfo holds its FileSystem by shared_ptr; these tests keep the FS on the stack,
@@ -329,15 +349,14 @@ TEST_F(VectorIndexCacheTest, GetOrCreate_EstimateExceptionDoesNotLeaveLoading) {
     });
 
     tenann::IndexCacheHandle handle;
-    EXPECT_FALSE(cache_->GetOrCreate(
-            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_FALSE(
+            cache_->GetOrCreate(tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
     EXPECT_FALSE(handle.valid());
     EXPECT_EQ(0, cache_->entry_count());
 
     SyncPoint::GetInstance()->DisableProcessing();
     SyncPoint::GetInstance()->ClearAllCallBacks();
-    EXPECT_TRUE(cache_->GetOrCreate(
-            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_TRUE(cache_->GetOrCreate(tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
     EXPECT_TRUE(handle.valid());
 }
 
@@ -608,9 +627,6 @@ TEST_F(VectorIndexCacheTest, SyncGetOrCreateWaitsForSameKeyAsyncLoad) {
 TEST_F(VectorIndexCacheTest, Factory_ConfigOffDoesNotWaitForExistingAsyncLoad) {
     ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
 
-    auto* saved_cache = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(cache_.get());
-    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved_cache); });
     const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
     config::enable_vector_index_cache_async_load_on_miss = false;
     DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
@@ -629,24 +645,21 @@ TEST_F(VectorIndexCacheTest, Factory_ConfigOffDoesNotWaitForExistingAsyncLoad) {
               cache_->TryGetOrSchedule(tenann::CacheKey(kMissingPath), std::move(async_loader)).state);
     ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
 
-    auto index_meta = std::make_shared<tenann::IndexMeta>(make_minimal_meta());
+    auto tablet_index = make_minimal_tablet_index();
     auto factory = std::async(std::launch::async, [&] {
         auto vi_file = remote_vi(kMissingPath, &fs);
-        std::shared_ptr<VectorIndexReader> reader;
-        auto st = VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &reader, nullptr, cache_.get());
-        return std::make_pair(std::move(st), std::move(reader));
+        VectorIndexReaderFactory reader_factory(*cache_);
+        return reader_factory.create_and_init(std::move(vi_file), tablet_index, {}, {});
     });
     const auto factory_status = factory.wait_for(std::chrono::milliseconds(500));
     if (factory_status != std::future_status::ready) {
         release_loader.set_value();
     }
     ASSERT_EQ(std::future_status::ready, factory_status);
-    auto [status, reader] = factory.get();
-    EXPECT_OK(status);
-    EXPECT_NE(nullptr, reader);
-    auto init = reader->init_searcher(*index_meta, remote_vi(kMissingPath, &fs));
-    ASSERT_TRUE(init.ok()) << init.status();
-    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, init.value());
+    auto result_or = factory.get();
+    ASSERT_OK(result_or);
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result_or->state);
+    EXPECT_EQ(nullptr, result_or->reader);
 
     release_loader.set_value();
 }
@@ -1113,28 +1126,28 @@ TEST(EmptyIndexReaderTest, AllMethodsReturnNotSupported) {
                         .is_not_supported());
 }
 
-TEST(TenANNReaderTest, InitSearcher_NoGlobalCache_ReturnsInternalError) {
+TEST(TenANNReaderTest, InitSearcher_UsesInjectedCacheWithoutGlobalCache) {
+    MemTracker tracker(-1, "tenann_reader_test");
+    VectorIndexCache cache(/*capacity=*/1024, &tracker);
     auto* saved = tenann::GetGlobalIndexCache();
     tenann::SetGlobalIndexCache(nullptr);
-    TenANNReader r;
-    tenann::IndexMeta meta;
-    auto st = r.init_searcher(meta, local_vi("/x.vi"));
-    EXPECT_TRUE(st.status().is_internal_error()) << st.status();
-    tenann::SetGlobalIndexCache(saved);
+    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved); });
+
+    MemoryFileSystem fs;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
+    auto st = r.init_searcher(make_minimal_meta(), remote_vi("/no/such/index.vi", &fs));
+    EXPECT_TRUE(st.status().is_not_found()) << st.status();
 }
 
 // Drives init_searcher through the loader's fs!=nullptr branch with a missing
 // path so the captured Status (NotFound) flows back through GetOrCreate to the
-// caller. This is the signal VectorIndexReaderFactory's brute-force fallback
-// keys off — collapsing it to InternalError would silently disable the fallback.
+// caller instead of being collapsed to an unhelpful InternalError.
 TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     MemTracker tracker(-1, "tenann_reader_test");
     VectorIndexCache cache(/*capacity=*/1024, &tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     MemoryFileSystem fs;
-    TenANNReader r;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
     OlapReaderStatistics stats;
     auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs), &stats);
@@ -1144,8 +1157,6 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     EXPECT_GT(stats.vector_index_file_open_ns, 0);
     EXPECT_EQ(0, stats.vector_index_read_file_ns);
     EXPECT_EQ(0, stats.vector_index_init_index_ns);
-
-    tenann::SetGlobalIndexCache(saved);
 }
 
 // Same fs-bound path but the file IS present, just not a real tenann index.
@@ -1157,19 +1168,15 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
 TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
     MemTracker tracker(-1, "tenann_reader_test");
     VectorIndexCache cache(/*capacity=*/1024, &tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     MemoryFileSystem fs;
     ASSERT_OK(fs.create_dir("/tmp"));
     ASSERT_OK(fs.append_file("/tmp/garbage.vi", Slice("not a real index", 16)));
 
-    TenANNReader r;
+    TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
     auto st = r.init_searcher(meta, remote_vi("/tmp/garbage.vi", &fs));
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
-
-    tenann::SetGlobalIndexCache(saved);
 }
 
 // A FileSystem that records which mem tracker is active when the index file is
@@ -1213,8 +1220,6 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
 
     MemTracker cache_tracker(-1, "vi_cache_probe");
     VectorIndexCache cache(/*capacity=*/1024, &cache_tracker);
-    auto* saved = tenann::GetGlobalIndexCache();
-    tenann::SetGlobalIndexCache(&cache);
 
     // Simulate the load being triggered while running under a query's mem tracker
     // (distinct from both process and vector_index). The loader must redirect the
@@ -1222,12 +1227,11 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
     MemTracker fake_query(-1, "fake_query_ambient");
     {
         CurrentThreadMemTrackerSetter ambient(&fake_query);
-        TenANNReader r;
+        TenANNReader r(cache, /*async_load_on_miss=*/false);
         auto meta = make_minimal_meta();
         // Load runs the probe fs, then fails NotFound (return ignored).
         (void)r.init_searcher(meta, remote_vi("/no/such/probe.vi", &fs));
     }
-    tenann::SetGlobalIndexCache(saved);
 
     ASSERT_NE(nullptr, fs.captured) << "loader never opened the index file via fs";
     EXPECT_EQ(process, fs.captured) << "index load charged to '" << fs.captured->label() << "', expected 'process'";

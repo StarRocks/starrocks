@@ -15,111 +15,94 @@
 #ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "common/config_vector_index_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
-#include "storage/index/vector/empty_index_reader.h"
+#include "fs/fs_util.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage_primitive/storage_stats.h"
-#include "tenann/index/index_cache.h"
 
 namespace starrocks {
 
-static Status create_from_file_impl(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
-                                    std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                    OlapReaderStatistics* stats, VectorIndexCache* vector_index_cache,
-                                    bool refine_distance) {
-    const std::string& index_path = vi_file->path;
+StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_init(
+        FileInfo vi_file, const std::shared_ptr<TabletIndex>& tablet_index,
+        const std::map<std::string, std::string>& query_params, const VectorIndexReaderInitOptions& options) {
+    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index, query_params));
+
+    const std::string& index_path = vi_file.path;
     const bool async_load_on_miss = config::enable_vector_index_cache_async_load_on_miss &&
-                                    vector_index_cache != nullptr && vector_index_cache->capacity() > 0 &&
-                                    !refine_distance;
+                                    _vector_index_cache.capacity() > 0 && !options.refine_distance;
 
-    if (vector_index_cache != nullptr) {
-        VectorIndexCacheProbeResult probe;
-        {
-            int64_t ignored_ns = 0;
-            SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_cache_lookup_ns : &ignored_ns);
-            probe = vector_index_cache->ProbeForQuery(tenann::CacheKey(index_path));
-        }
-        if (probe.state == VectorIndexCacheProbeState::kReady) {
-            (*vector_index_reader) = std::make_shared<TenANNReader>(vector_index_cache, async_load_on_miss, false,
-                                                                    std::move(probe.handle));
-            return Status::OK();
-        }
-        if (probe.state == VectorIndexCacheProbeState::kLoading) {
-            // A real load is already in progress. Do not repeat file metadata
-            // I/O or build another loader for this query.
-            (*vector_index_reader) = std::make_shared<TenANNReader>(vector_index_cache, async_load_on_miss, true);
-            return Status::OK();
-        }
-    }
-
-    // Warm path: an entry in the cache means the .vi file exists and is not
-    // an empty-mark placeholder, so we can skip the OSS/S3 HEAD round-trips
-    // (path_exist + new_random_access_file + get_size) that the cold path runs.
-    auto* cache = tenann::GetGlobalIndexCache();
-    if (vector_index_cache == nullptr && cache != nullptr) {
-        tenann::IndexCacheHandle probe;
-        bool cache_hit = false;
-        {
-            int64_t ignored_ns = 0;
-            SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_cache_lookup_ns : &ignored_ns);
-            cache_hit = cache->Lookup(tenann::CacheKey(index_path), &probe);
-        }
-        if (cache_hit) {
-            (*vector_index_reader) = std::make_shared<TenANNReader>();
-            return Status::OK();
-        }
-    }
-
-    std::unique_ptr<RandomAccessFile> index_file;
-    uint64_t file_size = 0;
+    VectorIndexCacheProbeResult probe;
     {
         int64_t ignored_ns = 0;
-        SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_file_open_ns : &ignored_ns);
-        if (vi_file->fs != nullptr) {
-            // Remote FS: let new_random_access_file() be the single source of truth for
-            // NotFound. Doing a separate path_exists() here would cost an extra round-trip.
-            auto file_or = vi_file->fs->new_random_access_file(index_path);
-            if (!file_or.ok()) {
-                if (file_or.status().is_not_found()) {
-                    return Status::NotFound(fmt::format("index path {} not found", index_path));
+        SCOPED_RAW_TIMER(options.stats != nullptr ? &options.stats->vector_index_cache_lookup_ns : &ignored_ns);
+        probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path));
+    }
+    if (probe.state == VectorIndexCacheProbeState::kLoading) {
+        if (options.stats != nullptr) {
+            ++options.stats->vector_index_cache_miss_count;
+        }
+        return VectorIndexReaderCreateResult{};
+    }
+
+    if (probe.state == VectorIndexCacheProbeState::kMiss) {
+        std::unique_ptr<RandomAccessFile> index_file;
+        uint64_t file_size = 0;
+        {
+            int64_t ignored_ns = 0;
+            SCOPED_RAW_TIMER(options.stats != nullptr ? &options.stats->vector_index_file_open_ns : &ignored_ns);
+            if (vi_file.fs != nullptr) {
+                auto file_or = vi_file.fs->new_random_access_file(index_path);
+                if (!file_or.ok()) {
+                    if (file_or.status().is_not_found()) {
+                        return VectorIndexReaderCreateResult{};
+                    }
+                    return file_or.status();
                 }
-                return file_or.status();
+                index_file = std::move(file_or).value();
+            } else {
+                if (!fs::path_exist(index_path)) {
+                    return VectorIndexReaderCreateResult{};
+                }
+                ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
             }
-            index_file = std::move(file_or).value();
-        } else {
-            if (!fs::path_exist(index_path)) {
-                return Status::NotFound(fmt::format("index path {} not found", index_path));
-            }
-            ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
+            ASSIGN_OR_RETURN(file_size, index_file->get_size());
         }
-        ASSIGN_OR_RETURN(file_size, index_file->get_size());
-    }
-    // Hand the resolved size to init_searcher so it does not HEAD/stat the same file again.
-    vi_file->size = file_size;
+        vi_file.size = file_size;
 
-    if (file_size == IndexDescriptor::mark_word_len) {
-        auto buf = std::make_unique<unsigned char[]>(file_size);
-        RETURN_IF_ERROR(index_file->read_fully(buf.get(), file_size));
-        std::string_view buf_str = std::string_view(reinterpret_cast<char*>(buf.get()), file_size);
-        if (buf_str == IndexDescriptor::mark_word) {
-            (*vector_index_reader) = std::make_shared<EmptyIndexReader>();
-            return Status::OK();
+        if (file_size == IndexDescriptor::mark_word_len) {
+            auto buf = std::make_unique<unsigned char[]>(file_size);
+            RETURN_IF_ERROR(index_file->read_fully(buf.get(), file_size));
+            std::string_view buf_str = std::string_view(reinterpret_cast<char*>(buf.get()), file_size);
+            if (buf_str == IndexDescriptor::mark_word) {
+                return VectorIndexReaderCreateResult{};
+            }
         }
     }
-    (*vector_index_reader) = std::make_shared<TenANNReader>(vector_index_cache, async_load_on_miss, false);
-    return Status::OK();
-}
 
-Status VectorIndexReaderFactory::create_from_file(FileInfo* vi_file,
-                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                                  OlapReaderStatistics* stats, VectorIndexCache* vector_index_cache,
-                                                  bool refine_distance) {
-    return create_from_file_impl(vi_file, index_meta, vector_index_reader, stats, vector_index_cache, refine_distance);
+    bool user_set_ef = false;
+    for (const auto& entry : query_params) {
+        if (boost::iequals(entry.first, index::vector::EF_SEARCH)) {
+            user_set_ef = true;
+            break;
+        }
+    }
+
+    std::shared_ptr<VectorIndexReader> reader =
+            std::make_shared<TenANNReader>(_vector_index_cache, async_load_on_miss, std::move(probe.handle));
+    ASSIGN_OR_RETURN(auto state, reader->init_searcher(meta, vi_file, options.segment_num_rows, options.query_k,
+                                                       user_set_ef, options.stats));
+    if (state == VectorIndexReaderInitResult::kFallback) {
+        return VectorIndexReaderCreateResult{};
+    }
+    return VectorIndexReaderCreateResult{.state = state, .reader = std::move(reader)};
 }
 
 } // namespace starrocks
