@@ -473,12 +473,19 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());
         updateCommitInfo(deleteFiles, context);
+        boolean shouldInvalidateCache = true;
         try {
             deleteFiles.commit();
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            shouldInvalidateCache = e instanceof CommitStateUnknownException;
             LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(
                     String.format("Failed to truncate iceberg table: %s.%s", dbName, tableName), e);
+        } finally {
+            if (shouldInvalidateCache) {
+                invalidateCacheAfterCommit(dbName, tableName);
+                asyncRefreshOthersFeMetadataCache(dbName, tableName);
+            }
         }
     }
 
