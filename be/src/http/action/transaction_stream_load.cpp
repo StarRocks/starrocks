@@ -490,16 +490,15 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             // set that bit, so silently continuing would apply a heterogeneous load as a HOMOGENEOUS
             // union partial update and write NULL over every column a row did not declare. Fail loudly
             // instead; use /api/{db}/{tbl}/_stream_load for flexible partial update.
-            return Status::NotSupported(fmt::format(
-                    "partial_update_mode={} is not supported on transaction stream load; use the "
-                    "regular stream load endpoint",
-                    partial_update_mode));
+            return Status::NotSupported(
+                    fmt::format("partial_update_mode={} is not supported on transaction stream load; use the "
+                                "regular stream load endpoint",
+                                partial_update_mode));
         } else {
             // An unrecognised value used to be ignored, which silently downgraded the load to the
             // default mode. Reject it so a typo cannot change how the data is applied.
-            return Status::InvalidArgument(
-                    fmt::format("Unknown partial_update_mode: {} (expected one of: row, column, auto)",
-                                partial_update_mode));
+            return Status::InvalidArgument(fmt::format(
+                    "Unknown partial_update_mode: {} (expected one of: row, column, auto)", partial_update_mode));
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
