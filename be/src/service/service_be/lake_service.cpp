@@ -1675,12 +1675,10 @@ struct AggregateCompactContext {
     }
 
     Status validate_unshare_result(lake::TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
-        const bool has_unshare_request =
-                std::any_of(request.requests().begin(), request.requests().end(),
-                            [](const CompactRequest& req) { return req.unshare_segments(); });
-        const bool has_default_request =
-                std::any_of(request.requests().begin(), request.requests().end(),
-                            [](const CompactRequest& req) { return !req.unshare_segments(); });
+        const bool has_unshare_request = std::any_of(request.requests().begin(), request.requests().end(),
+                                                     [](const CompactRequest& req) { return req.unshare_segments(); });
+        const bool has_default_request = std::any_of(request.requests().begin(), request.requests().end(),
+                                                     [](const CompactRequest& req) { return !req.unshare_segments(); });
         if (has_unshare_request && has_default_request) {
             return Status::InvalidArgument("aggregate compaction cannot mix UNSHARE and default modes");
         }
