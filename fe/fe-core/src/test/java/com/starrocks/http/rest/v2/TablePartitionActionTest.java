@@ -209,22 +209,7 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
                 testDbId, RANGE_PARTITION_TABLE_ID, BASE_PARTITION_ID, testIndexId, TStorageMedium.HDD, true);
         baseIndex.addTablet(tablet, tabletMeta);
 
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/" + tableName);
-        FilePathInfo pathInfo = builder.build();
+        FilePathInfo pathInfo = newTestPathInfo(tableName);
         lakeTable.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
 
         new Expectations(tablet) {

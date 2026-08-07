@@ -187,12 +187,9 @@ public class PartitionInfoView {
             }
 
             // Under range distribution bucketNum above counts the base index's tablets, so the tablet
-            // list must come from that same index or the two fields contradict each other. Any other
-            // distribution keeps the historical selection, whose tablet ids clients may already rely on.
-            // The pairing holds whenever bucketNum was actually derived from the base index. When it
-            // fell back instead -- the base index is unresolvable, or holds no tablets -- the two are
-            // independent again, which no internal table can reach: its physical partition is always
-            // built around a base index carrying at least one tablet.
+            // list must come from that same index -- whenever bucketNum was in fact derived from it --
+            // or the two fields contradict each other. Any other distribution keeps the historical
+            // selection, whose tablet ids clients may already rely on.
             MaterializedIndex materializedIndex = null;
             if (distributionInfo != null
                     && distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {

@@ -522,8 +522,7 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
-        // BUCKETS: each physical partition can carry its own bucket count (e.g. ADD PHYSICAL PARTITION),
-        // and a range-distribution partition reports the real tablet count of its base index.
+        // BUCKETS
         partitionMetaInfo.setBuckets(physicalPartition.getActualBucketNum(distributionInfo));
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));

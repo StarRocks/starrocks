@@ -334,7 +334,9 @@ public class PartitionsProcDirTest {
         table.setIndexMeta(baseIndex.getMetaId(), "range_table", col, 0, 0, (short) 1,
                 TStorageType.COLUMN, KeysType.DUP_KEYS);
 
-        Partition partition = new Partition(partitionId, 1035L, "p1", baseIndex, new RangeDistributionInfo());
+        long defaultPhysicalId = 1035;
+        Partition partition =
+                new Partition(partitionId, defaultPhysicalId, "p1", baseIndex, new RangeDistributionInfo());
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
         physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
@@ -350,6 +352,6 @@ public class PartitionsProcDirTest {
 
         BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, table, false).fetchResult();
 
-        Assertions.assertEquals("3", bucketsByPartitionId(result).get("1035"));
+        Assertions.assertEquals("3", bucketsByPartitionId(result).get(String.valueOf(defaultPhysicalId)));
     }
 }
