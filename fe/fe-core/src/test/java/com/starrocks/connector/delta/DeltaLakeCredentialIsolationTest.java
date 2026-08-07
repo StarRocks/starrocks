@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
@@ -111,6 +112,17 @@ public class DeltaLakeCredentialIsolationTest {
         Assertions.assertEquals("ak-nation", observedAccessKey[0]);
     }
 
+    @Test
+    public void testEnginesOfDifferentTablesGetDistinctFileSystemCacheKeys() throws Exception {
+        DeltaLakeSnapshot nation = metastore.getLatestSnapshot("db1", "nation");
+        DeltaLakeSnapshot supplier = metastore.getLatestSnapshot("db1", "supplier");
+
+        // FileSystem instances are cached per credential fingerprint, so two tables sharing a scheme and
+        // authority only get separate clients when their fingerprints differ.
+        Assertions.assertNotEquals(credentialFingerprintOf(nation.getDeltaLakeEngine()),
+                credentialFingerprintOf(supplier.getDeltaLakeEngine()));
+    }
+
     private static CloudConfiguration vendedCredentialFor(String tableName) {
         return CloudConfigurationFactory.buildCloudConfigurationForStorage(ImmutableMap.of(
                 CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "ak-" + tableName,
@@ -120,9 +132,17 @@ public class DeltaLakeCredentialIsolationTest {
     }
 
     private static String accessKeyOf(DeltaLakeEngine engine) throws Exception {
+        return configurationOf(engine).get(Constants.ACCESS_KEY);
+    }
+
+    private static String credentialFingerprintOf(DeltaLakeEngine engine) throws Exception {
+        return configurationOf(engine).get(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING);
+    }
+
+    private static Configuration configurationOf(DeltaLakeEngine engine) throws Exception {
         Field field = DeltaLakeEngine.class.getDeclaredField("hadoopConf");
         field.setAccessible(true);
-        return ((Configuration) field.get(engine)).get(Constants.ACCESS_KEY);
+        return (Configuration) field.get(engine);
     }
 
     private static void readCheckpointThrough(DeltaLakeEngine engine) throws IOException {
