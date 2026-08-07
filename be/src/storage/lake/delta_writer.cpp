@@ -246,6 +246,9 @@ private:
     RuntimeProfile* _profile = nullptr;
     // Used for maintain spill block for bulk load.
     std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
+    // Shared with SpillMemTableSink so cancellation is visible even if the
+    // sink is being created or a spill merge is already running.
+    std::shared_ptr<SpillMergeCancellation> _spill_merge_cancellation = std::make_shared<SpillMergeCancellation>();
     // End of data ingestion
     bool _eos = false;
     DeltaWriterStat _stats;
@@ -342,8 +345,8 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
-            _mem_table_sink =
-                    std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(), _profile);
+            _mem_table_sink = std::make_unique<SpillMemTableSink>(_load_spill_block_mgr.get(), _tablet_writer.get(),
+                                                                  _profile, _spill_merge_cancellation);
         } else {
             // Init normal TabletWriterSink
             _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -620,7 +623,9 @@ Status DeltaWriterImpl::finish() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
+    RETURN_IF_ERROR(current_cancel_status());
     RETURN_IF_ERROR(merge_blocks_to_segments());
+    RETURN_IF_ERROR(current_cancel_status());
     RETURN_IF_ERROR(_tablet_writer->finish());
     return Status::OK();
 }
@@ -858,6 +863,7 @@ void DeltaWriterImpl::cancel(const Status& st) {
             return;
         }
         _cancel_status = st;
+        _spill_merge_cancellation->cancel(st);
         // Cancel the flush token under the lock to prevent race with close() which resets _flush_token.
         // FlushToken::cancel() is lightweight (just sets a status flag), so holding the lock is fine.
         if (_flush_token != nullptr) {

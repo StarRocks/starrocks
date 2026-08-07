@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -33,6 +35,8 @@
 #include "storage/lake/test_util.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
+#include "util/countdown_latch.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -291,6 +295,44 @@ TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
     ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->files().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_cancel_running_merge) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    ASSERT_OK(block_manager->init());
+    auto tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), tablet_id, _tablet_schema,
+                                                                         txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+    for (int i = 0; i < 3; i++) {
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        ASSERT_OK(sink.flush_chunk(*chunk, &segment, false));
+    }
+
+    CountDownLatch merge_started(1);
+    CountDownLatch resume_merge(1);
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments:process", [&](void*) {
+        merge_started.count_down();
+        resume_merge.wait();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    Status merge_status;
+    std::thread merge_thread([&]() { merge_status = sink.merge_blocks_to_segments(); });
+    merge_started.wait();
+    sink.cancel(Status::Cancelled("load cancelled during spill merge"));
+    resume_merge.count_down();
+    merge_thread.join();
+
+    ASSERT_TRUE(merge_status.is_cancelled()) << merge_status;
+    ASSERT_TRUE(merge_status.message().find("load cancelled during spill merge") != std::string::npos);
+    ASSERT_TRUE(tablet_writer->files().empty());
 }
 
 INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,

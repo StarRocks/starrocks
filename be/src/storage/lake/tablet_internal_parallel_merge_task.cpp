@@ -18,20 +18,23 @@
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/lake/spill_mem_table_sink.h"
 #include "storage/lake/tablet_writer.h"
+#include "testutil/sync_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator,
                                                                  MemTracker* merge_mem_tracker, Schema* schema,
-                                                                 int32_t task_index, QuitFlag* quit_flag)
+                                                                 int32_t task_index,
+                                                                 SpillMergeCancellation* cancellation)
         : _writer(writer),
           _block_iterator(block_iterator),
           _merge_mem_tracker(merge_mem_tracker),
           _schema(schema),
           _task_index(task_index),
-          _quit_flag(quit_flag) {}
+          _cancellation(cancellation) {}
 
 TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
     if (_block_iterator != nullptr) {
@@ -47,12 +50,21 @@ void TabletInternalParallelMergeTask::run() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
     auto st = Status::OK();
-    while (!_quit_flag->quit.load()) {
+    TEST_SYNC_POINT("SpillMemTableSink::merge_blocks_to_segments:process");
+    while (true) {
+        st = _cancellation->status();
+        if (!st.ok()) {
+            break;
+        }
         chunk->reset();
         auto itr_st = _block_iterator->get_next(chunk);
         if (itr_st.is_end_of_file()) {
             break;
         } else if (itr_st.ok()) {
+            st = _cancellation->status();
+            if (!st.ok()) {
+                break;
+            }
             ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
             st = _writer->write(*chunk, nullptr);
             if (!st.ok()) {
@@ -64,7 +76,13 @@ void TabletInternalParallelMergeTask::run() {
         }
     }
     if (st.ok()) {
+        st = _cancellation->status();
+    }
+    if (st.ok()) {
         st = _writer->flush();
+    }
+    if (st.ok()) {
+        st = _cancellation->status();
     }
     if (st.ok()) {
         st = _writer->finish();
@@ -83,9 +101,9 @@ void TabletInternalParallelMergeTask::cancel() {
 
 void TabletInternalParallelMergeTask::update_status(const Status& st) {
     _status.update(st);
-    if (!st.ok() && _quit_flag != nullptr) {
+    if (!st.ok() && _cancellation != nullptr) {
         // Notify other tasks to quit
-        _quit_flag->quit.store(true);
+        _cancellation->cancel(st);
     }
 }
 

@@ -81,7 +81,7 @@ public:
 
     void abort() override;
 
-    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
 
     void update_profile() override;
 
@@ -793,8 +793,26 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
 
 void LakeTabletsChannel::abort() {
     std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    auto cancel_status = Status::Cancelled("tablet channel aborted");
     for (auto& it : _delta_writers) {
+        it.second->cancel(cancel_status);
         it.second->close();
+    }
+}
+
+void LakeTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) {
+    std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "tablet channel aborted" : reason);
+    for (auto tablet_id : tablet_ids) {
+        auto it = _delta_writers.find(tablet_id);
+        if (it == _delta_writers.end()) {
+            LOG(WARNING) << "tablet_id: " << tablet_id
+                         << " not found in LakeTabletsChannel, load_id=" << print_id(_key.id)
+                         << ", index_id=" << _key.index_id;
+            continue;
+        }
+        it->second->cancel(cancel_status);
+        it->second->close();
     }
 }
 

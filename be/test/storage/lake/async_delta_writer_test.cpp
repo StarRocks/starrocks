@@ -664,6 +664,78 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
     delta_writer->close();
 }
 
+TEST_F(LakeAsyncDeltaWriterTest, test_cancel_running_block_merger) {
+    static const int kChunkSize = 128;
+    auto chunk = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto old_write_buffer_size = config::write_buffer_size;
+    auto old_parallel_merge = config::enable_load_spill_parallel_merge;
+    auto old_max_merge_bytes = config::load_spill_max_merge_bytes;
+    config::write_buffer_size = 1;
+    config::enable_load_spill_parallel_merge = true;
+    config::load_spill_max_merge_bytes = 1;
+    DeferOp restore_config([&]() {
+        config::write_buffer_size = old_write_buffer_size;
+        config::enable_load_spill_parallel_merge = old_parallel_merge;
+        config::load_spill_max_merge_bytes = old_max_merge_bytes;
+    });
+
+    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    CountDownLatch flush_latch(3);
+    for (int i = 0; i < 3; i++) {
+        delta_writer->write(&chunk, indexes.data(), indexes.size(), [](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+
+    CountDownLatch merge_started(1);
+    CountDownLatch resume_merge(1);
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments:process", [&](void*) {
+        merge_started.count_down();
+        resume_merge.wait();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_points([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    Status finish_status;
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> result) {
+        finish_status = result.status();
+        finish_latch.count_down();
+    });
+    merge_started.wait();
+    delta_writer->cancel(Status::Cancelled("cancel running spill merge"));
+    resume_merge.count_down();
+    finish_latch.wait();
+
+    ASSERT_TRUE(finish_status.is_cancelled()) << finish_status;
+    ASSERT_TRUE(finish_status.message().find("cancel running spill merge") != std::string::npos);
+    delta_writer->close();
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     do_block_merger(true);
 }

@@ -31,6 +31,28 @@
 
 namespace starrocks::lake {
 
+void SpillMergeCancellation::cancel(const Status& status) {
+    if (status.ok()) {
+        return;
+    }
+    {
+        std::lock_guard lock(_mutex);
+        if (!_status.ok()) {
+            return;
+        }
+        _status = status;
+    }
+    _cancelled.store(true, std::memory_order_release);
+}
+
+Status SpillMergeCancellation::status() const {
+    if (!is_cancelled()) {
+        return Status::OK();
+    }
+    std::lock_guard lock(_mutex);
+    return _status;
+}
+
 Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
                                          size_t write_num_rows) {
     _append_rows += write_num_rows;
@@ -110,10 +132,11 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
 }
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile) {
+                                     RuntimeProfile* profile, std::shared_ptr<SpillMergeCancellation> cancellation) {
     _block_manager = block_manager;
     _writer = writer;
     _profile = profile;
+    _cancellation = cancellation != nullptr ? std::move(cancellation) : std::make_shared<SpillMergeCancellation>();
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -268,6 +291,7 @@ StatusOr<SpillBlockInputTasks> SpillMemTableSink::generate_spill_block_input_tas
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
     for (auto& group : groups) {
+        RETURN_IF_ERROR(_cancellation->status());
         merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
         current_input_bytes += group.data_size();
         result.total_block_bytes += group.data_size();
@@ -303,57 +327,71 @@ StatusOr<SpillBlockInputTasks> SpillMemTableSink::generate_spill_block_input_tas
 }
 
 Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg) {
+    RETURN_IF_ERROR(_cancellation->status());
     MonotonicStopWatch timer;
     timer.start();
     auto token =
             StorageEngine::instance()->load_spill_block_merge_executor()->create_tablet_internal_parallel_merge_token();
     // 1. Get all spill block iterators
-    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
-                     generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
-                                                     config::load_spill_memory_usage_per_merge,
-                                                     true /* do_sort */, do_agg));
+    ASSIGN_OR_RETURN(
+            auto spill_block_iterator_tasks,
+            generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                             config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg));
     // 2. Prepare all tablet writers
     std::vector<std::unique_ptr<TabletWriter>> writers;
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        RETURN_IF_ERROR(_cancellation->status());
         ASSIGN_OR_RETURN(auto writer, _writer->clone());
         writers.push_back(std::move(writer));
     }
     // 3. Prepare all parallel merge tasks
-    QuitFlag quit_flag;
     std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        RETURN_IF_ERROR(_cancellation->status());
         tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
                 writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(),
-                _schema.get(), i, &quit_flag));
+                _schema.get(), i, _cancellation.get()));
     }
     // 4. Submit all tasks to thread pool
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        auto cancel_st = _cancellation->status();
+        if (!cancel_st.ok()) {
+            tasks[i]->update_status(cancel_st);
+            break;
+        }
         auto submit_st = token->submit(tasks[i]);
         if (!submit_st.ok()) {
             tasks[i]->update_status(submit_st);
             break;
         }
     }
-    token->wait();
+    while (!token->wait_for(MonoDelta::FromMilliseconds(50))) {
+        if (_cancellation->is_cancelled()) {
+            // Cancel tasks that have not started yet and wait for running tasks to
+            // observe the shared cancellation state.
+            token->shutdown();
+            break;
+        }
+    }
     // 5. check all task status
     for (const auto& task : tasks) {
         RETURN_IF_ERROR(task->status());
     }
+    RETURN_IF_ERROR(_cancellation->status());
     // 6. merge all writers' result
     RETURN_IF_ERROR(_writer->merge_other_writers(writers));
     timer.stop();
 
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT),
-                   spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
                    spill_block_iterator_tasks.total_block_bytes);
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT),
-                   spill_block_iterator_tasks.iterators.size());
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), spill_block_iterator_tasks.iterators.size());
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), timer.elapsed_time());
     return Status::OK();
 }
 
 Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
+    RETURN_IF_ERROR(_cancellation->status());
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
     auto write_func = [&char_field_indexes, this](Chunk* chunk) {
         ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
@@ -361,25 +399,29 @@ Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
     };
     auto flush_func = [this]() { return _writer->flush(); };
 
-    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
-                     generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
-                                                     config::load_spill_memory_usage_per_merge,
-                                                     true /* do_sort */, do_agg));
+    ASSIGN_OR_RETURN(
+            auto spill_block_iterator_tasks,
+            generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                             config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg));
     MonotonicStopWatch timer;
     timer.start();
     size_t total_merges = 0;
     size_t total_rows = 0;
     size_t total_chunk = 0;
     for (const auto& merge_itr : spill_block_iterator_tasks.iterators) {
+        RETURN_IF_ERROR(_cancellation->status());
         total_merges++;
         auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
+        TEST_SYNC_POINT("SpillMemTableSink::merge_blocks_to_segments:process");
         while (true) {
+            RETURN_IF_ERROR(_cancellation->status());
             chunk->reset();
             auto st = merge_itr->get_next(chunk);
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
+                RETURN_IF_ERROR(_cancellation->status());
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 RETURN_IF_ERROR(write_func(chunk));
@@ -388,6 +430,7 @@ Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
             }
         }
         merge_itr->close();
+        RETURN_IF_ERROR(_cancellation->status());
         RETURN_IF_ERROR(flush_func());
     }
     timer.stop();
@@ -399,8 +442,7 @@ Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
             _block_manager->txn_id(), _block_manager->tablet_id(), groups.size(),
             spill_block_iterator_tasks.total_blocks, spill_block_iterator_tasks.total_block_bytes, total_merges,
             total_rows, total_chunk, duration_ms);
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT),
-                   spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputGroups", TUnit::UNIT), spill_block_iterator_tasks.group_count);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
                    spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
@@ -411,6 +453,7 @@ Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg) {
 Status SpillMemTableSink::merge_blocks_to_segments() {
     TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+    RETURN_IF_ERROR(_cancellation->status());
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
 
