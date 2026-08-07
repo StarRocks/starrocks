@@ -51,6 +51,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/local_primary_key_compaction_conflict_resolver.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/persistent_index.h"
@@ -4449,6 +4450,12 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
             }
             ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(), new_chunk.get());
 
+            // Primary key tables never take the MemTable schema change path: convert_from and
+            // reorder_from build a RowsetWriter directly, so both re-encode the sort key unchecked
+            // unless the guard runs here.
+            RETURN_IF_ERROR(check_sort_key_size(new_schema, _tablet.tablet_schema()->sort_key_idxes(), *new_chunk, 0,
+                                                new_chunk->num_rows()));
+
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
@@ -4598,6 +4605,11 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                 chunk_arr.push_back(new_chunk);
                 ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(),
                                                   new_chunk.get());
+                // ALTER ... ORDER BY on a primary key table lands here, and can promote a wide value
+                // column into the sort key. Checked after padding, since padding mutates the chunk
+                // that chunk_arr already holds.
+                RETURN_IF_ERROR(check_sort_key_size(new_schema, tschema->sort_key_idxes(), *new_chunk, 0,
+                                                    new_chunk->num_rows()));
             }
         }
 

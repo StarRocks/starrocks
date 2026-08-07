@@ -1153,6 +1153,15 @@ This topic introduces the following types of BE configurations:
 - Description: The expiration time of snapshot files.
 - Introduced in: -
 
+### sort_key_limit_size
+
+- Default: 1024
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of one row's encoded sort key. A load (including Spark Load) or a schema change that would admit a row with a wider sort key fails with a non-retryable error. This bounds the size of the full sort key index page and the memory it occupies once loaded. Compaction and post-commit segment rewrites are not checked, because a failure there happens after the transaction commits; rows admitted before this limit took effect are therefore unaffected. The check applies whenever the sort key can be encoded, regardless of `enable_full_sort_key_index`, so that row admission and segment writing cannot disagree. Set to 0 or a negative value to disable the check.
+- Introduced in: -
+
 ### stale_memtable_flush_time_sec
 
 - Default: 0

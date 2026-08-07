@@ -55,6 +55,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/metadata_util.h"
@@ -478,6 +479,11 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         }
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
+
+        // A direct schema change re-encodes the sort key -- widening a sort column changes its
+        // encoded width -- and does not pass through a MemTable, so it needs its own check.
+        RETURN_IF_ERROR(check_sort_key_size(new_schema, new_tablet->tablet_schema()->sort_key_idxes(), *new_chunk, 0,
+                                            new_chunk->num_rows()));
 
         if (st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             std::string err_msg = strings::Substitute(
