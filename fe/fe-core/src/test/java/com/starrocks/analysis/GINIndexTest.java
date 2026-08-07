@@ -19,11 +19,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -176,5 +178,40 @@ public class GINIndexTest extends PlanTestBase {
         StringLiteral stringExpr = new StringLiteral("test");
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
+    }
+
+    @Test
+    public void testMaterializedViewGINIndexGetsDistinctIndexId() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `mv_index_base` (\n" +
+                "  `f1` int NOT NULL COMMENT \"\",\n" +
+                "  `f2` varchar(200) NOT NULL COMMENT \"\",\n" +
+                "  `f3` varchar(200) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`f1`)\n" +
+                "DISTRIBUTED BY HASH(`f1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_two_gin\n" +
+                "(f1, f2, f3,\n" +
+                " INDEX gin_idx1 (`f2`) USING GIN,\n" +
+                " INDEX gin_idx2 (`f3`) USING GIN)\n" +
+                "DISTRIBUTED BY HASH(f1) BUCKETS 1\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT f1, f2, f3 FROM mv_index_base;");
+
+        OlapTable mv = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "mv_two_gin");
+        List<Index> mvIndexes = mv.getIndexes();
+        Assertions.assertEquals(2, mvIndexes.size());
+        // A GIN index must carry a real id: it goes into the tablet schema pushed to BE and, for the
+        // CLucene backend, into the on-disk index file name.
+        for (Index index : mvIndexes) {
+            Assertions.assertTrue(index.getIndexId() >= 0,
+                    "GIN index " + index.getIndexName() + " should get a valid index id, got "
+                            + index.getIndexId());
+        }
+        // Two indexes sharing an id would resolve to the same .ivt directory and clobber each other.
+        Assertions.assertNotEquals(mvIndexes.get(0).getIndexId(), mvIndexes.get(1).getIndexId(),
+                "two GIN indexes on one materialized view must not share an index id");
     }
 }
