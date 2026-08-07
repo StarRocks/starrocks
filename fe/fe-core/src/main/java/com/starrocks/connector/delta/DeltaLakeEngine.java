@@ -15,7 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.cache.LoadingCache;
+import com.google.common.cache.Cache;
 import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultEngine;
@@ -30,14 +30,20 @@ public class DeltaLakeEngine extends DefaultEngine {
     private final Configuration hadoopConf;
     private final DeltaLakeCatalogProperties properties;
     // Cache for checkpoint metadata, key is file path and read schema, value is list of ColumnarBatch
-    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
     // Cache for json metadata, key is file path, value is list of JsonNode
-    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
+    private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     protected DeltaLakeEngine(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
+<<<<<<< HEAD
                               LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
                               LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         super(hadoopConf);
+=======
+                              Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                              Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
+        super(new HadoopFileIO(hadoopConf));
+>>>>>>> 02020791e5 ([BugFix] Isolate Delta Lake per-table cloud credentials (#77424))
         this.hadoopConf = hadoopConf;
         this.properties = properties;
         this.checkpointCache = checkpointCache;
@@ -57,8 +63,8 @@ public class DeltaLakeEngine extends DefaultEngine {
     }
 
     public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-                                         LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
-                                         LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
+                                         Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                                         Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
         return new DeltaLakeEngine(hadoopConf, properties, checkpointCache, jsonCache);
     }
 }
