@@ -1023,6 +1023,13 @@ public class SplitTabletJob extends TabletReshardJob {
         // keeps its PACK grouping (and the WITH_SHARD pin below).
         boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
 
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise the background warehouse (online split) -- unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
+
+        boolean unpinPlacement = shouldUnpinPlacement(table, oldIndex, newIndex,
+                TabletReshardUtils.computeNodeCount(computeResource));
+
         // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
         // payload follows the ReshardingTablet iteration order; the same batch produced
         // by a leader-switch re-run emits a byte-equivalent payload.
@@ -1043,20 +1050,50 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-        // spreadNewShards (computed above) also drops the WITH_SHARD pin here: pre-split splits a
-        // freshly created EMPTY tablet, so there is no warm cache to preserve and the new shards
-        // should spread rather than pin to the source worker. Online split (non-empty source) keeps
-        // the WITH_SHARD pin to reuse the source worker's warm cache.
-        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
-        // otherwise the background warehouse (online split) — unified with the publish path.
-        ComputeResource computeResource = resolveComputeResource(table.getId());
+        // unpinPlacement (computed above) drops the WITH_SHARD pin: pre-split splits a freshly
+        // created EMPTY tablet, so there is no warm cache to preserve, and an ORDER BY != PK online
+        // split is about to rewrite every new shard anyway. Any other online split keeps the pin to
+        // reuse the source worker's warm cache. Note this is deliberately NOT spreadNewShards: the
+        // PACK grouping above is orthogonal and stays on for every online split.
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
                 shardProperties, computeResource,
-                spreadNewShards);
+                unpinPlacement);
+    }
+
+    /**
+     * Whether this split's new shards should drop the {@code WITH_SHARD} pin to the source worker.
+     *
+     * <p>The pin exists to reuse the source worker's warm cache, which is the right trade for an
+     * ordinary online split: the children start out sharing the parent's segments and read them
+     * locally. Two cases have no warm cache worth keeping.
+     *
+     * <p>Pre-split (empty source) is the established one. The other is an ORDER BY != PK split: the
+     * children cannot range-filter the shared segments cheaply, so the split drags a full UNSHARE
+     * rewrite behind it, and pinning lands that whole rewrite on the source worker -- one node's
+     * compaction concurrency while the rest of the cluster idles. Worse, it is self-sustaining: each
+     * generation re-pins to its parent, so a range index that begins life as a single tablet stays on
+     * one node no matter how many tablets it grows to.
+     *
+     * <p>Unpin only while the index is still too small to spread on its own. Once it holds at least
+     * two shards per compute node, inheriting the parent's worker already spreads the children, and
+     * the pin earns its keep on the (by then much larger) rewrite.
+     */
+    @VisibleForTesting
+    static boolean shouldUnpinPlacement(OlapTable table, MaterializedIndex oldIndex,
+                                        MaterializedIndex newIndex, int computeNodeCount) {
+        if (oldIndex == null) {
+            return false;
+        }
+        if (oldIndex.getRowCount() == 0) {
+            return true;
+        }
+        return MetaUtils.hasSeparateSortKey(table, newIndex.getMetaId())
+                && table.isFileBundling()
+                && oldIndex.getTablets().size() < 2 * computeNodeCount;
     }
 
     @VisibleForTesting
