@@ -373,7 +373,10 @@ public class SplitTabletJobEarlyTest {
         // `new SplitTabletClause()`. The manual grammar path hands over a non-null empty properties
         // map instead; both shapes must reach the factory and both must refuse the early contribution
         // when the effective early target is non-positive.
-        setTabletDataSizes(3L << 30, 100L << 30);   // the 100 GiB tablet keeps the factory entered
+        // The two sizes must live in separate indexes: in one index the 100 GiB tablet's normal split
+        // exhausts headroom before the 3 GiB tablet is reached, masking the guard regardless of its
+        // presence (the same headroom-masking the planner-level test avoids with a single tablet).
+        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
         SplitTabletClause manualClause = new SplitTabletClause(null, null, new HashMap<>());
         manualClause.setTabletReshardTargetSize(Config.tablet_reshard_target_size);
         List<SplitTabletClause> clauses = List.of(new SplitTabletClause(), manualClause);
@@ -413,5 +416,22 @@ public class SplitTabletJobEarlyTest {
         TabletReshardJob job =
                 new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
         assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits");
+    }
+
+    @Test
+    public void aResolvableWarehouseGetsTheEarlyPlanThroughTheThreeArgConstructor() throws Exception {
+        // Symmetrical to anUnavailableWarehouseFallsBackToTheNormalRule: that test only proves the
+        // 3-arg ctor forwards SOME count; this one proves the forwarded count is actually usable, i.e.
+        // the early rule fires exactly as it would through the 4-arg ctor with a literal 8.
+        setTabletDataSizes(3L << 30);
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                return 8;
+            }
+        };
+        TabletReshardJob job =
+                new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
+        assertEquals(2L, job.getParallelTablets(), "the resolved count must enable the early rule");
     }
 }
