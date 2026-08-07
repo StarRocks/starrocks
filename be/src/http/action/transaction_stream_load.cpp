@@ -475,12 +475,31 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
     }
     if (!http_req->header(HTTP_PARTIAL_UPDATE_MODE).empty()) {
-        if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "row") {
+        // Case-insensitive, matching /api/{db}/{tbl}/_stream_load and the other headers parsed here.
+        const std::string& partial_update_mode = http_req->header(HTTP_PARTIAL_UPDATE_MODE);
+        if (boost::iequals(partial_update_mode, "row")) {
             request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "auto") {
+        } else if (boost::iequals(partial_update_mode, "auto")) {
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
+        } else if (boost::iequals(partial_update_mode, "column")) {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
+        } else if (boost::iequals(partial_update_mode, "flexible") ||
+                   boost::iequals(partial_update_mode, "flexible_row")) {
+            // Reject rather than accept-and-ignore. A flexible load carries per-row column sets; the
+            // flexible bit is what makes FE inject the hidden "__cset__" slot. This endpoint does not
+            // set that bit, so silently continuing would apply a heterogeneous load as a HOMOGENEOUS
+            // union partial update and write NULL over every column a row did not declare. Fail loudly
+            // instead; use /api/{db}/{tbl}/_stream_load for flexible partial update.
+            return Status::NotSupported(fmt::format(
+                    "partial_update_mode={} is not supported on transaction stream load; use the "
+                    "regular stream load endpoint",
+                    partial_update_mode));
+        } else {
+            // An unrecognised value used to be ignored, which silently downgraded the load to the
+            // default mode. Reject it so a typo cannot change how the data is applied.
+            return Status::InvalidArgument(
+                    fmt::format("Unknown partial_update_mode: {} (expected one of: row, column, auto)",
+                                partial_update_mode));
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {

@@ -801,16 +801,31 @@ public class Load {
     }
 
     /**
-     * A GIN (inverted) index cannot be answered from a column-mode partial-update overlay: neither a
-     * dense {@code .cols} nor a sparse {@code .spcols} overlay carries an inverted index, and the base
-     * segment's {@code .idx} reflects PRE-overlay values, so {@code col MATCH ...} over an
-     * overlay-rewritten column has no valid index to seek. ROW mode instead rewrites the full row into a
-     * new segment whose GIN index is (re)built at write time, keeping MATCH correct. So when a partial
-     * update touches any GIN-indexed column, force ROW mode (overriding COLUMN/AUTO); a flexible load
-     * thereby becomes flexible-on-row (the flexible bit is unchanged, only the storage mode). Called from
-     * EVERY planner that can build a partial-update plan (StreamLoadPlanner AND LoadPlanner) so no entry
-     * path leaves a GIN column on the column path. The read-side segment_iterator inverted-index sparse
-     * guard remains a belt for any overlay that predates an ALTER ADD GIN INDEX.
+     * Keep a GIN (inverted) indexed column off the column-mode partial-update overlay by forcing ROW
+     * mode, which rewrites the full row into a new segment whose indexes are all rebuilt at write time.
+     *
+     * <p>Only ONE of the overlay shapes actually carries a usable inverted index, and three separate
+     * failure modes remain, so the column path is not safe for a GIN column:
+     * <ul>
+     *   <li>DENSE {@code .cols} + BUILTIN GIN: the overlay DOES carry a freshly built, positionally
+     *       aligned builtin index (segment_writer.cpp keeps footer-inlined implementations for the
+     *       markless {@code .cols} writer) and the reader binds to the DCG segment, so MATCH is correct
+     *       on its own. But any OTHER index on the same column -- an NGRAMBF/BLOOM_FILTER or BITMAP
+     *       published into an IDG {@code .idx} sidecar -- is still probed with the BASE segment id
+     *       (segment_iterator.cpp threads {@code idg_loader} + base {@code segment_id} into the
+     *       iterator bound to the {@code .cols} file) and takes precedence over the overlay's own
+     *       footer bloom, so a stale bloom silently prunes the pages holding the updated rows.</li>
+     *   <li>Standalone (CLucene) GIN: the overlay writer produces no index at all, so MATCH fails
+     *       loudly until compaction rewrites the base. CLucene is the DEFAULT implementation; BUILTIN
+     *       is forced only for shared-data tables, so this is the ordinary shared-nothing case.</li>
+     *   <li>SPARSE {@code .spcols}: the read path suppresses the inverted iterator for any column with a
+     *       sparse layer (its index would live in K-row ordinal space, not base ordinal space), so MATCH
+     *       fails there too whenever {@code enable_sparse_dcg} is on.</li>
+     * </ul>
+     *
+     * <p>A flexible load thereby becomes flexible-on-row: the flexible bit is unchanged, only the
+     * storage mode. Called from the load planners (StreamLoadPlanner, LoadPlanner) and from
+     * UpdatePlanner, so no entry path leaves a GIN column on the column path.</p>
      */
     public static TPartialUpdateMode forceRowModeForInvertedIndexedColumn(
             Table tbl, List<Column> updateColumns, TPartialUpdateMode mode) {
