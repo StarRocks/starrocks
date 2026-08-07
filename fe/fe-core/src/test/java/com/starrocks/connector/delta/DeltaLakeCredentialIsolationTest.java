@@ -98,8 +98,8 @@ public class DeltaLakeCredentialIsolationTest {
         String[] observedAccessKey = new String[1];
         new MockUp<DeltaLakeParquetHandler>() {
             @Mock
-            public List<ColumnarBatch> readParquetFile(String filePath, long fileSize, long modificationTime,
-                                                       StructType physicalSchema, Configuration hadoopConf) {
+            public List<ColumnarBatch> readParquetFile(String filePath, StructType physicalSchema,
+                                                       Configuration hadoopConf) {
                 observedAccessKey[0] = hadoopConf.get(Constants.ACCESS_KEY);
                 return Lists.newArrayList();
             }
@@ -181,10 +181,6 @@ public class DeltaLakeCredentialIsolationTest {
         @Override
         public void checkpoint(Engine engine, long version)
                 throws TableNotFoundException, CheckpointAlreadyExistsException, IOException {
-        }
-
-        @Override
-        public void checksum(Engine engine, long version) throws TableNotFoundException, IOException {
         }
     }
 }

@@ -81,17 +81,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .weigher((key, value) -> weighCheckpointEntry((Pair<DeltaLakeFileStatus, StructType>) key,
                         (List<ColumnarBatch>) value))
                 .maximumWeight(checkpointCacheSize)
-<<<<<<< HEAD
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.second, hdfsConfiguration);
-                    }
-                });
-=======
                 .build();
->>>>>>> 02020791e5 ([BugFix] Isolate Delta Lake per-table cloud credentials (#77424))
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
