@@ -93,15 +93,14 @@ public class TabletStatMgr extends FrontendDaemon {
         super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
+    // Note this stamp says only that a cycle ENDED, not that it collected anything: it is advanced
+    // unconditionally below, including for a cycle whose stat RPCs all failed. Its one remaining
+    // consumer, StatisticsCalcUtils, uses it for a cardinality estimate, where being wrong costs a
+    // worse plan. The exact-COUNT(*) fold used to consult it too, through workTimeIsMustAfter(), and
+    // served stale rows as an exact answer; it now asks the tablets to prove which version their
+    // counts cover (see Tablet#getRowCountAtVersion), and that method is gone with its last caller.
     public LocalDateTime getLastWorkTimestamp() {
         return lastWorkTimestamp;
-    }
-
-    public boolean workTimeIsMustAfter(LocalDateTime time) {
-        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
-            return false;
-        }
-        return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
     @Override
@@ -270,10 +269,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+            // The BE serves get_tablet_stat from a snapshot it rebuilds only every
+            // tablet_stat_cache_update_interval_second (300s by default), so a successful RPC does
+            // NOT mean the numbers are current. The reported version says which tablet version they
+            // describe; a BE too old to report it leaves 0, which keeps exact-count callers on the
+            // safe (meta scan) path.
             replica.updateStat(
                     entry.getValue().getData_size(),
                     entry.getValue().getRow_num(),
-                    entry.getValue().getVersion_count()
+                    entry.getValue().getVersion_count(),
+                    entry.getValue().isSetVersion() ? entry.getValue().getVersion() : 0L
             );
         }
     }
@@ -473,7 +478,10 @@ public class TabletStatMgr extends FrontendDaemon {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
-                            tablet.setRowCount(stat.numRows);
+                            // The CN computes these strictly from the version we asked for
+                            // (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(id, version)),
+                            // so the requested version is exactly what the numbers describe.
+                            tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }
