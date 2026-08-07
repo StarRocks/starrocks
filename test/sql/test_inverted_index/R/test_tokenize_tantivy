@@ -35,6 +35,11 @@ SELECT tokenize('ngram:2:3', 'Ab中');
 -- result:
 ["ab","ab中","b中"]
 -- !result
+SELECT tokenize('standard',
+    'The Quick Brown U.S.A. AT&T foo-bar 192.168.1.2 user@example.com 中华人民');
+-- result:
+["quick","brown","usa","at&t","foo","bar","192.168.1.2","user@example.com","中华人民"]
+-- !result
 SET use_tantivy_tokenize = false;
 -- result:
 -- !result
@@ -84,5 +89,57 @@ WHERE content MATCH_ALL tokenize('cjk', '中华人民');
 1
 -- !result
 DROP TABLE t_tokenize_match;
+-- result:
+-- !result
+CREATE TABLE t_standard_match (
+    id INT NOT NULL,
+    content VARCHAR(255),
+    INDEX idx_content (content) USING GIN (
+        'imp_lib' = 'tantivy',
+        'parser' = 'standard'
+    )
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_standard_match VALUES
+    (1, 'Contact User@Example.com from the U.S.A.'),
+    (2, 'user example com usa'),
+    (3, 'AT&T 中华人民');
+-- result:
+-- !result
+SELECT id FROM t_standard_match
+WHERE content MATCH_ALL 'USER@example.com'
+ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM t_standard_match
+WHERE content MATCH_ALL 'U.S.A.'
+ORDER BY id;
+-- result:
+1
+2
+-- !result
+SELECT id FROM t_standard_match
+WHERE content MATCH_ALL 'AT&T 中华人民'
+ORDER BY id;
+-- result:
+3
+-- !result
+SELECT id FROM t_standard_match
+WHERE content MATCH_PHRASE 'contact user@example.com'
+ORDER BY id;
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_standard_match
+WHERE content MATCH_PHRASE 'user@example.com contact';
+-- result:
+0
+-- !result
+DROP TABLE t_standard_match;
 -- result:
 -- !result

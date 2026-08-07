@@ -39,15 +39,16 @@ struct TokenizeState {
 
 Status configure_tantivy_tokenizer(const Slice& method, TokenizeState* state) {
     const std::string method_name = method.to_string();
-    if (method == "english" || method == "jieba" || method == "ik" || method == "ik_smart" ||
+    if (method == "english" || method == "standard" || method == "jieba" || method == "ik" || method == "ik_smart" ||
         method_name.rfind("ngram:", 0) == 0) {
         state->tokenizer_name = method_name;
     } else if (method == "chinese" || method == "cjk") {
         state->tokenizer_name = "cjk";
     } else {
-        return Status::NotSupported("Unknown Tantivy tokenizer '" + method.to_string() +
-                                    "'. Supported tokenizers are: 'english', 'chinese', 'cjk', 'jieba', 'ik', "
-                                    "'ik_smart', 'ngram:<min_gram>:<max_gram>'.");
+        return Status::NotSupported(
+                "Unknown Tantivy tokenizer '" + method.to_string() +
+                "'. Supported tokenizers are: 'english', 'standard', 'chinese', 'cjk', 'jieba', 'ik', "
+                "'ik_smart', 'ngram:<min_gram>:<max_gram>'.");
     }
     return Status::OK();
 }

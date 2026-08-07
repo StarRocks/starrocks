@@ -76,6 +76,10 @@ TEST_F(GinFunctionsTest, TantivyTokenizers) {
     ASSERT_LT(ik_search.size(), ik_index.size());
 
     ASSERT_EQ((std::vector<std::string>{"ab", "ab中", "b中"}), tokenize("ngram:2:3", "Ab中", true).value());
+    ASSERT_EQ((std::vector<std::string>{"quick", "brown", "usa", "at&t", "foo", "bar", "192.168.1.2",
+                                        "user@example.com", "中华人民"}),
+              tokenize("standard", "The Quick Brown U.S.A. AT&T foo-bar 192.168.1.2 user@example.com 中华人民", true)
+                      .value());
 }
 
 TEST_F(GinFunctionsTest, CLuceneTokenizers) {
@@ -85,10 +89,21 @@ TEST_F(GinFunctionsTest, CLuceneTokenizers) {
 }
 
 TEST_F(GinFunctionsTest, RejectsEngineSpecificUnsupportedTokenizer) {
-    ASSERT_TRUE(tokenize("standard", "hello", true).status().is_not_supported());
     ASSERT_TRUE(tokenize("jieba", "中华人民共和国", false).status().is_not_supported());
     ASSERT_TRUE(tokenize("ik", "中华人民共和国", false).status().is_not_supported());
     ASSERT_TRUE(tokenize("ngram:2:3", "hello", false).status().is_not_supported());
+}
+
+TEST_F(GinFunctionsTest, TantivyStandardMatchesCLuceneStandard) {
+    const std::vector<std::string> corpus = {
+            "The Quick Brown U.S.A. AT&T foo-bar 192.168.1.2 user@example.com 中华人民",
+            "can't dog's dogs' host-name.com windowsupdate.microsoft.com--update A&B.C",
+            "abc中华123 人民abc カタカナ한글",
+            "-12.50 .75 1.2.3.4",
+    };
+    for (const auto& text : corpus) {
+        ASSERT_EQ(tokenize("standard", text, false).value(), tokenize("standard", text, true).value()) << text;
+    }
 }
 
 } // namespace starrocks

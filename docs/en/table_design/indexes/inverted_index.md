@@ -12,7 +12,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 Since version 3.3.0, StarRocks supports full-text inverted indexes, which can break the text into smaller words, and create an index entry for each word that can show the mapping relationship between the word and its corresponding row number in the data file. For full-text searches, StarRocks queries the inverted index based on the search keywords, quickly locating the data rows that match the keywords.
 
-The full-text inverted index is not yet supported in Primary Key tables and shared-data clusters.
+Full-text inverted indexes provide multiple implementations. The Tantivy implementation supports Duplicate Key and Primary Key tables in both shared-nothing and shared-data clusters.
 
 ## Overview
 
@@ -21,6 +21,123 @@ StarRocks stores its underlying data in the data files organized by columns. Eac
 For example, if a data row contains "hello world" and its row number is 123, the full-text inverted index builds index entries based on this tokenization result and row number: hello->123, world->123.
 
 During full-text searches, StarRocks can locate index entries containing the search keywords using full-text inverted indexes, and then quickly find the row numbers where the keywords appear, significantly reducing the number of data rows that need to be scanned.
+
+## Use Tantivy inverted indexes
+
+### Create an index
+
+Before creating an index, enable the FE configuration `enable_experimental_gin`:
+
+```sql
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+```
+
+Set `"imp_lib" = "tantivy"` in the index properties. The following example uses the English tokenizer:
+
+```sql
+CREATE TABLE docs (
+    id BIGINT NOT NULL,
+    content VARCHAR(65535),
+    INDEX idx_content (content) USING GIN (
+        "imp_lib" = "tantivy",
+        "parser" = "english"
+    )
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```
+
+You can also add an index after table creation:
+
+```sql
+CREATE INDEX idx_content ON docs (content) USING GIN (
+    "imp_lib" = "tantivy",
+    "parser" = "english"
+);
+```
+
+### Query the index
+
+Tantivy supports the following common query forms:
+
+```sql
+-- Match any token.
+SELECT * FROM docs WHERE content MATCH_ANY 'database search';
+
+-- Match all tokens. MATCH without a wildcard also uses AND semantics.
+SELECT * FROM docs WHERE content MATCH_ALL 'database search';
+
+-- Phrase match. ~1 allows one position of slop.
+SELECT * FROM docs WHERE content MATCH_PHRASE 'full search ~1';
+
+-- Sort by BM25 relevance.
+SELECT *, score()
+FROM docs
+WHERE content MATCH_ANY 'database search'
+ORDER BY score() DESC
+LIMIT 10;
+```
+
+`MATCH`, `MATCH_ANY`, `MATCH_ALL`, and `MATCH_PHRASE` must be pushdown predicates in the `WHERE` clause on the indexed column. The right operand is normally a non-empty string literal. `MATCH_ANY` and `MATCH_ALL` can also accept the result of `tokenize()`:
+
+```sql
+SELECT * FROM docs
+WHERE content MATCH_ALL tokenize('english', 'Database Search');
+```
+
+The system variable `enable_gin_filter` is `true` by default. If it has been disabled, enable it again:
+
+```sql
+SET enable_gin_filter = true;
+```
+
+### Supported tokenizers
+
+| `parser` | Description | Additional parameters |
+| --- | --- | --- |
+| `none` | Default. Does not tokenize text and indexes the entire value as one term. | - |
+| `english` | Tokenizes English text, converts terms to lowercase, and removes English stopwords. It does not apply stemming. | - |
+| `standard` | CLucene-compatible grammar-based tokenizer that recognizes terms such as email addresses and acronyms. It converts terms to lowercase and removes English stopwords. | - |
+| `chinese` / `cjk` | CJK bigram tokenizer that emits overlapping adjacent character pairs. It converts ASCII text to lowercase. `cjk` is an alias for `chinese`. | - |
+| `jieba` | Dictionary-based Chinese tokenization in Jieba search mode. It converts ASCII text to lowercase. | - |
+| `ik` | Dictionary-based Chinese tokenization using IK. | `parser_mode` |
+| `ngram` | Emits contiguous Unicode N-Grams and converts text to lowercase. | `min_gram`, `max_gram` |
+
+`english` drops terms longer than 40 characters. `standard` limits each term to 255 characters.
+
+Use `tokenize()` to inspect tokenizer output. The two DDL modes for `parser = 'ik'` map to `ik` and `ik_smart` in `tokenize()`. For N-Gram tokenization, use `ngram:<min_gram>:<max_gram>`:
+
+```sql
+SELECT tokenize('ik', '中华人民共和国国歌');
+SELECT tokenize('ik_smart', '中华人民共和国国歌');
+SELECT tokenize('ngram:2:3', 'Ab中');
+```
+
+### Index parameters
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `imp_lib` | - | Must be `tantivy`. It must also be specified explicitly in shared-data clusters. |
+| `parser` | `none` | Specifies the tokenizer. |
+| `parser_mode` | `ik_max_word` | Only valid with `parser = 'ik'`. Values: `ik_max_word` for fine-grained tokenization and `ik_smart` for coarse-grained tokenization. |
+| `min_gram` | - | Only valid with `parser = 'ngram'`. It must be a positive integer and specified together with `max_gram`. |
+| `max_gram` | - | Only valid with `parser = 'ngram'`. It must be greater than or equal to `min_gram`. |
+| `support_phrase` | `true` | Whether to store term positions. It must be `true` to use `MATCH_PHRASE`. |
+| `support_bm25` | `true` | Whether to store field norms required by BM25. It must be `true` to use `score()`. |
+
+`support_phrase` and `support_bm25` apply only to Tantivy and take effect when the index is built. Rebuild the index after changing them.
+
+### Limitations
+
+- Each inverted index can contain only one `CHAR`, `VARCHAR`, or `STRING` column.
+- Only Duplicate Key and Primary Key tables are supported. Primary Key tables support full-row writes and row-mode partial updates, but not column-mode partial updates.
+- When you add an index using `ALTER TABLE` or `CREATE INDEX` in a shared-nothing cluster, the table property `replicated_storage` must be `false`.
+- Wildcard queries support `%` and `*`, but the wildcard expression is not tokenized. It directly matches indexed terms, so consider the selected tokenizer and its case-conversion rules.
+- Specify phrase slop at the end of the query text in the form `'text ~N'`. A space is required before `~`, and `N` must be a non-negative integer.
+- `score()` applies only to non-negated `MATCH`, `MATCH_ANY`, or `MATCH_ALL` queries. It does not apply to `MATCH_PHRASE` or wildcard queries.
 
 ## Basic operation
 
@@ -32,7 +149,7 @@ Before creating a fulltext inverted index, you need to enable FE configuration i
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-Also, a fulltext inverted index can only be created in the Duplicate Key table and the table property `replicated_storage` needs to be `false`.
+A full-text inverted index can be created on a Duplicate Key or Primary Key table. Limitations depend on the implementation. For Tantivy, see [Limitations](#limitations).
 
 #### Create full-text Inverted Index at table creation
 
@@ -79,7 +196,7 @@ MySQL [example_db]> SHOW CREATE TABLE t\G
 
 #### Delete full-text inverted index
 
-Execute `ALTER TABLE ADD INDEX` or `DROP INDEX` to delete full-text inverted indexes.
+Execute `ALTER TABLE DROP INDEX` or `DROP INDEX` to delete full-text inverted indexes.
 
 ```SQL
 DROP INDEX idx on t;

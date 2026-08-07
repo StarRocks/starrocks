@@ -25,6 +25,7 @@
 mod cjk_bigram;
 mod ik;
 mod jieba;
+mod standard;
 
 use ik_rs::core::ik_segmenter::TokenMode;
 use tantivy::tokenizer::{
@@ -39,6 +40,7 @@ use crate::error::{Result, TantivyBindingError};
 use cjk_bigram::CjkBigramTokenizer;
 use ik::IkTokenizer;
 use jieba::JiebaTokenizer;
+use standard::StandardTokenizer;
 
 pub const TOKENIZER_ENGLISH: &str = "english";
 pub const TOKENIZER_JIEBA: &str = "jieba";
@@ -47,6 +49,7 @@ pub const TOKENIZER_IK: &str = "ik";
 pub const TOKENIZER_IK_SMART: &str = "ik_smart";
 pub const TOKENIZER_NGRAM: &str = "ngram";
 pub const TOKENIZER_RAW: &str = "raw";
+pub const TOKENIZER_STANDARD: &str = "standard";
 
 pub const TOKENIZER_NAME: &str = "sr_default";
 
@@ -64,9 +67,10 @@ pub fn build(name: &str) -> Result<TextAnalyzer> {
         TOKENIZER_IK => Ok(TextAnalyzer::builder(IkTokenizer::default()).build()),
         TOKENIZER_IK_SMART => Ok(TextAnalyzer::builder(IkTokenizer::new(TokenMode::SEARCH))
             .build()),
+        TOKENIZER_STANDARD => Ok(standard_analyzer()),
         TOKENIZER_RAW => Ok(TextAnalyzer::builder(RawTokenizer::default()).build()),
         other => Err(TantivyBindingError::InvalidArgument(format!(
-            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_IK}', '{TOKENIZER_IK_SMART}', '{TOKENIZER_NGRAM}:<min_gram>:<max_gram>', '{TOKENIZER_RAW}'"
+            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_IK}', '{TOKENIZER_IK_SMART}', '{TOKENIZER_NGRAM}:<min_gram>:<max_gram>', '{TOKENIZER_STANDARD}', '{TOKENIZER_RAW}'"
         ))),
     }
 }
@@ -87,6 +91,16 @@ pub fn tokenize(tokenizer_name: &str, text: &str) -> Result<Vec<String>> {
 fn english_analyzer() -> TextAnalyzer {
     TextAnalyzer::builder(SimpleTokenizer::default())
         .filter(RemoveLongFilter::limit(40))
+        .filter(LowerCaser)
+        .filter(
+            StopWordFilter::new(Language::English)
+                .expect("english stopwords are bundled in the tantivy crate"),
+        )
+        .build()
+}
+
+fn standard_analyzer() -> TextAnalyzer {
+    TextAnalyzer::builder(StandardTokenizer)
         .filter(LowerCaser)
         .filter(
             StopWordFilter::new(Language::English)

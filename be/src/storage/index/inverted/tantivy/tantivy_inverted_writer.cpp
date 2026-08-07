@@ -42,8 +42,10 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
                                      std::unique_ptr<InvertedWriter>* res) {
     auto parser_str = get_parser_string_from_properties(tablet_index->index_properties());
     std::string tokenizer;
-    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH || parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH) {
         tokenizer = "english";
+    } else if (parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+        tokenizer = "standard";
     } else if (parser_str == INVERTED_INDEX_PARSER_CHINESE) {
         tokenizer = "cjk";
     } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {

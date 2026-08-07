@@ -57,8 +57,10 @@ Status TantivyInvertedReader::create(const std::string& path, const std::shared_
 
     auto parser_str = get_parser_string_from_properties(tablet_index->index_properties());
     std::string tokenizer_name;
-    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH || parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+    if (parser_str == INVERTED_INDEX_PARSER_ENGLISH) {
         tokenizer_name = "english";
+    } else if (parser_str == INVERTED_INDEX_PARSER_STANDARD) {
+        tokenizer_name = "standard";
     } else if (parser_str == INVERTED_INDEX_PARSER_CHINESE) {
         tokenizer_name = "cjk";
     } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {
