@@ -61,8 +61,7 @@ Status visit_position_delete_rows(const ChunkPtr& chunk, const IcebergPositionDe
 
 Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_size, const std::string& timezone,
                          const FormatScannerOptions& options, FormatScannerStats* stats,
-                         const IcebergPositionDeleteReader::RowCallback& cb,
-                         const std::string* pushdown_file_path_eq) {
+                         const IcebergPositionDeleteReader::RowCallback& cb, const std::string* pushdown_file_path_eq) {
     std::unique_ptr<parquet::FileReader> reader;
     try {
         reader = std::make_unique<parquet::FileReader>(chunk_size, file, length);
