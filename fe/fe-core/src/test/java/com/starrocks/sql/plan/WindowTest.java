@@ -624,6 +624,61 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testRankingWindowWithNonPositivePredicateNotPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // Ranking window functions start from 1, so these predicates keep no row at all. Pushing them down
+        // used to build a PARTITION-TOP-N with `partition limit: 0`, which crashes the BE when it creates
+        // the per-partition sorter, or a TopN with `limit 0`, which throws from LogicalTopNOperator.
+        for (String predicate : List.of("rk <= 0", "rk = 0", "rk < 0", "rk <= -3")) {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+            assertContains(plan, ":SELECT");
+
+            // Without partition by there is no PARTITION-TOP-N, the pushdown used to fail the planner instead.
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "TOP-N");
+            assertContains(plan, ":SELECT");
+        }
+
+        for (String predicate : List.of("rk <= 0", "rk = 0", "rk < 0", "rk <= -3")) {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where " + predicate + ";";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "PARTITION-TOP-N");
+        }
+
+        // A positive bound still gets pushed down.
+        String sql = "select * from (\n" +
+                "    select *, " +
+                "        row_number() over (partition by v3 order by v2) as rk " +
+                "    from t0\n" +
+                ") sub_t0\n" +
+                "where rk <= 1;";
+        assertContains(getFragmentPlan(sql), "  1:PARTITION-TOP-N\n" +
+                "  |  partition by: 3: v3 \n" +
+                "  |  partition limit: 1\n" +
+                "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                "  |  offset: 0");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testRankingWindowWithPartitionLimitPushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {
