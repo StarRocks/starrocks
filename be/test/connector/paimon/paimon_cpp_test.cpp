@@ -13,15 +13,14 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <paimon/catalog/catalog.h>
+#include <paimon/defs.h>
+#include <paimon/status.h>
 
 #include <filesystem>
 #include <map>
 #include <string>
 #include <utility>
-
-#include "paimon/catalog/catalog.h"
-#include "paimon/defs.h"
-#include "paimon/status.h"
 
 namespace starrocks {
 
