@@ -40,7 +40,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.KeysType;
@@ -196,6 +195,38 @@ class RangeDistributionMigrationServiceTest {
     }
 
     @Test
+    void followerSubmissionFailsBeforePlanningOrMutation() {
+        long parentId = onlyTablet().getId();
+        RangeDistributionMigrationService followerService = new RangeDistributionMigrationService() {
+            @Override
+            protected boolean isLeaderAdmissionOpen() {
+                return false;
+            }
+
+            @Override
+            protected TabletReshardJob createSplitJob(Database ignoredDatabase, OlapTable ignoredTable,
+                                                       Map<Long, List<TabletRange>> ranges) {
+                captured.factoryCalls++;
+                return Mockito.mock(TabletReshardJob.class);
+            }
+
+            @Override
+            protected void addTabletReshardJob(TabletReshardJob job) {
+                captured.managerCalls++;
+            }
+        };
+
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                () -> followerService.submitSplit(database.getFullName(), table.getName(),
+                        Map.of(parentId, splitAt(List.of("5", "2")))));
+
+        Assertions.assertTrue(exception.getMessage().contains("active leader FE"));
+        Assertions.assertEquals(0, captured.factoryCalls);
+        Assertions.assertEquals(0, captured.managerCalls);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
     void unchangedMultiPartitionMultiIndexTopologyIsAdmittedAndPublishedAfterUnlock() throws Exception {
         addVisibleRollupToEveryPhysicalPartition();
         MaterializedIndex firstBase = firstPhysical().getLatestBaseIndex();
@@ -209,20 +240,15 @@ class RangeDistributionMigrationServiceTest {
         request.put(secondRollup.getTablets().get(0).getId(), splitAt(List.of("7")));
 
         TabletReshardJobMgr isolatedManager = new TabletReshardJobMgr();
-        AtomicBoolean initialRecordDurable = new AtomicBoolean();
-        AtomicBoolean unpublishedBeforeCommit = new AtomicBoolean();
-        AtomicBoolean publishedAfterCommit = new AtomicBoolean();
+        AtomicBoolean journaled = new AtomicBoolean();
+        AtomicBoolean publishedBeforeJournal = new AtomicBoolean();
         AtomicReference<List<LockType>> journalLockTypes = new AtomicReference<>();
         new MockUp<EditLog>() {
             @Mock
-            public void logInitTabletReshardJob(TabletReshardJob job, WALApplier applier)
-                    throws StarRocksException {
-                job.init();
-                unpublishedBeforeCommit.set(isolatedManager.getTabletReshardJob(job.getJobId()) == null);
+            public void logUpdateTabletReshardJob(TabletReshardJob job) {
+                publishedBeforeJournal.set(isolatedManager.getTabletReshardJob(job.getJobId()) == job);
                 journalLockTypes.set(currentTableLockTypes());
-                initialRecordDurable.set(true);
-                applier.apply(job);
-                publishedAfterCommit.set(isolatedManager.getTabletReshardJob(job.getJobId()) == job);
+                journaled.set(true);
             }
         };
         RangeDistributionMigrationService migrationService = new RangeDistributionMigrationService() {
@@ -246,9 +272,8 @@ class RangeDistributionMigrationServiceTest {
             Assertions.assertTrue(admittedIndexes.stream()
                     .anyMatch(index -> index.getMaterializedIndexId() == secondRollup.getId()));
             Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
-            Assertions.assertTrue(initialRecordDurable.get());
-            Assertions.assertTrue(unpublishedBeforeCommit.get());
-            Assertions.assertTrue(publishedAfterCommit.get());
+            Assertions.assertTrue(journaled.get());
+            Assertions.assertTrue(publishedBeforeJournal.get());
             Assertions.assertEquals(List.of(), journalLockTypes.get());
         } finally {
             table.setState(OlapTable.OlapTableState.NORMAL);

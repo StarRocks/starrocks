@@ -19,7 +19,6 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -31,14 +30,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -61,7 +55,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
-import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -78,7 +71,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -828,138 +820,11 @@ public class SplitTabletJobTest {
 
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         try {
-            assertAdmissionRejectedWithoutPublication(
-                    tabletReshardJob, table, OlapTable.OlapTableState.SCHEMA_CHANGE);
+            Assertions.assertThrows(StarRocksException.class, tabletReshardJob::init);
+            // Reservation rejected, the table state is left untouched.
+            Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
         } finally {
             table.setState(OlapTable.OlapTableState.NORMAL);
         }
-    }
-
-    @Test
-    public void testInitRejectsRemovedPhysicalPartition() throws Exception {
-        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        Partition partition = table.getPartition(physicalPartition.getParentId());
-
-        table.removePhysicalPartition(physicalPartition);
-        partition.removeSubPartition(physicalPartition.getId());
-        try {
-            assertAdmissionRejectedWithoutPublication(job, table, OlapTable.OlapTableState.NORMAL);
-        } finally {
-            table.setState(OlapTable.OlapTableState.NORMAL);
-            partition.addSubPartition(physicalPartition);
-            table.addPhysicalPartition(physicalPartition);
-        }
-    }
-
-    @Test
-    public void testInitRejectsReplacedLatestVisibleIndex() throws Exception {
-        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
-        MaterializedIndex replacement = new MaterializedIndex(
-                GlobalStateMgr.getCurrentState().getNextId(), oldIndex.getMetaId(),
-                MaterializedIndex.IndexState.NORMAL, oldIndex.getShardGroupId());
-        Tablet oldTablet = oldIndex.getTablets().get(0);
-        replacement.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(), oldTablet.getRange()),
-                null, false);
-
-        physicalPartition.addMaterializedIndex(replacement, true);
-        try {
-            assertAdmissionRejectedWithoutPublication(job, table, OlapTable.OlapTableState.NORMAL);
-        } finally {
-            table.setState(OlapTable.OlapTableState.NORMAL);
-            physicalPartition.deleteMaterializedIndexByIndexId(replacement.getId());
-        }
-    }
-
-    @Test
-    public void testInitRejectsChangedOldTabletSet() throws Exception {
-        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
-        Tablet oldTablet = index.getTablets().get(0);
-        TabletRange oldRange = oldTablet.getRange();
-        Tablet extraTablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(), oldRange);
-
-        index.addTablet(extraTablet, null, false);
-        try {
-            assertAdmissionRejectedWithoutPublication(job, table, OlapTable.OlapTableState.NORMAL);
-        } finally {
-            table.setState(OlapTable.OlapTableState.NORMAL);
-            index.removeTablet(extraTablet.getId());
-        }
-    }
-
-    @Test
-    public void testInitRejectsChangedOldTabletRange() throws Exception {
-        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
-        Tablet oldTablet = index.getTablets().get(0);
-        TabletRange oldRange = oldTablet.getRange();
-        oldTablet.setRange(tabletRange(701, 702));
-        try {
-            assertAdmissionRejectedWithoutPublication(job, table, OlapTable.OlapTableState.NORMAL);
-        } finally {
-            table.setState(OlapTable.OlapTableState.NORMAL);
-            oldTablet.setRange(oldRange);
-        }
-    }
-
-    @Test
-    public void testInitResolvesTableAfterReservationLock() throws Exception {
-        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        OlapTable replacement = table.selectiveCopy(null, true, MaterializedIndex.IndexExtState.ALL);
-        Assertions.assertNotNull(replacement);
-        PhysicalPartition replacementPartition = replacement.getAllPhysicalPartitions().iterator().next();
-        Partition replacementLogicalPartition = replacement.getPartition(replacementPartition.getParentId());
-        replacement.removePhysicalPartition(replacementPartition);
-        replacementLogicalPartition.removeSubPartition(replacementPartition.getId());
-
-        new MockUp<Locker>() {
-            private boolean replaced;
-
-            @Mock
-            public void lockTablesWithIntensiveDbLock(Invocation invocation, Long dbId,
-                                                      List<Long> tableIds, LockType lockType) {
-                if (!replaced && lockType == LockType.WRITE && tableIds.equals(List.of(table.getId()))) {
-                    replaced = true;
-                    db.dropTable(table.getId());
-                    Assertions.assertTrue(db.registerTableUnlocked(replacement));
-                }
-                invocation.proceed(dbId, tableIds, lockType);
-            }
-        };
-
-        try {
-            assertAdmissionRejectedWithoutPublication(job, replacement, OlapTable.OlapTableState.NORMAL);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, replacement.getState());
-        } finally {
-            table.setState(OlapTable.OlapTableState.NORMAL);
-            replacement.setState(OlapTable.OlapTableState.NORMAL);
-            db.dropTable(replacement.getId());
-            db.registerTableUnlocked(table);
-        }
-    }
-
-    private void assertAdmissionRejectedWithoutPublication(TabletReshardJob job, OlapTable expectedTable,
-                                                            OlapTable.OlapTableState expectedState) {
-        AtomicBoolean journaled = new AtomicBoolean();
-        new MockUp<EditLog>() {
-            @Mock
-            public void logInitTabletReshardJob(TabletReshardJob candidate, WALApplier applier)
-                    throws StarRocksException {
-                candidate.init();
-                journaled.set(true);
-                applier.apply(candidate);
-            }
-        };
-        TabletReshardJobMgr isolatedManager = new TabletReshardJobMgr();
-
-        Assertions.assertThrows(StarRocksException.class, () -> isolatedManager.addTabletReshardJob(job));
-        Assertions.assertTrue(isolatedManager.getTabletReshardJobs().isEmpty());
-        Assertions.assertFalse(journaled.get());
-        Assertions.assertEquals(expectedState, expectedTable.getState());
     }
 }

@@ -53,7 +53,6 @@ import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -2428,48 +2427,6 @@ public class EditLog {
 
     public void logUpdateTabletReshardJob(TabletReshardJob job) {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
-    }
-
-    /**
-     * Reserve, durably journal, and publish a new tablet reshard job under one WAL-admission fence.
-     */
-    public void logInitTabletReshardJob(TabletReshardJob job, WALApplier applier) throws StarRocksException {
-        enterGate();
-        boolean initialized = false;
-        boolean durable = false;
-        try {
-            job.init();
-            initialized = true;
-
-            Writable writable = new Writable() {
-                @Override
-                public void write(DataOutput out) throws IOException {
-                    Text.writeString(out, GsonUtils.GSON.toJson(job));
-                }
-            };
-            waitForCommit(submitRawUninterruptibly(
-                    OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, writable, -1));
-            durable = true;
-            if (applier != null) {
-                applier.apply(job);
-            }
-        } catch (Throwable t) {
-            if (initialized && !durable) {
-                try {
-                    job.rollbackInit();
-                } catch (Throwable cleanupFailure) {
-                    if (cleanupFailure != t) {
-                        t.addSuppressed(cleanupFailure);
-                    }
-                }
-            } else if (durable) {
-                LOG.error("Initial tablet reshard WAL apply failed after durability; "
-                        + "the manager publication was torn and must not be rolled back", t);
-            }
-            throw t;
-        } finally {
-            exitGate();
-        }
     }
 
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {

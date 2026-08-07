@@ -96,6 +96,9 @@ public class RangeDistributionMigrationService {
 
     public long submitSplit(String databaseName, String tableName,
                             Map<Long, List<RangeSpec>> parentTabletIdToRanges) throws StarRocksException {
+        if (!isLeaderAdmissionOpen()) {
+            throw new StarRocksException("Range split must be submitted to the active leader FE");
+        }
         if (parentTabletIdToRanges == null || parentTabletIdToRanges.isEmpty()) {
             throw new IllegalArgumentException("Range split requires at least one parent tablet");
         }
@@ -144,6 +147,11 @@ public class RangeDistributionMigrationService {
 
     protected void addTabletReshardJob(TabletReshardJob job) throws StarRocksException {
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(job);
+    }
+
+    protected boolean isLeaderAdmissionOpen() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        return globalStateMgr.isLeader() && globalStateMgr.isLeaderWorkAdmissionOpen();
     }
 
     private static JsonObject toJson(OlapTable table, Partition partition, PhysicalPartition physicalPartition) {

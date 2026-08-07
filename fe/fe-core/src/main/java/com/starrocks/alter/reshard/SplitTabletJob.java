@@ -41,7 +41,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -64,7 +63,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -129,77 +127,12 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     public void init() throws StarRocksException {
-        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
-            Table currentTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-            if (!(currentTable instanceof OlapTable)) {
-                throw new TabletReshardException("Table not found. " + this);
-            }
-            OlapTable olapTable = (OlapTable) currentTable;
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new TabletReshardException(
-                        "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
-            }
-            validateAdmissionTopology(olapTable);
-            olapTable.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        try {
+            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
         } catch (TabletReshardException e) {
             // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
             throw new StarRocksException(e.getMessage(), e);
-        }
-    }
-
-    private void validateAdmissionTopology(OlapTable olapTable) {
-        for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
-            long physicalPartitionId = reshardingPartition.getPhysicalPartitionId();
-            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-            if (physicalPartition == null) {
-                throw new TabletReshardException("Physical partition " + physicalPartitionId
-                        + " changed before tablet reshard admission");
-            }
-
-            for (ReshardingMaterializedIndex reshardingIndex
-                    : reshardingPartition.getReshardingIndexes().values()) {
-                validateAdmissionIndex(physicalPartition, reshardingIndex);
-            }
-        }
-    }
-
-    private void validateAdmissionIndex(PhysicalPartition physicalPartition,
-                                        ReshardingMaterializedIndex reshardingIndex) {
-        MaterializedIndex recordedNewIndex = reshardingIndex.getMaterializedIndex();
-        MaterializedIndex currentIndex = physicalPartition.getLatestIndex(recordedNewIndex.getMetaId());
-        long recordedIndexId = reshardingIndex.getMaterializedIndexId();
-        if (currentIndex == null || currentIndex.getId() != recordedIndexId
-                || currentIndex.getState() == MaterializedIndex.IndexState.SHADOW) {
-            throw new TabletReshardException("Materialized index " + recordedIndexId
-                    + " changed before tablet reshard admission");
-        }
-
-        Map<Long, TabletRange> recordedOldTabletRanges = new LinkedHashMap<>();
-        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-            Tablet recordedNewTablet = recordedNewIndex.getTablet(reshardingTablet.getFirstNewTabletId());
-            if (recordedNewTablet == null) {
-                throw new TabletReshardException("Incomplete tablet reshard topology for index " + recordedIndexId);
-            }
-            for (long oldTabletId : reshardingTablet.getOldTabletIds()) {
-                if (recordedOldTabletRanges.put(oldTabletId, recordedNewTablet.getRange()) != null) {
-                    throw new TabletReshardException("Duplicate old tablet " + oldTabletId
-                            + " in tablet reshard topology");
-                }
-            }
-        }
-
-        if (currentIndex.getTablets().size() != recordedOldTabletRanges.size()) {
-            throw new TabletReshardException("Tablet set changed in materialized index " + recordedIndexId
-                    + " before tablet reshard admission");
-        }
-        for (Tablet currentTablet : currentIndex.getTablets()) {
-            TabletRange recordedRange = recordedOldTabletRanges.get(currentTablet.getId());
-            if (!recordedOldTabletRanges.containsKey(currentTablet.getId())
-                    || !Objects.equals(recordedRange, currentTablet.getRange())) {
-                throw new TabletReshardException("Tablet " + currentTablet.getId()
-                        + " changed before tablet reshard admission");
-            }
         }
     }
 

@@ -110,12 +110,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table,
             Map<Long, List<TabletRange>> oldTabletIdToRanges) throws StarRocksException {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (!globalStateMgr.isLeader() || !globalStateMgr.isLeaderWorkAdmissionOpen()) {
-            throw new StarRocksException(
-                    "Tablet reshard admission is unavailable on this FE; retry on the active leader");
-        }
-
         Preconditions.checkArgument(oldTabletIdToRanges != null && !oldTabletIdToRanges.isEmpty(),
                 "External-boundaries split requires a non-empty oldTabletIdToRanges map");
 
