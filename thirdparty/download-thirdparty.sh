@@ -733,13 +733,9 @@ if [[ -d $TP_SOURCE_DIR/$AVRO_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$AVRO_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.12.0" ]; then
         # c patches
-<<<<<<< HEAD
-        patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.patch
-        patch -p1 < $TP_PATCH_DIR/avro-1.12.0.c.namespace.patch
-=======
         cd $TP_SOURCE_DIR/$AVRO_SOURCE
         apply_patch -p1 $TP_PATCH_DIR/avro-1.12.0.c.patch
->>>>>>> 279306d7b5c... [BugFix] Fail the thirdparty build when a patch does not apply (#77368)
+        apply_patch -p1 $TP_PATCH_DIR/avro-1.12.0.c.namespace.patch
         cp $TP_PATCH_DIR/avro-1.12.0.c.findjansson.patch ./lang/c/Findjansson.cmake
 
         # c++ patches
