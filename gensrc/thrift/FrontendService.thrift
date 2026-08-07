@@ -2778,13 +2778,10 @@ service FrontendService {
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 
-<<<<<<< HEAD
     TGetTableBookmarkSummaryResponse getTableBookmarkSummary(1: optional TGetTableBookmarkSummaryRequest request)
     TGetTableBookmarkPartitionsResponse getTableBookmarkPartitions(1: optional TGetTableBookmarkPartitionsRequest request)
     TGetTableBookmarkReferencesResponse getTableBookmarkReferences(1: optional TGetTableBookmarkReferencesRequest request)
-=======
     TGetPartitionAccessTimesResponse getPartitionAccessTimes(1: optional TGetPartitionAccessTimesRequest request)
->>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
 
     TReportLakeCompactionResponse reportLakeCompaction(1: TReportLakeCompactionRequest request)
 

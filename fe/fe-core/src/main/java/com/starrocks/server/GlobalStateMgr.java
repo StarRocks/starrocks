@@ -466,13 +466,11 @@ public class GlobalStateMgr {
 
     private final TabletStatMgr tabletStatMgr;
 
-<<<<<<< HEAD
     // Control-plane server for the StarRocks external catalog, consumed by peer clusters over
     // HTTP; also the daemon that sweeps expired remote-scan sessions.
     private final StarRocksRemoteScanService starRocksRemoteScanService;
-=======
+
     private final PartitionAccessTimeMgr partitionAccessTimeMgr;
->>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -862,13 +860,9 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-<<<<<<< HEAD
         this.starRocksRemoteScanService = new StarRocksRemoteScanService();
-        this.authenticationMgr = new AuthenticationMgrEPack();
-=======
         this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
-        this.authenticationMgr = new AuthenticationMgr();
->>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
+        this.authenticationMgr = new AuthenticationMgrEPack();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
         this.securityPolicyManager = new SecurityPolicyMgr();
@@ -1283,17 +1277,16 @@ public class GlobalStateMgr {
         return tabletStatMgr;
     }
 
-<<<<<<< HEAD
     public StarRocksRemoteScanService getStarRocksRemoteScanService() {
         return starRocksRemoteScanService;
     }
 
-    public StatisticStorage getStatisticStorage() {
-        return statisticStorage;
-=======
     public PartitionAccessTimeMgr getPartitionAccessTimeMgr() {
         return partitionAccessTimeMgr;
->>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
+    }
+
+    public StatisticStorage getStatisticStorage() {
+        return statisticStorage;
     }
 
     // Only used in UT

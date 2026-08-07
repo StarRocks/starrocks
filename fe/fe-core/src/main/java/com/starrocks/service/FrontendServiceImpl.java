@@ -3225,7 +3225,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-<<<<<<< HEAD
     public TGetTableBookmarkSummaryResponse getTableBookmarkSummary(
             TGetTableBookmarkSummaryRequest request) throws TException {
         return TableBookmarkSummarySystemTable.query(request);
@@ -3241,7 +3240,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTableBookmarkReferencesResponse getTableBookmarkReferences(
             TGetTableBookmarkReferencesRequest request) throws TException {
         return TableBookmarkReferencesSystemTable.query(request);
-=======
+    }
+
+    @Override
     public TGetPartitionAccessTimesResponse getPartitionAccessTimes(TGetPartitionAccessTimesRequest request)
             throws TException {
         TGetPartitionAccessTimesResponse response = new TGetPartitionAccessTimesResponse();
@@ -3256,7 +3257,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         response.setPartition_id_to_access_time_ms(result);
         response.setStatus(new TStatus(TStatusCode.OK));
         return response;
->>>>>>> 30de29ee7e4... [Feature] Record per-partition last update time and last query access time (#76637)
     }
 
     @Override
