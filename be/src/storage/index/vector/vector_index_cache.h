@@ -74,6 +74,7 @@ public:
                                    tenann::IndexCacheHandle* handle) override;
 
     void SetCapacity(size_t new_capacity);
+    bool clear_expired(int64_t now = MonotonicMillis());
     size_t capacity() const { return _cache.capacity(); }
     size_t memory_usage() const { return _cache.size(); }
 
@@ -82,10 +83,12 @@ public:
 
 private:
     tenann::IndexCacheHandle _wrap(Entry* entry, tenann::IndexRef ref);
+    void _release(Entry* entry, bool is_ivfpq_list_block);
     void _update_metrics() const;
 
     Cache _cache;
     VectorIndexCacheMetrics* _metrics = nullptr;
+    std::atomic<int64_t> _last_clear_expired_ms{0};
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};
 };
@@ -102,6 +105,7 @@ class VectorIndexCache {
 public:
     VectorIndexCache(size_t, MemTracker*, VectorIndexCacheMetrics* = nullptr) {}
     void SetCapacity(size_t) {}
+    bool clear_expired(int64_t = 0) { return false; }
     size_t capacity() const { return 0; }
     size_t memory_usage() const { return 0; }
     uint64_t lookup_count() const { return 0; }
