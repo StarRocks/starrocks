@@ -48,6 +48,7 @@
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "exec/exec_env.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "platform/key_cache.h"
@@ -714,6 +715,53 @@ protected:
     TTransactionId _txn_id = 12345;
 };
 
+struct SourceBundleReadCounters {
+    int read_all_calls = 0;
+    int64_t read_at_fully_bytes = 0;
+    int open_calls = 0;
+    bool all_opens_skip_disk_cache = true;
+};
+
+class CountingSeekableInputStream final : public io::SeekableInputStreamWrapper {
+public:
+    CountingSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream, SourceBundleReadCounters* counters)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
+              _stream(std::move(stream)),
+              _counters(counters) {}
+
+    StatusOr<std::string> read_all() override {
+        ++_counters->read_all_calls;
+        return _stream->read_all();
+    }
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
+        _counters->read_at_fully_bytes += count;
+        return Status::OK();
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    SourceBundleReadCounters* _counters;
+};
+
+class CountingMemoryFileSystem final : public MemoryFileSystem {
+public:
+    explicit CountingMemoryFileSystem(SourceBundleReadCounters* counters) : _counters(counters) {}
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& url) override {
+        ++_counters->open_calls;
+        _counters->all_opens_skip_disk_cache &= opts.skip_disk_cache;
+        ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, url));
+        auto stream = std::make_shared<CountingSeekableInputStream>(file->stream(), _counters);
+        return std::make_unique<RandomAccessFile>(std::move(stream), url);
+    }
+
+private:
+    SourceBundleReadCounters* _counters;
+};
+
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_fallback_to_legacy2_format_success) {
     // Create metadata ONLY at legacy2 format path (without db_id and partition_id)
     // This forces all three attempts to be tried
@@ -755,6 +803,220 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     // Verify failure with NotFound error
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_source_tablet_from_bundle) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_EQ(_version, (*result)->version());
+    ASSERT_TRUE((*result)->has_schema());
+    EXPECT_EQ(1, (*result)->schema().column_size());
+    EXPECT_EQ("c0", (*result)->schema().column(0).name());
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reads_only_requested_source_bundle_page) {
+    BoolConfigGuard checksum_guard(&config::lake_enable_protobuf_file_checksum);
+    config::lake_enable_protobuf_file_checksum = false;
+
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto other_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    other_metadata->set_id(_src_tablet_id + 1);
+    auto* rowset = other_metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(4096);
+    for (int i = 0; i < 32; ++i) {
+        rowset->add_segment_metas()->set_filename(fmt::format("segment-{}", i));
+    }
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    tablet_metas.emplace(other_metadata->id(), *other_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(_src_tablet_id, _version);
+    ASSIGN_OR_ABORT(auto local_bundle_file, _shared_fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto bundle_content, local_bundle_file->read_all());
+
+    SourceBundleReadCounters counters;
+    auto source_fs = std::make_shared<CountingMemoryFileSystem>(&counters);
+    const std::string meta_dir = "/remote/source/meta";
+    const auto source_bundle_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(0, _version));
+    ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+    ASSERT_OK(source_fs->create_file(source_bundle_path));
+    ASSERT_OK(source_fs->append_file(source_bundle_path, Slice(bundle_content)));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_EQ(0, counters.read_all_calls);
+    EXPECT_GT(counters.read_at_fully_bytes, 0);
+    EXPECT_LT(counters.read_at_fully_bytes, bundle_content.size());
+    EXPECT_GT(counters.open_calls, 0);
+    EXPECT_TRUE(counters.all_opens_skip_disk_cache);
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, standalone_source_read_bypasses_disk_cache) {
+    SourceBundleReadCounters counters;
+    auto source_fs = std::make_shared<CountingMemoryFileSystem>(&counters);
+    const std::string meta_dir = "/remote/source/meta";
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    std::string content;
+    ASSERT_TRUE(_tablet_metadata->SerializeToString(&content));
+    ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+    ASSERT_OK(source_fs->create_file(metadata_path));
+    ASSERT_OK(source_fs->append_file(metadata_path, Slice(content)));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+    ASSERT_OK(result.status());
+    EXPECT_EQ(_src_tablet_id, (*result)->id());
+    EXPECT_GT(counters.open_calls, 0);
+    EXPECT_TRUE(counters.all_opens_skip_disk_cache);
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_malformed_source_bundle_envelope) {
+    std::string oversized_footer(sizeof(uint64_t), '\0');
+    oversized_footer[0] = 1;
+    const std::vector<std::pair<std::string, std::string>> cases = {
+            {"tiny", "is too small"},
+            {oversized_footer, "Invalid source metadata bundle footer"},
+    };
+
+    const std::string meta_dir = "/remote/source/meta";
+    const auto bundle_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(0, _version));
+    for (const auto& [content, expected_message] : cases) {
+        SCOPED_TRACE(expected_message);
+        auto source_fs = std::make_shared<MemoryFileSystem>();
+        ASSERT_OK(source_fs->create_dir_recursive(meta_dir));
+        ASSERT_OK(source_fs->create_file(bundle_path));
+        ASSERT_OK(source_fs->append_file(bundle_path, Slice(content)));
+
+        auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs);
+
+        ASSERT_TRUE(result.status().is_corruption()) << result.status();
+        EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr(expected_message));
+    }
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, reports_missing_source_tablet_in_bundle) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto other_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    other_metadata->set_id(_src_tablet_id + 1);
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(other_metadata->id(), *other_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_not_found()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("absent from source metadata bundle"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_source_bundle_page_with_mismatched_checksum) {
+    BoolConfigGuard checksum_guard(&config::lake_enable_protobuf_file_checksum);
+    config::lake_enable_protobuf_file_checksum = true;
+
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(_src_tablet_id, _version);
+    ASSIGN_OR_ABORT(auto input_file, _shared_fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto content, input_file->read_all());
+    ASSERT_FALSE(content.empty());
+    content[0] ^= 0xFF;
+    WritableFileOptions opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_ABORT(auto output_file, _shared_fs->new_writable_file(opts, bundle_path));
+    ASSERT_OK(output_file->append(Slice(content)));
+    ASSERT_OK(output_file->close());
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Mismatched checksum"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, rejects_mismatched_source_tablet_id_in_bundle_page) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    auto mismatched_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    mismatched_metadata->set_id(_src_tablet_id + 1);
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *mismatched_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("Tablet ID mismatch"));
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, does_not_hide_corrupt_source_metadata_with_bundle_fallback) {
+    ASSERT_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    tablet_metas.emplace(_src_tablet_id, *_tablet_metadata);
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    const std::string meta_dir = lake::join_path(_test_dir, lake::kMetadataDirectoryName);
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    ASSIGN_OR_ABORT(auto output_file, _shared_fs->new_writable_file(metadata_path));
+    ASSERT_OK(output_file->append(Slice("\xff", 1)));
+    ASSERT_OK(output_file->close());
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
+    _replication_txn_manager.reset();
+    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+    _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
+
+    const std::string meta_dir = "/remote/source/meta";
+    const auto metadata_path = lake::join_path(meta_dir, lake::tablet_metadata_filename(_src_tablet_id, _version));
+    auto stale_metadata = std::make_shared<TabletMetadata>();
+    stale_metadata->set_id(_src_tablet_id);
+    stale_metadata->set_version(_version);
+    stale_metadata->set_gtid(101);
+    _tablet_mgr->metacache()->cache_tablet_metadata(metadata_path, stale_metadata);
+
+    auto source_fs_a = std::make_shared<MemoryFileSystem>();
+    auto source_fs_b = std::make_shared<MemoryFileSystem>();
+    auto write_source_metadata = [&](const std::shared_ptr<MemoryFileSystem>& source_fs, int64_t gtid) {
+        auto source_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        source_metadata->set_gtid(gtid);
+        std::string content;
+        CHECK(source_metadata->SerializeToString(&content));
+        CHECK_OK(source_fs->create_dir_recursive(meta_dir));
+        CHECK_OK(source_fs->create_file(metadata_path));
+        CHECK_OK(source_fs->append_file(metadata_path, Slice(content)));
+    };
+    write_source_metadata(source_fs_a, 202);
+    write_source_metadata(source_fs_b, 303);
+
+    auto result_a = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs_a);
+    auto result_b = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, source_fs_b);
+    ASSERT_OK(result_a);
+    ASSERT_OK(result_b);
+    EXPECT_EQ(202, result_a.value()->gtid());
+    EXPECT_EQ(303, result_b.value()->gtid());
+    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(101, cached->gtid());
 }
 
 #ifdef USE_STAROS
@@ -951,6 +1213,51 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_NE(std::string::npos, status.message().find("Failed to create virtual starlet filesystem"));
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, raw_s3_uses_virtual_shard_uri) {
+    std::string captured_uri;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_partition_starlet_uri",
+                                          [&](void* arg) { captured_uri = *static_cast<std::string*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("stop after URI construction");
+    });
+
+    auto request = build_request(true /* with_full_path */);
+    ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.virtual_tablet_id), captured_uri);
+    EXPECT_NE(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.src_tablet_id), captured_uri);
+}
+
+TEST_F(LakeReplicationRemoteStorageTest, non_s3_uses_virtual_shard_uri_authority) {
+    std::string captured_meta_dir;
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::src_meta_dir",
+                                          [&](void* arg) { captured_meta_dir = *static_cast<std::string*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("stop after source path construction");
+    });
+
+    auto request = build_request(false /* with_full_path */);
+    ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    EXPECT_TRUE(status.is_corruption()) << status;
+
+    RemoteStarletLocationProvider provider;
+    const auto expected_meta_dir = provider.metadata_root_location(request.virtual_tablet_id, request.src_db_id,
+                                                                   request.src_table_id, request.src_partition_id);
+    const auto legacy_meta_dir = provider.metadata_root_location(request.src_tablet_id, request.src_db_id,
+                                                                 request.src_table_id, request.src_partition_id);
+    EXPECT_EQ(expected_meta_dir, captured_meta_dir);
+    EXPECT_NE(legacy_meta_dir, captured_meta_dir);
+    ASSIGN_OR_ABORT(auto expected_parsed, parse_starlet_uri(expected_meta_dir));
+    ASSIGN_OR_ABORT(auto legacy_parsed, parse_starlet_uri(legacy_meta_dir));
+    EXPECT_EQ(expected_parsed.first, legacy_parsed.first);
+    EXPECT_EQ(request.virtual_tablet_id, expected_parsed.second);
+    EXPECT_EQ(request.src_tablet_id, legacy_parsed.second);
 }
 
 // Test Case 2: has_full_path=false, new_fs_starlet returns nullptr
