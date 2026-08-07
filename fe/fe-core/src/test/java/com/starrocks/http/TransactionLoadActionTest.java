@@ -126,6 +126,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             boolean isLeader() {
                 return true;
             }
+
+            @Mock
+            public static boolean isCheckpointThread() {
+                return false;
+            }
         };
 
         new MockUp<TransactionLoadAction>() {

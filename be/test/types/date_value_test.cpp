@@ -18,6 +18,7 @@
 #define private public
 
 #include <cstring>
+#include <limits>
 #include <type_traits>
 
 #include "types/date_value.h"
@@ -288,6 +289,22 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(6, dv.weekday()); // Saturday
     dv.from_date(2020, 6, 7);
     ASSERT_EQ(0, dv.weekday()); // Sunday
+}
+
+// The vectorized function framework evaluates the data column of a NullableColumn as a whole, so
+// DateValue methods are fed the arbitrary payload sitting under the null flags as well. weekday()
+// must stay inside [0, 6] for any julian value, otherwise trunc_to_week() reads out of bounds.
+TEST(DateValueTest, weekday_out_of_range_julian) {
+    for (int32_t julian : {std::numeric_limits<int32_t>::min(), -100000000, -8, -7, -6, -5, -4, -3, -2, -1, 0,
+                           std::numeric_limits<int32_t>::max()}) {
+        DateValue dv{julian};
+        int weekday = dv.weekday();
+        ASSERT_GE(weekday, 0) << "julian=" << julian;
+        ASSERT_LE(weekday, 6) << "julian=" << julian;
+
+        // must not read out of bounds of the day-of-week table
+        dv.trunc_to_week();
+    }
 }
 
 TEST(DateValueTest, test_trunc_to_month) {
