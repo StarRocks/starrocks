@@ -17,6 +17,11 @@
 
 #define private public
 
+<<<<<<< HEAD:be/test/column/date_value_test.cpp
+=======
+#include <cstring>
+#include <limits>
+>>>>>>> 1e94196163 ([BugFix] Keep DateValue::weekday() in range for out-of-range julian values (#77310)):be/test/types/date_value_test.cpp
 #include <type_traits>
 
 #include "butil/time.h"
@@ -283,4 +288,103 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(0, dv.weekday()); // Sunday
 }
 
+<<<<<<< HEAD:be/test/column/date_value_test.cpp
+=======
+// The vectorized function framework evaluates the data column of a NullableColumn as a whole, so
+// DateValue methods are fed the arbitrary payload sitting under the null flags as well. weekday()
+// must stay inside [0, 6] for any julian value, otherwise trunc_to_week() reads out of bounds.
+TEST(DateValueTest, weekday_out_of_range_julian) {
+    for (int32_t julian : {std::numeric_limits<int32_t>::min(), -100000000, -8, -7, -6, -5, -4, -3, -2, -1, 0,
+                           std::numeric_limits<int32_t>::max()}) {
+        DateValue dv{julian};
+        int weekday = dv.weekday();
+        ASSERT_GE(weekday, 0) << "julian=" << julian;
+        ASSERT_LE(weekday, 6) << "julian=" << julian;
+
+        // must not read out of bounds of the day-of-week table
+        dv.trunc_to_week();
+    }
+}
+
+TEST(DateValueTest, test_trunc_to_month) {
+    for (DateValue date = DateValue::MIN_DATE_VALUE; date <= DateValue::MAX_DATE_VALUE; date._julian++) {
+        DateValue res_date = date;
+        res_date.trunc_to_month();
+
+        int year0, month0, day0;
+        date::to_date_with_cache(date.julian(), &year0, &month0, &day0);
+        int year1, month1, day1;
+        date::to_date_with_cache(res_date.julian(), &year1, &month1, &day1);
+
+        ASSERT_EQ(year0, year1);
+        ASSERT_EQ(month0, month1);
+        ASSERT_EQ(1, day1);
+    }
+}
+
+TEST(DateValueTest, test_trunc_to_quarter) {
+    static int month_to_quarter[13] = {0, 1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10};
+
+    for (DateValue date = DateValue::MIN_DATE_VALUE; date <= DateValue::MAX_DATE_VALUE; date._julian++) {
+        DateValue res_date = date;
+        res_date.trunc_to_quarter();
+
+        int year0, month0, day0;
+        date::to_date_with_cache(date.julian(), &year0, &month0, &day0);
+        int year1, month1, day1;
+        date::to_date_with_cache(res_date.julian(), &year1, &month1, &day1);
+
+        ASSERT_EQ(year0, year1);
+        ASSERT_EQ(month_to_quarter[month0], month1);
+        ASSERT_EQ(1, day1);
+    }
+}
+
+TEST(DateValueTest, to_string_buffer) {
+    DateValue dv;
+    dv.from_date(2020, 2, 3);
+
+    // Buffer exactly the required size: writes 10 chars, no null terminator.
+    char buf[16];
+    std::memset(buf, '#', sizeof(buf));
+    int len = dv.to_string(buf, 10);
+    ASSERT_EQ(10, len);
+    ASSERT_EQ(std::string("2020-02-03"), std::string(buf, len));
+    // Bytes beyond the written range must be untouched.
+    ASSERT_EQ('#', buf[10]);
+
+    // Larger buffer still writes exactly 10 chars.
+    std::memset(buf, '#', sizeof(buf));
+    len = dv.to_string(buf, sizeof(buf));
+    ASSERT_EQ(10, len);
+    ASSERT_EQ(std::string("2020-02-03"), std::string(buf, len));
+    ASSERT_EQ('#', buf[10]);
+
+    // Single-digit month/day are zero-padded.
+    dv.from_date(1, 1, 1);
+    len = dv.to_string(buf, 10);
+    ASSERT_EQ(10, len);
+    ASSERT_EQ(std::string("0001-01-01"), std::string(buf, len));
+
+    dv.from_date(9999, 12, 31);
+    len = dv.to_string(buf, 10);
+    ASSERT_EQ(10, len);
+    ASSERT_EQ(std::string("9999-12-31"), std::string(buf, len));
+
+    // Matches the std::string overload.
+    dv.from_date(2020, 2, 3);
+    len = dv.to_string(buf, 10);
+    ASSERT_EQ(std::string(buf, len), dv.to_string());
+
+    // Undersized buffer returns -1 and does not write.
+    std::memset(buf, '#', sizeof(buf));
+    ASSERT_EQ(-1, dv.to_string(buf, 9));
+    ASSERT_EQ('#', buf[0]);
+    ASSERT_EQ(-1, dv.to_string(buf, 0));
+    ASSERT_EQ('#', buf[0]);
+
+    ASSERT_EQ(10, DateValue::max_string_length());
+}
+
+>>>>>>> 1e94196163 ([BugFix] Keep DateValue::weekday() in range for out-of-range julian values (#77310)):be/test/types/date_value_test.cpp
 } // namespace starrocks
