@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER_MODE;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.TANTIVY;
@@ -77,6 +78,15 @@ public class InvertedIndexUtil {
      * Alias for "chinese" — CJK bigram tokenizer (tantivy only)
      */
     public static String INVERTED_INDEX_PARSER_CJK = "cjk";
+
+    /**
+     * IK dictionary-based segmentation (tantivy only)
+     */
+    public static String INVERTED_INDEX_PARSER_IK = "ik";
+
+    public static String INVERTED_INDEX_PARSER_MODE_KEY = PARSER_MODE.name().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_PARSER_MAX_WORD = "ik_max_word";
+    public static String INVERTED_INDEX_PARSER_SMART = "ik_smart";
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
 
@@ -133,6 +143,7 @@ public class InvertedIndexUtil {
         }
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+        checkInvertedIndexParserMode(properties);
         checkInvertedIndexNgram(properties);
 
         // add default properties
@@ -165,11 +176,12 @@ public class InvertedIndexUtil {
                     || parser.equals(INVERTED_INDEX_PARSER_CHINESE);
             boolean isJieba = parser.equals(INVERTED_INDEX_PARSER_JIEBA);
             boolean isCjk = parser.equals(INVERTED_INDEX_PARSER_CJK);
-            if (!isCommonParser && !isJieba && !isCjk) {
+            boolean isIk = parser.equals(INVERTED_INDEX_PARSER_IK);
+            if (!isCommonParser && !isJieba && !isCjk && !isIk) {
                 throw new SemanticException("INVERTED index parser: " + parser
                         + " is invalid for column: " + indexColName + " of type " + colType);
             }
-            if (isJieba || isCjk) {
+            if (isJieba || isCjk || isIk) {
                 String impValue = properties == null ? null : properties.get(INVERTED_INDEX_IMP_LIB_KEY);
                 boolean isTantivy = TANTIVY.name().equalsIgnoreCase(impValue);
                 if (!isTantivy) {
@@ -183,6 +195,27 @@ public class InvertedIndexUtil {
         } else if (!parser.equals(INVERTED_INDEX_PARSER_NONE)) {
             throw new SemanticException("INVERTED index with parser: " + parser
                     + " is not supported for column: " + indexColName + " of type " + colType);
+        }
+    }
+
+    public static void checkInvertedIndexParserMode(Map<String, String> properties) {
+        String parserMode = properties == null ? null : properties.get(INVERTED_INDEX_PARSER_MODE_KEY);
+        String parser = getInvertedIndexParser(properties);
+        if (!INVERTED_INDEX_PARSER_IK.equals(parser)) {
+            if (parserMode != null) {
+                throw new SemanticException("parser_mode is only supported for parser 'ik'");
+            }
+            return;
+        }
+
+        if (parserMode == null) {
+            properties.put(INVERTED_INDEX_PARSER_MODE_KEY, INVERTED_INDEX_PARSER_MAX_WORD);
+            return;
+        }
+        if (!INVERTED_INDEX_PARSER_MAX_WORD.equals(parserMode)
+                && !INVERTED_INDEX_PARSER_SMART.equals(parserMode)) {
+            throw new SemanticException("Invalid parser_mode '" + parserMode
+                    + "' for parser 'ik'; expected ik_max_word or ik_smart");
         }
     }
 

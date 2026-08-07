@@ -86,6 +86,9 @@ TEST(InvertedIndexPluginTest, option_test) {
                   inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_ENGLISH));
         ASSERT_EQ(INVERTED_INDEX_PARSER_CHINESE,
                   inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_CHINESE));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_JIEBA,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_JIEBA));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_IK, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_IK));
         ASSERT_EQ(INVERTED_INDEX_PARSER_UNKNOWN,
                   inverted_index_parser_type_to_string(static_cast<InvertedIndexParserType>(-1)));
 
@@ -97,7 +100,20 @@ TEST(InvertedIndexPluginTest, option_test) {
                   get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_ENGLISH));
         ASSERT_EQ(InvertedIndexParserType::PARSER_CHINESE,
                   get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_CHINESE));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_JIEBA,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_JIEBA));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_IK,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_IK));
         ASSERT_EQ(InvertedIndexParserType::PARSER_UNKNOWN, get_inverted_index_parser_type_from_string("unknown"));
+    }
+
+    // Test IK parser mode and its fine-grained default.
+    {
+        std::map<std::string, std::string> props;
+        ASSERT_EQ(INVERTED_INDEX_PARSER_MAX_WORD, get_parser_mode_string_from_properties(props));
+
+        props[INVERTED_INDEX_PARSER_MODE_KEY] = "IK_SMART";
+        ASSERT_EQ(INVERTED_INDEX_PARSER_SMART, get_parser_mode_string_from_properties(props));
     }
 
     // Test get_parser_string_from_properties

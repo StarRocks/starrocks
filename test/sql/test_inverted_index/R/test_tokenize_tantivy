@@ -18,6 +18,19 @@ SELECT array_contains(tokenize('jieba', '中华人民共和国成立了'), '人�
 -- result:
 1
 -- !result
+SELECT array_contains(tokenize('ik', '中华人民共和国国歌'), '中华');
+-- result:
+1
+-- !result
+SELECT array_contains(tokenize('ik_smart', '中华人民共和国国歌'), '中华');
+-- result:
+0
+-- !result
+SELECT cardinality(tokenize('ik', '中华人民共和国国歌'))
+    > cardinality(tokenize('ik_smart', '中华人民共和国国歌'));
+-- result:
+1
+-- !result
 SET use_tantivy_tokenize = false;
 -- result:
 -- !result

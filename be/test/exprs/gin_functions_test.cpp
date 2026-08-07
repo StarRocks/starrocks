@@ -68,6 +68,12 @@ TEST_F(GinFunctionsTest, TantivyTokenizers) {
     auto jieba = tokenize("jieba", "中华人民共和国成立了", true).value();
     ASSERT_NE(std::find(jieba.begin(), jieba.end(), "人民"), jieba.end());
     ASSERT_NE(std::find(jieba.begin(), jieba.end(), "共和国"), jieba.end());
+
+    auto ik_index = tokenize("ik", "中华人民共和国国歌", true).value();
+    auto ik_search = tokenize("ik_smart", "中华人民共和国国歌", true).value();
+    ASSERT_NE(std::find(ik_index.begin(), ik_index.end(), "中华"), ik_index.end());
+    ASSERT_EQ(std::find(ik_search.begin(), ik_search.end(), "中华"), ik_search.end());
+    ASSERT_LT(ik_search.size(), ik_index.size());
 }
 
 TEST_F(GinFunctionsTest, CLuceneTokenizers) {
@@ -79,6 +85,7 @@ TEST_F(GinFunctionsTest, CLuceneTokenizers) {
 TEST_F(GinFunctionsTest, RejectsEngineSpecificUnsupportedTokenizer) {
     ASSERT_TRUE(tokenize("standard", "hello", true).status().is_not_supported());
     ASSERT_TRUE(tokenize("jieba", "中华人民共和国", false).status().is_not_supported());
+    ASSERT_TRUE(tokenize("ik", "中华人民共和国", false).status().is_not_supported());
 }
 
 } // namespace starrocks

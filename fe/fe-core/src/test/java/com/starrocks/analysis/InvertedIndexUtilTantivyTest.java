@@ -157,6 +157,61 @@ public class InvertedIndexUtilTantivyTest extends PlanTestBase {
     }
 
     @Test
+    public void ikParserDefaultsToMaxWord() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ik");
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertEquals("ik_max_word",
+                props.get(InvertedIndexUtil.INVERTED_INDEX_PARSER_MODE_KEY));
+    }
+
+    @Test
+    public void ikSmartParserModePasses() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ik");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_MODE_KEY, "ik_smart");
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void invalidIkParserModeIsRejected() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ik");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_MODE_KEY, "search");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("ik_max_word"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("ik_smart"), ex.getMessage());
+    }
+
+    @Test
+    public void ikParserOnBuiltinIsRejected() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = new HashMap<>();
+        props.put(impLibKey(), InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ik");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("tantivy"), ex.getMessage());
+    }
+
+    @Test
+    public void parserModeOnNonIkParserIsRejected() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "jieba");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_MODE_KEY, "ik_smart");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("only supported"), ex.getMessage());
+    }
+
+    @Test
     public void supportPhraseDefaultFilled_forTantivy() {
         Column col = new Column("txt", Type.STRING, true);
         Map<String, String> props = tantivyProps();

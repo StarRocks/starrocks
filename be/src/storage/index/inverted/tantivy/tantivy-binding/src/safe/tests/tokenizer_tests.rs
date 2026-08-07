@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::safe::tokenizer::{
-    build, tokenize, TOKENIZER_CJK, TOKENIZER_ENGLISH, TOKENIZER_JIEBA, TOKENIZER_RAW,
+    build, tokenize, TOKENIZER_CJK, TOKENIZER_ENGLISH, TOKENIZER_IK, TOKENIZER_IK_SMART,
+    TOKENIZER_JIEBA, TOKENIZER_RAW,
 };
 
 #[test]
@@ -32,14 +33,20 @@ fn jieba_builds() {
 }
 
 #[test]
+fn ik_modes_build() {
+    assert!(build(TOKENIZER_IK).is_ok());
+    assert!(build(TOKENIZER_IK_SMART).is_ok());
+}
+
+#[test]
 fn raw_builds() {
     assert!(build(TOKENIZER_RAW).is_ok());
 }
 
 #[test]
 fn unsupported_rejected() {
-    match build("ik") {
-        Ok(_) => panic!("expected error for ik"),
+    match build("definitely-not-a-tokenizer") {
+        Ok(_) => panic!("expected unsupported tokenizer error"),
         Err(e) => {
             let msg = e.to_string();
             assert!(msg.contains("unsupported tokenizer"), "got: {msg}");
@@ -129,4 +136,36 @@ fn jieba_mixed_text() {
     assert!(tokens.contains(&"starrocks".to_string()));
     assert!(tokens.contains(&"高性能".to_string()));
     assert!(tokens.contains(&"数据库".to_string()));
+}
+
+#[test]
+fn ik_default_is_index_mode() {
+    let text = "中华人民共和国国歌";
+    let default_tokens = tokenize(TOKENIZER_IK, text).unwrap();
+
+    assert!(
+        default_tokens.contains(&"中华".to_string()),
+        "got: {default_tokens:?}"
+    );
+    assert!(
+        default_tokens.contains(&"中华人民共和国".to_string()),
+        "got: {default_tokens:?}"
+    );
+}
+
+#[test]
+fn ik_search_mode_is_coarser_than_index_mode() {
+    let text = "中华人民共和国国歌";
+    let index_tokens = tokenize(TOKENIZER_IK, text).unwrap();
+    let search_tokens = tokenize(TOKENIZER_IK_SMART, text).unwrap();
+
+    assert!(index_tokens.len() > search_tokens.len());
+    assert_eq!(search_tokens, vec!["中华人民共和国", "国歌"]);
+}
+
+#[test]
+fn ik_mixed_text_lowercase() {
+    let tokens = tokenize(TOKENIZER_IK, "StarRocks数据库").unwrap();
+    assert!(tokens.contains(&"starrocks".to_string()), "got: {tokens:?}");
+    assert!(tokens.contains(&"数据库".to_string()), "got: {tokens:?}");
 }

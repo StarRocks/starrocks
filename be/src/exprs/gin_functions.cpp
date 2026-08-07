@@ -38,13 +38,14 @@ struct TokenizeState {
 };
 
 Status configure_tantivy_tokenizer(const Slice& method, TokenizeState* state) {
-    if (method == "english" || method == "jieba") {
+    if (method == "english" || method == "jieba" || method == "ik" || method == "ik_smart") {
         state->tokenizer_name = method.to_string();
     } else if (method == "chinese" || method == "cjk") {
         state->tokenizer_name = "cjk";
     } else {
         return Status::NotSupported("Unknown Tantivy tokenizer '" + method.to_string() +
-                                    "'. Supported tokenizers are: 'english', 'chinese', 'cjk', 'jieba'.");
+                                    "'. Supported tokenizers are: 'english', 'chinese', 'cjk', 'jieba', 'ik', "
+                                    "'ik_smart'.");
     }
     return Status::OK();
 }

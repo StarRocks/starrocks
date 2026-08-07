@@ -15,7 +15,7 @@
 //! Tokenizer factory and shared API.
 //!
 //! Each custom `tantivy::Tokenizer` impl lives in its own submodule
-//! (`cjk_bigram`, `jieba`). Tantivy's bundled tokenizers (`SimpleTokenizer`,
+//! (`cjk_bigram`, `ik`, `jieba`). Tantivy's bundled tokenizers (`SimpleTokenizer`,
 //! `RawTokenizer`) are assembled inline below — they have no custom code,
 //! so a separate file would only add jump cost.
 //!
@@ -23,8 +23,10 @@
 //! `build()`; do not duplicate this dispatch elsewhere.
 
 mod cjk_bigram;
+mod ik;
 mod jieba;
 
+use ik_rs::core::ik_segmenter::TokenMode;
 use tantivy::tokenizer::{
     Language, LowerCaser, RawTokenizer, RemoveLongFilter, SimpleTokenizer, StopWordFilter,
     TextAnalyzer,
@@ -35,11 +37,14 @@ use tantivy::tokenizer::{
 
 use crate::error::{Result, TantivyBindingError};
 use cjk_bigram::CjkBigramTokenizer;
+use ik::IkTokenizer;
 use jieba::JiebaTokenizer;
 
 pub const TOKENIZER_ENGLISH: &str = "english";
 pub const TOKENIZER_JIEBA: &str = "jieba";
 pub const TOKENIZER_CJK: &str = "cjk";
+pub const TOKENIZER_IK: &str = "ik";
+pub const TOKENIZER_IK_SMART: &str = "ik_smart";
 pub const TOKENIZER_RAW: &str = "raw";
 
 pub const TOKENIZER_NAME: &str = "sr_default";
@@ -51,9 +56,12 @@ pub fn build(name: &str) -> Result<TextAnalyzer> {
             .build()),
         TOKENIZER_JIEBA => Ok(TextAnalyzer::builder(JiebaTokenizer::default())
             .build()),
+        TOKENIZER_IK => Ok(TextAnalyzer::builder(IkTokenizer::default()).build()),
+        TOKENIZER_IK_SMART => Ok(TextAnalyzer::builder(IkTokenizer::new(TokenMode::SEARCH))
+            .build()),
         TOKENIZER_RAW => Ok(TextAnalyzer::builder(RawTokenizer::default()).build()),
         other => Err(TantivyBindingError::InvalidArgument(format!(
-            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_RAW}'"
+            "unsupported tokenizer '{other}'; supported: '{TOKENIZER_ENGLISH}', '{TOKENIZER_CJK}', '{TOKENIZER_JIEBA}', '{TOKENIZER_IK}', '{TOKENIZER_IK_SMART}', '{TOKENIZER_RAW}'"
         ))),
     }
 }

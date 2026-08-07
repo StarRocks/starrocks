@@ -63,6 +63,11 @@ Status TantivyInvertedReader::create(const std::string& path, const std::shared_
         tokenizer_name = "cjk";
     } else if (parser_str == INVERTED_INDEX_PARSER_JIEBA) {
         tokenizer_name = "jieba";
+    } else if (parser_str == INVERTED_INDEX_PARSER_IK) {
+        tokenizer_name =
+                get_parser_mode_string_from_properties(tablet_index->index_properties()) == INVERTED_INDEX_PARSER_SMART
+                        ? "ik_smart"
+                        : "ik";
     } else if (parser_str == INVERTED_INDEX_PARSER_NONE) {
         tokenizer_name = "raw";
     } else {

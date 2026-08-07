@@ -49,6 +49,7 @@ enum class InvertedIndexParserType {
     PARSER_ENGLISH = 3,
     PARSER_CHINESE = 4,
     PARSER_JIEBA = 5,
+    PARSER_IK = 6,
 };
 
 const std::string INVERTED_IMP_KEY = "imp_lib";
@@ -63,6 +64,10 @@ const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
 const std::string INVERTED_INDEX_PARSER_JIEBA = "jieba";
+const std::string INVERTED_INDEX_PARSER_IK = "ik";
+const std::string INVERTED_INDEX_PARSER_MODE_KEY = "parser_mode";
+const std::string INVERTED_INDEX_PARSER_MAX_WORD = "ik_max_word";
+const std::string INVERTED_INDEX_PARSER_SMART = "ik_smart";
 const std::string LIKE_FN_NAME = "like";
 
 const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";

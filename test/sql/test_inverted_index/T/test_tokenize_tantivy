@@ -4,6 +4,10 @@ SELECT tokenize('english', 'The Quick Brown Foxes Running');
 SELECT tokenize('chinese', '中华人民');
 SELECT tokenize('cjk', '中华人民');
 SELECT array_contains(tokenize('jieba', '中华人民共和国成立了'), '人民');
+SELECT array_contains(tokenize('ik', '中华人民共和国国歌'), '中华');
+SELECT array_contains(tokenize('ik_smart', '中华人民共和国国歌'), '中华');
+SELECT cardinality(tokenize('ik', '中华人民共和国国歌'))
+    > cardinality(tokenize('ik_smart', '中华人民共和国国歌'));
 
 SET use_tantivy_tokenize = false;
 SELECT tokenize('english', 'Hello World');

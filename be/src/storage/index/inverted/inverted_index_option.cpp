@@ -64,6 +64,8 @@ std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_
         return INVERTED_INDEX_PARSER_CHINESE;
     case InvertedIndexParserType::PARSER_JIEBA:
         return INVERTED_INDEX_PARSER_JIEBA;
+    case InvertedIndexParserType::PARSER_IK:
+        return INVERTED_INDEX_PARSER_IK;
     default:
         return INVERTED_INDEX_PARSER_UNKNOWN;
     }
@@ -81,6 +83,8 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
         return InvertedIndexParserType::PARSER_CHINESE;
     } else if (lower_value == INVERTED_INDEX_PARSER_JIEBA) {
         return InvertedIndexParserType::PARSER_JIEBA;
+    } else if (lower_value == INVERTED_INDEX_PARSER_IK) {
+        return InvertedIndexParserType::PARSER_IK;
     }
 
     return InvertedIndexParserType::PARSER_UNKNOWN;
@@ -93,6 +97,13 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
         }
     }
     return INVERTED_INDEX_PARSER_NONE;
+}
+
+std::string get_parser_mode_string_from_properties(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_PARSER_MODE_KEY); it != properties.end()) {
+        return boost::algorithm::to_lower_copy(it->second);
+    }
+    return INVERTED_INDEX_PARSER_MAX_WORD;
 }
 
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {
