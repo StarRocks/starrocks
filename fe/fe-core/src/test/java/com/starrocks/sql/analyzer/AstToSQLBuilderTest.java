@@ -198,4 +198,46 @@ public class AstToSQLBuilderTest {
                 "WHERE `cte02`.`priority` IS NOT NULL";
         Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
+    @Test
+    public void testInsertValuesRoundTrip() {
+        // The INSERT source takes a bare VALUES list. Emitting the parenthesized derived-table form
+        // `INSERT INTO t (cols) (VALUES ...)` produces SQL the parser rejects.
+        String[][] cases = {
+                {"insert into t0 (v1, v2) values (1, 111)", "INSERT INTO `t0` (`v1`,`v2`) VALUES(1, 111)"},
+                {"insert into t0 values (1, 2), (3, 4)", "INSERT INTO `t0` VALUES(1, 2), (3, 4)"},
+                {"insert into t0 values (1, null)", "INSERT INTO `t0` VALUES(1, NULL)"},
+                {"insert overwrite t0 (v1) values (1)", "INSERT OVERWRITE `t0` (`v1`) VALUES(1)"},
+                {"insert into t0 with label lb (v1) values (1)", "INSERT INTO `t0` WITH LABEL `lb` (`v1`) VALUES(1)"},
+        };
+        for (String[] c : cases) {
+            StatementBase stmt = SqlParser.parseSingleStatement(c[0], SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals(c[1], serializedSql, c[0]);
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT),
+                    c[0]);
+            // Deparsing is a fixpoint: re-serializing the output must not change it again.
+            Assertions.assertEquals(serializedSql,
+                    AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT)),
+                    c[0]);
+        }
+    }
+
+    @Test
+    public void testValuesInDerivedTablePositionKeepsParentheses() {
+        // Counterpart to testInsertValuesRoundTrip: outside the INSERT source, a VALUES relation sits in
+        // derived-table position and *must* stay parenthesized.
+        String sql = "select * from (values (1, 'a'), (2, 'b')) tt(x, y)";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String serializedSql = AstToSQLBuilder.toSQL(stmt);
+        Assertions.assertEquals("SELECT *\nFROM (VALUES(1, 'a'), (2, 'b')) tt(x,y)", serializedSql);
+        Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT));
+    }
+
+    @Test
+    public void testInsertValuesDigestUnaffected() {
+        // The digest form stays unparenthesized and keeps only the first row.
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "insert into t0 (v1, v2) values (1, 111), (2, 222)", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("INSERT INTO `t0` (`v1`,`v2`) VALUES(?, ?)", AstToSQLBuilder.toDigest(stmt));
+    }
 }

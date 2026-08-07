@@ -577,9 +577,9 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    protected String visitValueRows(ValuesRelation node) {
         if (!options.isEnableDigest()) {
-            return super.visitValues(node, scope);
+            return super.visitValueRows(node);
         }
 
         if (node.isNullValues()) {
@@ -596,6 +596,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append(rowBuilder);
         }
         return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        if (!options.isEnableDigest()) {
+            return super.visitValues(node, scope);
+        }
+        // The digest form is deliberately unparenthesized and keeps only the first row.
+        return visitValueRows(node);
     }
 
     @Override
