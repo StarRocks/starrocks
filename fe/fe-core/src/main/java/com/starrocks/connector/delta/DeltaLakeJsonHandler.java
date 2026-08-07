@@ -62,13 +62,8 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
     private final int maxBatchSize;
     private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
-<<<<<<< HEAD
-    public DeltaLakeJsonHandler(Configuration hadoopConf, LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        super(hadoopConf);
-=======
     public DeltaLakeJsonHandler(Configuration hadoopConf, Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        super(new HadoopFileIO(hadoopConf));
->>>>>>> 02020791e5 ([BugFix] Isolate Delta Lake per-table cloud credentials (#77424))
+        super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.maxBatchSize = hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);
         this.jsonCache = jsonCache;

@@ -35,15 +35,9 @@ public class DeltaLakeEngine extends DefaultEngine {
     private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     protected DeltaLakeEngine(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
-<<<<<<< HEAD
-                              LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
-                              LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        super(hadoopConf);
-=======
                               Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
                               Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        super(new HadoopFileIO(hadoopConf));
->>>>>>> 02020791e5 ([BugFix] Isolate Delta Lake per-table cloud credentials (#77424))
+        super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.properties = properties;
         this.checkpointCache = checkpointCache;
