@@ -204,6 +204,25 @@ struct TDictionaryCacheSink {
     6: optional i32 key_size
 }
 
+// CK-compatible logical sink MV (`CREATE MATERIALIZED VIEW ... TO <table>`): a secondary sink that,
+// for each chunk written to the base table, applies an optional predicate and per-column transform
+// expressions and writes the resulting rows into an existing target OLAP table within the same
+// load transaction. Carried alongside the base TOlapTableSink and fanned out on the BE.
+struct TOlapTableLogicalSink {
+    1: optional i64 mv_id
+    2: optional string mv_name
+    3: optional i64 target_table_id
+    4: optional Descriptors.TOlapTableSchemaParam schema
+    5: optional Descriptors.TOlapTablePartitionParam partition
+    6: optional Descriptors.TOlapTableLocationParam location
+    // Per target column, the expression evaluated over the base chunk (in target column order).
+    7: optional list<Exprs.TExpr> transform_exprs
+    // Optional WHERE predicate evaluated over the base chunk; rows failing it are not sinked.
+    8: optional Exprs.TExpr where_predicate
+    9: optional Types.TKeysType keys_type
+    10: optional i32 tuple_id
+}
+
 struct TOlapTableSink {
     1: required Types.TUniqueId load_id
     2: required i64 txn_id
@@ -238,6 +257,9 @@ struct TOlapTableSink {
     30: optional bool ignore_out_of_partition
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
+    // CK-compatible TO-table MVs attached to the base table; each writes transformed rows into its
+    // own target table within the same load transaction as the base write.
+    33: optional list<TOlapTableLogicalSink> logical_sinks
 }
 
 struct TSchemaTableSink {
