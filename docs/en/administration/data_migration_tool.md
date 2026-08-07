@@ -163,13 +163,6 @@ These storage volumes are used **only during migration** to give target CNs read
 
 Range-distributed table migration is supported only between shared-data clusters. The migration tool creates a missing target table automatically from the source table definition. Do not create the target table manually.
 
-Before migrating a range-distributed table, verify that both cluster builds contain the FE range-topology and exact-boundary split bridge and these two shared-data server fixes:
-
-- A split child can use its current metadata and data version as the UUID file deduplication baseline when the old data-version metadata file does not exist.
-- Shared objects and bundled segments are copied once with the correct physical path and with their logical offset and size preserved.
-
-Do not perform an end-to-end or production migration until all these dependencies are present in the deployed builds.
-
 Record the original values of the following FE configurations. For each dynamic setting, also add the matching persistent setting to **fe.conf** on every applicable FE so that an FE restart does not change the migration contract.
 
 1. On both the source and target clusters, disable tablet merge and keep range distribution enabled:
