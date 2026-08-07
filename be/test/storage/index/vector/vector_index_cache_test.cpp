@@ -650,7 +650,8 @@ TEST_F(VectorIndexCacheTest, Factory_ConfigOffDoesNotWaitForExistingAsyncLoad) {
     auto factory = std::async(std::launch::async, [&] {
         auto vi_file = remote_vi(kMissingPath, &fs);
         VectorIndexReaderFactory reader_factory(*cache_);
-        return reader_factory.create_and_init(std::move(vi_file), tablet_index, {}, {});
+        OlapReaderStatistics stats;
+        return reader_factory.create_and_init(std::move(vi_file), tablet_index, {}, {.stats = stats});
     });
     const auto factory_status = factory.wait_for(std::chrono::milliseconds(500));
     if (factory_status != std::future_status::ready) {
@@ -1117,7 +1118,8 @@ TEST(VectorIndexFileReaderTest, OpenFailsOnMissingFile) {
 TEST(EmptyIndexReaderTest, AllMethodsReturnNotSupported) {
     EmptyIndexReader r;
     tenann::IndexMeta meta;
-    auto init_result = r.init_searcher(meta, local_vi("/x.vi"));
+    OlapReaderStatistics stats;
+    auto init_result = r.init_searcher(std::move(meta), local_vi("/x.vi"), stats);
     ASSERT_TRUE(init_result.ok()) << init_result.status();
     EXPECT_EQ(VectorIndexReaderInitResult::kFallback, init_result.value());
     EXPECT_TRUE(r.search(tenann::PrimitiveSeqView{}, /*k=*/1, nullptr, nullptr).is_not_supported());
@@ -1136,7 +1138,8 @@ TEST(TenANNReaderTest, InitSearcher_UsesInjectedCacheWithoutGlobalCache) {
 
     MemoryFileSystem fs;
     TenANNReader r(cache, /*async_load_on_miss=*/false);
-    auto st = r.init_searcher(make_minimal_meta(), remote_vi("/no/such/index.vi", &fs));
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(make_minimal_meta(), remote_vi("/no/such/index.vi", &fs), stats);
     EXPECT_TRUE(st.status().is_not_found()) << st.status();
 }
 
@@ -1151,7 +1154,7 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
     OlapReaderStatistics stats;
-    auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs), &stats);
+    auto st = r.init_searcher(std::move(meta), remote_vi("/no/such/index.vi", &fs), stats);
     EXPECT_TRUE(st.status().is_not_found()) << st.status();
     EXPECT_EQ(0, stats.vector_index_cache_hit_count);
     EXPECT_EQ(1, stats.vector_index_cache_miss_count);
@@ -1176,7 +1179,8 @@ TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
 
     TenANNReader r(cache, /*async_load_on_miss=*/false);
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, remote_vi("/tmp/garbage.vi", &fs));
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(std::move(meta), remote_vi("/tmp/garbage.vi", &fs), stats);
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
 }
 
@@ -1230,8 +1234,9 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
         CurrentThreadMemTrackerSetter ambient(&fake_query);
         TenANNReader r(cache, /*async_load_on_miss=*/false);
         auto meta = make_minimal_meta();
+        OlapReaderStatistics stats;
         // Load runs the probe fs, then fails NotFound (return ignored).
-        (void)r.init_searcher(meta, remote_vi("/no/such/probe.vi", &fs));
+        (void)r.init_searcher(std::move(meta), remote_vi("/no/such/probe.vi", &fs), stats);
     }
 
     ASSERT_NE(nullptr, fs.captured) << "loader never opened the index file via fs";

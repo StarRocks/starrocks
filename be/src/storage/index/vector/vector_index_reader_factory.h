@@ -34,7 +34,8 @@ struct VectorIndexReaderInitOptions {
     size_t segment_num_rows = 0;
     int query_k = 0;
     bool refine_distance = false;
-    OlapReaderStatistics* stats = nullptr;
+    // Required. SegmentReadOptions rejects a null stats pointer before creating an iterator.
+    OlapReaderStatistics& stats;
 };
 
 struct VectorIndexReaderCreateResult {

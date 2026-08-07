@@ -23,8 +23,8 @@ class EmptyIndexReader final : public VectorIndexReader {
 public:
     ~EmptyIndexReader() override = default;
 
-    StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& /*meta*/, const FileInfo& /*vi_file*/,
-                                                        OlapReaderStatistics* /*stats*/ = nullptr) override {
+    StatusOr<VectorIndexReaderInitResult> init_searcher(tenann::IndexMeta /*meta*/, const FileInfo& /*vi_file*/,
+                                                        OlapReaderStatistics& /*stats*/) override {
         return VectorIndexReaderInitResult::kFallback;
     }
 

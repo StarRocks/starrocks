@@ -211,7 +211,8 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         const auto& empty_meta = std::map<std::string, std::string>{};
         FileInfo vi_file{.path = index_path};
         VectorIndexReaderFactory factory(*_reader_cache);
-        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {}));
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
         ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_result.state);
         ASSERT_NE(nullptr, init_result.reader);
         auto ann_reader = std::move(init_result.reader);
@@ -264,7 +265,8 @@ TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
         const auto& empty_meta = std::map<std::string, std::string>{};
         FileInfo vi_file{.path = index_path};
         VectorIndexReaderFactory factory(*_reader_cache);
-        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {}));
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
         ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_result.state);
         ASSERT_NE(nullptr, init_result.reader);
         auto ann_reader = std::move(init_result.reader);
@@ -422,7 +424,9 @@ TEST_F(VectorIndexSearchTest, factory_create_and_init_null_fs_uses_injected_cach
         const auto empty_query_params = std::map<std::string, std::string>{};
         FileInfo vi_file{.path = ann_path};
         VectorIndexReaderFactory factory(*_reader_cache);
-        ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_query_params, {}));
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto result,
+                        factory.create_and_init(vi_file, tablet_index, empty_query_params, {.stats = stats}));
         EXPECT_EQ(VectorIndexReaderInitResult::kReady, result.state);
         EXPECT_NE(nullptr, result.reader);
     } catch (tenann::Error& e) {
@@ -455,7 +459,7 @@ TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss
     OlapReaderStatistics cold_stats;
     FileInfo cold_vi_file{.path = index_path, .fs = _fs};
     ASSIGN_OR_ABORT(auto cold_result, factory.create_and_init(cold_vi_file, tablet_index, empty_query_params,
-                                                              VectorIndexReaderInitOptions{.stats = &cold_stats}));
+                                                              VectorIndexReaderInitOptions{.stats = cold_stats}));
     ASSERT_EQ(VectorIndexReaderInitResult::kReady, cold_result.state);
     ASSERT_NE(nullptr, cold_result.reader);
     EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
@@ -469,7 +473,7 @@ TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss
     OlapReaderStatistics warm_stats;
     FileInfo warm_vi_file{.path = index_path, .fs = _fs};
     ASSIGN_OR_ABORT(auto warm_result, factory.create_and_init(warm_vi_file, tablet_index, empty_query_params,
-                                                              VectorIndexReaderInitOptions{.stats = &warm_stats}));
+                                                              VectorIndexReaderInitOptions{.stats = warm_stats}));
     ASSERT_EQ(VectorIndexReaderInitResult::kReady, warm_result.state);
     ASSERT_NE(nullptr, warm_result.reader);
     EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
@@ -508,7 +512,7 @@ TEST_F(VectorIndexSearchTest, async_cache_miss_falls_back_then_next_reader_uses_
     OlapReaderStatistics cold_stats;
     FileInfo cold_vi_file{.path = index_path, .fs = _fs};
     ASSIGN_OR_ABORT(auto cold_result, factory.create_and_init(cold_vi_file, tablet_index, empty_query_params,
-                                                              VectorIndexReaderInitOptions{.stats = &cold_stats}));
+                                                              VectorIndexReaderInitOptions{.stats = cold_stats}));
     EXPECT_EQ(VectorIndexReaderInitResult::kFallback, cold_result.state);
     EXPECT_EQ(nullptr, cold_result.reader);
     EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
@@ -529,7 +533,7 @@ TEST_F(VectorIndexSearchTest, async_cache_miss_falls_back_then_next_reader_uses_
     OlapReaderStatistics warm_stats;
     FileInfo warm_vi_file{.path = index_path, .fs = _fs};
     ASSIGN_OR_ABORT(auto warm_result, factory.create_and_init(warm_vi_file, tablet_index, empty_query_params,
-                                                              VectorIndexReaderInitOptions{.stats = &warm_stats}));
+                                                              VectorIndexReaderInitOptions{.stats = warm_stats}));
     EXPECT_EQ(VectorIndexReaderInitResult::kReady, warm_result.state);
     EXPECT_NE(nullptr, warm_result.reader);
     EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
@@ -567,7 +571,7 @@ TEST_F(VectorIndexSearchTest, async_ineligible_queries_load_index_synchronously)
         ASSIGN_OR_ABORT(auto result,
                         factory.create_and_init(
                                 vi_file, tablet_index, empty_query_params,
-                                VectorIndexReaderInitOptions{.refine_distance = refine_distance, .stats = &stats}));
+                                VectorIndexReaderInitOptions{.refine_distance = refine_distance, .stats = stats}));
         EXPECT_EQ(VectorIndexReaderInitResult::kReady, result.state);
         EXPECT_NE(nullptr, result.reader);
         EXPECT_EQ(1, stats.vector_index_cache_miss_count);

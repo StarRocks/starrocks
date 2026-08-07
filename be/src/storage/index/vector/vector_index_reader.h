@@ -69,16 +69,10 @@ public:
     // resolved. A null `vi_file.fs` means read the path from the local filesystem. The
     // FileSystem is held by shared_ptr because the reader built from it is stored in the
     // tenann index cache and outlives the SegmentIterator that started the load.
-    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file,
-                                                                OlapReaderStatistics* stats = nullptr) = 0;
-
-    // Per-segment context for apply_adaptive_ef_search(). Default forwards
-    // to the row-count-unaware form for readers without adaptive scaling.
-    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(const tenann::IndexMeta& meta, const FileInfo& vi_file,
-                                                                size_t segment_num_rows, int query_k, bool user_set_ef,
-                                                                OlapReaderStatistics* stats = nullptr) {
-        return init_searcher(meta, vi_file, stats);
-    }
+    // Takes ownership of the query-specific meta so implementations can adjust it
+    // without serializing and copying the full IndexMeta again.
+    virtual StatusOr<VectorIndexReaderInitResult> init_searcher(tenann::IndexMeta meta, const FileInfo& vi_file,
+                                                                OlapReaderStatistics& stats) = 0;
 
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                           tenann::IdFilter* id_filter = nullptr) = 0;

@@ -42,6 +42,7 @@
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/storage_stats.h"
 
 #ifdef WITH_TENANN
 #include "storage/index/vector/tenann/tenann_index_utils.h"
@@ -632,7 +633,8 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_shared_data_path) {
     VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
     VectorIndexReaderFactory factory(cache);
     FileInfo vi_file{.path = vector_index_path, .fs = _fs};
-    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {}));
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
     ASSERT_EQ(VectorIndexReaderInitResult::kReady, result.state);
     ASSERT_NE(result.reader, nullptr);
 }
@@ -659,7 +661,8 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_
     VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
     VectorIndexReaderFactory factory(cache);
     FileInfo vi_file{.path = vector_index_path, .fs = _fs};
-    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {}));
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
     ASSERT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
     ASSERT_EQ(nullptr, result.reader);
 }
@@ -673,7 +676,8 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_not_found) {
     VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
     VectorIndexReaderFactory factory(cache);
     FileInfo vi_file{.path = non_existent_path, .fs = _fs};
-    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {}));
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
     ASSERT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
     ASSERT_EQ(nullptr, result.reader);
 }

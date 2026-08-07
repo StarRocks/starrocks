@@ -41,14 +41,11 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
 
     VectorIndexCacheProbeResult probe;
     {
-        int64_t ignored_ns = 0;
-        SCOPED_RAW_TIMER(options.stats != nullptr ? &options.stats->vector_index_cache_lookup_ns : &ignored_ns);
+        SCOPED_RAW_TIMER(&options.stats.vector_index_cache_lookup_ns);
         probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path));
     }
     if (probe.state == VectorIndexCacheProbeState::kLoading) {
-        if (options.stats != nullptr) {
-            ++options.stats->vector_index_cache_miss_count;
-        }
+        ++options.stats.vector_index_cache_miss_count;
         return VectorIndexReaderCreateResult{};
     }
 
@@ -56,8 +53,7 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
         std::unique_ptr<RandomAccessFile> index_file;
         uint64_t file_size = 0;
         {
-            int64_t ignored_ns = 0;
-            SCOPED_RAW_TIMER(options.stats != nullptr ? &options.stats->vector_index_file_open_ns : &ignored_ns);
+            SCOPED_RAW_TIMER(&options.stats.vector_index_file_open_ns);
             if (vi_file.fs != nullptr) {
                 auto file_or = vi_file.fs->new_random_access_file(index_path);
                 if (!file_or.ok()) {
@@ -94,11 +90,11 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
             break;
         }
     }
+    apply_adaptive_ef_search(&meta, options.segment_num_rows, options.query_k, user_set_ef);
 
     std::shared_ptr<VectorIndexReader> reader =
             std::make_shared<TenANNReader>(_vector_index_cache, async_load_on_miss, std::move(probe.handle));
-    ASSIGN_OR_RETURN(auto state, reader->init_searcher(meta, vi_file, options.segment_num_rows, options.query_k,
-                                                       user_set_ef, options.stats));
+    ASSIGN_OR_RETURN(auto state, reader->init_searcher(std::move(meta), vi_file, options.stats));
     if (state == VectorIndexReaderInitResult::kFallback) {
         return VectorIndexReaderCreateResult{};
     }

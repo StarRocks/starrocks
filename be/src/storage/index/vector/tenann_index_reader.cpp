@@ -62,30 +62,29 @@ namespace starrocks {
 
 namespace {
 
-void apply_index_reader_cache_options(tenann::IndexMeta* meta_copy) {
-    if (meta_copy->index_type() == tenann::IndexType::kFaissIvfPq) {
+void apply_index_reader_cache_options(tenann::IndexMeta* meta) {
+    if (meta->index_type() == tenann::IndexType::kFaissIvfPq) {
         if (config::enable_vector_index_block_cache) {
-            meta_copy->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = false;
-            meta_copy->index_reader_options()[tenann::IndexReaderOptions::cache_index_block_key] = true;
+            meta->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = false;
+            meta->index_reader_options()[tenann::IndexReaderOptions::cache_index_block_key] = true;
         } else {
-            meta_copy->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = true;
-            meta_copy->index_reader_options()[tenann::IndexReaderOptions::cache_index_block_key] = false;
+            meta->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = true;
+            meta->index_reader_options()[tenann::IndexReaderOptions::cache_index_block_key] = false;
         }
     } else {
-        meta_copy->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = true;
+        meta->index_reader_options()[tenann::IndexReaderOptions::cache_index_file_key] = true;
     }
 }
 
 StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, const FileInfo& vi_file,
                                              VectorIndexCache& vector_index_cache, MemTracker* tracker,
-                                             OlapReaderStatistics* stats) {
+                                             OlapReaderStatistics& stats) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(tracker);
     try {
         std::shared_ptr<VectorIndexFileReader> external_file_reader;
         if (vi_file.fs != nullptr) {
             auto opened_or = [&]() {
-                int64_t ignored_ns = 0;
-                SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_file_open_ns : &ignored_ns);
+                SCOPED_RAW_TIMER(&stats.vector_index_file_open_ns);
                 return VectorIndexFileReader::open(vi_file);
             }();
             if (!opened_or.ok()) {
@@ -100,11 +99,9 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
             reader->SetFileReader(external_file_reader);
         }
         DeferOp collect_read_stats([&] {
-            if (stats != nullptr) {
-                const auto& read_stats = reader->read_timing_stats();
-                stats->vector_index_read_file_ns += read_stats.read_file_ns;
-                stats->vector_index_init_index_ns += read_stats.init_index_ns;
-            }
+            const auto& read_stats = reader->read_timing_stats();
+            stats.vector_index_read_file_ns += read_stats.read_file_ns;
+            stats.vector_index_init_index_ns += read_stats.init_index_ns;
         });
         auto index_ref = reader->ReadIndexFile(vi_file.path);
         if (external_file_reader != nullptr) {
@@ -121,24 +118,23 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
     }
 }
 
-VectorIndexCache::AsyncIndexLoader make_owned_index_loader(tenann::IndexMeta meta, FileInfo vi_file,
-                                                           VectorIndexCache& vector_index_cache, MemTracker* tracker,
-                                                           OlapReaderStatistics* stats) {
-    return [meta = std::move(meta), vi_file = std::move(vi_file), vector_index_cache = &vector_index_cache, tracker,
-            stats]() mutable -> StatusOr<tenann::IndexRef> {
-        return load_vector_index(meta, vi_file, *vector_index_cache, tracker, stats);
+VectorIndexCache::AsyncIndexLoader make_owned_index_loader(std::shared_ptr<const tenann::IndexMeta> meta,
+                                                           FileInfo vi_file, VectorIndexCache& vector_index_cache,
+                                                           MemTracker* tracker) {
+    return [meta = std::move(meta), vi_file = std::move(vi_file), vector_index_cache = &vector_index_cache,
+            tracker]() -> StatusOr<tenann::IndexRef> {
+        OlapReaderStatistics background_stats;
+        return load_vector_index(*meta, vi_file, *vector_index_cache, tracker, background_stats);
     };
 }
 
 } // namespace
 
-StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::IndexMeta& meta,
-                                                                  const FileInfo& vi_file,
-                                                                  OlapReaderStatistics* stats) {
+StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(tenann::IndexMeta meta, const FileInfo& vi_file,
+                                                                  OlapReaderStatistics& stats) {
     const std::string& index_path = vi_file.path;
 
-    auto meta_copy = meta;
-    apply_index_reader_cache_options(&meta_copy);
+    apply_index_reader_cache_options(&meta);
 
     // Charge the load to the process tracker (not the vector_index tracker): the
     // index lives in the heap, so the allocator hook already accounts these bytes
@@ -151,28 +147,25 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
     // the load off the originating query's mem limit while leaving the deterministic
     // cache consume/release as the sole source of the vector_index label.
     auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+    std::shared_ptr<const tenann::IndexMeta> async_meta;
 
     if (!_cache_handle.valid()) {
         if (_async_load_on_miss) {
             // The background task owns every captured value. In particular it
             // never keeps query statistics or SegmentIterator stack objects.
-            auto owned_loader = make_owned_index_loader(meta_copy, vi_file, _vector_index_cache, tracker, nullptr);
+            async_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
+            auto owned_loader = make_owned_index_loader(async_meta, vi_file, _vector_index_cache, tracker);
             VectorIndexCacheProbeResult probe;
             {
-                int64_t ignored_ns = 0;
-                SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_cache_lookup_ns : &ignored_ns);
+                SCOPED_RAW_TIMER(&stats.vector_index_cache_lookup_ns);
                 probe = _vector_index_cache.TryGetOrSchedule(tenann::CacheKey(index_path), std::move(owned_loader));
             }
             if (probe.state != VectorIndexCacheProbeState::kReady) {
-                if (stats != nullptr) {
-                    ++stats->vector_index_cache_miss_count;
-                }
+                ++stats.vector_index_cache_miss_count;
                 return VectorIndexReaderInitResult::kFallback;
             }
             _cache_handle = std::move(probe.handle);
-            if (stats != nullptr) {
-                ++stats->vector_index_cache_hit_count;
-            }
+            ++stats.vector_index_cache_hit_count;
         } else {
             Status load_status = Status::OK();
             bool loader_invoked = false;
@@ -180,7 +173,7 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
             auto loader = [&]() -> tenann::IndexRef {
                 loader_invoked = true;
                 SCOPED_RAW_TIMER(&loader_ns);
-                auto loaded_or = load_vector_index(meta_copy, vi_file, _vector_index_cache, tracker, stats);
+                auto loaded_or = load_vector_index(meta, vi_file, _vector_index_cache, tracker, stats);
                 if (!loaded_or.ok()) {
                     load_status = loaded_or.status();
                     return nullptr;
@@ -198,15 +191,13 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
                 cache_ok = result.state == VectorIndexCacheProbeState::kReady;
                 _cache_handle = std::move(result.handle);
             }
-            if (stats != nullptr) {
-                // Exclude this caller's loader time so a cold leader reports cache bookkeeping,
-                // while a concurrent follower reports its singleflight wait.
-                stats->vector_index_cache_lookup_ns += std::max<int64_t>(0, get_or_create_ns - loader_ns);
-                if (loader_invoked || loading) {
-                    ++stats->vector_index_cache_miss_count;
-                } else {
-                    ++stats->vector_index_cache_hit_count;
-                }
+            // Exclude this caller's loader time so a cold leader reports cache bookkeeping,
+            // while a concurrent follower reports its singleflight wait.
+            stats.vector_index_cache_lookup_ns += std::max<int64_t>(0, get_or_create_ns - loader_ns);
+            if (loader_invoked || loading) {
+                ++stats.vector_index_cache_miss_count;
+            } else {
+                ++stats.vector_index_cache_hit_count;
             }
             if (loading) {
                 return VectorIndexReaderInitResult::kFallback;
@@ -216,15 +207,15 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
                                          : Status::InternalError("failed to load vector index: " + index_path);
             }
         }
-    } else if (stats != nullptr) {
-        ++stats->vector_index_cache_hit_count;
+    } else {
+        ++stats.vector_index_cache_hit_count;
     }
 
     {
-        int64_t ignored_ns = 0;
-        SCOPED_RAW_TIMER(stats != nullptr ? &stats->vector_index_searcher_init_ns : &ignored_ns);
+        SCOPED_RAW_TIMER(&stats.vector_index_searcher_init_ns);
         try {
-            _searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(meta_copy);
+            const auto& searcher_meta = async_meta != nullptr ? *async_meta : meta;
+            _searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(searcher_meta);
             // AttachIndexRef skips the second cache lookup Searcher::ReadIndex
             // would otherwise do — we already hold the ref from GetOrCreate.
             _searcher->AttachIndexRef(_cache_handle.index_ref());
@@ -241,15 +232,6 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::
         }
     }
     return VectorIndexReaderInitResult::kReady;
-}
-
-StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(const tenann::IndexMeta& meta,
-                                                                  const FileInfo& vi_file, size_t segment_num_rows,
-                                                                  int query_k, bool user_set_ef,
-                                                                  OlapReaderStatistics* stats) {
-    auto adapted_meta = meta;
-    apply_adaptive_ef_search(&adapted_meta, segment_num_rows, query_k, user_set_ef);
-    return init_searcher(adapted_meta, vi_file, stats);
 }
 
 Status TenANNReader::search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids,

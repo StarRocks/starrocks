@@ -1255,13 +1255,14 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
     if (vector_index_cache == nullptr) {
         return Status::InternalError("StorageEnv vector index cache is not initialized");
     }
+    DCHECK(_opts.stats != nullptr);
 
     VectorIndexReaderFactory factory(*vector_index_cache);
     VectorIndexReaderInitOptions options{
             .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
             .query_k = static_cast<int>(_vector_index_ctx->k),
             .refine_distance = _vector_index_ctx->refine_distance,
-            .stats = _opts.stats,
+            .stats = *_opts.stats,
     };
     ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
     if (result.state == VectorIndexReaderInitResult::kFallback) {
