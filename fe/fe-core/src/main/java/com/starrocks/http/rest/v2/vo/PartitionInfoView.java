@@ -17,6 +17,7 @@ package com.starrocks.http.rest.v2.vo;
 import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -143,12 +144,12 @@ public class PartitionInfoView {
             pvo.setId(partitionId);
             pvo.setName(partition.getName());
 
-            Optional.ofNullable(partition.getDistributionInfo()).ifPresent(distributionInfo -> {
-                pvo.setBucketNum(distributionInfo.getBucketNum());
-                pvo.setDistributionType(distributionInfo.getTypeStr());
-            });
-
+            DistributionInfo distributionInfo = partition.getDistributionInfo();
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+            if (distributionInfo != null) {
+                pvo.setBucketNum(physicalPartition.getActualBucketNum(distributionInfo));
+                pvo.setDistributionType(distributionInfo.getTypeStr());
+            }
 
             pvo.setVisibleVersion(physicalPartition.getVisibleVersion());
             pvo.setVisibleVersionTime(physicalPartition.getVisibleVersionTime());
@@ -185,9 +186,20 @@ public class PartitionInfoView {
                     // TODO add more type support in the future
             }
 
-            List<MaterializedIndex> allIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
-            if (CollectionUtils.isNotEmpty(allIndices)) {
-                MaterializedIndex materializedIndex = allIndices.get(0);
+            // Under range distribution bucketNum above counts the base index's tablets, so the tablet
+            // list must come from that same index or the two fields contradict each other. Any other
+            // distribution keeps the historical selection, whose tablet ids clients may already rely on.
+            MaterializedIndex materializedIndex = null;
+            if (distributionInfo != null
+                    && distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+                materializedIndex = physicalPartition.getLatestBaseIndexOrNull();
+            }
+            if (materializedIndex == null) {
+                List<MaterializedIndex> allIndices =
+                        physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                materializedIndex = CollectionUtils.isNotEmpty(allIndices) ? allIndices.get(0) : null;
+            }
+            if (materializedIndex != null) {
                 List<Tablet> tablets = materializedIndex.getTablets();
                 if (CollectionUtils.isNotEmpty(tablets)) {
                     Optional<LakeTablet> lakeTabletOptional = tablets.stream()

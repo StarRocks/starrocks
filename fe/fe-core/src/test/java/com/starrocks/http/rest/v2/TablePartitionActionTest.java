@@ -31,15 +31,19 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.v2.RestBaseResultV2.PagedResult;
@@ -55,6 +59,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
@@ -62,6 +67,8 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.http.client.utils.URIBuilder;
@@ -78,11 +85,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -106,6 +116,12 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
 
     private static final Long LIST_PARTITION_TABLE_ID = testTableId + 13000L;
     private static final String LIST_PARTITION_TABLE_NAME = "tb_list_partition";
+
+    private static final Long RANGE_DISTRIBUTION_TABLE_ID = testTableId + 14000L;
+    private static final String RANGE_DISTRIBUTION_TABLE_NAME = "tb_range_distribution";
+
+    private static final Long HASH_ROLLUP_TABLE_ID = testTableId + 15000L;
+    private static final String HASH_ROLLUP_TABLE_NAME = "tb_hash_rollup";
 
     private static final Long BASE_PARTITION_ID = testPartitionId + 11000L;
 
@@ -559,6 +575,212 @@ public class TablePartitionActionTest extends StarRocksHttpTestCase {
         }
 
         db.dropTable(UNPARTITIONED_TABLE_ID);
+    }
+
+    private static MaterializedIndex newIndexWithTablets(long indexId, long metaId, int tabletNum,
+                                                         long tableId, long physicalPartitionId) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, MaterializedIndex.IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        TabletMeta tabletMeta = new TabletMeta(
+                testDbId, tableId, physicalPartitionId, indexId, TStorageMedium.HDD, true);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), tabletMeta);
+        }
+        return index;
+    }
+
+    /**
+     * A range-distribution lake table whose base index holds 3 tablets and whose two rollups hold 2
+     * and 4, so the base-index reading (3) is distinguishable from the old fixed 1, the minimum (2)
+     * and the maximum (4).
+     */
+    private static LakeTable newRangeDistributionLakeTable() throws Exception {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
+
+        Column c0 = new Column("c0", IntegerType.BIGINT, true, null, null, false, null, "cc0", 1);
+        List<Column> columns = Lists.newArrayList(c0);
+
+        long partitionId = BASE_PARTITION_ID + 500L;
+        long physicalPartitionId = partitionId + 1L;
+
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        LakeTable lakeTable = new LakeTable(RANGE_DISTRIBUTION_TABLE_ID, RANGE_DISTRIBUTION_TABLE_NAME,
+                columns, KeysType.DUP_KEYS, partitionInfo, new RangeDistributionInfo());
+
+        MaterializedIndex baseIndex = newIndexWithTablets(30000L, 3000L, 3,
+                RANGE_DISTRIBUTION_TABLE_ID, physicalPartitionId);
+        lakeTable.setBaseIndexMetaId(baseIndex.getMetaId());
+        lakeTable.setIndexMeta(baseIndex.getMetaId(), RANGE_DISTRIBUTION_TABLE_NAME, columns, 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        FilePathInfo pathInfo = newTestPathInfo(RANGE_DISTRIBUTION_TABLE_NAME);
+        lakeTable.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
+        mockLakeLookups(pathInfo);
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", baseIndex,
+                new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newIndexWithTablets(10000L, 1000L, 2,
+                RANGE_DISTRIBUTION_TABLE_ID, physicalPartitionId));
+        physicalPartition.createRollupIndex(newIndexWithTablets(20000L, 2000L, 4,
+                RANGE_DISTRIBUTION_TABLE_ID, physicalPartitionId));
+        partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
+        lakeTable.addPartition(partition);
+
+        return lakeTable;
+    }
+
+    @Test
+    public void testRangeDistributionPartitionReportsBaseIndexTablets() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        LakeTable table = newRangeDistributionLakeTable();
+        db.registerTableUnlocked(table);
+
+        PhysicalPartition physicalPartition = table.getPartitions().iterator().next()
+                .getDefaultPhysicalPartition();
+        // Precondition: a wrong implementation taking element 0 of the generic enumeration must not
+        // coincidentally land on the base index.
+        assertNotEquals(30000L,
+                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId());
+
+        Request request = newRequest(DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME, RANGE_DISTRIBUTION_TABLE_NAME);
+        try (Response response = networkClient.newCall(request).execute()) {
+            RestBaseResultV2<PagedResult<PartitionView>> resp = parseResponseBody(response.body().string());
+            assertEquals("0", resp.getCode());
+            PartitionView partition = resp.getResult().getItems().get(0);
+
+            assertEquals(3, partition.getBucketNum().intValue());
+            assertEquals("RANGE", partition.getDistributionType());
+
+            // The tablet list must come from the same index the bucket count was taken from.
+            List<Long> tabletIds = partition.getTablets().stream()
+                    .map(TabletView::getId).collect(Collectors.toList());
+            assertEquals(Lists.newArrayList(30000L, 30001L, 30002L), tabletIds);
+        } finally {
+            db.dropTable(RANGE_DISTRIBUTION_TABLE_ID);
+        }
+    }
+
+    /**
+     * The base-index selection is confined to range distribution: a hash table carrying a rollup must
+     * still serialize the index the generic enumeration yields, so existing clients see the same ids.
+     */
+    @Test
+    public void testHashDistributionWithRollupKeepsGenericIndexSelection() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(testDbId);
+        LakeTable table = newHashDistributionLakeTableWithRollup();
+        db.registerTableUnlocked(table);
+
+        PhysicalPartition physicalPartition = table.getPartitions().iterator().next()
+                .getDefaultPhysicalPartition();
+        MaterializedIndex expectedIndex = physicalPartition
+                .getLatestMaterializedIndices(IndexExtState.ALL).get(0);
+        assertNotEquals(physicalPartition.getLatestBaseIndexOrNull().getId(), expectedIndex.getId());
+        List<Long> expectedTabletIds = expectedIndex.getTablets().stream()
+                .map(Tablet::getId).collect(Collectors.toList());
+
+        Request request = newRequest(DEFAULT_INTERNAL_CATALOG_NAME, DB_NAME, HASH_ROLLUP_TABLE_NAME);
+        try (Response response = networkClient.newCall(request).execute()) {
+            RestBaseResultV2<PagedResult<PartitionView>> resp = parseResponseBody(response.body().string());
+            assertEquals("0", resp.getCode());
+            PartitionView partition = resp.getResult().getItems().get(0);
+
+            assertEquals(8, partition.getBucketNum().intValue());
+            List<Long> tabletIds = partition.getTablets().stream()
+                    .map(TabletView::getId).collect(Collectors.toList());
+            assertEquals(expectedTabletIds, tabletIds);
+        } finally {
+            db.dropTable(HASH_ROLLUP_TABLE_ID);
+        }
+    }
+
+    /**
+     * Same shape as {@link #newRangeDistributionLakeTable()} but hash-distributed, so the generic
+     * index-selection path this PR must not touch stays covered: base-index and rollup index ids are
+     * offset from the range fixture's so the two never collide in the tablet inverted index.
+     */
+    private static LakeTable newHashDistributionLakeTableWithRollup() throws Exception {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
+
+        Column c0 = new Column("c0", IntegerType.BIGINT, true, null, null, false, null, "cc0", 1);
+        List<Column> columns = Lists.newArrayList(c0);
+
+        long partitionId = BASE_PARTITION_ID + 600L;
+        long physicalPartitionId = partitionId + 1L;
+
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(8, Lists.newArrayList(c0));
+        LakeTable lakeTable = new LakeTable(HASH_ROLLUP_TABLE_ID, HASH_ROLLUP_TABLE_NAME,
+                columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+
+        MaterializedIndex baseIndex = newIndexWithTablets(31000L, 3100L, 3,
+                HASH_ROLLUP_TABLE_ID, physicalPartitionId);
+        lakeTable.setBaseIndexMetaId(baseIndex.getMetaId());
+        lakeTable.setIndexMeta(baseIndex.getMetaId(), HASH_ROLLUP_TABLE_NAME, columns, 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        FilePathInfo pathInfo = newTestPathInfo(HASH_ROLLUP_TABLE_NAME);
+        lakeTable.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
+        mockLakeLookups(pathInfo);
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", baseIndex,
+                distributionInfo);
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newIndexWithTablets(11000L, 1100L, 2,
+                HASH_ROLLUP_TABLE_ID, physicalPartitionId));
+        physicalPartition.createRollupIndex(newIndexWithTablets(21000L, 2100L, 4,
+                HASH_ROLLUP_TABLE_ID, physicalPartitionId));
+        partition.getDefaultPhysicalPartition().setVisibleVersion(testStartVersion, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
+        lakeTable.addPartition(partition);
+
+        return lakeTable;
+    }
+
+    private static FilePathInfo newTestPathInfo(String tableName) {
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/" + tableName);
+        return builder.build();
+    }
+
+    private static void mockLakeLookups(FilePathInfo pathInfo) throws Exception {
+        new MockUp<LakeTablet>() {
+            @Mock
+            public Set<Long> getBackendIds() {
+                return Sets.newHashSet(testBackendId1);
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(anyLong, anyLong);
+                minTimes = 0;
+                result = ShardInfo.newBuilder().setFilePath(pathInfo).build();
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getComputeNodeId((ComputeResource) any, anyLong);
+                minTimes = 0;
+                result = testBackendId1;
+
+                GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAliveComputeNodeId((ComputeResource) any, anyLong);
+                minTimes = 0;
+                result = testBackendId1;
+            }
+        };
     }
 
     private static RestBaseResultV2<PagedResult<PartitionView>> parseResponseBody(String body) {
