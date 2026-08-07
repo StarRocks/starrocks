@@ -14,14 +14,17 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -477,5 +480,122 @@ public class PhysicalPartitionTest {
 
         partition.deleteMaterializedIndexByIndexId(baseIndexId2);
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
+    }
+
+    private static final long BASE_INDEX_ID = 30000L;
+    private static final long BASE_INDEX_META_ID = 3000L;
+    private static final long ROLLUP_A_INDEX_ID = 10000L;
+    private static final long ROLLUP_A_META_ID = 1000L;
+    private static final long ROLLUP_B_INDEX_ID = 20000L;
+    private static final long ROLLUP_B_META_ID = 2000L;
+
+    /** An index carrying {@code tabletNum} tablets, registered without touching the inverted index. */
+    private static MaterializedIndex newIndexWithTablets(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
+    }
+
+    /**
+     * A physical partition whose base index holds 3 tablets and which carries two rollups holding 2
+     * and 4 tablets, so "base", "min", "max" and "legacy 1" are four distinct answers.
+     */
+    private static PhysicalPartition newPartitionWithDivergentRollups() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L,
+                newIndexWithTablets(BASE_INDEX_ID, BASE_INDEX_META_ID, 3));
+        partition.createRollupIndex(newIndexWithTablets(ROLLUP_A_INDEX_ID, ROLLUP_A_META_ID, 2));
+        partition.createRollupIndex(newIndexWithTablets(ROLLUP_B_INDEX_ID, ROLLUP_B_META_ID, 4));
+        return partition;
+    }
+
+    @Test
+    public void testGetLatestBaseIndexOrNullReturnsBaseIndex() {
+        PhysicalPartition partition = newPartitionWithDivergentRollups();
+
+        // Precondition: generic enumeration must not already start at the base index, or a wrong
+        // implementation that just takes element 0 would pass this suite by coincidence.
+        Assertions.assertNotEquals(BASE_INDEX_ID,
+                partition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
+
+        Assertions.assertEquals(BASE_INDEX_ID, partition.getLatestBaseIndexOrNull().getId());
+    }
+
+    @Test
+    public void testGetLatestBaseIndexOrNullReturnsNullWhenBaseIndexUnresolvable() {
+        // An external OLAP table builds its physical partitions this way and never reaches
+        // setBaseIndex, so baseIndexMetaId stays -1.
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L);
+
+        Assertions.assertNull(partition.getLatestBaseIndexOrNull());
+        Assertions.assertThrows(IllegalStateException.class, partition::getLatestBaseIndex);
+    }
+
+    @Test
+    public void testGetActualBucketNumForRangeReportsBaseIndexTabletNum() {
+        PhysicalPartition partition = newPartitionWithDivergentRollups();
+        partition.setBucketNum(1); // what range distribution seeds at creation
+
+        Assertions.assertEquals(3, partition.getActualBucketNum(new RangeDistributionInfo()));
+    }
+
+    @Test
+    public void testGetActualBucketNumForRangeFallsBackWhenBaseIndexUnresolvable() {
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L);
+
+        partition.setBucketNum(7);
+        Assertions.assertEquals(7, partition.getActualBucketNum(new RangeDistributionInfo()));
+
+        // With no stored per-physical value either, the table-level default is the last resort.
+        partition.setBucketNum(0);
+        Assertions.assertEquals(1, partition.getActualBucketNum(new RangeDistributionInfo()));
+    }
+
+    @Test
+    public void testGetActualBucketNumForRangeFallsBackWhenBaseIndexHasNoTablets() {
+        // A resolvable base index that holds no tablets yet is not an answer, so the stored value wins.
+        PhysicalPartition partition = new PhysicalPartition(1L, 2L,
+                newIndexWithTablets(BASE_INDEX_ID, BASE_INDEX_META_ID, 0));
+        partition.setBucketNum(4);
+
+        Assertions.assertEquals(4, partition.getActualBucketNum(new RangeDistributionInfo()));
+    }
+
+    @Test
+    public void testGetLatestBaseIndexOrNullReturnsNullForDegenerateIndexMaps() {
+        // Both branches are defensive -- the public API cannot reach them, because
+        // deleteMaterializedIndexByIndexId drops the meta entry once its id list empties -- but the
+        // accessor promises null rather than an exception, so pin it.
+        PhysicalPartition emptyList = newPartitionWithDivergentRollups();
+        Map<Long, List<Long>> metaToIds = Deencapsulation.getField(emptyList, "indexMetaIdToIndexIds");
+        metaToIds.put(BASE_INDEX_META_ID, Lists.newArrayList());
+        Assertions.assertNull(emptyList.getLatestBaseIndexOrNull());
+
+        PhysicalPartition danglingId = newPartitionWithDivergentRollups();
+        Map<Long, MaterializedIndex> idToVisible = Deencapsulation.getField(danglingId, "idToVisibleIndex");
+        idToVisible.remove(BASE_INDEX_ID);
+        Assertions.assertNull(danglingId.getLatestBaseIndexOrNull());
+    }
+
+    @Test
+    public void testGetActualBucketNumForNonRangeIsUnchanged() {
+        PhysicalPartition partition = newPartitionWithDivergentRollups();
+        List<Column> distributionColumns = Lists.newArrayList(new Column("k1", IntegerType.INT));
+
+        // A hash or random partition keeps reporting its stored per-physical bucket number, and the
+        // table-level default when that is unset -- exactly today's behavior. The divergent rollups
+        // in the fixture must not influence either answer.
+        partition.setBucketNum(5);
+        Assertions.assertEquals(5, partition.getActualBucketNum(new RandomDistributionInfo(9)));
+        Assertions.assertEquals(5, partition.getActualBucketNum(
+                new HashDistributionInfo(9, distributionColumns)));
+
+        partition.setBucketNum(0);
+        Assertions.assertEquals(9, partition.getActualBucketNum(new RandomDistributionInfo(9)));
+        Assertions.assertEquals(9, partition.getActualBucketNum(
+                new HashDistributionInfo(9, distributionColumns)));
     }
 }
