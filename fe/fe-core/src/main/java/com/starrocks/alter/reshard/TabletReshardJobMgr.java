@@ -170,12 +170,39 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // count also captures a max-tablet size-band crossing. murmur3 (matching ColocateChecker) avoids
     // the 32-bit Objects.hash collision that could hide a config change.
     @VisibleForTesting
-    static long splitPlanSignature(long maxTabletSize) {
+    static long splitPlanSignature(long maxTabletSize, int maxSplitCount) {
         return Hashing.murmur3_128().newHasher()
                 .putLong(Config.tablet_reshard_target_size)
                 .putInt(Config.tablet_reshard_max_split_count)
-                .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size))
+                .putInt(maxSplitCount)
+                .putInt(TabletReshardUtils.calcSplitCount(maxTabletSize, Config.tablet_reshard_target_size,
+                        maxSplitCount))
                 .hash().asLong();
+    }
+
+    /**
+     * Whether the quiet period after this table's previous reshard job has elapsed.
+     *
+     * <p>A split whose children must be UNSHARE-rewritten holds the partition's only compaction slot
+     * for the whole rewrite, during which size-tiered compaction cannot run and the small files from
+     * ongoing ingestion just pile up. Firing the next split the moment the previous one lands never
+     * gives that backlog a chance to drain. Finished jobs stay in {@code tabletReshardJobs} for
+     * tablet_reshard_history_job_keep_max_ms, so the previous finish time is read straight off them --
+     * no extra state to keep in sync, and it survives a leader switch.
+     */
+    private boolean reshardQuietPeriodElapsed(long tableId) {
+        int waitSeconds = Config.tablet_reshard_orderby_split_interval_second;
+        if (waitSeconds <= 0) {
+            return true;
+        }
+        long newestFinishMs = 0;
+        for (TabletReshardJob job : tabletReshardJobs.values()) {
+            if (job instanceof SplitTabletJob splitJob && splitJob.getTableId() == tableId && job.isDone()) {
+                newestFinishMs = Math.max(newestFinishMs, job.getFinishedTimeMs());
+            }
+        }
+        return newestFinishMs == 0
+                || System.currentTimeMillis() - newestFinishMs >= waitSeconds * 1000L;
     }
 
     /**
@@ -199,8 +226,12 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
         try {
             long tableId = table.getId();
             if (TabletReshardUtils.needSplit(maxTabletSize)) {
+                if (TabletReshardUtils.splitRewritesEveryShard(table) && !reshardQuietPeriodElapsed(tableId)) {
+                    // Leave the latch untouched: this is a "not yet", not "no progress possible".
+                    return;
+                }
                 long signature = ColocateChecker.tableConvergenceSignature(db, table,
-                        splitPlanSignature(maxTabletSize));
+                        splitPlanSignature(maxTabletSize, TabletReshardUtils.effectiveMaxSplitCount(table)));
                 TableAlignmentLatch.AlignmentDecision decision = sizeSplitLatch.evaluate(tableId, signature);
                 if (decision.fire()) {
                     TabletReshardJob job = createTabletReshardJob(db, table, new SplitTabletClause());

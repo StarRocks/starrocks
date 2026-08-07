@@ -1025,6 +1025,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否允许按范围分桶的云原生主键表使用与主键不同的 `ORDER BY` 键。该实验性路径要求启用 File Bundling，并且只能在所有 BE 都升级到支持该功能的版本后开启。第一期在 tablet split、过渡期 publish 和 UNSHARE compaction 中均不支持 DCG 或 IDG 元数据，检测到任一元数据时会拒绝执行。
 - 引入版本: -
 
+### `tablet_reshard_orderby_max_split_count`
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：当一次分裂会附带一次完整的 UNSHARE 重写时（即 range 分布的主键表，且 `ORDER BY` 键与主键不同），单个源 tablet 最多可分裂出的新 tablet 个数。这类分裂无法对父 tablet 的共享 segment 做范围过滤，每个子 tablet 都要被完整重写，因此扇出越大读放大越严重。该值还会被 `tablet_reshard_max_split_count` 进一步限制。取值小于等于 1 表示关闭这项额外限制。
+- 引入版本：-
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：当一次分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可处理的源 tablet 个数。该配置限制单次 UNSHARE compaction 重写的数据量，从而限制它占用分区唯一 compaction 名额、阻塞 size-tiered compaction 的时长。优先选择最大的 tablet。取值小于等于 0 表示使用该 warehouse 的计算节点个数。
+- 引入版本：-
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- 默认值：180
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：对于分裂会附带完整 UNSHARE 重写的表，上一次 tablet reshard 任务完成后，再次触发自动分裂前需要等待的静默时长。该静默期让 size-tiered compaction 有机会清理在 compaction 名额被占用期间堆积的小文件。取值小于等于 0 表示不等待。
+- 引入版本：-
+
 ### `enable_pipeline_routine_load`
 
 - 默认值: false

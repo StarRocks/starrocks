@@ -669,9 +669,9 @@ public class TabletReshardJobMgrTest {
                     "the old 32-bit Objects.hash fingerprint would have collided on these inputs");
 
             Config.tablet_reshard_target_size = targetA;
-            long sigA = TabletReshardJobMgr.splitPlanSignature(huge);
+            long sigA = TabletReshardJobMgr.splitPlanSignature(huge, Config.tablet_reshard_max_split_count);
             Config.tablet_reshard_target_size = targetB;
-            long sigB = TabletReshardJobMgr.splitPlanSignature(huge);
+            long sigB = TabletReshardJobMgr.splitPlanSignature(huge, Config.tablet_reshard_max_split_count);
             Assertions.assertNotEquals(sigA, sigB,
                     "the 64-bit murmur3 fingerprint must distinguish targets that collide under Objects.hash");
         } finally {
