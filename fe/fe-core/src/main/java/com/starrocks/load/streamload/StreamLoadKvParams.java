@@ -25,6 +25,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -226,12 +227,15 @@ public class StreamLoadKvParams implements StreamLoadParams {
             return Optional.empty();
         }
         TPartialUpdateMode mode = null;
-        // Case-SENSITIVE, matching isFlexiblePartialUpdate() below and the BE stream_load.cpp header
-        // parsing. A miscased value (e.g. "Flexible") must NOT parse as a valid mode here while
-        // isFlexiblePartialUpdate() (case-sensitive) reports non-flexible -- that mismatch would silently
-        // apply a heterogeneous load as a homogeneous union and NULL-clobber omitted columns. An unknown or
-        // miscased value throws instead of silently degrading to the default (row) full-row upsert.
-        switch (partialUpdateMode) {
+        // Case-INSENSITIVE, matching the other stream-load headers (format, compression, trim_space are
+        // all parsed with boost::iequals in be/src/http/action/stream_load.cpp) and normalized the SAME
+        // way in isFlexiblePartialUpdate() below and in the BE header parsing. Both sides must normalize
+        // identically: if one accepted "Flexible" as flexible while the other read it as non-flexible, the
+        // load would silently apply a heterogeneous update as a homogeneous union and NULL-clobber the
+        // columns a row did not declare. Locale.ROOT (not the default locale) so "AUTO" folds to "auto"
+        // even under a Turkish locale, where 'I' lowercases to a dotless 'i'. A genuinely unknown value
+        // still throws rather than silently degrading to the default (row) full-row upsert.
+        switch (partialUpdateMode.toLowerCase(Locale.ROOT)) {
             case "column":
                 mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
                 break;
@@ -265,7 +269,11 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<Boolean> isFlexiblePartialUpdate() {
-        String partialUpdateMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
+        String rawMode = params.get(HTTP_PARTIAL_UPDATE_MODE);
+        // Normalize EXACTLY as getPartialUpdateMode() does. These two must agree on every input: a value
+        // that parses as "flexible" there but reads as non-flexible here would apply a heterogeneous load
+        // as a homogeneous union and NULL-clobber the columns a row did not declare.
+        String partialUpdateMode = rawMode == null ? null : rawMode.toLowerCase(Locale.ROOT);
         // Both "flexible" (COLUMN/SDCG apply) and "flexible_row" (ROW-mode masked rewrite)
         // are flexible loads: each row updates a different column subset. The flexible BIT
         // is intentionally decoupled from the storage MODE chosen in getPartialUpdateMode().
