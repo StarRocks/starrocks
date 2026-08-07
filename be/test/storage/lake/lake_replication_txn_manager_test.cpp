@@ -39,21 +39,9 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/config.h"
-#include "fs/fs_starlet.h"
-=======
-#include "common/config_lake_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "common/config_starlet_fwd.h"
-#include "common/thread/threadpool.h"
-#include "compute_env/staros/starlet_filesystem.h"
-#include "compute_env/staros/staros_worker.h"
-#include "compute_env/staros/staros_worker_runtime.h"
-#include "exec/exec_env.h"
-#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
->>>>>>> 1c7befd088 ([BugFix] Read remote bundled lake metadata during replication (#77362))
+#include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/join.h"
@@ -1234,7 +1222,7 @@ TEST_F(LakeReplicationRemoteStorageTest, raw_s3_uses_virtual_shard_uri) {
 
     auto request = build_request(true /* with_full_path */);
     ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_EQ(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.virtual_tablet_id), captured_uri);
     EXPECT_NE(convert_s3_path_to_starlet_uri(request.src_partition_full_path, request.src_tablet_id), captured_uri);
@@ -1251,7 +1239,7 @@ TEST_F(LakeReplicationRemoteStorageTest, non_s3_uses_virtual_shard_uri_authority
 
     auto request = build_request(false /* with_full_path */);
     ASSERT_NE(request.src_tablet_id, request.virtual_tablet_id);
-    auto status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    auto status = _replication_txn_manager->replicate_lake_remote_storage(request);
     EXPECT_TRUE(status.is_corruption()) << status;
 
     RemoteStarletLocationProvider provider;

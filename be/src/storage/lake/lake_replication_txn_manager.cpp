@@ -17,24 +17,10 @@
 #include <atomic>
 #include <mutex>
 
-<<<<<<< HEAD
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "common/config.h"
 #include "fs/fs_starlet.h"
-=======
-#include "base/coding.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "cache/dynamic_cache.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "common/storage_define.h"
-#include "common/system/master_info.h"
-#include "common/thread/threadpool.h"
-#include "compute_env/staros/starlet_filesystem.h"
-#include "fs/fs_factory.h"
->>>>>>> 1c7befd088 ([BugFix] Read remote bundled lake metadata during replication (#77362))
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/Types_constants.h"
@@ -51,19 +37,14 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-<<<<<<< HEAD
 #include "storage/primary_key_encoding_types.h"
-#include "storage/segment_stream_converter.h"
-#include "storage/tablet_schema.h"
-#include "testutil/sync_point.h"
-=======
 #include "storage/protobuf_file.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "storage_primitive/primary_key_encoding_types.h"
->>>>>>> 1c7befd088 ([BugFix] Read remote bundled lake metadata during replication (#77362))
+#include "testutil/sync_point.h"
 #include "types/logical_type.h"
+#include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/dynamic_cache.h"
 #include "util/threadpool.h"
@@ -166,7 +147,6 @@ StatusOr<TabletMetadataPtr> load_source_bundle_tablet_metadata(int64_t tablet_id
     }
     metadata->mutable_schema()->CopyFrom(schema_it->second);
     (*metadata->mutable_historical_schemas())[schema_id_it->second].CopyFrom(schema_it->second);
-    force_cloud_native_pk_persistent_index(metadata.get());
 
     for (const auto& [_, historical_schema_id] : metadata->rowset_to_schema()) {
         auto historical_schema_it = bundle->schemas().find(historical_schema_id);
