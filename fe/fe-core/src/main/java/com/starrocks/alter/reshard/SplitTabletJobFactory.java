@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
@@ -33,6 +34,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
@@ -43,6 +45,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -65,6 +68,86 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
+    }
+
+    /**
+     * Early-split policy captured ONCE per job, so a mutable-config change mid-plan cannot leave one
+     * job's indexes planned under different policies.
+     */
+    record EarlySplitPolicy(long earlyTarget, int computeNodeCount, int maxSplitCount, boolean enabled) {
+        int ceiling() {
+            return computeNodeCount > 0
+                    ? TabletReshardUtils.earlySplitCeiling(computeNodeCount, maxSplitCount) : 0;
+        }
+
+        boolean appliesTo(int tabletCount) {
+            return enabled && tabletCount < ceiling();
+        }
+
+        static EarlySplitPolicy disabled() {
+            return new EarlySplitPolicy(0L, 0, Config.tablet_reshard_max_split_count, false);
+        }
+    }
+
+    @VisibleForTesting
+    static EarlySplitPolicy capturePolicy(SplitTabletClause clause, int computeNodeCount) {
+        long earlyTarget = TabletReshardUtils.earlySplitTargetSize();
+        boolean explicitTargetSize = clause.getProperties() != null
+                && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+        // earlyTarget > 0 is a guard, not a comment: calcSplitCount reads a non-positive target as a
+        // forced split count, and tablet_reshard_min_split_size has no positivity validator.
+        boolean enabled = Config.tablet_reshard_enable_early_split
+                && earlyTarget > 0
+                && !explicitTargetSize
+                && computeNodeCount > 0;
+        return new EarlySplitPolicy(earlyTarget, computeNodeCount,
+                Config.tablet_reshard_max_split_count, enabled);
+    }
+
+    /**
+     * Pure per-index split plan: {@code oldTabletId -> requested child count}, allocating NO tablet id.
+     * Callers measure the result against the job budget and only then materialize it.
+     *
+     * <p>The early rule fires only where the size rule declines to split
+     * ({@code k = kNormal > 1 ? kNormal : kEarly}). That ordering is load bearing: a BE split is
+     * all-or-nothing — when the segment key distribution cannot produce exactly the requested number of
+     * boundaries it publishes an identical tablet instead — so asking for more children than today's
+     * rule would can turn a split that succeeds into one that does nothing.
+     */
+    @VisibleForTesting
+    static Map<Long, Integer> planIndexSplits(MaterializedIndex index, long clauseTargetSize,
+            EarlySplitPolicy policy) {
+        int tabletCount = index.getTablets().size();
+        boolean early = policy.appliesTo(tabletCount);
+        int headroom = early ? Math.max(0, policy.ceiling() - tabletCount) : 0;
+
+        List<Tablet> tablets = index.getTablets();
+        if (early) {
+            // getTablets() returns the live range-ordered list that merge grouping and index
+            // reconstruction depend on — sort a copy, stably, so equal sizes keep range order.
+            tablets = new ArrayList<>(tablets);
+            tablets.sort(Comparator.comparingLong((Tablet t) -> t.getDataSize(true)).reversed());
+        }
+
+        Map<Long, Integer> splitCounts = new LinkedHashMap<>();
+        for (Tablet tablet : tablets) {
+            long dataSize = tablet.getDataSize(true);
+            int kNormal = TabletReshardUtils.calcSplitCount(dataSize, clauseTargetSize);
+            int kEarly = 1;
+            if (early && headroom > 0) {
+                kEarly = Math.min(TabletReshardUtils.calcSplitCount(dataSize, policy.earlyTarget()),
+                        headroom + 1);
+            }
+            int k = kNormal > 1 ? kNormal : kEarly;
+            if (k <= 1) {
+                continue;
+            }
+            splitCounts.put(tablet.getId(), k);
+            if (early) {
+                headroom = Math.max(0, headroom - (k - 1));
+            }
+        }
+        return splitCounts;
     }
 
     /*
