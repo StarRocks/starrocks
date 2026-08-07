@@ -310,9 +310,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_cover_all
     EXPECT_TRUE(invalid.message().find("gap/overlap") != std::string::npos);
 
     const int64_t txn_id = 90002;
-    auto state_or =
-            _manager->create_and_register_tablet_state(metadata->id(), txn_id, metadata->version(), 4, 200,
-                                                       true, nullptr, [](bool /*success*/) {});
+    auto state_or = _manager->create_and_register_tablet_state(metadata->id(), txn_id, metadata->version(), 4, 200,
+                                                               true, nullptr, [](bool /*success*/) {});
     ASSERT_TRUE(state_or.ok());
     state_or.value()->expected_unshare_subtask_count = 2;
     auto merged_log = _manager->get_merged_txn_log(metadata->id(), txn_id);

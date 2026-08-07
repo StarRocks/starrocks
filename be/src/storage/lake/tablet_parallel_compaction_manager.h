@@ -194,8 +194,7 @@ public:
                                         const TabletParallelConfig& config,
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                        const ReleaseTokenFunc& release_token,
-                                        bool is_unshare = false);
+                                        const ReleaseTokenFunc& release_token, bool is_unshare = false);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -263,8 +262,7 @@ private:
     // Returns nullptr if state already exists
     StatusOr<std::shared_ptr<TabletParallelCompactionState>> create_and_register_tablet_state(
             int64_t tablet_id, int64_t txn_id, int64_t version, int32_t max_parallel, int64_t max_bytes,
-            bool is_unshare, std::shared_ptr<CompactionTaskCallback> callback,
-            const ReleaseTokenFunc& release_token);
+            bool is_unshare, std::shared_ptr<CompactionTaskCallback> callback, const ReleaseTokenFunc& release_token);
 
     // Submit subtasks to thread pool
     // Returns the number of subtasks successfully submitted
