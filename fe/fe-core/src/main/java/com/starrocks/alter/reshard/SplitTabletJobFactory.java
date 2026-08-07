@@ -130,14 +130,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             checkTableNormalState(db, table);
 
-            // A split whose children must be UNSHARE-rewritten is bounded twice: how far one tablet may
-            // fan out (read amplification per generation) and how many tablets one job may take (how long
-            // that job holds the partition's only compaction slot). Both are no-ops for an ordinary split.
-            final int maxSplitCount = TabletReshardUtils.effectiveMaxSplitCount(table);
-            final int[] tabletBudget = {TabletReshardUtils.maxSplitTabletsPerJob(
-                    table, GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getBackgroundComputeResource(table.getId()))};
-
             // Group input entries by (physicalPartition, materializedIndex) so each
             // ReshardingMaterializedIndex carries all of its targets in one pass.
             // physicalPartitionId -> indexId -> oldTabletId -> ranges
