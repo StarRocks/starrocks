@@ -1,0 +1,55 @@
+-- name: test_json_subfield_char_neglen_predicate
+-- Regression for the length-less CHAR crash. CAST(json->'$.x' AS char) with no length is a
+-- wildcard CHAR whose length is -1. flat-JSON subfield pushdown (cbo_json_v2_rewrite +
+-- cbo_prune_subfield) materializes it as a synthetic CHAR scan column with length -1, and BE
+-- OlapPredicateParser::t_parse_thrift_cond then called padding_zeros(col.length()). col.length()
+-- is int32; -1 converts to ~SIZE_MAX when passed to padding_zeros(size_t), so std::string::append
+-- threw std::length_error -- aborting the BE on shared-data (lake) scans and erroring the query on
+-- shared-nothing scans. The fix guards the padding with col.length() > 0. With the pushdown on
+-- (default), the length-less char cast must now run and return the same results as the varchar
+-- cast, get_json_string, and the pushdown-off path.
+create table t(id int, j json) duplicate key(id)
+  distributed by hash(id) buckets 3 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values
+ (1, parse_json('{"f2":"hello"}')),
+ (2, parse_json('{"f2":"world"}')),
+ (3, parse_json('{"f2":"hello"}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+set cbo_prune_subfield = true;
+-- result:
+-- !result
+select id, cast(j->'$.f2' as char) as v from t order by id;
+-- result:
+1	hello
+2	world
+3	hello
+-- !result
+select count(*) from t where cast(j->'$.f2' as char) = 'hello';
+-- result:
+2
+-- !result
+select id from t where cast(j->'$.f2' as char) = 'world' order by id;
+-- result:
+2
+-- !result
+select count(*) from t where cast(j->'$.f2' as varchar) = 'hello';
+-- result:
+2
+-- !result
+select count(*) from t where get_json_string(j, 'f2') = 'hello';
+-- result:
+2
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select count(*) from t where cast(j->'$.f2' as char) = 'hello';
+-- result:
+2
+-- !result
