@@ -20,6 +20,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,6 +29,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -36,6 +38,9 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
@@ -296,5 +301,55 @@ public class PartitionsProcDirTest {
         Map<String, String> bucketsById = bucketsByPartitionId(result);
         Assertions.assertEquals("3", bucketsById.get(String.valueOf(defaultPhysicalId)));
         Assertions.assertEquals("5", bucketsById.get(String.valueOf(biggerPhysicalId)));
+    }
+
+    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
+    }
+
+    /**
+     * A range-distribution partition's tablet count is dynamic, and RangeDistributionInfo always
+     * reports one bucket, so Buckets must come from the latest base index. Base holds 3 tablets while
+     * the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1, from the
+     * minimum (2) and from the maximum (4).
+     */
+    @Test
+    public void testFetchResultForRangeDistributionReportsBaseIndexTabletNum() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
+
+        LakeTable table = new LakeTable(1024L, "range_table", col, null, listPartition, null);
+        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
+        // distributionKeyAsString resolves a range table's sort key through the base index meta.
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
+        table.setIndexMeta(baseIndex.getMetaId(), "range_table", col, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        Partition partition = new Partition(partitionId, 1035L, "p1", baseIndex, new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
+        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
+
+        table.addPartition(partition);
+        db.registerTableUnlocked(table);
+
+        // Precondition: a wrong implementation taking element 0 of the generic index enumeration must
+        // not coincidentally land on the base index.
+        Assertions.assertNotEquals(baseIndex.getId(),
+                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
+
+        BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, table, false).fetchResult();
+
+        Assertions.assertEquals("3", bucketsByPartitionId(result).get("1035"));
     }
 }
