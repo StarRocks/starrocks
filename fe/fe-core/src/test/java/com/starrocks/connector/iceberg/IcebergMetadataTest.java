@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -163,6 +164,7 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
@@ -189,11 +191,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -573,6 +578,193 @@ public class IcebergMetadataTest extends TableTestBase {
         parts.add(tableName.getDb());
         parts.add(tableName.getTbl());
         return new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
+    }
+
+    @Test
+    public void testTruncateTableInvalidatesCachesAfterCommit() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        AtomicReference<TableName> refreshedTable = new AtomicReference<>();
+        AtomicReference<List<String>> refreshedPartitions = new AtomicReference<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                refreshedTable.set(table);
+                refreshedPartitions.set(partitionNames);
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        metadata.truncateTable(stmt, connectContext);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        mockedNativeTableB.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(0, remainingFiles.size()),
+                () -> Assertions.assertEquals(3, catalogGetTableCalls.get(),
+                        "getTable must reload after the IcebergMetadata.tables entry is removed"),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(1, refreshOtherFeCalls.get()),
+                () -> Assertions.assertEquals(new TableName(CATALOG_NAME, dbName, tableName), refreshedTable.get()),
+                () -> Assertions.assertEquals(List.of(), refreshedPartitions.get()));
+    }
+
+    @Test
+    public void testTruncateTableInvalidatesCachesWhenCommitStateIsUnknown() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+        TestTables.TestTable stateUnknownTable = TestTables.tableWithCommitSucceedButStateUnknown(tableDir, "tb");
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return stateUnknownTable;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.truncateTable(stmt, connectContext));
+        metadata.getTable(connectContext, dbName, tableName);
+
+        stateUnknownTable.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(stateUnknownTable.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(exception.getCause() instanceof CommitStateUnknownException),
+                () -> Assertions.assertEquals(0, remainingFiles.size()),
+                () -> Assertions.assertEquals(3, catalogGetTableCalls.get(),
+                        "unknown commit state must reload the IcebergMetadata.tables entry"),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(1, refreshOtherFeCalls.get()));
+    }
+
+    @Test
+    public void testTruncateTableDoesNotInvalidateCachesWhenCommitFails() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.updateProperties().set(TableProperties.COMMIT_NUM_RETRIES, "0").commit();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        AtomicInteger refreshOtherFeCalls = new AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                refreshOtherFeCalls.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+        mockedNativeTableB.ops().failCommits(1);
+
+        TruncateTableStmt stmt = new TruncateTableStmt(
+                createTableRef(new TableName(CATALOG_NAME, dbName, tableName)));
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.truncateTable(stmt, connectContext));
+        metadata.getTable(connectContext, dbName, tableName);
+
+        mockedNativeTableB.refresh();
+        List<FileScanTask> remainingFiles = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(exception.getMessage().contains("Failed to truncate iceberg table")),
+                () -> Assertions.assertEquals(1, remainingFiles.size()),
+                () -> Assertions.assertEquals(2, catalogGetTableCalls.get(),
+                        "failed commit must retain the IcebergMetadata.tables entry"),
+                () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(0, refreshOtherFeCalls.get()));
     }
 
     @Test
