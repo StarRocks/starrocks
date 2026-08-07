@@ -403,4 +403,45 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
         StreamLoadKvParams bad = new StreamLoadKvParams(m);
         assertThrows(RuntimeException.class, bad::getPartialUpdateMode);
     }
+
+    // partial_update_mode is matched case-insensitively, like the other stream-load headers (format,
+    // compression, trim_space). The mode AND the flexible bit must agree on a miscased value: if only
+    // one of them recognised "Flexible", the load would be planned as a homogeneous union update and
+    // NULL-clobber the columns a row did not declare.
+    @Test
+    public void testPartialUpdateModeIsCaseInsensitive() {
+        Map<String, String> m = new HashMap<>();
+        m.put(HTTP_PARTIAL_UPDATE, "true");
+        m.put(HTTP_FORMAT, "json");
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "Flexible");
+        StreamLoadKvParams flex = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE, flex.getPartialUpdateMode().orElse(null));
+        assertTrue(flex.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "FLEXIBLE_ROW");
+        StreamLoadKvParams flexRow = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.ROW_MODE, flexRow.getPartialUpdateMode().orElse(null));
+        assertTrue(flexRow.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "AUTO");
+        StreamLoadKvParams auto = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.AUTO_MODE, auto.getPartialUpdateMode().orElse(null));
+        assertTrue(auto.isFlexiblePartialUpdate().orElse(false));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "Column");
+        StreamLoadKvParams column = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, column.getPartialUpdateMode().orElse(null));
+        assertFalse(column.isFlexiblePartialUpdate().orElse(true));
+
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "RoW");
+        StreamLoadKvParams row = new StreamLoadKvParams(m);
+        assertEquals(TPartialUpdateMode.ROW_MODE, row.getPartialUpdateMode().orElse(null));
+
+        // Case folding must not turn a genuinely unknown token into a valid one.
+        m.put(HTTP_PARTIAL_UPDATE_MODE, "FlexibleX");
+        StreamLoadKvParams bad = new StreamLoadKvParams(m);
+        assertThrows(RuntimeException.class, bad::getPartialUpdateMode);
+        assertFalse(bad.isFlexiblePartialUpdate().orElse(true));
+    }
 }
