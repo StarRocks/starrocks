@@ -1837,9 +1837,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             // FLEX_COLUMN takes the per-row MASKED overlay (a column a row did not declare
                             // keeps its base value); the homogeneous fixed-colset path takes the plain one.
                             if (flex_column) {
-                                RETURN_IF_ERROR(_update_source_chunk_by_upt_flexible(
-                                        *upt_pairs_ptr, partial_schema, selective_unique_update_column_ids,
-                                        distinct_column_sets, container));
+                                RETURN_IF_ERROR(_update_source_chunk_by_upt_flexible(*upt_pairs_ptr, partial_schema,
+                                                                                     selective_unique_update_column_ids,
+                                                                                     distinct_column_sets, container));
                             } else {
                                 RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
                                                                             condition_idx_in_partial_schema));
