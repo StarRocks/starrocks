@@ -404,8 +404,7 @@ void FileReaderTest::_setup_rf_predicates(
         HdfsScannerContext* ctx, const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes) {
     ctx->predicates.runtime_filter_preds = RuntimeFilterPredicates(0 /*driver_sequence*/);
     for (const auto& [desc, slot_id] : probes) {
-        ctx->predicates.runtime_filter_preds.add_predicate(
-                ctx->predicates.rf_predicate_pool.add(new RuntimeFilterPredicate(desc, slot_id)));
+        ctx->predicates.runtime_filter_preds.add_predicate(_pool.add(new RuntimeFilterPredicate(desc, slot_id)));
     }
     ctx->format_scan_context.runtime_filter_preds = &ctx->predicates.runtime_filter_preds;
     ctx->format_scan_context.driver_sequence = 0;

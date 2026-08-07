@@ -206,18 +206,13 @@ struct HdfsScannerContext {
     //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) is destroyed first
     //   predicate_tree / predicate_parser (raw ptrs into predicate_free_pool)
     //   predicate_free_pool (owns ColumnPredicates)
-    //   conjuncts_manager
-    //   runtime_filter_preds (raw ptrs into rf_predicate_pool)
-    //   rf_predicate_pool is destroyed last
+    //   conjuncts_manager is destroyed last
     struct PredicateState {
-        // Owns the RuntimeFilterPredicate objects that runtime_filter_preds points at.
-        // Deliberately scanner-scoped rather than runtime_state->obj_pool(): each
-        // predicate keeps a hash_values scratch buffer sized to the chunk size for
-        // hash-partitioned filters, and there is one scanner per split, so a
-        // fragment-scoped pool would accumulate them for the whole query.
-        ObjectPool rf_predicate_pool;
-        // Predicate objects only. The mutable sampling state used during evaluation
-        // lives in per-reader copies (see GroupReader::_setup_runtime_filter_predicates).
+        // Borrowed RuntimeFilterPredicate*, owned by the fragment-scoped
+        // runtime_state->obj_pool() like the conjuncts manager's allocations, so they
+        // outlive this struct. Holds predicate objects only -- the mutable sampling
+        // state used during evaluation lives in per-reader copies (see
+        // GroupReader::_setup_runtime_filter_predicates).
         RuntimeFilterPredicates runtime_filter_preds;
 
         std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;

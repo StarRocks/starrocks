@@ -20,7 +20,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -783,19 +782,12 @@ void GroupReader::_setup_runtime_filter_predicates() {
         return;
     }
 
-    // Map probe slot -> where its decoded column will live. Derived from the physical
-    // read_cols behind the active/lazy index vectors rather than from active_slot_ids(),
-    // which also carries variant hidden slots that are not physical columns.
-    std::unordered_map<SlotId, bool> servable;
-    auto collect = [&](const std::vector<int>& col_indices, bool is_active) {
-        for (int col_idx : col_indices) {
-            const auto& col = _param.read_cols[col_idx];
-            if (col.is_extended_variant_virtual) continue;
-            servable.emplace(col.slot_id(), is_active);
-        }
-    };
-    collect(_column_materializer->active_column_indices(), true);
-    collect(_column_materializer->lazy_column_indices(), false);
+    // add_lazy_column() pushes _lazy_column_indices and _lazy_slot_ids together, so
+    // this is exactly the set of physical columns this row group defers. Note
+    // active_slot_ids() is NOT the mirror image -- it also carries variant hidden
+    // slots -- so "has a reader and is not lazy" is what identifies an active column.
+    const auto& lazy_ids = _column_materializer->lazy_slot_ids();
+    const std::unordered_set<SlotId> lazy_slots(lazy_ids.begin(), lazy_ids.end());
 
     RuntimeFilterPredicates preds(src->driver_sequence());
     std::unordered_set<SlotId> probe_columns_seen;
@@ -803,15 +795,17 @@ void GroupReader::_setup_runtime_filter_predicates() {
         // ConnectorPredicateParser::column_id() returns SlotDescriptor::id(), so the
         // predicate's ColumnId is the probe slot id.
         const auto slot_id = static_cast<SlotId>(pred->get_column_id());
-        auto it = servable.find(slot_id);
-        if (it == servable.end()) continue;
+        // Drops anything this row group cannot supply: partition, not-existed and
+        // extended slots, extended variant virtual columns (skipped by
+        // _create_column_readers), and columns absent from this file after schema
+        // evolution pruned the materialized set.
         if (_column_readers.find(slot_id) == _column_readers.end()) continue;
         preds.add_predicate(pred);
         // Several filters may probe the same column. _rf_probe_columns drives building
         // the probe chunk, which keys columns by id and rejects duplicates, so it must
         // hold each column once even though every predicate is kept.
         if (probe_columns_seen.insert(slot_id).second) {
-            _rf_probe_columns.push_back({slot_id, it->second});
+            _rf_probe_columns.push_back({slot_id, /*is_active=*/lazy_slots.count(slot_id) == 0});
         }
     }
     if (_rf_probe_columns.empty()) {

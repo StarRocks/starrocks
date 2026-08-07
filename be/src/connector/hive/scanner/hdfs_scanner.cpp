@@ -64,7 +64,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
     ctx.format_scan_context.runtime_filter_preds = nullptr;
     ctx.predicates.runtime_filter_preds = RuntimeFilterPredicates();
-    ctx.predicates.rf_predicate_pool.clear();
 
     ctx.format_scan_context.scan_range_offset = ctx.scan_range->offset;
     ctx.format_scan_context.scan_range_length = ctx.scan_range->length;
@@ -177,9 +176,11 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.driver_sequence = _scanner_ctx->driver_sequence;
     if (config::parquet_runtime_filter_push_down_enable && _runtime_state->enable_join_runtime_filter_pushdown() &&
         _scanner_ctx->runtime_filter_collector != nullptr) {
+        // Same fragment-scoped pool as opts.obj_pool above: the predicates are borrowed
+        // by ctx.predicates and must outlive it.
         ASSIGN_OR_RETURN(ctx.predicates.runtime_filter_preds,
                          ctx.predicates.conjuncts_manager->get_runtime_filter_predicates(
-                                 &ctx.predicates.rf_predicate_pool, ctx.predicates.predicate_parser.get()));
+                                 _runtime_state->obj_pool(), ctx.predicates.predicate_parser.get()));
         if (!ctx.predicates.runtime_filter_preds.empty()) {
             ctx.format_scan_context.runtime_filter_preds = &ctx.predicates.runtime_filter_preds;
         }
