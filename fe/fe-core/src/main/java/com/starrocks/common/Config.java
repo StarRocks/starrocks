@@ -3127,6 +3127,18 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_queue_max_size = 1000;
 
     /**
+     * `remove_orphan_files` only accepts an `older_than` earlier than `current time - this value` (in
+     * seconds). A later `older_than` is rejected, because deleting files that recent can remove data a
+     * concurrent write has not committed yet and leave the table unreadable.
+     * <p>
+     * Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7 day default.
+     * <p>
+     * Default: 86400 (24 hours)
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_remove_orphan_files_min_retention_seconds = 24L * 60L * 60L;
+
+    /**
      * paimon metadata cache preheat, default false
      */
     @ConfField(mutable = true)
