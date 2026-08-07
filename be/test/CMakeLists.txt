@@ -443,11 +443,10 @@ endif()
 
 # paimon-cpp smoke test, a standalone binary that exists only with
 # --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
-# The paimon include path is scoped to this target so other test sources
-# cannot include paimon headers.
+# The paimon include path comes from the imported `paimon` target, so other
+# test sources cannot include paimon headers.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
-    target_include_directories(paimon_cpp_test SYSTEM BEFORE PRIVATE ${PAIMON_CPP_INCLUDE_DIR})
     target_link_libraries(paimon_cpp_test paimon)
 endif ()
 

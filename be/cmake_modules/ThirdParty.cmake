@@ -509,10 +509,13 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
                             "run thirdparty/build-thirdparty.sh paimon_cpp first")
     endif()
     add_library(paimon SHARED IMPORTED GLOBAL)
-    set_target_properties(paimon PROPERTIES IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY})
-    # NOTE: not added to the global include path on purpose; only the targets
-    # that use paimon-cpp should include ${PAIMON_CPP_INCLUDE_DIR}.
-    set(PAIMON_CPP_INCLUDE_DIR "${PAIMON_CPP_DIR}/include")
+    # Headers install under <prefix>/include/paimon/..., so consumers write
+    # #include <paimon/predicate/literal.h>. The include path rides on the
+    # imported target (treated as SYSTEM by default) instead of the global
+    # include path, so only targets that link `paimon` can see the headers.
+    set_target_properties(paimon PROPERTIES
+        IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES "${PAIMON_CPP_DIR}/include")
     message(STATUS "link paimon-cpp from ${PAIMON_SHARED_LIBRARY}")
 endif()
 
