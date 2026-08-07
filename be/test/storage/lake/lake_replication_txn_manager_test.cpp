@@ -669,6 +669,35 @@ protected:
         return file.save(*_tablet_metadata);
     }
 
+    // Stage a bundle metadata file under `target_meta_dir`.
+    //
+    // `put_bundle_tablet_metadata` can only write to the location provider's metadata root, but the
+    // replication path receives a `meta_dir` that points at the *source* cluster and is unrelated to
+    // the local provider. Relocating the bundle reproduces that: the local provider resolves nothing,
+    // so `build_source_tablet_meta` has to reach the bundle through the fallback under test.
+    Status stage_bundle_at(std::map<int64_t, TabletMetadataPB>& metas, const std::string& target_meta_dir,
+                           int64_t version) {
+        auto provider_meta_dir = _location_provider->metadata_root_location(_src_tablet_id);
+        RETURN_IF_ERROR(fs::create_directories(provider_meta_dir));
+        RETURN_IF_ERROR(_tablet_mgr->put_bundle_tablet_metadata(metas));
+
+        auto bundle_name = lake::tablet_metadata_filename(0, version);
+        auto src_path = lake::join_path(provider_meta_dir, bundle_name);
+        ASSIGN_OR_RETURN(auto in, fs::new_random_access_file(src_path));
+        ASSIGN_OR_RETURN(auto content, in->read_all());
+
+        RETURN_IF_ERROR(fs::create_directories(target_meta_dir));
+        ASSIGN_OR_RETURN(auto out, fs::new_writable_file(lake::join_path(target_meta_dir, bundle_name)));
+        RETURN_IF_ERROR(out->append(Slice(content)));
+        RETURN_IF_ERROR(out->close());
+
+        // Drop the local copy and the cached "this partition is bundled" hint so the local provider
+        // cannot satisfy the lookup.
+        RETURN_IF_ERROR(fs::delete_file(src_path));
+        _tablet_mgr->prune_metacache();
+        return Status::OK();
+    }
+
     // Build path formats for testing
     // Current format: {base}/db{db_id}/{table_id}/{partition_id}/meta
     std::string build_current_format_meta_dir() {
@@ -755,6 +784,68 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_all_attempts_fail_not_foun
     // Verify failure with NotFound error
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_found()) << result.status();
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_bundle_fallback_success) {
+    // Source partition holds only bundled metadata, which is what 4.x shared-data clusters write.
+    std::map<int64_t, TabletMetadataPB> metas;
+    metas.emplace(_src_tablet_id, *_tablet_metadata);
+    auto meta_dir = build_current_format_meta_dir();
+    ASSERT_OK(stage_bundle_at(metas, meta_dir, _version));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    // The per-tablet file does not exist, so the tablet must be recovered from the bundle.
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(_src_tablet_id, result.value()->id());
+    EXPECT_EQ(_version, result.value()->version());
+    // put_bundle_tablet_metadata strips the schema into the bundle header; it must be restored.
+    ASSERT_TRUE(result.value()->has_schema());
+    ASSERT_EQ(1, result.value()->schema().column_size());
+    EXPECT_EQ("c0", result.value()->schema().column(0).name());
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_bundle_tablet_not_in_bundle) {
+    // Write a bundle that contains a DIFFERENT tablet, not our _src_tablet_id
+    auto other_metadata = std::make_shared<TabletMetadata>();
+    other_metadata->set_id(next_id());
+    other_metadata->set_version(_version);
+    auto other_schema = other_metadata->mutable_schema();
+    other_schema->set_keys_type(DUP_KEYS);
+    other_schema->set_id(next_id());
+    auto c0 = other_schema->add_column();
+    c0->set_unique_id(next_id());
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    std::map<int64_t, TabletMetadataPB> metas;
+    metas.emplace(other_metadata->id(), *other_metadata);
+    auto meta_dir = build_current_format_meta_dir();
+    ASSERT_OK(stage_bundle_at(metas, meta_dir, _version));
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    // Should fail: individual file not found, bundle exists but doesn't contain our tablet
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_not_found()) << result.status();
+}
+
+TEST_F(TryBuildSourceTabletMetaWithFallbackTest, test_bundle_corruption_propagates) {
+    // Write a corrupt bundle file (write individual metadata format as if it were a bundle)
+    auto meta_dir = build_current_format_meta_dir();
+    auto filename = lake::tablet_metadata_filename(0, _version);
+    auto filepath = lake::join_path(meta_dir, filename);
+    ASSERT_OK(fs::create_directories(meta_dir));
+    ProtobufFile file(filepath);
+    ASSERT_OK(file.save(*_tablet_metadata)); // This is individual metadata, NOT a valid bundle
+
+    auto result = _replication_txn_manager->build_source_tablet_meta(_src_tablet_id, _version, meta_dir, _shared_fs);
+
+    // Should fail with Corruption, NOT NotFound (error propagation)
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
 }
 
 #ifdef USE_STAROS
