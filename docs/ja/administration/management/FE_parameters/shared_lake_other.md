@@ -719,6 +719,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
 - 導入時期：v4.1.0
 
+<<<<<<< HEAD
+=======
+### `iceberg_remove_orphan_files_min_retention_seconds`
+
+- デフォルト：86400
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：`remove_orphan_files` プロシージャの `older_than` は `現在時刻 - この値` より前でなければなりません。これより新しい `older_than` は拒否されます。それほど新しいファイルを削除すると、並行する書き込みがまだコミットしていないデータを消してしまい、テーブルが読み取り不能になるためです。制限されるのは明示的に指定した `older_than` のみで、省略した場合はプロシージャ自身の 7 日のデフォルトが使われます。プロシージャの実行中にそのテーブルへの書き込みが一切ない場合にのみ、この値を小さくしてください。
+- 導入時期：v4.2.0
+
+<EditonSpecificFEItemSharedLakeOther />
+
+>>>>>>> 2ee99d1580 ([BugFix] Reject a remove_orphan_files older_than that leaves too small a retention window (#77394))
 ## その他
 
 ### `agent_task_resend_wait_time_ms`

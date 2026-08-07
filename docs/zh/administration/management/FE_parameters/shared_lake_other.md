@@ -706,6 +706,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `iceberg_remove_orphan_files_min_retention_seconds`
+
+- 默认值: 86400
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: `remove_orphan_files` procedure 的 `older_than` 必须早于 `当前时间 - 该值`，更晚的 `older_than` 会被拒绝 —— 因为删除这么新的文件可能删掉并发写入尚未提交的数据，导致表不可读。此配置仅约束显式传入的 `older_than`；不传该参数时仍使用该 procedure 自身的 7 天默认值。仅当 procedure 运行期间该表没有任何写入时，才降低此值。
+- 引入版本: v4.2.0
+
 ### lake_balance_tablets_threshold
 
 - 默认值：0.15
