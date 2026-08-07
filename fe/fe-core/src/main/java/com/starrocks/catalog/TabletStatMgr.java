@@ -144,8 +144,14 @@ public class TabletStatMgr extends FrontendDaemon {
                 boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
                         && olapTable.isCloudNativeTableOrMaterializedView()
                         && olapTable.isRangeDistribution();
-                int parallelismFloor = reshardEligible
-                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
+                // One probed resolution per eligible table, exactly as before; the auto-merge floor and
+                // the early-split ceiling both derive from this single sample, so a warehouse resize
+                // cannot leave them describing different layouts.
+                int computeNodeCount = reshardEligible
+                        ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
+                int parallelismFloor = computeNodeCount == 0 ? 0
+                        : TabletReshardUtils.parallelismFloor(computeNodeCount,
+                                Config.tablet_reshard_max_split_count);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {

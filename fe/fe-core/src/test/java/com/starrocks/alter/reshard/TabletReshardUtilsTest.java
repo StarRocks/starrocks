@@ -21,6 +21,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -40,19 +42,27 @@ public class TabletReshardUtilsTest {
 
     private long savedTargetSize;
     private int savedMaxSplitCount;
+    private long savedMinSplitSize;
+    private boolean savedEnableEarlySplit;
 
     @BeforeEach
     public void setup() {
         savedTargetSize = Config.tablet_reshard_target_size;
         savedMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedMinSplitSize = Config.tablet_reshard_min_split_size;
+        savedEnableEarlySplit = Config.tablet_reshard_enable_early_split;
         Config.tablet_reshard_target_size = 10L * 1024 * 1024 * 1024; // 10G
         Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_reshard_min_split_size = 2L * 1024 * 1024 * 1024; // 2G
+        Config.tablet_reshard_enable_early_split = true;
     }
 
     @AfterEach
     public void teardown() {
         Config.tablet_reshard_target_size = savedTargetSize;
         Config.tablet_reshard_max_split_count = savedMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedMinSplitSize;
+        Config.tablet_reshard_enable_early_split = savedEnableEarlySplit;
     }
 
     @Test
@@ -204,17 +214,76 @@ public class TabletReshardUtilsTest {
     }
 
     @Test
-    public void safeComputeParallelismFloor_returnsZeroWhenComputeFails() {
-        // computeParallelismFloor resolves warehouse / compute-node state via StarMgr and can throw
-        // (e.g. the warehouse no longer exists). safeComputeParallelismFloor must swallow that and
-        // fall back to "no floor" (0) so a single table's warehouse error cannot abort the scan.
-        new MockUp<TabletReshardUtils>() {
+    public void safeComputeNodeCountForTable_returnsZeroWhenResolutionFails() {
+        // The resolution goes through the warehouse manager and can throw (e.g. the warehouse no
+        // longer exists, or has no usable worker). It must swallow that and fall back to 0 so a single
+        // table's warehouse error cannot abort the scan; 0 in turn means "no floor" for auto-merge and
+        // "no early split" for the split factory.
+        new MockUp<WarehouseManager>() {
             @Mock
-            public static int computeParallelismFloor(long tableId) {
+            public ComputeResource getBackgroundComputeResource(long tableId) {
                 throw new RuntimeException("warehouse unavailable");
             }
         };
-        assertEquals(0, TabletReshardUtils.safeComputeParallelismFloor(123L));
+        assertEquals(0, TabletReshardUtils.safeComputeNodeCountForTable(123L));
+    }
+
+    @Test
+    public void earlySplitTargetSize_clampsToTarget() {
+        Config.tablet_reshard_target_size = 10L << 30;
+        Config.tablet_reshard_min_split_size = 2L << 30;
+        assertEquals(2L << 30, TabletReshardUtils.earlySplitTargetSize());
+
+        // A minimum above the target clamps down, so the early threshold collapses onto the normal one
+        // and the early rule can only fire where the normal rule already declined.
+        Config.tablet_reshard_min_split_size = 40L << 30;
+        assertEquals(10L << 30, TabletReshardUtils.earlySplitTargetSize());
+    }
+
+    @Test
+    public void needEarlySplit_honoursThresholdFlagAndNonPositiveTarget() {
+        Config.tablet_reshard_enable_early_split = true;
+        Config.tablet_reshard_target_size = 10L << 30;
+        Config.tablet_reshard_min_split_size = 2L << 30;
+        long earlyThreshold = TabletReshardUtils.splitThreshold(2L << 30); // 3 GiB
+
+        assertFalse(TabletReshardUtils.needEarlySplit(earlyThreshold - 1));
+        assertTrue(TabletReshardUtils.needEarlySplit(earlyThreshold));
+
+        Config.tablet_reshard_enable_early_split = false;
+        assertFalse(TabletReshardUtils.needEarlySplit(earlyThreshold));
+
+        // A non-positive minimum must NOT reach calcSplitCount's forced-count mode, which would read
+        // -8 as "split into 8".
+        Config.tablet_reshard_enable_early_split = true;
+        for (long badMin : new long[] {0L, -8L}) {
+            Config.tablet_reshard_min_split_size = badMin;
+            assertFalse(TabletReshardUtils.needEarlySplit(Long.MAX_VALUE / 2),
+                    "min_split_size " + badMin + " must not enable the early rule");
+        }
+    }
+
+    /**
+     * The whole split/merge disjointness argument rests on this: early split acts on
+     * tabletCount &lt; ceiling and auto-merge on tabletCount &gt; floor, so the ceiling must never
+     * exceed the floor.
+     */
+    @Test
+    public void earlySplitCeiling_neverExceedsParallelismFloor() {
+        int[] nodeCounts = {0, 1, 2, 3, 8, 16, 1024, 4096, Integer.MAX_VALUE};
+        int[] maxSplits = {0, 1, 2, 8, 1024, Integer.MAX_VALUE};
+        for (int cn : nodeCounts) {
+            for (int maxSplit : maxSplits) {
+                int ceiling = TabletReshardUtils.earlySplitCeiling(cn, maxSplit);
+                int floor = TabletReshardUtils.parallelismFloor(cn, maxSplit);
+                assertTrue(ceiling <= floor,
+                        "ceiling " + ceiling + " > floor " + floor + " for cn=" + cn + " maxSplit=" + maxSplit);
+            }
+        }
+        assertEquals(8, TabletReshardUtils.earlySplitCeiling(8, 1024));
+        assertEquals(8, TabletReshardUtils.earlySplitCeiling(16, 8));   // capped by max_split_count
+        assertEquals(1, TabletReshardUtils.earlySplitCeiling(1, 1024)); // a single node never splits
+        assertEquals(1, TabletReshardUtils.earlySplitCeiling(8, 1));    // splitting disabled
     }
 
     @Test

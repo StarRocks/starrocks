@@ -96,6 +96,45 @@ public class TabletReshardUtils {
         return minAdjacentTabletPairSize < mergePairThreshold(target);
     }
 
+    /**
+     * Target tablet size while an index sits below the cluster's usable parallelism. Clamped to the
+     * steady-state target so it can never exceed it: when an operator sets the minimum above the
+     * target, the early threshold collapses onto the normal one and the rule becomes a no-op.
+     */
+    @VisibleForTesting
+    static long earlySplitTargetSize() {
+        return Math.min(Config.tablet_reshard_min_split_size, Config.tablet_reshard_target_size);
+    }
+
+    /**
+     * Coarse "could an early split fire at this size" gate, mirroring {@link #needSplit}. Used to admit
+     * a reshard candidate; the split job factory re-decides authoritatively per index.
+     */
+    public static boolean needEarlySplit(long dataSize) {
+        if (!Config.tablet_reshard_enable_early_split) {
+            return false;
+        }
+        long target = earlySplitTargetSize();
+        // calcSplitCount reads a non-positive target as a FORCED split count (-8 means "split into 8"),
+        // and tablet_reshard_min_split_size has no positivity validator, so guard it here.
+        return target > 0 && calcSplitCount(dataSize, target) > 1;
+    }
+
+    /**
+     * Highest tablet count the early rule may drive one index to.
+     *
+     * <p>MUST stay at or below the auto-merge parallelism floor. Merge acts on
+     * {@code tabletCount > floor} and early split on {@code tabletCount < ceiling}, so
+     * {@code ceiling <= floor} keeps the two regions disjoint and makes split/merge oscillation
+     * impossible for a given node-count sample. Deriving it from {@link #parallelismFloor} keeps them
+     * in lockstep even when {@code maxSplitCount < computeNodeCount}, where a plain node-count ceiling
+     * would overlap the merge region. The outer min() also keeps a single-node warehouse (floor 2,
+     * count 1) from splitting at all.
+     */
+    public static int earlySplitCeiling(int computeNodeCount, int maxSplitCount) {
+        return Math.min(computeNodeCount, parallelismFloor(computeNodeCount, maxSplitCount));
+    }
+
     /*
      * Return value > 1 if need split
      * Return value = 1 if not need split
@@ -133,16 +172,29 @@ public class TabletReshardUtils {
     }
 
     /**
-     * Total number of compute nodes provisioned in the given warehouse resource (>= 1). Uses
-     * getAllComputeNodeIds (NOT the alive/blocklist-filtered set) so a transient node restart or
-     * blocklist entry does not change reshard layout decisions. Shared by pre-split (which sizes a
-     * new partition to at least this many tablets) and auto-merge (whose floor is derived from it),
-     * keeping the two consistent. Throws ErrorReportException (unchecked) if the warehouse resource
-     * no longer exists.
+     * Number of compute nodes PROVISIONED in FE for the resource's worker group (>= 1).
+     *
+     * <p>Counts both Backends and ComputeNodes: {@code Backend extends ComputeNode}, a shared-data
+     * cluster can be made entirely of BEs acting as workers, and HeartbeatMgr registers both as StarOS
+     * workers. Deliberately NOT filtered by liveness, so a transient node restart or blocklist entry
+     * does not change reshard layout decisions.
+     *
+     * <p>FE is the source of this mapping, not a consumer of it: FE assigns each node's
+     * warehouse/worker group, persists it, and feeds that value into StarOS via addWorker(). The two
+     * can diverge briefly in either direction — a node added but not yet registered is counted here and
+     * not by StarOS; a node dropped after losing its starlet port is still held by StarOS and not
+     * counted here until StarMgrMetaSyncer reconciles. Both are bounded by the count itself, and both
+     * move the early-split ceiling and the auto-merge floor together, so their disjointness holds.
+     *
+     * <p>Shared by pre-split (which sizes a new partition to at least this many tablets), auto-merge
+     * (whose floor derives from it) and early split (whose ceiling does), keeping all three consistent.
      */
     public static int computeNodeCount(ComputeResource computeResource) {
-        return Math.max(1, GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getAllComputeNodeIds(computeResource).size());
+        long workerGroupId = computeResource.getWorkerGroupId();
+        return Math.max(1, (int) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .backendAndComputeNodeStream()
+                .filter(node -> node.getWorkerGroupId() == workerGroupId)
+                .count());
     }
 
     /**
@@ -150,9 +202,12 @@ public class TabletReshardUtils {
      * tablet count below the parallelism level pre-split established. Pure clamp logic, split out for
      * testability. When maxSplitCount < 2 there is no multi-tablet pre-split layout to preserve
      * (TabletPreSplitCoordinator#selectTabletCount requires maxSplitCount >= 2), so no floor applies.
+     *
+     * <p>Public because TabletStatMgr derives the auto-merge floor from a node count it resolves once
+     * per scan, and {@link #earlySplitCeiling} must stay in lockstep with it.
      */
     @VisibleForTesting
-    static int parallelismFloor(int computeNodeCount, int maxSplitCount) {
+    public static int parallelismFloor(int computeNodeCount, int maxSplitCount) {
         if (maxSplitCount < 2) {
             return 1;
         }
@@ -170,14 +225,22 @@ public class TabletReshardUtils {
         return parallelismFloor(computeNodeCount(computeResource), Config.tablet_reshard_max_split_count);
     }
 
-    // Parallelism floor for merge eligibility; returns 0 (ungated) when warehouse state is unavailable.
-    // computeParallelismFloor resolves warehouse compute-node count via StarMgr, so call it off hot,
-    // lock-held paths (e.g. the periodic scan), not per-publish.
-    public static int safeComputeParallelismFloor(long tableId) {
+    /**
+     * Compute-node count for a table's background (reshard) warehouse; {@code 0} when the warehouse is
+     * unknown or unavailable, so a caller can fall back to today's behavior.
+     *
+     * <p>Resolves through {@code WarehouseManager#getBackgroundComputeResource}, NOT the probe-free
+     * variant: that probe is load bearing — it is why an auto-merge job is rejected before admission
+     * when the warehouse has no usable worker. Using one resolution for both the early-split ceiling
+     * and the auto-merge floor is also what keeps them consistent within a decision, so callers that
+     * need both must derive them from a single call.
+     */
+    public static int safeComputeNodeCountForTable(long tableId) {
         try {
-            return computeParallelismFloor(tableId);
+            return computeNodeCount(GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getBackgroundComputeResource(tableId));
         } catch (RuntimeException e) {
-            LOG.warn("Parallelism floor unavailable for table {}; auto-merge will not be floor-gated.", tableId, e);
+            LOG.warn("Compute node count unavailable for table {}; reshard sizing will fall back.", tableId, e);
             return 0;
         }
     }
