@@ -17,8 +17,10 @@
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -170,11 +172,12 @@ const tparquet::RowGroup* GroupReader::get_row_group_metadata() const {
 
 // ── get_next: materialise one chunk from the current row group ──────────────
 //
-// Pipeline (7 stages):
+// Pipeline (8 stages):
 //   1. Prune deleted rows           — deletion bitmap
 //   2. Read & filter active columns — dict / expression predicate pushdown
 //   3. Evaluate compound predicates — multi-slot conjuncts from scanner_ctxs
 //   4. Evaluate variant predicates  — fetch sources + deferred subfield conjuncts
+//   4.1 Probe join runtime filters  — row-level RF probe before lazy materialization
 //   5. Filter & backfill lazy       — apply combined filter + lazy column backfill
 //   6. Append output side columns   — partition / not-existed / extended / count
 //   7. Emit output                  — variant projections + physical columns
@@ -224,6 +227,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         // 4. Evaluate variant predicates
         ASSIGN_OR_RETURN(rows_survive, _evaluate_variant_predicates(r, state));
+        if (!rows_survive) continue;
+
+        // 4.1 Probe join runtime filters
+        ASSIGN_OR_RETURN(rows_survive, _evaluate_runtime_filters(r, state));
         if (!rows_survive) continue;
 
         // 5. Apply combined filter and backfill lazy columns
@@ -350,6 +357,118 @@ StatusOr<bool> GroupReader::_evaluate_variant_predicates(const Range<uint64_t>& 
             state.chunk_filter[i] &= vr[i];
         }
         state.has_filter = true;
+    }
+    return true;
+}
+
+// ── 4.1 Evaluate join runtime filters ──────
+//
+// Sits immediately before stage 5 so the filter is applied where it pays off: it
+// narrows the lazy-column read range and shrinks the emitted chunk. Like stages 1/3/4
+// this only ANDs into state.chunk_filter, so it can never change query results --
+// worst case it is a no-op. The scan operator still probes the same filters
+// afterwards (has_push_down_to_storage stays false for connector scans), so a slot we
+// cannot serve here stays correct, just not accelerated.
+//
+// ── Why every probe column is finalized to its logical form first ──
+//
+// A column sitting in a slot after read_range() may be PHYSICAL rather than logical:
+// Int32 dictionary codes, or decoded-but-not-yet-converted parquet values (see the
+// swap machinery documented in scalar_column_reader.h). Three properties make this
+// impossible to reason about from here, so we do not try:
+//
+//   1. It cannot be inferred from the column. Dictionary codes are an Int32Column,
+//      indistinguishable from a genuine INT column. Only the owning ColumnReader
+//      knows, via pointer identity against its own _code_column, and that check is
+//      private to the reader -- ColumnReader deliberately exposes only
+//      finalize_lazy_state() ("make it logical"), never "what is it right now".
+//   2. Active does not imply decoded. A column whose conjuncts all became dict
+//      filters is evaluated directly on the codes and is never finalized in stage 2
+//      (see ColumnMaterializer::read_active_range_round_by_round), and stage 3
+//      early-returns when there are no compound conjuncts.
+//   3. It varies per chunk. ScalarColumnReader::read_range() picks DICT_CODE only
+//      when the incoming filter is selective enough, so the same column in the same
+//      row group can hand back codes for one chunk and values for the next.
+//
+// Getting this wrong yields silently wrong rows, not a crash: the filter would probe
+// dictionary codes against a filter built over the decoded values. So we pay an
+// unconditional finalize_active_slot(), which is idempotent and costs a null check
+// when the column is already logical.
+//
+// The cost of that choice: for a dict-encoded string join key we materialize every
+// surviving string and hash it once per row. Probing the dictionary instead (D
+// distinct values, D << rows) and reducing each row to a byte lookup -- what
+// DictColumnRuntimeFilterPredicate already does for OLAP -- would be considerably
+// cheaper. It is deliberately not done here, because a "detect the state, then take
+// the fast path" implementation would be racing property 3 above. Doing it safely
+// means making the state deterministic instead of detecting it: request dict codes
+// up front so read_range() must produce them, and expose the fast path through an
+// API that cannot be misread (e.g. one returning the code column or nullptr, never
+// leaving the caller to guess). Until a string join key actually shows up as a
+// bottleneck, the simpler always-finalize path is the better trade -- note the
+// motivating TPC-DS q27 case joins exclusively on integer surrogate keys, which this
+// optimization would not help at all.
+StatusOr<bool> GroupReader::_evaluate_runtime_filters(const Range<uint64_t>& r, RowGroupScanState& state) {
+    if (_rf_probe_columns.empty() || state.row_count == 0) {
+        return true;
+    }
+    // RuntimeFilterPredicates::evaluate() takes uint16_t row bounds. FileReader caps
+    // requests at _chunk_size, so this is defensive only.
+    if (state.row_count > std::numeric_limits<uint16_t>::max()) {
+        return true;
+    }
+    // Nothing has arrived yet: skip before materializing any probe column, so an RF
+    // that never shows up costs no extra IO at all.
+    if (!_rf_predicates.any_filter_ready()) {
+        return true;
+    }
+
+    const size_t input_rows = SIMD::count_nonzero(state.chunk_filter.data(), state.row_count);
+    if (input_rows == 0) {
+        return false;
+    }
+
+    SCOPED_RAW_TIMER(&_param.stats->rf_cond_evaluate_ns);
+
+    // RuntimeFilterPredicate looks columns up by ColumnId (Chunk::_cid_to_index), but
+    // the parquet active chunk is keyed by SlotId only. Build a throwaway cid-keyed
+    // view over the same columns, the way SegmentIterator does for its per-column
+    // runtime filters. It must be built *after* the columns are finalized, because
+    // finalizing replaces the ColumnPtr rather than mutating it in place.
+    Chunk rf_chunk;
+    for (const auto& probe : _rf_probe_columns) {
+        if (probe.is_active) {
+            // Unconditional and idempotent -- see the note above on why the physical
+            // vs logical state cannot be inferred here.
+            RETURN_IF_ERROR(_column_materializer->finalize_active_slot(probe.slot_id, state.active_chunk));
+            rf_chunk.append_column(state.active_chunk->get_column_by_slot_id(probe.slot_id),
+                                   static_cast<ColumnId>(probe.slot_id), true);
+        } else {
+            // Lazy column: read just this slot on demand. materialize_slot() honors the
+            // current filter (so rows already dropped by stages 1-4 are skipped),
+            // finalizes to logical form, and caches the column so stage 5's backfill
+            // picks it up instead of re-reading it.
+            RETURN_IF_ERROR(_column_materializer->materialize_slot(probe.slot_id, r, &state.chunk_filter));
+            const auto* cached = _column_materializer->get_slot_cache(probe.slot_id);
+            RETURN_IF_ERROR(cached != nullptr
+                                    ? Status::OK()
+                                    : Status::InternalError("runtime filter probe column not materialized"));
+            rf_chunk.append_column(cached->values, static_cast<ColumnId>(probe.slot_id), true);
+        }
+    }
+
+    RETURN_IF_ERROR(_rf_predicates.evaluate(&rf_chunk, state.chunk_filter.data(), 0,
+                                            static_cast<uint16_t>(state.row_count)));
+
+    const size_t output_rows = SIMD::count_nonzero(state.chunk_filter.data(), state.row_count);
+    _param.stats->rf_cond_input_rows += input_rows;
+    _param.stats->rf_cond_output_rows += output_rows;
+    if (output_rows != input_rows) {
+        state.has_filter = true;
+    }
+    if (output_rows == 0) {
+        _param.stats->late_materialize_skip_rows += state.row_count;
+        return false;
     }
     return true;
 }
@@ -649,6 +768,56 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         _column_materializer->promote_lazy_to_active();
         _variant->promote_lazy_to_active();
     }
+
+    // ── Join runtime filter pushdown ──────────────────────────────────────────
+    // Must run last: it needs the final active/lazy split.
+    _setup_runtime_filter_predicates();
+}
+
+void GroupReader::_setup_runtime_filter_predicates() {
+    _rf_predicates = RuntimeFilterPredicates();
+    _rf_probe_columns.clear();
+
+    auto* src = _param.scan_ctx == nullptr ? nullptr : _param.scan_ctx->runtime_filter_preds;
+    if (src == nullptr || src->empty()) {
+        return;
+    }
+
+    // Map probe slot -> where its decoded column will live. Derived from the physical
+    // read_cols behind the active/lazy index vectors rather than from active_slot_ids(),
+    // which also carries variant hidden slots that are not physical columns.
+    std::unordered_map<SlotId, bool> servable;
+    auto collect = [&](const std::vector<int>& col_indices, bool is_active) {
+        for (int col_idx : col_indices) {
+            const auto& col = _param.read_cols[col_idx];
+            if (col.is_extended_variant_virtual) continue;
+            servable.emplace(col.slot_id(), is_active);
+        }
+    };
+    collect(_column_materializer->active_column_indices(), true);
+    collect(_column_materializer->lazy_column_indices(), false);
+
+    RuntimeFilterPredicates preds(src->driver_sequence());
+    std::unordered_set<SlotId> probe_columns_seen;
+    for (auto* pred : src->rf_predicates()) {
+        // ConnectorPredicateParser::column_id() returns SlotDescriptor::id(), so the
+        // predicate's ColumnId is the probe slot id.
+        const auto slot_id = static_cast<SlotId>(pred->get_column_id());
+        auto it = servable.find(slot_id);
+        if (it == servable.end()) continue;
+        if (_column_readers.find(slot_id) == _column_readers.end()) continue;
+        preds.add_predicate(pred);
+        // Several filters may probe the same column. _rf_probe_columns drives building
+        // the probe chunk, which keys columns by id and rejects duplicates, so it must
+        // hold each column once even though every predicate is kept.
+        if (probe_columns_seen.insert(slot_id).second) {
+            _rf_probe_columns.push_back({slot_id, it->second});
+        }
+    }
+    if (_rf_probe_columns.empty()) {
+        return;
+    }
+    _rf_predicates = std::move(preds);
 }
 
 // ── IO range collection ─────────────────────────────────────────────────────

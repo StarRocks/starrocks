@@ -40,6 +40,7 @@
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_parser.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 
@@ -136,6 +137,20 @@ struct HdfsScannerContext {
 
     // ===== shared scan fields =====
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+    // Driver sequence of the owning pipeline driver, set by HiveDataSource from
+    // runtime_membership_filter_eval_context.  Mirrors what the lake connector
+    // already does; the hive path simply never plumbed it.
+    //
+    // RuntimeFilterProbeDescriptor::runtime_filter() only consults this argument for
+    // group-colocate filters -- for every other filter it is ignored.  Such a filter
+    // cannot reach a connector scan today: FE adds every connector scan node to its
+    // exec group with disableColocateGroup=true (PlanFragmentBuilder), so
+    // build_from_group_execution is never set on filters probed here.  Carrying the
+    // real value is therefore defensive, not a fix for a live bug.  It is still worth
+    // it: the runtime filter predicates below re-resolve their filter once per chunk,
+    // and the -1 sentinel would index group_colocate_filter() out of bounds if
+    // connector scans ever do join a colocate group (e.g. bucket-aware execution).
+    int32_t driver_sequence = -1;
     const TupleDescriptor* tuple_desc = nullptr;
     FormatScanContext format_scan_context;
     HdfsScannerProfile profile;
@@ -191,8 +206,20 @@ struct HdfsScannerContext {
     //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) is destroyed first
     //   predicate_tree / predicate_parser (raw ptrs into predicate_free_pool)
     //   predicate_free_pool (owns ColumnPredicates)
-    //   conjuncts_manager is destroyed last
+    //   conjuncts_manager
+    //   runtime_filter_preds (raw ptrs into rf_predicate_pool)
+    //   rf_predicate_pool is destroyed last
     struct PredicateState {
+        // Owns the RuntimeFilterPredicate objects that runtime_filter_preds points at.
+        // Deliberately scanner-scoped rather than runtime_state->obj_pool(): each
+        // predicate keeps a hash_values scratch buffer sized to the chunk size for
+        // hash-partitioned filters, and there is one scanner per split, so a
+        // fragment-scoped pool would accumulate them for the whole query.
+        ObjectPool rf_predicate_pool;
+        // Predicate objects only. The mutable sampling state used during evaluation
+        // lives in per-reader copies (see GroupReader::_setup_runtime_filter_predicates).
+        RuntimeFilterPredicates runtime_filter_preds;
+
         std::unique_ptr<RuntimeScanRangePruner> runtime_filter_scan_range_pruner;
         PredicateTree predicate_tree;
         std::unique_ptr<ConnectorPredicateParser> predicate_parser;

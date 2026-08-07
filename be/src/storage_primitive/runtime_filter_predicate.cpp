@@ -166,6 +166,15 @@ Status DictColumnRuntimeFilterPredicate::prepare() {
     return Status::OK();
 }
 
+bool RuntimeFilterPredicates::any_filter_ready() const {
+    for (const auto* pred : _rf_predicates) {
+        if (pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void RuntimeFilterPredicates::_update_selectivity_map() {
     _selectivity_map.clear();
     std::sort(_sampling_ctxs.begin(), _sampling_ctxs.end(),
