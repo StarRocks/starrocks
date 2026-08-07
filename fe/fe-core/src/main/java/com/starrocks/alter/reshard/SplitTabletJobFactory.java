@@ -64,10 +64,25 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private final SplitTabletClause splitTabletClause;
 
+    private final int computeNodeCount;
+
     public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause) {
+        // User-facing DDL entry: no caller-side count and no suppression latch, so resolve here.
+        this(db, table, splitTabletClause, TabletReshardUtils.safeComputeNodeCountForTable(table.getId()));
+    }
+
+    /**
+     * Automatic entry. The caller supplies the compute-node count so the trigger's no-progress
+     * fingerprint and the plan this factory executes describe the same layout; resolving it again here
+     * would let a warehouse resize between the two suppress a plan that has since become feasible.
+     * {@code 0} disables the early rule.
+     */
+    public SplitTabletJobFactory(Database db, OlapTable table, SplitTabletClause splitTabletClause,
+            int computeNodeCount) {
         this.db = db;
         this.table = table;
         this.splitTabletClause = splitTabletClause;
+        this.computeNodeCount = computeNodeCount;
     }
 
     /**
@@ -156,6 +171,22 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             }
         }
         return splitCounts;
+    }
+
+    /**
+     * Tablets the replacement MaterializedIndex will contain for this plan. Every sibling is re-created,
+     * not only the split ones, so this — not getParallelTablets(), which counts split children only —
+     * is what bounds FE heap and id churn for one job.
+     */
+    private static long replacementTabletCount(MaterializedIndex index, Map<Long, Integer> splitCounts) {
+        if (splitCounts.isEmpty()) {
+            return 0L;
+        }
+        long total = index.getTablets().size();
+        for (int k : splitCounts.values()) {
+            total += k - 1;
+        }
+        return total;
     }
 
     /*
@@ -512,30 +543,73 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     }
                 }
 
+                long clauseTargetSize = splitTabletClause.getTabletReshardTargetSize();
+                // Early work is admitted only while no other reshard job is running. That observation is
+                // a best-effort throttle, not an exclusion — check/init/insert in the manager are not
+                // atomic and five paths admit jobs — but it keeps early expansion off a busy cluster.
+                EarlySplitPolicy policy =
+                        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTotalParallelTablets() == 0
+                                ? capturePolicy(splitTabletClause, computeNodeCount)
+                                : EarlySplitPolicy.disabled();
+
+                // Pass 1: every index's baseline (today's plan) and its early plan. No id is allocated.
+                Map<MaterializedIndex, Map<Long, Integer>> baselines = new LinkedHashMap<>();
+                Map<MaterializedIndex, Map<Long, Integer>> earlyPlans = new LinkedHashMap<>();
+                long baselineTopology = 0L;
+                for (PhysicalPartition physicalPartition : physicalPartitions) {
+                    for (MaterializedIndex oldIndex :
+                            physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        // When not specifying which tablets to split,
+                        // tablet_reshard_target_size must be greater than 0
+                        Preconditions.checkState(clauseTargetSize > 0,
+                                "Invalid tablet_reshard_target_size: " + clauseTargetSize);
+                        Map<Long, Integer> baseline =
+                                planIndexSplits(oldIndex, clauseTargetSize, EarlySplitPolicy.disabled());
+                        baselines.put(oldIndex, baseline);
+                        earlyPlans.put(oldIndex, planIndexSplits(oldIndex, clauseTargetSize, policy));
+                        baselineTopology += replacementTabletCount(oldIndex, baseline);
+                    }
+                }
+
+                // Pass 2: spend only what the complete baseline leaves. The baseline itself is never
+                // trimmed — a purely size-driven plan may exceed the cap, exactly as today.
+                long earlyBudget = Config.tablet_reshard_max_parallel_tablets - baselineTopology;
+                Map<MaterializedIndex, Map<Long, Integer>> chosen = new LinkedHashMap<>();
+                for (Map.Entry<MaterializedIndex, Map<Long, Integer>> entry : baselines.entrySet()) {
+                    MaterializedIndex oldIndex = entry.getKey();
+                    Map<Long, Integer> baseline = entry.getValue();
+                    Map<Long, Integer> withEarly = earlyPlans.get(oldIndex);
+                    long delta = replacementTabletCount(oldIndex, withEarly)
+                            - replacementTabletCount(oldIndex, baseline);
+                    if (delta > 0 && delta <= earlyBudget) {
+                        chosen.put(oldIndex, withEarly);
+                        earlyBudget -= delta;
+                    } else {
+                        if (delta > 0) {
+                            LOG.info("Deferred early split for index {} of table {}.{}: it needs {} more "
+                                            + "replacement tablets than the baseline, and only {} remain "
+                                            + "within tablet_reshard_max_parallel_tablets {}",
+                                    oldIndex.getId(), db.getFullName(), table.getName(), delta, earlyBudget,
+                                    Config.tablet_reshard_max_parallel_tablets);
+                        }
+                        chosen.put(oldIndex, baseline);
+                    }
+                }
+
+                // Materialize the chosen plans. This is the only place a tablet id is minted.
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-
-                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
-                        for (Tablet tablet : oldIndex.getTablets()) {
-                            // When not specifying which tablets to split,
-                            // tablet_reshard_target_size must be greater than 0
-                            Preconditions.checkState(splitTabletClause.getTabletReshardTargetSize() > 0,
-                                    "Invalid tablet_reshard_target_size: "
-                                            + splitTabletClause.getTabletReshardTargetSize());
-
-                            int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                    splitTabletClause.getTabletReshardTargetSize());
-
-                            if (newTabletCount <= 1) {
-                                continue;
-                            }
-
-                            splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
+                    for (MaterializedIndex oldIndex :
+                            physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        Map<Long, Integer> splitCounts = chosen.getOrDefault(oldIndex, Map.of());
+                        if (splitCounts.isEmpty()) {
+                            continue;
                         }
 
-                        if (splittingTablets.isEmpty()) {
-                            continue;
+                        Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
+                        for (Map.Entry<Long, Integer> splitCount : splitCounts.entrySet()) {
+                            splittingTablets.put(splitCount.getKey(),
+                                    createSplittingTablet(splitCount.getKey(), splitCount.getValue()));
                         }
 
                         List<ReshardingTablet> reshardingTablets = createReshardingTablets(oldIndex, splittingTablets);
