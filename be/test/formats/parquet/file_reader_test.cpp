@@ -400,8 +400,8 @@ StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(
     return gen_runtime_filter_desc(slot_id, 1);
 }
 
-void FileReaderTest::_setup_rf_predicates(
-        HdfsScannerContext* ctx, const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes) {
+void FileReaderTest::_setup_rf_predicates(HdfsScannerContext* ctx,
+                                          const std::vector<std::pair<RuntimeFilterProbeDescriptor*, SlotId>>& probes) {
     ctx->predicates.runtime_filter_preds = RuntimeFilterPredicates(0 /*driver_sequence*/);
     for (const auto& [desc, slot_id] : probes) {
         ctx->predicates.runtime_filter_preds.add_predicate(_pool.add(new RuntimeFilterPredicate(desc, slot_id)));
@@ -3917,8 +3917,8 @@ TEST_F(FileReaderTest, runtime_filter_pushdown_on_active_column) {
     _rf_probe_collector->add_descriptor(rf_desc);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id],
-                                           _rf_probe_collector, tuple_desc, _runtime_state, ctx);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
     _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
 
     auto file_reader = _create_file_reader(_filter_row_group_path_1);
@@ -3939,8 +3939,8 @@ TEST_F(FileReaderTest, runtime_filter_pushdown_on_active_column) {
 // pull it on demand via materialize_slot(), and stage 5 must still emit correct values
 // for it through the _slot_cache triggered path.
 TEST_F(FileReaderTest, runtime_filter_pushdown_on_lazy_column) {
-    const SlotId probe_slot = 0;  // col1: runtime filter target, no conjunct -> lazy
-    const SlotId other_slot = 1;  // col2: carries the conjunct entry -> active
+    const SlotId probe_slot = 0; // col1: runtime filter target, no conjunct -> lazy
+    const SlotId other_slot = 1; // col2: carries the conjunct entry -> active
     // Slot ids must match _create_int_chunk(), which keys columns positionally.
     Utils::SlotDesc slot_descs[] = {{"col1", TYPE_INT_DESC, 0}, {"col2", TYPE_INT_DESC, 1}, {""}};
     auto* ctx = _create_scan_context(slot_descs, _filter_row_group_path_1);
@@ -3984,8 +3984,8 @@ TEST_F(FileReaderTest, runtime_filter_pushdown_filter_not_arrived) {
     _rf_probe_collector->add_descriptor(rf_desc);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id],
-                                           _rf_probe_collector, tuple_desc, _runtime_state, ctx);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
     _setup_rf_predicates(ctx, {{rf_desc, slot_id}});
 
     auto file_reader = _create_file_reader(_filter_row_group_path_1);
@@ -4021,8 +4021,8 @@ TEST_F(FileReaderTest, runtime_filter_pushdown_two_filters_same_column) {
     _rf_probe_collector->add_descriptor(rf_desc2);
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id],
-                                           _rf_probe_collector, tuple_desc, _runtime_state, ctx);
+    ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[slot_id], _rf_probe_collector,
+                                           tuple_desc, _runtime_state, ctx);
     _setup_rf_predicates(ctx, {{rf_desc1, slot_id}, {rf_desc2, slot_id}});
 
     auto file_reader = _create_file_reader(_filter_row_group_path_1);

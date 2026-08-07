@@ -449,15 +449,14 @@ StatusOr<bool> GroupReader::_evaluate_runtime_filters(const Range<uint64_t>& r, 
             // picks it up instead of re-reading it.
             RETURN_IF_ERROR(_column_materializer->materialize_slot(probe.slot_id, r, &state.chunk_filter));
             const auto* cached = _column_materializer->get_slot_cache(probe.slot_id);
-            RETURN_IF_ERROR(cached != nullptr
-                                    ? Status::OK()
-                                    : Status::InternalError("runtime filter probe column not materialized"));
+            RETURN_IF_ERROR(cached != nullptr ? Status::OK()
+                                              : Status::InternalError("runtime filter probe column not materialized"));
             rf_chunk.append_column(cached->values, static_cast<ColumnId>(probe.slot_id), true);
         }
     }
 
-    RETURN_IF_ERROR(_rf_predicates.evaluate(&rf_chunk, state.chunk_filter.data(), 0,
-                                            static_cast<uint16_t>(state.row_count)));
+    RETURN_IF_ERROR(
+            _rf_predicates.evaluate(&rf_chunk, state.chunk_filter.data(), 0, static_cast<uint16_t>(state.row_count)));
 
     const size_t output_rows = SIMD::count_nonzero(state.chunk_filter.data(), state.row_count);
     _param.stats->rf_cond_input_rows += input_rows;
