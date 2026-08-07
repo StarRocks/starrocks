@@ -104,10 +104,13 @@ set(EXEC_FILES
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
+<<<<<<< HEAD
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
         ./exec/arrow_to_json_converter_test.cpp
         ./exec/cache_select_scanner_test.cpp
+=======
+>>>>>>> 6935c65363 ([BugFix] Keep the current row when an analytic frame starts at a FOLLOWING offset (#77342))
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
