@@ -335,7 +335,9 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
     });
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
-        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+        if (delete_file->__isset.file_format && delete_file->file_format == THdfsFileFormat::PUFFIN) {
+            RETURN_IF_ERROR(iceberg_delete_builder.build_deletion_vector(*delete_file));
+        } else if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
             RETURN_IF_ERROR(iceberg_delete_builder.build_orc(*delete_file));
         } else {
             const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
