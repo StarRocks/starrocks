@@ -34,6 +34,13 @@ import java.util.List;
 import java.util.Map;
 
 public class PhysicalPartitionTest {
+    private static final long BASE_INDEX_ID = 30000L;
+    private static final long BASE_INDEX_META_ID = 3000L;
+    private static final long ROLLUP_A_INDEX_ID = 10000L;
+    private static final long ROLLUP_A_META_ID = 1000L;
+    private static final long ROLLUP_B_INDEX_ID = 20000L;
+    private static final long ROLLUP_B_META_ID = 2000L;
+
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     private GlobalStateMgr globalStateMgr;
@@ -481,13 +488,6 @@ public class PhysicalPartitionTest {
         partition.deleteMaterializedIndexByIndexId(baseIndexId2);
         Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
     }
-
-    private static final long BASE_INDEX_ID = 30000L;
-    private static final long BASE_INDEX_META_ID = 3000L;
-    private static final long ROLLUP_A_INDEX_ID = 10000L;
-    private static final long ROLLUP_A_META_ID = 1000L;
-    private static final long ROLLUP_B_INDEX_ID = 20000L;
-    private static final long ROLLUP_B_META_ID = 2000L;
 
     /** An index carrying {@code tabletNum} tablets, registered without touching the inverted index. */
     private static MaterializedIndex newIndexWithTablets(long indexId, long metaId, int tabletNum) {

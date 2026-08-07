@@ -398,6 +398,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * {@link #setBaseIndex}, so {@code baseIndexMetaId} stays -1. Read-only paths that merely display
      * metadata use this variant, so such a partition degrades to a fallback value instead of failing
      * the whole statement.
+     *
+     * <p>Resolves visible indexes only, deliberately: unlike {@link #getLatestIndex(long)}, it does
+     * not fall back to {@code idToShadowIndex}.
      */
     public MaterializedIndex getLatestBaseIndexOrNull() {
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
@@ -744,6 +747,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      *
      * <p>Every other distribution, and a range partition whose base index cannot be resolved, keeps
      * the stored per-physical bucket number and falls back to the table-level distribution default.
+     *
+     * @param distributionInfo the partition's own distribution, from {@link Partition#getDistributionInfo()}; must not be null
      */
     public int getActualBucketNum(DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
