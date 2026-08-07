@@ -139,7 +139,7 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
-StatusOr<std::vector<RowsetPtr>> DeshardCompactionPolicy::pick_rowsets() {
+StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
         const auto& rowset = _tablet_metadata->rowsets(i);
@@ -154,7 +154,7 @@ StatusOr<std::vector<RowsetPtr>> DeshardCompactionPolicy::pick_rowsets() {
     return input_rowsets;
 }
 
-StatusOr<CompactionAlgorithm> DeshardCompactionPolicy::choose_compaction_algorithm(
+StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(
         const std::vector<RowsetPtr>& rowsets) {
     if (rowsets.empty()) {
         return CLOUD_NATIVE_INDEX_COMPACTION;

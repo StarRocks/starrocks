@@ -88,7 +88,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * Transitional query layout for an ORDER BY != PK tablet split.
      *
      * <p>Writes and publish always use the latest index id in {@link #indexMetaIdToIndexIds} (the
-     * children). Queries stay pinned to the superseded parent index until the atomic DESHARD
+     * children). Queries stay pinned to the superseded parent index until the atomic UNSHARE
      * compaction becomes visible. Empty means queries use the latest (writable) layout, preserving the
      * historical behavior for every other table and partition.
      */
@@ -395,7 +395,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     /**
-     * Returns the latest base index, which is also the layout that accepts new writes. During DESHARD this is the
+     * Returns the latest base index, which is also the layout that accepts new writes. During UNSHARE this is the
      * child layout. Query paths must use {@link #getQueryableBaseIndex()} instead.
      */
     public MaterializedIndex getLatestBaseIndex() {
@@ -405,7 +405,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
     }
 
-    /** Returns the base index used by scans. During DESHARD this can remain pinned to the parent layout. */
+    /** Returns the base index used by scans. During UNSHARE this can remain pinned to the parent layout. */
     public MaterializedIndex getQueryableBaseIndex() {
         return getQueryableIndex(baseIndexMetaId);
     }
@@ -594,7 +594,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return queryIndexMetaIdToIndexId.containsKey(indexMetaId);
     }
 
-    public boolean finishDeshard() {
+    public boolean finishUnshare() {
         if (queryIndexMetaIdToIndexId.isEmpty()) {
             return false;
         }
@@ -602,7 +602,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
-    public boolean isDesharding() {
+    public boolean isUnsharing() {
         return !queryIndexMetaIdToIndexId.isEmpty();
     }
 
@@ -650,7 +650,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     }
 
     /**
-     * Returns every layout whose files must stay visible to vacuum. During DESHARD this is the
+     * Returns every layout whose files must stay visible to vacuum. During UNSHARE this is the
      * union of the latest (writable) layout and the pinned query layout; outside the transition it is
      * exactly the latest-layout result.
      */

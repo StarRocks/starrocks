@@ -639,7 +639,7 @@ message TxnInfoPB {
     // Marks the partition-wide compaction that removes split-shared segments. This is copied from the
     // persisted compaction transaction attachment so aggregate publish can omit the query-only parent
     // metadata even after an FE leader failover (when the in-memory compaction job no longer exists).
-    optional bool deshard_compaction = 15;
+    optional bool unshare_compaction = 15;
 }
 
 message SplittingTabletInfoPB {

@@ -52,7 +52,7 @@ public class CompactionJob {
     private final ComputeResource computeResource;
     private String warehouse;
     private final Quantiles scoreBefore;
-    private final boolean deshard;
+    private final boolean unshare;
     private Quantiles scoreAfter;
     private boolean partialSuccess; // whether job is partial successful
     private CompactionProfile profile;
@@ -65,7 +65,7 @@ public class CompactionJob {
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId,
             boolean allowPartialSuccess, ComputeResource computeResource, String warehouse,
-            Quantiles scoreBefore, boolean deshard) {
+            Quantiles scoreBefore, boolean unshare) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
@@ -77,7 +77,7 @@ public class CompactionJob {
         this.computeResource = computeResource;
         this.warehouse = warehouse;
         this.scoreBefore = scoreBefore;
-        this.deshard = deshard;
+        this.unshare = unshare;
         this.scoreAfter = null;
         this.partialSuccess = false;
         this.profile = null;
@@ -236,8 +236,8 @@ public class CompactionJob {
         return allowPartialSuccess;
     }
 
-    public boolean isDeshard() {
-        return deshard;
+    public boolean isUnshare() {
+        return unshare;
     }
 
     public ComputeResource getComputeResource() {

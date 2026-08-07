@@ -414,11 +414,11 @@ public class Utils {
         request.setPublishReqs(publishReqs);
 
         // This marker comes from the persisted transaction attachment rather than the scheduler's
-        // in-memory job map. It therefore remains correct when a committed DESHARD transaction is
+        // in-memory job map. It therefore remains correct when a committed UNSHARE transaction is
         // published by a new FE leader.
-        boolean deshardPublish = txnInfos.stream()
-                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isDeshardCompaction()));
-        if (!deshardPublish) {
+        boolean unsharePublish = txnInfos.stream()
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+        if (!unsharePublish) {
             Set<Long> publishedTabletIds = publishReqs.stream()
                     .filter(java.util.Objects::nonNull)
                     .flatMap(publishReq -> Optional.ofNullable(publishReq.getTabletIds())

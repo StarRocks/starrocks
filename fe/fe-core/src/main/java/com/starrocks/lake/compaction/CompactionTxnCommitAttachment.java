@@ -22,30 +22,30 @@ public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("fc")
     private boolean forceCommit = false;
     @SerializedName("ds")
-    private boolean deshard = false;
+    private boolean unshare = false;
 
     public CompactionTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
         this.forceCommit = false;
-        this.deshard = false;
+        this.unshare = false;
     }
 
     public CompactionTxnCommitAttachment(boolean forceCommit) {
         this(forceCommit, false);
     }
 
-    public CompactionTxnCommitAttachment(boolean forceCommit, boolean deshard) {
+    public CompactionTxnCommitAttachment(boolean forceCommit, boolean unshare) {
         super(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
         this.forceCommit = forceCommit;
-        this.deshard = deshard;
+        this.unshare = unshare;
     }
 
     public boolean getForceCommit() {
         return forceCommit;
     }
 
-    public boolean isDeshard() {
-        return deshard;
+    public boolean isUnshare() {
+        return unshare;
     }
 
 }

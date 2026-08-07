@@ -37,8 +37,8 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _tablet_schema(std::move(tablet_schema)) {}
 
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
-    if (_context->mode == COMPACTION_MODE_DESHARD) {
-        // DESHARD rewrites shared data files only. Rebuilding/major-compacting the
+    if (_context->is_unshare) {
+        // UNSHARE rewrites shared data files only. Rebuilding/major-compacting the
         // cloud-native PK index in the same transaction adds substantial I/O and is
         // unnecessary for the atomic query-layout cutover.
         return Status::OK();

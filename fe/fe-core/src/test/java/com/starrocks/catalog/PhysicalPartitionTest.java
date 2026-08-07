@@ -482,7 +482,7 @@ public class PhysicalPartitionTest {
     }
 
     @Test
-    public void testQueryableIndexPinnedUntilDeshardFinishes() {
+    public void testQueryableIndexPinnedUntilUnshareFinishes() {
         long baseMetaId = 3100L;
         MaterializedIndex parent = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
         PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, parent);
@@ -491,7 +491,7 @@ public class PhysicalPartitionTest {
         partition.pinQueryableIndex(baseMetaId, parent.getId());
         partition.addMaterializedIndex(children, true);
 
-        Assertions.assertTrue(partition.isDesharding());
+        Assertions.assertTrue(partition.isUnsharing());
         Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
         Assertions.assertEquals(children, partition.getLatestBaseIndex());
         Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
@@ -501,12 +501,12 @@ public class PhysicalPartitionTest {
 
         String json = GsonUtils.GSON.toJson(partition);
         PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
-        Assertions.assertTrue(restored.isDesharding());
+        Assertions.assertTrue(restored.isUnsharing());
         Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
 
-        Assertions.assertTrue(partition.finishDeshard());
-        Assertions.assertFalse(partition.finishDeshard());
-        Assertions.assertFalse(partition.isDesharding());
+        Assertions.assertTrue(partition.finishUnshare());
+        Assertions.assertFalse(partition.finishUnshare());
+        Assertions.assertFalse(partition.isUnsharing());
         Assertions.assertEquals(children, partition.getQueryableBaseIndex());
     }
 }

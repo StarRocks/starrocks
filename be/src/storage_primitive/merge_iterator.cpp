@@ -486,7 +486,7 @@ private:
     RowSourceMaskBuffer* _mask_buffer = nullptr;
     // Optional row-selection stream aligned one-to-one with _mask_buffer. A non-zero
     // source number means keep the row; zero means consume it from the source iterator
-    // without appending it. Vertical DESHARD compaction records this stream while
+    // without appending it. Vertical UNSHARE compaction records this stream while
     // processing the key group and replays it for every value group.
     RowSourceMaskBuffer* _selection_buffer = nullptr;
 };

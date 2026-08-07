@@ -1195,7 +1195,7 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
 
     // For ORDER BY != PK, segment min/max and sampling metadata are in sort-key
     // space and cannot estimate a PK-space child distribution. Correctness only
-    // requires every inherited rowset to remain shared until DESHARD. Use uniform
+    // requires every inherited rowset to remain shared until UNSHARE. Use uniform
     // weights for transitional FE statistics and avoid comparing the two domains.
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && tablet_schema->has_separate_sort_key()) {
         RangeSplitResult uniform_result;

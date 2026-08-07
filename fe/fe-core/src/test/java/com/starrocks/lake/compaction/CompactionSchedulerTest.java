@@ -32,7 +32,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
-import com.starrocks.proto.CompactionModePB;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -873,17 +872,17 @@ public class CompactionSchedulerTest {
             Assertions.assertNotNull(req.parallelConfig, "parallelConfig should be set when enabled");
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
-            Assertions.assertEquals(CompactionModePB.COMPACTION_MODE_DEFAULT, req.mode);
+            Assertions.assertFalse(req.unshareSegments);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
         }
 
-        CompactionTask deshardTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
-                PartitionStatistics.CompactionPriority.DESHARD,
+        CompactionTask unshareTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                PartitionStatistics.CompactionPriority.UNSHARE,
                 WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
-        AggregateCompactRequest deshardRequest = (AggregateCompactRequest) requestField.get(deshardTask);
-        for (CompactRequest req : deshardRequest.requests) {
-            Assertions.assertEquals(CompactionModePB.COMPACTION_MODE_DESHARD, req.mode);
+        AggregateCompactRequest unshareRequest = (AggregateCompactRequest) requestField.get(unshareTask);
+        for (CompactRequest req : unshareRequest.requests) {
+            Assertions.assertTrue(req.unshareSegments);
             Assertions.assertNotNull(req.parallelConfig);
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
@@ -1107,14 +1106,14 @@ public class CompactionSchedulerTest {
         Mockito.when(late.getTxnId()).thenReturn(3000L);
         compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 5), late);
 
-        // The current reshard's DESHARD transaction can equal the watermark because the job records
-        // peekNextTransactionId() before triggering DESHARD. It must be allowed to finish and publish.
-        CompactionJob deshardAtWatermark = Mockito.mock(CompactionJob.class);
-        Mockito.when(deshardAtWatermark.getTxnId()).thenReturn(endTransactionId);
-        Mockito.when(deshardAtWatermark.isDeshard()).thenReturn(true);
-        Mockito.when(deshardAtWatermark.transactionHasCommitted()).thenReturn(false);
+        // The current reshard's UNSHARE transaction can equal the watermark because the job records
+        // peekNextTransactionId() before triggering UNSHARE. It must be allowed to finish and publish.
+        CompactionJob unshareAtWatermark = Mockito.mock(CompactionJob.class);
+        Mockito.when(unshareAtWatermark.getTxnId()).thenReturn(endTransactionId);
+        Mockito.when(unshareAtWatermark.isUnshare()).thenReturn(true);
+        Mockito.when(unshareAtWatermark.transactionHasCommitted()).thenReturn(false);
         compactionScheduler.getRunningCompactions().put(
-                new PartitionIdentifier(dbId, tableId, 7), deshardAtWatermark);
+                new PartitionIdentifier(dbId, tableId, 7), unshareAtWatermark);
 
         // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
         CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
@@ -1138,7 +1137,7 @@ public class CompactionSchedulerTest {
         Mockito.verify(prepared).abort();
         Mockito.verify(committed, Mockito.never()).abort();
         Mockito.verify(late, Mockito.never()).abort();
-        Mockito.verify(deshardAtWatermark, Mockito.never()).abort();
+        Mockito.verify(unshareAtWatermark, Mockito.never()).abort();
         Mockito.verify(otherPartitionPrepared, Mockito.never()).abort();
         Mockito.verify(otherPartitionCommitted, Mockito.never()).abort();
         Mockito.verify(otherTable, Mockito.never()).abort();

@@ -305,20 +305,20 @@ public class CompactionMgr implements MemoryTrackable {
         return statistics;
     }
 
-    public PartitionStatistics triggerDeshardCompaction(PartitionIdentifier partition) {
+    public PartitionStatistics triggerUnshareCompaction(PartitionIdentifier partition) {
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
                 v = new PartitionStatistics(partition);
             }
             if (v.getCompactionScore() == null) {
                 // Score-based selectors discard null scores even for an explicit priority. A
-                // synthetic zero score lets DESHARD run for an empty/new partition as well.
+                // synthetic zero score lets UNSHARE run for an empty/new partition as well.
                 v.setCompactionScore(new Quantiles(0, 0, 0));
             }
-            v.setPriority(PartitionStatistics.CompactionPriority.DESHARD);
+            v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
             return v;
         });
-        LOG.info("Trigger DESHARD compaction, {}", statistics);
+        LOG.info("Trigger UNSHARE compaction, {}", statistics);
         return statistics;
     }
 

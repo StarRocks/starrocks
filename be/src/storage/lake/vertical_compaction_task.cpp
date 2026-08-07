@@ -68,10 +68,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     DCHECK(!store_paths.empty());
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
-    const bool deshard_filter = _context->mode == COMPACTION_MODE_DESHARD && _tablet_schema->has_separate_sort_key();
+    const bool pk_range_filter = _context->is_unshare && _tablet_schema->has_separate_sort_key();
     auto selection_buffer =
-            deshard_filter ? std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path) : nullptr;
-    auto selection_masks = deshard_filter ? std::make_unique<std::vector<RowSourceMask>>() : nullptr;
+            pk_range_filter ? std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path) : nullptr;
+    auto selection_masks = pk_range_filter ? std::make_unique<std::vector<RowSourceMask>>() : nullptr;
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
@@ -91,7 +91,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     // would otherwise land in value groups where the eager SST writer (which only sees the key group)
     // cannot reach them. Move them into the key group so compaction builds the PK-index SST eagerly.
     const bool pk_in_key_group =
-            (writer->enable_pk_index_eager_build() || deshard_filter) && _tablet_schema->has_separate_sort_key();
+            (writer->enable_pk_index_eager_build() || pk_range_filter) && _tablet_schema->has_separate_sort_key();
     if (pk_in_key_group) {
         move_pk_columns_into_key_group(&column_groups);
     }
@@ -314,7 +314,7 @@ Status VerticalCompactionTask::compact_column_group(
                     auto it = std::find(column_group.begin(), column_group.end(), pk_column);
                     if (it == column_group.end()) {
                         return Status::InternalError(
-                                fmt::format("vertical DESHARD key group does not contain PK column {}", pk_column));
+                                fmt::format("vertical UNSHARE key group does not contain PK column {}", pk_column));
                     }
                     size_t chunk_index = static_cast<size_t>(std::distance(column_group.begin(), it));
                     pk_chunk.append_column(chunk->get_column_by_index(chunk_index), static_cast<SlotId>(pk_column));
@@ -324,7 +324,7 @@ Status VerticalCompactionTask::compact_column_group(
             }
             if (source_masks->size() != filter.size()) {
                 return Status::InternalError(
-                        fmt::format("vertical DESHARD source-mask size {} differs from filter size {}",
+                        fmt::format("vertical UNSHARE source-mask size {} differs from filter size {}",
                                     source_masks->size(), filter.size()));
             }
             selection_masks->clear();

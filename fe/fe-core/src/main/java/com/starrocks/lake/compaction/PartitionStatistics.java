@@ -40,7 +40,7 @@ public class PartitionStatistics {
     public enum CompactionPriority {
         DEFAULT(0),
         MANUAL_COMPACT(1),
-        DESHARD(2);
+        UNSHARE(2);
 
         private final int value;
 

@@ -26,10 +26,10 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
     txn_log->set_txn_id(_txn_id);
     op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(cancel_func());
-    // An empty DESHARD pick means this sibling already owns only private files.
+    // An empty UNSHARE pick means this sibling already owns only private files.
     // It must still contribute a successful no-op txn log to the all-sibling
     // aggregate transaction, but it must not opportunistically rewrite SSTs.
-    if (_context->mode != COMPACTION_MODE_DESHARD) {
+    if (!_context->is_unshare) {
         RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     }
     _context->progress.update(100);

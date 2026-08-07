@@ -1005,7 +1005,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether range-distributed, cloud-native primary-key tables may use an `ORDER BY` key that differs from the primary key. This experimental path requires File Bundling and must only be enabled after all BEs are upgraded to a version that supports it. The first phase does not support DCG or IDG metadata during tablet split, transitional publish, or DESHARD compaction, and rejects the operation if either is present.
+- Description: Whether range-distributed, cloud-native primary-key tables may use an `ORDER BY` key that differs from the primary key. This experimental path requires File Bundling and must only be enabled after all BEs are upgraded to a version that supports it. The first phase does not support DCG or IDG metadata during tablet split, transitional publish, or UNSHARE compaction, and rejects the operation if either is present.
 - Introduced in: -
 
 ### `enable_pipeline_routine_load`

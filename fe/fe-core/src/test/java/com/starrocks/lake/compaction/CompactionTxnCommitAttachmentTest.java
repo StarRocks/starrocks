@@ -33,11 +33,11 @@ public class CompactionTxnCommitAttachmentTest {
 
         CompactionTxnCommitAttachment attachment2 = new CompactionTxnCommitAttachment(true /* forceCommit */);
         Assertions.assertTrue(attachment2.getForceCommit());
-        Assertions.assertFalse(attachment2.isDeshard());
+        Assertions.assertFalse(attachment2.isUnshare());
 
         attachment2 = new CompactionTxnCommitAttachment(false, true);
         Assertions.assertFalse(attachment2.getForceCommit());
-        Assertions.assertTrue(attachment2.isDeshard());
+        Assertions.assertTrue(attachment2.isUnshare());
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bout);
@@ -45,6 +45,6 @@ public class CompactionTxnCommitAttachmentTest {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
         attachment = GsonUtils.GSON.fromJson(Text.readString(in), CompactionTxnCommitAttachment.class);
         Assertions.assertFalse(attachment.getForceCommit());
-        Assertions.assertTrue(attachment.isDeshard());
+        Assertions.assertTrue(attachment.isUnshare());
     }
 }

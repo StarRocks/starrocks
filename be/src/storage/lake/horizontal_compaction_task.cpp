@@ -126,7 +126,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
-        if (_context->mode == COMPACTION_MODE_DESHARD && _tablet_schema->has_separate_sort_key()) {
+        if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
             ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
                                                   _tablet.metadata()->range(), _tablet_schema, *chunk));
             if (!rssid_rowids.empty()) {

@@ -387,24 +387,24 @@ public class SplitTabletJob extends TabletReshardJob {
         }
 
         // ORDER BY != PK children inherit complete shared rowsets. Keep queries on the parent layout
-        // until one partition-wide, non-partial DESHARD transaction has rewritten every sibling.
+        // until one partition-wide, non-partial UNSHARE transaction has rewritten every sibling.
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
-        boolean waitingForDeshard = false;
+        boolean waitingForUnshare = false;
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             for (Long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
                 PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-                if (physicalPartition == null || !physicalPartition.isDesharding()) {
+                if (physicalPartition == null || !physicalPartition.isUnsharing()) {
                     continue;
                 }
-                waitingForDeshard = true;
+                waitingForUnshare = true;
                 PartitionIdentifier identifier = new PartitionIdentifier(dbId, tableId, physicalPartitionId);
                 if (!compactionMgr.isPartitionCompacting(identifier)) {
-                    compactionMgr.triggerDeshardCompaction(identifier);
+                    compactionMgr.triggerUnshareCompaction(identifier);
                 }
             }
         }
-        if (waitingForDeshard) {
+        if (waitingForUnshare) {
             return;
         }
 
@@ -860,7 +860,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
             // Installing the new materialized indexes changes the writable layout immediately. For an
             // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
-            // until DESHARD finishes. Bump the table's optimistic version so any plan racing either
+            // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
             // catalog transition is retried against a self-consistent layout. Mirrors
             // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
             // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.

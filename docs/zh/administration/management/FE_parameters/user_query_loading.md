@@ -1004,7 +1004,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许按范围分桶的云原生主键表使用与主键不同的 `ORDER BY` 键。该实验性路径要求启用 File Bundling，并且只能在所有 BE 都升级到支持该功能的版本后开启。第一期在 tablet split、过渡期 publish 和 DESHARD compaction 中均不支持 DCG 或 IDG 元数据，检测到任一元数据时会拒绝执行。
+- 描述: 是否允许按范围分桶的云原生主键表使用与主键不同的 `ORDER BY` 键。该实验性路径要求启用 File Bundling，并且只能在所有 BE 都升级到支持该功能的版本后开启。第一期在 tablet split、过渡期 publish 和 UNSHARE compaction 中均不支持 DCG 或 IDG 元数据，检测到任一元数据时会拒绝执行。
 - 引入版本: -
 
 ### `enable_pipeline_routine_load`

@@ -1674,59 +1674,77 @@ struct AggregateCompactContext {
         }
     }
 
-    Status validate_deshard_result(lake::TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
-        const bool has_deshard_request =
+    Status validate_unshare_result(lake::TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
+        const bool has_unshare_request =
                 std::any_of(request.requests().begin(), request.requests().end(),
-                            [](const CompactRequest& req) { return req.mode() == COMPACTION_MODE_DESHARD; });
+                            [](const CompactRequest& req) { return req.unshare_segments(); });
         const bool has_default_request =
                 std::any_of(request.requests().begin(), request.requests().end(),
-                            [](const CompactRequest& req) { return req.mode() != COMPACTION_MODE_DESHARD; });
-        if (has_deshard_request && has_default_request) {
-            return Status::InvalidArgument("aggregate compaction cannot mix DESHARD and default modes");
+                            [](const CompactRequest& req) { return !req.unshare_segments(); });
+        if (has_unshare_request && has_default_request) {
+            return Status::InvalidArgument("aggregate compaction cannot mix UNSHARE and default modes");
         }
-        if (!has_deshard_request) {
+        if (!has_unshare_request) {
             return Status::OK();
         }
 
         std::unordered_map<int64_t, const TxnLogPB*> tablet_to_log;
         for (const auto& log : combined_txn_log.txn_logs()) {
             if (!tablet_to_log.emplace(log.tablet_id(), &log).second) {
-                return Status::Corruption(fmt::format("duplicate deshard txn log for tablet {}", log.tablet_id()));
+                return Status::Corruption(fmt::format("duplicate unshare txn log for tablet {}", log.tablet_id()));
             }
         }
 
         for (const auto& compact_request : request.requests()) {
             if (compact_request.allow_partial_success() || !compact_request.skip_write_txnlog()) {
                 return Status::InvalidArgument(
-                        "DESHARD aggregate compaction requires allow_partial_success=false and skip_write_txnlog=true");
+                        "UNSHARE aggregate compaction requires allow_partial_success=false and skip_write_txnlog=true");
             }
             for (int64_t tablet_id : compact_request.tablet_ids()) {
                 auto log_it = tablet_to_log.find(tablet_id);
                 if (log_it == tablet_to_log.end()) {
-                    return Status::Corruption(fmt::format("missing deshard txn log for tablet {}", tablet_id));
+                    return Status::Corruption(fmt::format("missing unshare txn log for tablet {}", tablet_id));
                 }
                 const auto* txn_log = log_it->second;
-                if (!txn_log->has_op_compaction()) {
-                    return Status::Corruption(
-                            fmt::format("deshard txn log for tablet {} has no op_compaction", tablet_id));
-                }
-                for (const auto& segment : txn_log->op_compaction().output_rowset().segment_metas()) {
-                    if (segment.shared()) {
-                        return Status::Corruption(
-                                fmt::format("deshard output for tablet {} still contains a shared segment", tablet_id));
+                // A tablet that took the parallel path reports one OpParallelCompaction holding
+                // every subtask's OpCompaction instead of a single top-level one. Both shapes are
+                // valid UNSHARE output, so validate against the flattened subtask list.
+                std::vector<const TxnLogPB::OpCompaction*> compactions;
+                if (txn_log->has_op_compaction()) {
+                    compactions.push_back(&txn_log->op_compaction());
+                } else if (txn_log->has_op_parallel_compaction()) {
+                    for (const auto& subtask : txn_log->op_parallel_compaction().subtask_compactions()) {
+                        compactions.push_back(&subtask);
                     }
+                    if (compactions.empty()) {
+                        return Status::Corruption(fmt::format(
+                                "unshare txn log for tablet {} has an empty parallel compaction", tablet_id));
+                    }
+                } else {
+                    return Status::Corruption(fmt::format(
+                            "unshare txn log for tablet {} has neither op_compaction nor op_parallel_compaction",
+                            tablet_id));
+                }
+
+                std::unordered_set<uint32_t> selected;
+                for (const auto* compaction : compactions) {
+                    for (const auto& segment : compaction->output_rowset().segment_metas()) {
+                        if (segment.shared()) {
+                            return Status::Corruption(fmt::format(
+                                    "unshare output for tablet {} still contains a shared segment", tablet_id));
+                        }
+                    }
+                    selected.insert(compaction->input_rowsets().begin(), compaction->input_rowsets().end());
                 }
 
                 ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, compact_request.version()));
-                std::unordered_set<uint32_t> selected(txn_log->op_compaction().input_rowsets().begin(),
-                                                      txn_log->op_compaction().input_rowsets().end());
                 for (const auto& rowset : metadata->rowsets()) {
                     const bool contains_shared =
                             std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
                                         [](const SegmentMetadataPB& segment) { return segment.shared(); });
                     if (contains_shared && !selected.contains(rowset.id())) {
                         return Status::Corruption(
-                                fmt::format("deshard result for tablet {} did not rewrite shared rowset {}", tablet_id,
+                                fmt::format("unshare result for tablet {} did not rewrite shared rowset {}", tablet_id,
                                             rowset.id()));
                     }
                 }
@@ -1747,7 +1765,7 @@ struct AggregateCompactContext {
                         [&] {
                             DeferOp defer([&] { latch.count_down(); });
                             auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-                            final_status = validate_deshard_result(tablet_mgr, request);
+                            final_status = validate_unshare_result(tablet_mgr, request);
                             if (final_status.ok()) {
                                 final_status = starrocks::write_combined_txn_log(combined_txn_log);
                             }

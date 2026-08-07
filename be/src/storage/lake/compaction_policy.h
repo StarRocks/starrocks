@@ -43,8 +43,7 @@ public:
 
     static StatusOr<CompactionPolicyPtr> create(TabletManager* tablet_mgr,
                                                 std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                                bool force_base_compaction,
-                                                CompactionModePB mode = COMPACTION_MODE_DEFAULT);
+                                                bool force_base_compaction, bool is_unshare = false);
 
     static bool is_real_time_compaction_strategy(const std::shared_ptr<const TabletMetadataPB>& metadata);
 

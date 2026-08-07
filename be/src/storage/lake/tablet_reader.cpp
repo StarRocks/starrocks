@@ -562,7 +562,7 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
     if (_is_key && _selection_buffer != nullptr && source_masks->empty() && chunk->num_rows() > 0) {
         // A one-child heap merge returns the child iterator directly, which does not
-        // produce source masks. DESHARD still needs one mask per physical row so value
+        // produce source masks. UNSHARE still needs one mask per physical row so value
         // groups can replay the selection stream.
         source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
     }

@@ -80,14 +80,13 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     // Constructor for normal compaction
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
                                    bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_,
-                                   int64_t table_id_ = 0, int64_t partition_id_ = 0,
-                                   CompactionModePB mode_ = COMPACTION_MODE_DEFAULT)
+                                   int64_t table_id_ = 0, int64_t partition_id_ = 0, bool is_unshare_ = false)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
               skip_write_txnlog(skip_write_txnlog_),
-              mode(mode_),
+              is_unshare(is_unshare_),
               callback(std::move(cb_)),
               table_id(table_id_),
               partition_id(partition_id_) {}
@@ -97,10 +96,9 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
                                                                      int64_t version_, bool force_base_compaction_,
                                                                      bool skip_write_txnlog_,
                                                                      std::shared_ptr<CompactionTaskCallback> cb_,
-                                                                     int32_t subtask_id_,
-                                                                     CompactionModePB mode_ = COMPACTION_MODE_DEFAULT) {
+                                                                     int32_t subtask_id_, bool is_unshare_ = false) {
         auto ctx = std::make_unique<CompactionTaskContext>(txn_id_, tablet_id_, version_, force_base_compaction_,
-                                                           skip_write_txnlog_, std::move(cb_), 0, 0, mode_);
+                                                           skip_write_txnlog_, std::move(cb_), 0, 0, is_unshare_);
         ctx->subtask_id = subtask_id_;
         return ctx;
     }
@@ -116,7 +114,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const int64_t version;
     const bool force_base_compaction;
     const bool skip_write_txnlog;
-    const CompactionModePB mode;
+    const bool is_unshare;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};

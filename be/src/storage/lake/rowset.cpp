@@ -156,7 +156,7 @@ StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
     // Range-distributed PK tablets with ORDER BY != PK persist their tablet/rowset
     // boundaries in PK space while segment pages are ordered by the independent sort key.
     // Such a boundary is not a contiguous segment seek range. Parent-tablet reads therefore
-    // read a deduplicated shared segment in full; DESHARD applies the PK range row-by-row.
+    // read a deduplicated shared segment in full; UNSHARE applies the PK range row-by-row.
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _tablet_schema->has_separate_sort_key()) {
         return std::optional<SeekRange>{};
     }

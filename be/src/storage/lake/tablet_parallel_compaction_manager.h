@@ -107,7 +107,7 @@ struct TabletParallelCompactionState {
     int64_t tablet_id = 0;
     int64_t txn_id = 0;
     int64_t version = 0;
-    CompactionModePB mode = COMPACTION_MODE_DEFAULT;
+    bool is_unshare = false;
 
     // Rowsets currently being compacted (to avoid conflicts)
     // Key: rowset_id, Value: reference count (number of subtasks using this rowset)
@@ -160,9 +160,9 @@ struct TabletParallelCompactionState {
     // the split is incomplete and must be treated as failed.
     int32_t expected_range_split_count = 0;
 
-    // DESHARD is all-or-nothing across every physical subtask. Recorded before
+    // UNSHARE is all-or-nothing across every physical subtask. Recorded before
     // submission so a partial thread-pool submission cannot be published.
-    int32_t expected_deshard_subtask_count = 0;
+    int32_t expected_unshare_subtask_count = 0;
 
     // Mutex for thread-safe access
     mutable std::mutex mutex;
@@ -195,7 +195,7 @@ public:
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                         const ReleaseTokenFunc& release_token,
-                                        CompactionModePB mode = COMPACTION_MODE_DEFAULT);
+                                        bool is_unshare = false);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -250,7 +250,7 @@ private:
 
     // Pick rowsets for compaction using CompactionPolicy
     StatusOr<std::vector<RowsetPtr>> pick_rowsets_for_compaction(int64_t tablet_id, int64_t txn_id, int64_t version,
-                                                                 bool force_base_compaction, CompactionModePB mode);
+                                                                 bool force_base_compaction, bool is_unshare);
 
     // Split rowsets into groups for parallel compaction
     // Returns empty vector if no valid groups can be formed
@@ -263,7 +263,7 @@ private:
     // Returns nullptr if state already exists
     StatusOr<std::shared_ptr<TabletParallelCompactionState>> create_and_register_tablet_state(
             int64_t tablet_id, int64_t txn_id, int64_t version, int32_t max_parallel, int64_t max_bytes,
-            CompactionModePB mode, std::shared_ptr<CompactionTaskCallback> callback,
+            bool is_unshare, std::shared_ptr<CompactionTaskCallback> callback,
             const ReleaseTokenFunc& release_token);
 
     // Submit subtasks to thread pool
@@ -374,13 +374,13 @@ private:
     std::vector<SubtaskGroup> _create_subtask_groups(int64_t tablet_id, std::vector<RowsetPtr> rowsets,
                                                      int32_t max_parallel, int64_t max_bytes_per_subtask);
 
-    // DESHARD must rewrite every selected shared rowset atomically. This planner
+    // UNSHARE must rewrite every selected shared rowset atomically. This planner
     // partitions the physical rowset/segment work without using sort-key ranges and
     // never drops an input merely because a one-rowset group is normally compacted.
-    std::vector<SubtaskGroup> _create_deshard_subtask_groups(int64_t tablet_id, const std::vector<RowsetPtr>& rowsets,
+    std::vector<SubtaskGroup> _create_unshare_subtask_groups(int64_t tablet_id, const std::vector<RowsetPtr>& rowsets,
                                                              int32_t max_parallel, int64_t max_bytes_per_subtask);
 
-    static Status _validate_deshard_group_coverage(const std::vector<RowsetPtr>& rowsets,
+    static Status _validate_unshare_group_coverage(const std::vector<RowsetPtr>& rowsets,
                                                    const std::vector<SubtaskGroup>& groups);
 
     // Merge multiple subtask LCRM files into a single LCRM file for the merged compaction.
@@ -423,7 +423,7 @@ private:
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_range_split_groups_error_paths);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_range_split_vlog_paths);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_deshard_groups_cover_all_segments);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_unshare_groups_cover_all_segments);
 
     TabletManager* _tablet_mgr;
 

@@ -738,7 +738,7 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     EXPECT_TRUE(cumulative_rowsets.empty());
 }
 
-TEST_F(LakeCompactionPolicyTest, test_deshard_picks_complete_shared_rowsets_only) {
+TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only) {
     auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
     metadata->set_version(2);
     metadata->mutable_range();
@@ -761,7 +761,7 @@ TEST_F(LakeCompactionPolicyTest, test_deshard_picks_complete_shared_rowsets_only
     add_rowset(3, {false, true, false});
     add_rowset(4, {false, false});
 
-    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, COMPACTION_MODE_DESHARD));
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, true));
     ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
     ASSERT_EQ(2, rowsets.size());
     EXPECT_EQ(2, rowsets[0]->id());
@@ -771,25 +771,25 @@ TEST_F(LakeCompactionPolicyTest, test_deshard_picks_complete_shared_rowsets_only
     EXPECT_EQ(3, rowsets[1]->num_segments());
 }
 
-TEST_F(LakeCompactionPolicyTest, test_deshard_rejects_unsupported_metadata) {
+TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
     auto non_pk = generate_simple_tablet_metadata(DUP_KEYS);
     non_pk->mutable_range();
-    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), non_pk, false, COMPACTION_MODE_DESHARD).ok());
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), non_pk, false, true).ok());
 
     auto no_range = generate_simple_tablet_metadata(PRIMARY_KEYS);
-    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, COMPACTION_MODE_DESHARD).ok());
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, true).ok());
 
     auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
     dcg->mutable_range();
     (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
-    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, COMPACTION_MODE_DESHARD);
+    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, true);
     ASSERT_FALSE(dcg_status.ok());
     EXPECT_TRUE(dcg_status.status().is_not_supported());
 
     auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
     idg->mutable_range();
     (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
-    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, COMPACTION_MODE_DESHARD);
+    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, true);
     ASSERT_FALSE(idg_status.ok());
     EXPECT_TRUE(idg_status.status().is_not_supported());
 }

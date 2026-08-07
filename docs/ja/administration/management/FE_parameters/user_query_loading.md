@@ -986,7 +986,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：範囲分散されたクラウドネイティブ主キーテーブルで、主キーと異なる `ORDER BY` キーを使用できるようにするかどうか。この実験的なパスには File Bundling が必要で、すべての BE を対応バージョンへアップグレードした後にのみ有効化できます。第 1 フェーズでは tablet split、移行中の publish、DESHARD compaction における DCG または IDG メタデータをサポートせず、いずれかが存在する場合は処理を拒否します。
+- 説明：範囲分散されたクラウドネイティブ主キーテーブルで、主キーと異なる `ORDER BY` キーを使用できるようにするかどうか。この実験的なパスには File Bundling が必要で、すべての BE を対応バージョンへアップグレードした後にのみ有効化できます。第 1 フェーズでは tablet split、移行中の publish、UNSHARE compaction における DCG または IDG メタデータをサポートせず、いずれかが存在する場合は処理を拒否します。
 - 導入時期：-
 
 ### `enable_pipeline_routine_load`

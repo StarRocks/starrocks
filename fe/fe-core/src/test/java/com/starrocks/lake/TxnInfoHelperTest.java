@@ -92,7 +92,7 @@ public class TxnInfoHelperTest {
     }
 
     @Test
-    public void testFromDeshardCompactionTransaction() {
+    public void testFromUnshareCompactionTransaction() {
         TransactionState state = Mockito.mock(TransactionState.class, Mockito.RETURNS_DEEP_STUBS);
         Mockito.when(state.getSourceType()).thenReturn(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
         Mockito.when(state.getTxnCommitAttachment())
@@ -102,7 +102,7 @@ public class TxnInfoHelperTest {
         TxnInfoPB info = TxnInfoHelper.fromTransactionState(state);
 
         assertFalse(info.forcePublish);
-        assertTrue(info.deshardCompaction);
+        assertTrue(info.unshareCompaction);
     }
 
     private static TUniqueId tid(long hi, long lo) {
