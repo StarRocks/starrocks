@@ -173,63 +173,6 @@ public:
         _release(entry);
     }
 
-    // Release a reference obtained from get()/get_or_create(), and remove the
-    // entry when that release leaves only the cache-owned base reference and
-    // the caller-provided predicate says the value is disposable.
-    //
-    // This is intentionally additive to release()/remove(): callers that need
-    // their existing semantics are unaffected. The predicate runs under
-    // _lock, so it must not acquire another lock, allocate, or call back into
-    // this cache. Entry destruction remains outside _lock because cached
-    // values may release handles that re-enter the same cache.
-    template <typename RemovePredicate>
-    bool release_and_remove_if_unused(Entry* entry, RemovePredicate&& should_remove) {
-        Entry* entry_to_delete = nullptr;
-        {
-            std::lock_guard<Lock> lg(_lock);
-            DCHECK_GT(entry->_ref.load(std::memory_order_relaxed), 1);
-            entry->_ref--;
-            if (entry->_ref == 1 && should_remove(entry->_value)) {
-                _map.erase(entry->key());
-                _list.erase(entry->_handle);
-                _object_size--;
-                _size -= entry->_size;
-                _tracker_release(entry->_size);
-                entry_to_delete = entry;
-            } else {
-                _list.splice(_list.end(), _list, entry->_handle);
-            }
-        }
-        delete entry_to_delete;
-        return entry_to_delete != nullptr;
-    }
-
-    // Atomically refresh the expiration deadline while releasing the caller's
-    // pin, and remove an unused entry when the predicate says it is disposable.
-    template <typename RemovePredicate>
-    bool release_with_expire_time_and_remove_if_unused(Entry* entry, int64_t expire_ms,
-                                                       RemovePredicate&& should_remove) {
-        Entry* entry_to_delete = nullptr;
-        {
-            std::lock_guard<Lock> lg(_lock);
-            DCHECK_GT(entry->_ref.load(std::memory_order_relaxed), 1);
-            entry->_expire_ms = expire_ms;
-            entry->_ref--;
-            if (entry->_ref == 1 && should_remove(entry->_value)) {
-                _map.erase(entry->key());
-                _list.erase(entry->_handle);
-                _object_size--;
-                _size -= entry->_size;
-                _tracker_release(entry->_size);
-                entry_to_delete = entry;
-            } else {
-                _list.splice(_list.end(), _list, entry->_handle);
-            }
-        }
-        delete entry_to_delete;
-        return entry_to_delete != nullptr;
-    }
-
     // remove an object get/get_or_create'ed earlier
     bool remove(Entry* entry) {
         std::lock_guard<Lock> lg(_lock);

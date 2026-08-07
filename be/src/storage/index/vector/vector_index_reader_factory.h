@@ -35,7 +35,7 @@ public:
     static Status create_from_file(FileInfo* vi_file, const std::shared_ptr<tenann::IndexMeta>& index_meta,
                                    std::shared_ptr<VectorIndexReader>* vector_index_reader,
                                    OlapReaderStatistics* stats = nullptr,
-                                   VectorIndexCache* vector_index_cache = nullptr);
+                                   VectorIndexCache* vector_index_cache = nullptr, bool refine_distance = false);
 #endif
 };
 

@@ -540,6 +540,48 @@ TEST_F(VectorIndexSearchTest, async_cache_miss_falls_back_then_next_reader_uses_
     EXPECT_EQ(0, warm_stats.vector_index_file_open_ns);
 }
 
+TEST_F(VectorIndexSearchTest, async_ineligible_queries_load_index_synchronously) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/async_ineligible_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, empty_query_params));
+    auto index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
+
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = true;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    auto verify_sync_load = [&](size_t capacity, bool refine_distance) {
+        MemTracker cache_tracker(-1, "vector_index_async_ineligible_test");
+        VectorIndexCache cache(capacity, &cache_tracker);
+        ASSERT_OK(cache.init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+        OlapReaderStatistics stats;
+        FileInfo vi_file{.path = index_path, .fs = _fs};
+        std::shared_ptr<VectorIndexReader> reader;
+        ASSERT_OK(VectorIndexReaderFactory::create_from_file(&vi_file, index_meta, &reader, &stats, &cache,
+                                                             refine_distance));
+        auto init = reader->init_searcher(*index_meta, vi_file, &stats);
+        ASSERT_TRUE(init.ok()) << init.status();
+        EXPECT_EQ(VectorIndexReaderInitResult::kReady, init.value());
+        EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+        EXPECT_EQ(VectorIndexCacheProbeState::kReady, cache.ProbeForQuery(tenann::CacheKey(index_path)).state);
+    };
+
+    verify_sync_load(/*capacity=*/0, /*refine_distance=*/false);
+    verify_sync_load(/*capacity=*/64 * 1024 * 1024, /*refine_distance=*/true);
+}
+
 #endif // WITH_TENANN
 
 // ==================== Brute-force fallback tests ====================

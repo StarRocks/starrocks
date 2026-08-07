@@ -1257,9 +1257,9 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
     _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
     // create_from_file backfills vi_file->size on the cold path; init_searcher reuses it.
-    auto create_st = VectorIndexReaderFactory::create_from_file(vi_file, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, _opts.stats,
-                                                                StorageEnv::GetInstance()->vector_index_cache());
+    auto create_st = VectorIndexReaderFactory::create_from_file(
+            vi_file, _vector_index_ctx->index_meta, &_vector_index_ctx->ann_reader, _opts.stats,
+            StorageEnv::GetInstance()->vector_index_cache(), _vector_index_ctx->refine_distance);
     // .vi file not found — caller will set up brute-force fallback
     if (create_st.is_not_found()) {
         _vector_index_ctx->use_vector_index = false;

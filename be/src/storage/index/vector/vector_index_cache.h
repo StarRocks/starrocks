@@ -62,12 +62,10 @@ public:
 
     State state(std::memory_order order = std::memory_order_acquire) const { return _state.load(order); }
     void set_state(State state, std::memory_order order = std::memory_order_release) { _state.store(state, order); }
-
     bool has_ref() const { return _ref != nullptr; }
     tenann::IndexRef ref() const { return _ref; }
     void set_ref(tenann::IndexRef ref) { _ref = std::move(ref); }
     tenann::IndexRef take_ref() { return std::move(_ref); }
-    size_t memory_usage() const { return _ref ? _ref->EstimateMemoryUsage() : 0; }
 
 private:
     std::mutex _mu;
@@ -116,9 +114,12 @@ public:
     // Query-only APIs. ProbeForQuery never waits for loader I/O: it immediately
     // returns kLoading after observing the atomic state. TryGetOrSchedule
     // single-flights EMPTY -> LOADING and returns kLoading for both an accepted
-    // task and a duplicate request.
+    // task and a duplicate request. GetOrCreateForQuery continues a preceding
+    // ProbeForQuery miss without waiting or counting the same query twice.
     [[nodiscard]] VectorIndexCacheProbeResult ProbeForQuery(const tenann::CacheKey& key);
     [[nodiscard]] VectorIndexCacheProbeResult TryGetOrSchedule(const tenann::CacheKey& key, AsyncIndexLoader loader);
+    [[nodiscard]] VectorIndexCacheProbeResult GetOrCreateForQuery(const tenann::CacheKey& key,
+                                                                  const IndexLoader& loader);
 
     Status init_async_load_pool(int num_threads, int max_queue_size);
     void shutdown_async_load_pool();
@@ -134,15 +135,17 @@ public:
 
 private:
     friend class VectorIndexLoadTask;
+    class LoadingToken;
 
     tenann::IndexCacheHandle _wrap(Entry* entry, tenann::IndexRef ref);
     void _release_entry(Entry* entry, bool is_ivfpq_list_block = false) noexcept;
-    bool _finish_ready_and_release(Entry* entry, tenann::IndexRef loaded) noexcept;
-    void _finish_empty_and_release(Entry* entry) noexcept;
+    VectorIndexCacheProbeResult _get_or_create(const tenann::CacheKey& key, const IndexLoader& loader,
+                                               bool wait_for_loading, bool count_lookup);
+    tenann::IndexRef _publish_loaded(LoadingToken* token, tenann::IndexRef loaded, size_t bytes);
     void _update_metrics() const;
 
     Cache _cache;
-    VectorIndexCacheMetrics* _metrics = nullptr;
+    VectorIndexCacheMetrics& _metrics;
     std::atomic<int64_t> _last_clear_expired_ms{0};
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};

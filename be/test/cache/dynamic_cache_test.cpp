@@ -194,31 +194,4 @@ TEST(DynamicCacheTest, get_all_entries) {
     }
 }
 
-TEST(DynamicCacheTest, release_and_remove_if_unused_removes_on_last_external_release) {
-    DynamicCache<int32_t, int64_t> cache(100);
-    auto* first = cache.get_or_create(1);
-    auto* second = cache.get(1);
-    ASSERT_EQ(first, second);
-    ASSERT_EQ(3, first->get_ref()); // cache base ref + two external refs
-
-    EXPECT_FALSE(cache.release_and_remove_if_unused(first, [](const int64_t&) { return true; }));
-    EXPECT_EQ(2, second->get_ref());
-    EXPECT_EQ(1, cache.object_size());
-
-    EXPECT_TRUE(cache.release_and_remove_if_unused(second, [](const int64_t&) { return true; }));
-    EXPECT_EQ(0, cache.object_size());
-    EXPECT_EQ(nullptr, cache.get(1));
-}
-
-TEST(DynamicCacheTest, release_and_remove_if_unused_preserves_entry_when_predicate_is_false) {
-    DynamicCache<int32_t, int64_t> cache(100);
-    auto* entry = cache.get_or_create(1);
-    EXPECT_FALSE(cache.release_and_remove_if_unused(entry, [](const int64_t&) { return false; }));
-    EXPECT_EQ(1, cache.object_size());
-
-    entry = cache.get(1);
-    ASSERT_NE(nullptr, entry);
-    cache.release(entry);
-}
-
 } // namespace starrocks

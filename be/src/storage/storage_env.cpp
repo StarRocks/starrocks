@@ -142,7 +142,9 @@ Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker
     if (vi_capacity <= 0) {
         LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
                      << " bytes (raw=" << config::vector_query_cache_capacity
-                     << ", process_mem_limit=" << process_mem_limit << "); vector index cache disabled";
+                     << ", process_mem_limit=" << process_mem_limit
+                     << "); async vector index loading is disabled, but queries still load indexes synchronously. "
+                        "The cache capacity is a soft limit";
         vi_capacity = 0;
     }
     auto vector_index_cache =
