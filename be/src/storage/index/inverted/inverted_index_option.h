@@ -42,6 +42,8 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
 
 std::string get_parser_mode_string_from_properties(const std::map<std::string, std::string>& properties);
 
+StatusOr<std::string> get_tantivy_ngram_tokenizer_name(const std::map<std::string, std::string>& properties);
+
 int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties);
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);

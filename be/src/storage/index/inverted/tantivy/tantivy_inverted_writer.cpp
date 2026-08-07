@@ -53,6 +53,8 @@ Status TantivyInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
                 get_parser_mode_string_from_properties(tablet_index->index_properties()) == INVERTED_INDEX_PARSER_SMART
                         ? "ik_smart"
                         : "ik";
+    } else if (parser_str == INVERTED_INDEX_PARSER_NGRAM) {
+        ASSIGN_OR_RETURN(tokenizer, get_tantivy_ngram_tokenizer_name(tablet_index->index_properties()));
     } else if (parser_str == INVERTED_INDEX_PARSER_NONE) {
         tokenizer = "raw";
     } else {

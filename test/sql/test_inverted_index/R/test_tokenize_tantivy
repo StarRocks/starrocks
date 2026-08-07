@@ -31,6 +31,10 @@ SELECT cardinality(tokenize('ik', '中华人民共和国国歌'))
 -- result:
 1
 -- !result
+SELECT tokenize('ngram:2:3', 'Ab中');
+-- result:
+["ab","ab中","b中"]
+-- !result
 SET use_tantivy_tokenize = false;
 -- result:
 -- !result

@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.MAX_GRAM;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.MIN_GRAM;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER_MODE;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
@@ -84,9 +86,16 @@ public class InvertedIndexUtil {
      */
     public static String INVERTED_INDEX_PARSER_IK = "ik";
 
+    /**
+     * Unicode ngram segmentation backed by Tantivy's NgramTokenizer (tantivy only)
+     */
+    public static String INVERTED_INDEX_PARSER_NGRAM = "ngram";
+
     public static String INVERTED_INDEX_PARSER_MODE_KEY = PARSER_MODE.name().toLowerCase(Locale.ROOT);
     public static String INVERTED_INDEX_PARSER_MAX_WORD = "ik_max_word";
     public static String INVERTED_INDEX_PARSER_SMART = "ik_smart";
+    public static String INVERTED_INDEX_MIN_GRAM_KEY = MIN_GRAM.name().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_MAX_GRAM_KEY = MAX_GRAM.name().toLowerCase(Locale.ROOT);
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
 
@@ -144,6 +153,7 @@ public class InvertedIndexUtil {
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexParserMode(properties);
+        checkTantivyNgram(properties);
         checkInvertedIndexNgram(properties);
 
         // add default properties
@@ -177,11 +187,12 @@ public class InvertedIndexUtil {
             boolean isJieba = parser.equals(INVERTED_INDEX_PARSER_JIEBA);
             boolean isCjk = parser.equals(INVERTED_INDEX_PARSER_CJK);
             boolean isIk = parser.equals(INVERTED_INDEX_PARSER_IK);
-            if (!isCommonParser && !isJieba && !isCjk && !isIk) {
+            boolean isNgram = parser.equals(INVERTED_INDEX_PARSER_NGRAM);
+            if (!isCommonParser && !isJieba && !isCjk && !isIk && !isNgram) {
                 throw new SemanticException("INVERTED index parser: " + parser
                         + " is invalid for column: " + indexColName + " of type " + colType);
             }
-            if (isJieba || isCjk || isIk) {
+            if (isJieba || isCjk || isIk || isNgram) {
                 String impValue = properties == null ? null : properties.get(INVERTED_INDEX_IMP_LIB_KEY);
                 boolean isTantivy = TANTIVY.name().equalsIgnoreCase(impValue);
                 if (!isTantivy) {
@@ -195,6 +206,40 @@ public class InvertedIndexUtil {
         } else if (!parser.equals(INVERTED_INDEX_PARSER_NONE)) {
             throw new SemanticException("INVERTED index with parser: " + parser
                     + " is not supported for column: " + indexColName + " of type " + colType);
+        }
+    }
+
+    public static void checkTantivyNgram(Map<String, String> properties) {
+        String parser = getInvertedIndexParser(properties);
+        String minGramValue = properties == null ? null : properties.get(INVERTED_INDEX_MIN_GRAM_KEY);
+        String maxGramValue = properties == null ? null : properties.get(INVERTED_INDEX_MAX_GRAM_KEY);
+        if (!INVERTED_INDEX_PARSER_NGRAM.equals(parser)) {
+            if (minGramValue != null || maxGramValue != null) {
+                throw new SemanticException("min_gram and max_gram are only supported for parser 'ngram'");
+            }
+            return;
+        }
+
+        if (minGramValue == null || maxGramValue == null) {
+            throw new SemanticException("parser 'ngram' requires both min_gram and max_gram");
+        }
+
+        int minGram = parsePositiveNgramValue(INVERTED_INDEX_MIN_GRAM_KEY, minGramValue);
+        int maxGram = parsePositiveNgramValue(INVERTED_INDEX_MAX_GRAM_KEY, maxGramValue);
+        if (minGram > maxGram) {
+            throw new SemanticException("min_gram must not be greater than max_gram");
+        }
+    }
+
+    private static int parsePositiveNgramValue(String key, String value) {
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed <= 0) {
+                throw new SemanticException(key + " must be greater than zero");
+            }
+            return parsed;
+        } catch (NumberFormatException e) {
+            throw new SemanticException(key + " must be a positive integer");
         }
     }
 

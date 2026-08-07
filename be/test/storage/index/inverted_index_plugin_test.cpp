@@ -89,6 +89,8 @@ TEST(InvertedIndexPluginTest, option_test) {
         ASSERT_EQ(INVERTED_INDEX_PARSER_JIEBA,
                   inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_JIEBA));
         ASSERT_EQ(INVERTED_INDEX_PARSER_IK, inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_IK));
+        ASSERT_EQ(INVERTED_INDEX_PARSER_NGRAM,
+                  inverted_index_parser_type_to_string(InvertedIndexParserType::PARSER_NGRAM));
         ASSERT_EQ(INVERTED_INDEX_PARSER_UNKNOWN,
                   inverted_index_parser_type_to_string(static_cast<InvertedIndexParserType>(-1)));
 
@@ -104,7 +106,23 @@ TEST(InvertedIndexPluginTest, option_test) {
                   get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_JIEBA));
         ASSERT_EQ(InvertedIndexParserType::PARSER_IK,
                   get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_IK));
+        ASSERT_EQ(InvertedIndexParserType::PARSER_NGRAM,
+                  get_inverted_index_parser_type_from_string(INVERTED_INDEX_PARSER_NGRAM));
         ASSERT_EQ(InvertedIndexParserType::PARSER_UNKNOWN, get_inverted_index_parser_type_from_string("unknown"));
+    }
+
+    // Test Tantivy ngram tokenizer property encoding and validation.
+    {
+        std::map<std::string, std::string> props = {
+                {INVERTED_INDEX_MIN_GRAM_KEY, "2"},
+                {INVERTED_INDEX_MAX_GRAM_KEY, "3"},
+        };
+        ASSERT_EQ("ngram:2:3", get_tantivy_ngram_tokenizer_name(props).value());
+
+        props[INVERTED_INDEX_MIN_GRAM_KEY] = "4";
+        ASSERT_FALSE(get_tantivy_ngram_tokenizer_name(props).ok());
+        props.erase(INVERTED_INDEX_MAX_GRAM_KEY);
+        ASSERT_FALSE(get_tantivy_ngram_tokenizer_name(props).ok());
     }
 
     // Test IK parser mode and its fine-grained default.

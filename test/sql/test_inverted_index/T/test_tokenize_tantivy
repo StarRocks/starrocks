@@ -8,6 +8,7 @@ SELECT array_contains(tokenize('ik', '中华人民共和国国歌'), '中华');
 SELECT array_contains(tokenize('ik_smart', '中华人民共和国国歌'), '中华');
 SELECT cardinality(tokenize('ik', '中华人民共和国国歌'))
     > cardinality(tokenize('ik_smart', '中华人民共和国国歌'));
+SELECT tokenize('ngram:2:3', 'Ab中');
 
 SET use_tantivy_tokenize = false;
 SELECT tokenize('english', 'Hello World');

@@ -14,7 +14,7 @@
 
 use crate::safe::tokenizer::{
     build, tokenize, TOKENIZER_CJK, TOKENIZER_ENGLISH, TOKENIZER_IK, TOKENIZER_IK_SMART,
-    TOKENIZER_JIEBA, TOKENIZER_RAW,
+    TOKENIZER_JIEBA, TOKENIZER_NGRAM, TOKENIZER_RAW,
 };
 
 #[test]
@@ -39,6 +39,11 @@ fn ik_modes_build() {
 }
 
 #[test]
+fn ngram_builds_with_explicit_range() {
+    assert!(build(&format!("{TOKENIZER_NGRAM}:2:3")).is_ok());
+}
+
+#[test]
 fn raw_builds() {
     assert!(build(TOKENIZER_RAW).is_ok());
 }
@@ -51,6 +56,23 @@ fn unsupported_rejected() {
             let msg = e.to_string();
             assert!(msg.contains("unsupported tokenizer"), "got: {msg}");
         }
+    }
+}
+
+#[test]
+fn invalid_ngram_config_rejected() {
+    for name in [
+        "ngram",
+        "ngram:0:2",
+        "ngram:3:2",
+        "ngram:two:3",
+        "ngram:2:3:4",
+    ] {
+        let err = match build(name) {
+            Ok(_) => panic!("expected invalid ngram tokenizer '{name}' to fail"),
+            Err(err) => err,
+        };
+        assert!(err.to_string().contains("ngram"), "got: {err}");
     }
 }
 
@@ -71,6 +93,22 @@ fn raw_no_split() {
     assert_eq!(tokens, vec!["hello world"]);
 }
 
+#[test]
+fn ngram_tokenize_unicode_and_lowercase() {
+    let tokens = tokenize("ngram:2:3", "Ab中").unwrap();
+    assert_eq!(tokens, vec!["ab", "ab中", "b中"]);
+}
+
+#[test]
+fn ngram_tokenize_all_inner_grams() {
+    let tokens = tokenize("ngram:2:3", "hello").unwrap();
+    assert_eq!(tokens, vec!["he", "hel", "el", "ell", "ll", "llo", "lo"]);
+}
+
+// Contract: english_analyzer uses SimpleTokenizer + RemoveLongFilter + LowerCaser
+// + StopWordFilter(English). See `english_analyzer()` in safe/tokenizer/mod.rs.
+// Key behavior: (1) English stopwords like "the" ARE removed; (2) no Porter
+// stemming — inflected forms are kept as-is (e.g. "foxes" stays "foxes").
 #[test]
 fn english_tokenize() {
     let tokens = tokenize(TOKENIZER_ENGLISH, "The Quick Brown Fox").unwrap();

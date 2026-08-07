@@ -212,6 +212,72 @@ public class InvertedIndexUtilTantivyTest extends PlanTestBase {
     }
 
     @Test
+    public void ngramParserWithValidRangePasses() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ngram");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MIN_GRAM_KEY, "2");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MAX_GRAM_KEY, "3");
+        Assertions.assertDoesNotThrow(
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void ngramParserRequiresBothBounds() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ngram");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MIN_GRAM_KEY, "2");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("both min_gram and max_gram"), ex.getMessage());
+    }
+
+    @Test
+    public void ngramParserRejectsInvalidBounds() {
+        Column col = new Column("txt", Type.STRING, true);
+        for (String[] bounds : new String[][] {
+                {"0", "2"},
+                {"3", "2"},
+                {"two", "3"},
+                {"2", "999999999999999999999"},
+        }) {
+            Map<String, String> props = tantivyProps();
+            props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ngram");
+            props.put(InvertedIndexUtil.INVERTED_INDEX_MIN_GRAM_KEY, bounds[0]);
+            props.put(InvertedIndexUtil.INVERTED_INDEX_MAX_GRAM_KEY, bounds[1]);
+            Assertions.assertThrows(SemanticException.class,
+                    () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS),
+                    "bounds should be rejected: " + bounds[0] + ", " + bounds[1]);
+        }
+    }
+
+    @Test
+    public void ngramParserOnBuiltinIsRejected() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = new HashMap<>();
+        props.put(impLibKey(), InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "ngram");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MIN_GRAM_KEY, "2");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MAX_GRAM_KEY, "3");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("tantivy"), ex.getMessage());
+    }
+
+    @Test
+    public void ngramBoundsOnOtherParserAreRejected() {
+        Column col = new Column("txt", Type.STRING, true);
+        Map<String, String> props = tantivyProps();
+        props.put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "jieba");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MIN_GRAM_KEY, "2");
+        props.put(InvertedIndexUtil.INVERTED_INDEX_MAX_GRAM_KEY, "3");
+        SemanticException ex = Assertions.assertThrows(SemanticException.class,
+                () -> InvertedIndexUtil.checkInvertedIndexValid(col, props, KeysType.DUP_KEYS));
+        Assertions.assertTrue(ex.getMessage().contains("only supported"), ex.getMessage());
+    }
+
+    @Test
     public void supportPhraseDefaultFilled_forTantivy() {
         Column col = new Column("txt", Type.STRING, true);
         Map<String, String> props = tantivyProps();

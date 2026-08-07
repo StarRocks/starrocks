@@ -74,6 +74,8 @@ TEST_F(GinFunctionsTest, TantivyTokenizers) {
     ASSERT_NE(std::find(ik_index.begin(), ik_index.end(), "中华"), ik_index.end());
     ASSERT_EQ(std::find(ik_search.begin(), ik_search.end(), "中华"), ik_search.end());
     ASSERT_LT(ik_search.size(), ik_index.size());
+
+    ASSERT_EQ((std::vector<std::string>{"ab", "ab中", "b中"}), tokenize("ngram:2:3", "Ab中", true).value());
 }
 
 TEST_F(GinFunctionsTest, CLuceneTokenizers) {
@@ -86,6 +88,7 @@ TEST_F(GinFunctionsTest, RejectsEngineSpecificUnsupportedTokenizer) {
     ASSERT_TRUE(tokenize("standard", "hello", true).status().is_not_supported());
     ASSERT_TRUE(tokenize("jieba", "中华人民共和国", false).status().is_not_supported());
     ASSERT_TRUE(tokenize("ik", "中华人民共和国", false).status().is_not_supported());
+    ASSERT_TRUE(tokenize("ngram:2:3", "hello", false).status().is_not_supported());
 }
 
 } // namespace starrocks
