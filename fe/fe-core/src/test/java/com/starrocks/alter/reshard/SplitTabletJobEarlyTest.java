@@ -405,7 +405,11 @@ public class SplitTabletJobEarlyTest {
 
     @Test
     public void anUnavailableWarehouseFallsBackToTheNormalRule() throws Exception {
-        setTabletDataSizes(3L << 30, 100L << 30);
+        // Separate indexes for the same reason the non-positive-minimum test needs them: in one index
+        // the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet is reached, so the
+        // assertion would read 10 for any node count and could not tell a resolved 0 from a count the
+        // constructor never resolved at all.
+        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
         new MockUp<TabletReshardUtils>() {
             @Mock
             public static int safeComputeNodeCountForTable(long tableId) {
