@@ -121,28 +121,36 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         boolean early = policy.appliesTo(tabletCount);
         int headroom = early ? Math.max(0, policy.ceiling() - tabletCount) : 0;
 
-        List<Tablet> tablets = index.getTablets();
+        // Snapshot id+size together, unconditionally. LakeTablet.dataSize is volatile and updated
+        // lock-free by the background tablet-stat collector, so re-reading it (once to sort, again to
+        // size the split) risks a value that changes between the two reads, and sorting on a live
+        // reference risks ArrayList.sort seeing an inconsistent comparator mid-sort. The snapshot also
+        // keeps "never sort the live list" true unconditionally, not only while the early rule fires.
+        record SizedTablet(long id, long dataSize) {
+        }
+        List<SizedTablet> tablets = new ArrayList<>(index.getTablets().size());
+        for (Tablet tablet : index.getTablets()) {
+            tablets.add(new SizedTablet(tablet.getId(), tablet.getDataSize(true)));
+        }
         if (early) {
             // getTablets() returns the live range-ordered list that merge grouping and index
-            // reconstruction depend on — sort a copy, stably, so equal sizes keep range order.
-            tablets = new ArrayList<>(tablets);
-            tablets.sort(Comparator.comparingLong((Tablet t) -> t.getDataSize(true)).reversed());
+            // reconstruction depend on — sort the snapshot, stably, so equal sizes keep range order.
+            tablets.sort(Comparator.comparingLong(SizedTablet::dataSize).reversed());
         }
 
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
-        for (Tablet tablet : tablets) {
-            long dataSize = tablet.getDataSize(true);
-            int kNormal = TabletReshardUtils.calcSplitCount(dataSize, clauseTargetSize);
+        for (SizedTablet tablet : tablets) {
+            int kNormal = TabletReshardUtils.calcSplitCount(tablet.dataSize(), clauseTargetSize);
             int kEarly = 1;
             if (early && headroom > 0) {
-                kEarly = Math.min(TabletReshardUtils.calcSplitCount(dataSize, policy.earlyTarget()),
+                kEarly = Math.min(TabletReshardUtils.calcSplitCount(tablet.dataSize(), policy.earlyTarget()),
                         headroom + 1);
             }
             int k = kNormal > 1 ? kNormal : kEarly;
             if (k <= 1) {
                 continue;
             }
-            splitCounts.put(tablet.getId(), k);
+            splitCounts.put(tablet.id(), k);
             if (early) {
                 headroom = Math.max(0, headroom - (k - 1));
             }

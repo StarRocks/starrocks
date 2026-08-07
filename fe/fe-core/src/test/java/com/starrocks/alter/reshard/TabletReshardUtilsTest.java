@@ -21,13 +21,18 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -284,6 +289,40 @@ public class TabletReshardUtilsTest {
         assertEquals(8, TabletReshardUtils.earlySplitCeiling(16, 8));   // capped by max_split_count
         assertEquals(1, TabletReshardUtils.earlySplitCeiling(1, 1024)); // a single node never splits
         assertEquals(1, TabletReshardUtils.earlySplitCeiling(8, 1));    // splitting disabled
+    }
+
+    @Test
+    public void computeNodeCount_countsBackendsAndComputeNodesInTheWorkerGroup() {
+        Backend beInGroup = new Backend(1L, "h1", 9050);
+        beInGroup.setWorkerGroupId(7L);
+        beInGroup.setAlive(false);                       // liveness must NOT be filtered
+        ComputeNode cnInGroup = new ComputeNode(2L, "h2", 9050);
+        cnInGroup.setWorkerGroupId(7L);
+        ComputeNode cnOtherGroup = new ComputeNode(3L, "h3", 9050);
+        cnOtherGroup.setWorkerGroupId(9L);
+
+        SystemInfoService clusterInfo = new SystemInfoService();
+        clusterInfo.addBackend(beInGroup);
+        clusterInfo.addComputeNode(cnInGroup);
+        clusterInfo.addComputeNode(cnOtherGroup);
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
+                return clusterInfo;
+            }
+        };
+
+        // Pin the worker group directly: WarehouseComputeResource resolves it through warehouse state,
+        // which this test does not establish.
+        ComputeResource resource = Mockito.mock(ComputeResource.class);
+        Mockito.when(resource.getWorkerGroupId()).thenReturn(7L);
+        assertEquals(2, TabletReshardUtils.computeNodeCount(resource));
+
+        Mockito.when(resource.getWorkerGroupId()).thenReturn(9L);
+        assertEquals(1, TabletReshardUtils.computeNodeCount(resource));
+
+        Mockito.when(resource.getWorkerGroupId()).thenReturn(11L);
+        assertEquals(1, TabletReshardUtils.computeNodeCount(resource), "empty group floors at 1");
     }
 
     @Test

@@ -421,6 +421,17 @@ public class WarehouseManagerTest {
     }
 
     @Test
+    public void testGetBackgroundComputeResourceWithoutProbeSkipsAvailabilityCheck() {
+        WarehouseManager mgr = new WarehouseManager();
+        mgr.initDefaultWarehouse();
+        // acquireComputeResource() would probe StarMgr and throw when no worker is available; the
+        // probe-free accessor must return a resource regardless, because it is a sizing hint only.
+        ComputeResource resource = mgr.getBackgroundComputeResourceWithoutProbe(1L);
+        Assertions.assertNotNull(resource);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, resource.getWarehouseId());
+    }
+
+    @Test
     public void testBackgroundWarehouse() {
         new MockUp<WarehouseComputeResourceProvider>() {
             @Mock
