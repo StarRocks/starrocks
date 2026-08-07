@@ -4988,6 +4988,9 @@ public class Config extends ConfigBase {
             "Default false for security. Set true to allow internal service calls.")
     public static boolean http_request_allow_private_in_allowlist = false;
 
-    @ConfField(mutable = true, comment = "number of dictified columns shown in explain verbose for each scan op")
+    @ConfField(mutable = true, comment = "The maximum number of low-cardinality dictionary-optimized columns listed " +
+            "in the dict_col field of each scan node in EXPLAIN VERBOSE output. When a scan node has more applied " +
+            "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
+            "or equal to 0 are treated as 0, which truncates the list entirely.")
     public static int explain_dict_column_size = 5;
 }
