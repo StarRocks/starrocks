@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -92,6 +93,12 @@ public class SimpleExecutor {
             AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
                     name, DebugUtil.printId(context.getQueryId()), type.name(), SqlCredentialRedactor.redact(sql));
             executor.execute();
+            if (context.getState().isError()) {
+                // StmtExecutor.execute() does not rethrow the failure of the statement, it only records
+                // the error in the ConnectContext state. Surface it here, otherwise the caller takes a
+                // failed statement for a successful one and may discard the data it wanted to persist.
+                throw new StarRocksException(context.getState().getErrorMessage());
+            }
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", SqlCredentialRedactor.redact(sql), e.getMessage(), e);
             throw new SemanticException(String.format(name + " execute sql failed: %s", e.getMessage()), e);
