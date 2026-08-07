@@ -97,6 +97,7 @@ PROPERTIES (property [,property]);
 | histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
 | histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
 | histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
+| histogram_stats_scope          | STRING   | both               | The scope of statistics to collect for a histogram: `mcv` (only most common values), `buckets` (only equi-height buckets), or `both` (both MCVs and buckets). |
 
 The number of rows to collect for a histogram is controlled by multiple parameters. It is the larger value between `statistic_sample_collect_rows` and table row count * `histogram_sample_ratio`. The number cannot exceed the value specified by `histogram_max_sample_row_count`. If the value is exceeded, `histogram_max_sample_row_count` takes precedence.
 
@@ -111,6 +112,12 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1,v2 WITH 32 BUCKETS
 PROPERTIES(
    "histogram_mcv_size" = "32",
    "histogram_sample_ratio" = "0.5"
+);
+
+-- Manually collect only MCVs on v1, skipping bucket collection.
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1
+PROPERTIES(
+   "histogram_stats_scope" = "mcv"
 );
 ```
 

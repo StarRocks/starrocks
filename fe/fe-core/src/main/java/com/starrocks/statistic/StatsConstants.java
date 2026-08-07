@@ -104,6 +104,11 @@ public class StatsConstants {
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
+    public static final String HISTOGRAM_STATS_SCOPE = "histogram_stats_scope";
+    public static final String HISTOGRAM_STATS_SCOPE_MCV = "mcv";
+    public static final String HISTOGRAM_STATS_SCOPE_BUCKETS = "buckets";
+    public static final String HISTOGRAM_STATS_SCOPE_BOTH = "both";
+
     public static final String HISTOGRAM_COLLECT_BUCKET_NDV_MODE = "histogram_collect_bucket_ndv_mode";
 
     // SQL plan manager table
