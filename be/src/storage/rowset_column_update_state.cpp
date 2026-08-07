@@ -311,11 +311,15 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
     return Status::OK();
 }
 
-int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(int64_t total_update_row_size, int64_t num_rows_upt) {
     // `num_rows_upt` could be zero after upgrade from old version,
     // then we will return zero and no limit.
-    if ((rowset->num_rows_upt()) <= 0) return 0;
-    return rowset->total_update_row_size() / rowset->num_rows_upt();
+    if (num_rows_upt <= 0) return 0;
+    return total_update_row_size / num_rows_upt;
+}
+
+int64_t RowsetColumnUpdateState::calc_upt_memory_usage_per_row(Rowset* rowset) {
+    return calc_upt_memory_usage_per_row(rowset->total_update_row_size(), rowset->num_rows_upt());
 }
 
 // Read chunk from source segment file and call `update_func` to update it.

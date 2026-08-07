@@ -161,20 +161,16 @@ public:
     // release(unuse) an object get/get_or_create'ed earlier
     void release(Entry* entry) {
         std::lock_guard<Lock> lg(_lock);
-        // CHECK _ref > 1
-        entry->_ref--;
-        if (entry->_ref > 0) {
-            _list.splice(_list.end(), _list, entry->_handle);
-        } else {
-            LOG(ERROR) << "release() got error: cache entry ref == 0 " << entry->_value << " delete";
-            DCHECK(false);
-            _map.erase(entry->key());
-            _list.erase(entry->_handle);
-            _object_size--;
-            _size -= entry->_size;
-            _tracker_release(entry->_size);
-            delete entry;
-        }
+        _release(entry);
+    }
+
+    // Atomically refresh an entry's expiration deadline while releasing the
+    // caller's pin. This avoids racing clear_expired() with an unlocked update
+    // to Entry::_expire_ms.
+    void release_with_expire_time(Entry* entry, int64_t expire_ms) {
+        std::lock_guard<Lock> lg(_lock);
+        entry->_expire_ms = expire_ms;
+        _release(entry);
     }
 
     // remove an object get/get_or_create'ed earlier
@@ -268,10 +264,9 @@ public:
     }
 
     // clear all unused *and* expired objects
-    void clear_expired() {
+    void clear_expired(int64_t now = MonotonicMillis()) {
         std::vector<Entry*> entry_list;
         {
-            int64_t now = MonotonicMillis();
             std::lock_guard<Lock> lg(_lock);
             auto itr = _list.begin();
             while (itr != _list.end()) {
@@ -391,6 +386,24 @@ public:
     }
 
 private:
+    // release(unuse) an object get/get_or_create'ed earlier. Caller holds _lock.
+    void _release(Entry* entry) {
+        // CHECK _ref > 1
+        entry->_ref--;
+        if (entry->_ref > 0) {
+            _list.splice(_list.end(), _list, entry->_handle);
+        } else {
+            LOG(ERROR) << "release() got error: cache entry ref == 0 " << entry->_value << " delete";
+            DCHECK(false);
+            _map.erase(entry->key());
+            _list.erase(entry->_handle);
+            _object_size--;
+            _size -= entry->_size;
+            _tracker_release(entry->_size);
+            delete entry;
+        }
+    }
+
     bool _evict(size_t target_capacity, std::vector<Entry*>* entry_list) {
         auto itr = _list.begin();
         while (_size > target_capacity && itr != _list.end()) {

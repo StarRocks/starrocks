@@ -350,6 +350,7 @@
       "path": "be/src/common/config_vector_index_fwd.h",
       "configs": [
         "vector_query_cache_capacity",
+        "vector_index_cache_expire_sec",
         "enable_vector_index_block_cache",
         "enable_vector_index_cache_on_build",
         "config_vector_index_build_concurrency",

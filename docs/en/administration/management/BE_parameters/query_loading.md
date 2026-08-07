@@ -736,6 +736,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether building a vector index also inserts the index it just built into the vector index cache sized by `vector_query_cache_capacity`. Disabled by default, because the cache is sized for the query working set: letting loads and compactions push freshly built indexes into it evicts entries that running queries depend on, in exchange for warming indexes that may never be queried. The query path still populates the cache on demand the first time an index is read. Enable this only when index build and queries run on the same node and newly built data is queried immediately, to save that first read-back of the index file. A change takes effect for index builds started after it.
 - Introduced in: v4.2.0
 
+### vector_index_cache_expire_sec
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Idle time before an unused vector index cache entry expires. The timer starts when the last cache handle is released, and a cache hit refreshes it when that handle is later released. Entries pinned by running queries are not removed. IVF-PQ list blocks are released together with their owning index entry and do not have independent TTLs. Values less than or equal to `0` disable expiration. A runtime change applies to subsequent handle releases and does not rewrite existing entry deadlines.
+- Introduced in: v4.2.0
+
 ### vector_adaptive_ef_alpha
 
 - Default: 1.0

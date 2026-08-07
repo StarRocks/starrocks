@@ -27,6 +27,8 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "base/time/time.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "fs/fs_memory.h"
 #include "runtime/current_thread.h"
@@ -37,6 +39,7 @@
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/index/vector/vector_index_file_reader.h"
+#include "storage_primitive/storage_stats.h"
 #include "tenann/common/error.h"
 #include "tenann/index/index.h"
 #include "tenann/index/index_cache.h"
@@ -47,10 +50,10 @@ namespace starrocks {
 namespace {
 constexpr size_t kDummyBytes = 1024;
 
-tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes) {
+tenann::IndexRef make_dummy_ref(size_t bytes = kDummyBytes, tenann::IndexType type = tenann::IndexType::kFaissHnsw) {
     void* buf = std::malloc(bytes);
     return std::make_shared<tenann::Index>(
-            buf, tenann::IndexType::kFaissIvfPqOneInvertedList, [](void* v) { std::free(v); },
+            buf, type, [](void* v) { std::free(v); },
             /*explicit_bytes=*/bytes);
 }
 
@@ -64,18 +67,35 @@ tenann::IndexMeta make_minimal_meta() {
     meta.SetIndexType(tenann::IndexType::kFaissHnsw);
     return meta;
 }
+
+// FileInfo holds its FileSystem by shared_ptr; these tests keep the FS on the stack,
+// so hand out a non-owning alias instead of transferring ownership.
+std::shared_ptr<FileSystem> borrowed_fs(FileSystem* fs) {
+    return std::shared_ptr<FileSystem>(fs, [](FileSystem*) {});
+}
+
+FileInfo local_vi(std::string path) {
+    return FileInfo{.path = std::move(path)};
+}
+
+FileInfo remote_vi(std::string path, FileSystem* fs) {
+    return FileInfo{.path = std::move(path), .fs = borrowed_fs(fs)};
+}
 } // namespace
 
 class VectorIndexCacheTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        saved_expire_seconds_ = config::vector_index_cache_expire_sec;
         tracker_ = std::make_unique<MemTracker>(-1, "vector_index_test");
         cache_ = std::make_unique<VectorIndexCache>(/*capacity=*/16 * 1024, tracker_.get());
     }
     void TearDown() override {
         cache_.reset();
         tracker_.reset();
+        config::vector_index_cache_expire_sec = saved_expire_seconds_;
     }
+    int32_t saved_expire_seconds_ = 0;
     std::unique_ptr<MemTracker> tracker_;
     std::unique_ptr<VectorIndexCache> cache_;
 };
@@ -315,6 +335,131 @@ TEST_F(VectorIndexCacheTest, SetCapacity_Shrink_EvictsImmediately) {
     EXPECT_FALSE(c->Lookup(tenann::CacheKey("/s2.vi"), &probe));
 }
 
+TEST_F(VectorIndexCacheTest, TTL_StartsAfterLastHandleRelease) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/ttl.vi"), make_dummy_ref(), &handle);
+
+    // A pinned entry survives a sweep.
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(base_time));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    handle = tenann::IndexCacheHandle{};
+    const int64_t released_at = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(released_at + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_FALSE(cache_->clear_expired(released_at + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_TRUE(cache_->clear_expired(released_at + 14 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_CacheHitRefreshesOnHandleRelease) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle inserted;
+    cache_->Insert(tenann::CacheKey("/refresh.vi"), make_dummy_ref(), &inserted);
+    inserted = tenann::IndexCacheHandle{};
+
+    tenann::IndexCacheHandle hit;
+    ASSERT_TRUE(cache_->Lookup(tenann::CacheKey("/refresh.vi"), &hit));
+    config::vector_index_cache_expire_sec = 900;
+    hit = tenann::IndexCacheHandle{};
+
+    // The hit is released under the 900-second TTL. Lowering the runtime
+    // setting afterward must not shorten this entry's existing deadline.
+    config::vector_index_cache_expire_sec = 10;
+    const int64_t base_time = MonotonicMillis();
+    EXPECT_TRUE(cache_->clear_expired(base_time + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    EXPECT_TRUE(cache_->clear_expired(base_time + 901 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_ConsecutiveSweepsHonorDeadline) {
+    config::vector_index_cache_expire_sec = 10;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/consecutive-sweeps.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+    const int64_t base_time = MonotonicMillis();
+
+    EXPECT_TRUE(cache_->clear_expired(base_time + 9 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_FALSE(cache_->clear_expired(base_time + 11 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+    EXPECT_TRUE(cache_->clear_expired(base_time + 14 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_DisabledKeepsUnusedEntries) {
+    config::vector_index_cache_expire_sec = 0;
+
+    tenann::IndexCacheHandle handle;
+    cache_->Insert(tenann::CacheKey("/no-ttl.vi"), make_dummy_ref(), &handle);
+    handle = tenann::IndexCacheHandle{};
+
+    EXPECT_FALSE(cache_->clear_expired(MonotonicMillis() + 24 * 60 * 60 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+}
+
+TEST_F(VectorIndexCacheTest, TTL_RuntimeUpdateOnlyAffectsFutureReleases) {
+    config::vector_index_cache_expire_sec = 900;
+
+    tenann::IndexCacheHandle old_ttl_handle;
+    const tenann::CacheKey old_ttl_key("/old-ttl.vi");
+    cache_->Insert(old_ttl_key, make_dummy_ref(), &old_ttl_handle);
+    old_ttl_handle = tenann::IndexCacheHandle{};
+
+    config::vector_index_cache_expire_sec = 10;
+    tenann::IndexCacheHandle new_ttl_handle;
+    const tenann::CacheKey new_ttl_key("/new-ttl.vi");
+    cache_->Insert(new_ttl_key, make_dummy_ref(), &new_ttl_handle);
+    new_ttl_handle = tenann::IndexCacheHandle{};
+
+    EXPECT_TRUE(cache_->clear_expired(MonotonicMillis() + 14 * 1000L));
+    EXPECT_EQ(kDummyBytes, cache_->memory_usage());
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_TRUE(cache_->Lookup(old_ttl_key, &probe));
+    probe = tenann::IndexCacheHandle{};
+    EXPECT_FALSE(cache_->Lookup(new_ttl_key, &probe));
+}
+
+TEST_F(VectorIndexCacheTest, TTL_IVFPQExpiresOuterEntryAndAllListBlocksTogether) {
+    config::vector_index_cache_expire_sec = 900;
+
+    tenann::IndexCacheHandle list_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi#list-0"),
+                   make_dummy_ref(kDummyBytes, tenann::IndexType::kFaissIvfPqOneInvertedList), &list_handle);
+
+    struct IvfPqPayload {
+        tenann::IndexCacheHandle list_handle;
+        std::vector<char> bytes;
+    };
+    auto* payload = new IvfPqPayload{std::move(list_handle), std::vector<char>(2048)};
+    auto outer_ref = std::make_shared<tenann::Index>(
+            payload, tenann::IndexType::kFaissIvfPq, [](void* p) { delete static_cast<IvfPqPayload*>(p); },
+            /*explicit_bytes=*/2048);
+
+    tenann::IndexCacheHandle outer_handle;
+    cache_->Insert(tenann::CacheKey("/ivfpq.vi"), outer_ref, &outer_handle);
+    outer_ref.reset();
+    outer_handle = tenann::IndexCacheHandle{};
+
+    EXPECT_TRUE(cache_->clear_expired(MonotonicMillis() + 901 * 1000L));
+    EXPECT_EQ(0, cache_->memory_usage());
+
+    tenann::IndexCacheHandle probe;
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi"), &probe));
+    EXPECT_FALSE(cache_->Lookup(tenann::CacheKey("/ivfpq.vi#list-0"), &probe));
+}
+
 TEST_F(VectorIndexCacheTest, MemTracker_Consume_AfterInsert) {
     int64_t before = tracker_->consumption();
     tenann::IndexCacheHandle h;
@@ -374,7 +519,8 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // Seed an "inner" entry plus a pinning handle that the outer ref will
     // hold and release on destruction — the BlockCacheInvertedLists pattern.
     tenann::IndexCacheHandle inner;
-    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024), &inner);
+    c->Insert(tenann::CacheKey("/inner.vi"), make_dummy_ref(1024, tenann::IndexType::kFaissIvfPqOneInvertedList),
+              &inner);
 
     // Outer Index whose deleter consumes the inner handle. Moving the handle
     // into the deleter lambda is the same shape as faiss owning a
@@ -397,8 +543,7 @@ TEST_F(VectorIndexCacheTest, ShutdownAndShrink_WithSelfReferentialEntry_NoDeadlo
     // which must not deadlock when the chained release runs.
     c->SetCapacity(0);
 
-    // Shutdown safety: destructing the cache must drain the remaining inner
-    // entry without re-locking _cache._lock.
+    // Shutdown safety remains covered after the cascading list-handle release.
     c.reset();
 }
 
@@ -450,21 +595,21 @@ TEST(VectorIndexFileReaderTest, OpenSucceedsOnMemoryFs) {
     MemoryFileSystem fs;
     ASSERT_OK(fs.create_dir("/tmp"));
     ASSERT_OK(fs.append_file("/tmp/idx.vi", Slice("abcd", 4)));
-    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(&fs, "/tmp/idx.vi"));
+    ASSIGN_OR_ABORT(auto reader, VectorIndexFileReader::open(remote_vi("/tmp/idx.vi", &fs)));
     ASSERT_NE(nullptr, reader);
     EXPECT_EQ(4, reader->GetSize());
 }
 
 TEST(VectorIndexFileReaderTest, OpenFailsOnMissingFile) {
     MemoryFileSystem fs;
-    auto r = VectorIndexFileReader::open(&fs, "/no/such/path.vi");
+    auto r = VectorIndexFileReader::open(remote_vi("/no/such/path.vi", &fs));
     EXPECT_FALSE(r.ok());
 }
 
 TEST(EmptyIndexReaderTest, AllMethodsReturnNotSupported) {
     EmptyIndexReader r;
     tenann::IndexMeta meta;
-    EXPECT_TRUE(r.init_searcher(meta, "/x.vi", /*fs=*/nullptr).is_not_supported());
+    EXPECT_TRUE(r.init_searcher(meta, local_vi("/x.vi")).is_not_supported());
     EXPECT_TRUE(r.search(tenann::PrimitiveSeqView{}, /*k=*/1, nullptr, nullptr).is_not_supported());
     std::vector<int64_t> ids;
     std::vector<float> dists;
@@ -477,7 +622,7 @@ TEST(TenANNReaderTest, InitSearcher_NoGlobalCache_ReturnsInternalError) {
     tenann::SetGlobalIndexCache(nullptr);
     TenANNReader r;
     tenann::IndexMeta meta;
-    auto st = r.init_searcher(meta, "/x.vi", /*fs=*/nullptr);
+    auto st = r.init_searcher(meta, local_vi("/x.vi"));
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
     tenann::SetGlobalIndexCache(saved);
 }
@@ -495,8 +640,14 @@ TEST(TenANNReaderTest, InitSearcher_FileNotFoundViaFs_PropagatesNotFound) {
     MemoryFileSystem fs;
     TenANNReader r;
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/no/such/index.vi", &fs);
+    OlapReaderStatistics stats;
+    auto st = r.init_searcher(meta, remote_vi("/no/such/index.vi", &fs), &stats);
     EXPECT_TRUE(st.is_not_found()) << st.to_string();
+    EXPECT_EQ(0, stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+    EXPECT_GT(stats.vector_index_file_open_ns, 0);
+    EXPECT_EQ(0, stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, stats.vector_index_init_index_ns);
 
     tenann::SetGlobalIndexCache(saved);
 }
@@ -519,7 +670,7 @@ TEST(TenANNReaderTest, InitSearcher_MalformedFile_ReturnsNonOk) {
 
     TenANNReader r;
     auto meta = make_minimal_meta();
-    auto st = r.init_searcher(meta, "/tmp/garbage.vi", &fs);
+    auto st = r.init_searcher(meta, remote_vi("/tmp/garbage.vi", &fs));
     EXPECT_FALSE(st.ok()) << "loader should surface tenann::Error / std::exception, not crash";
 
     tenann::SetGlobalIndexCache(saved);
@@ -578,7 +729,7 @@ TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
         TenANNReader r;
         auto meta = make_minimal_meta();
         // Load runs the probe fs, then fails NotFound (return ignored).
-        (void)r.init_searcher(meta, "/no/such/probe.vi", &fs);
+        (void)r.init_searcher(meta, remote_vi("/no/such/probe.vi", &fs));
     }
     tenann::SetGlobalIndexCache(saved);
 

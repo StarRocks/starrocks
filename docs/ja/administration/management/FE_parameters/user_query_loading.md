@@ -254,6 +254,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューの BACKUP と RESTORE を有効にするかどうか。この項目が `false` に設定されている場合、StarRocks は非同期マテリアライズドビューのバックアップをスキップします。
 - 導入時期：v3.2.0
 
+### `enable_batch_insert_histogram_statistics`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：複数列のヒストグラムを収集するときに、ヒストグラム統計を一括挿入するかどうかを指定します。このパラメータは StarRocks テーブルと外部テーブルの両方に適用されます。`false` に設定すると、StarRocks は列ごとにヒストグラム統計を個別に挿入します。
+- 導入時期：-
+
 ### `enable_collect_full_statistic`
 
 - デフォルト：true
@@ -502,6 +511,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：式で許可される子式の最大数。
+- 導入時期：-
+
+### `histogram_batch_insert_buffer_size`
+
+- デフォルト：20971520
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：ヒストグラム統計のバッチ挿入でバッファリングする SQL 文の最大サイズ。このパラメータは StarRocks テーブルと外部テーブルの両方に適用されます。バッファサイズがこの値を超える場合、StarRocks は複数列の挿入を複数の文に分割します。1 行がこの制限を超える場合、その行は単独で挿入されます。
 - 導入時期：-
 
 ### `histogram_buckets_size`

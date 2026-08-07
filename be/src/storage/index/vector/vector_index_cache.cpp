@@ -16,11 +16,27 @@
 
 #ifdef WITH_TENANN
 
+#include <algorithm>
+#include <limits>
+
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
 
 namespace starrocks {
+
+namespace {
+
+int64_t expire_time_ms() {
+    const int32_t expire_seconds = config::vector_index_cache_expire_sec;
+    if (expire_seconds <= 0) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return MonotonicMillis() + static_cast<int64_t>(expire_seconds) * 1000;
+}
+
+} // namespace
 
 VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics)
         : _cache(capacity), _metrics(metrics == nullptr ? VectorIndexCacheMetrics::instance() : metrics) {
@@ -36,7 +52,7 @@ VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorI
 
 // Drain IndexRefs outside _cache._lock before ~DynamicCache acquires it.
 // IVF-PQ entries hold nested IndexCacheHandles whose deleters call back into
-// _cache.release(); freeing them under ~DynamicCache's lock self-deadlocks
+// this cache; freeing them under ~DynamicCache's lock self-deadlocks
 // (std::mutex isn't recursive) and stalls BE shutdown.
 VectorIndexCache::~VectorIndexCache() {
     auto entries = _cache.get_all_entries();
@@ -72,6 +88,28 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
 void VectorIndexCache::SetCapacity(size_t new_capacity) {
     _cache.set_capacity(new_capacity);
     _update_metrics();
+}
+
+bool VectorIndexCache::clear_expired(int64_t now) {
+    const int64_t expire_seconds = config::vector_index_cache_expire_sec;
+    if (expire_seconds <= 0) {
+        return false;
+    }
+
+    const int64_t interval_ms = std::max<int64_t>(1, expire_seconds / 2) * 1000;
+    int64_t last_clear_expired_ms = _last_clear_expired_ms.load(std::memory_order_relaxed);
+    if (last_clear_expired_ms != 0 && (now <= last_clear_expired_ms || now - last_clear_expired_ms < interval_ms)) {
+        return false;
+    }
+    while (!_last_clear_expired_ms.compare_exchange_weak(last_clear_expired_ms, now, std::memory_order_relaxed)) {
+        if (last_clear_expired_ms != 0 && (now <= last_clear_expired_ms || now - last_clear_expired_ms < interval_ms)) {
+            return false;
+        }
+    }
+
+    _cache.clear_expired(now);
+    _update_metrics();
+    return true;
 }
 
 void VectorIndexCache::Insert(const tenann::CacheKey& key, tenann::IndexRef ref, tenann::IndexCacheHandle* handle) {
@@ -126,12 +164,27 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
     return true;
 }
 
-// Deleter captures _cache as a raw pointer; handles MUST be released before
+// Deleter captures this as a raw pointer; handles MUST be released before
 // StorageEnv::destroy_vector_index_cache() runs after query/vector users drain.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
-    Cache* cache = &_cache;
-    return tenann::IndexCacheHandle(
-            std::move(ref), std::shared_ptr<void>(entry, [cache](void* p) { cache->release(static_cast<Entry*>(p)); }));
+    const bool is_ivfpq_list_block =
+            ref != nullptr && ref->index_type() == tenann::IndexType::kFaissIvfPqOneInvertedList;
+    return tenann::IndexCacheHandle(std::move(ref), std::shared_ptr<void>(entry, [this, is_ivfpq_list_block](void* p) {
+                                        _release(static_cast<Entry*>(p), is_ivfpq_list_block);
+                                    }));
+}
+
+void VectorIndexCache::_release(Entry* entry, bool is_ivfpq_list_block) {
+    if (is_ivfpq_list_block) {
+        // List blocks belong to the outer IVF-PQ entry. When that entry goes
+        // away, release its blocks as a group instead of giving each list an
+        // independent TTL.
+        _cache.remove(entry);
+        _update_metrics();
+        return;
+    }
+
+    _cache.release_with_expire_time(entry, expire_time_ms());
 }
 
 void VectorIndexCache::_update_metrics() const {
