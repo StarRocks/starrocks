@@ -35,6 +35,8 @@ import java.util.Optional;
 //    whether by the AggregationNode or by the SortNode above it);
 // 2. session variables that change how the BE evaluates the plan must be part of the digest.
 public class QueryCacheRuntimeFilterAndTimeZoneTest {
+    private static final int DEFAULT_TOPN_PUSH_DOWN_AGG_MODE = 1;
+
     private static ConnectContext ctx;
 
     @BeforeAll
@@ -93,7 +95,7 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
         OlapTable t3 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb("qc_rf_db").getTable("t3");
         for (Partition partition : t3.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(40);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(40);
         }
         // A colocate pair for the join shapes. j1 is made huge and j2 tiny so that the aggregated j1
         // side is chosen as the probe (left) input, which is what puts the aggregation -- and hence the
@@ -114,7 +116,7 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
                     .getDb("qc_rf_db").getTable(name);
             long rows = name.equals("j1") ? 10000000L : 20L;
             for (Partition partition : table.getAllPartitions()) {
-                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rows);
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rows);
             }
         }
     }
@@ -199,7 +201,6 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
         // neither may leave the fragment cacheable. Only the first was covered before.
         String sql = "select count(*), sum(s), min(s), max(s) from " +
                 "(select c1, sum(v1) s from t3 group by c1 order by c1 limit 10) x";
-        int originalMode = ctx.getSessionVariable().getTopNPushDownAggMode();
         try {
             for (int mode : new int[] {0, 1}) {
                 ctx.getSessionVariable().setEnablePreAggTopNPushDown(mode);
@@ -207,7 +208,9 @@ public class QueryCacheRuntimeFilterAndTimeZoneTest {
                         "a pre-aggregation TopN filter must not be cached, topn_push_down_agg_mode=" + mode);
             }
         } finally {
-            ctx.getSessionVariable().setEnablePreAggTopNPushDown(originalMode);
+            // This branch has no getter for topn_push_down_agg_mode, so the default is restored by
+            // its literal value (SessionVariable#topNPushDownAggMode).
+            ctx.getSessionVariable().setEnablePreAggTopNPushDown(DEFAULT_TOPN_PUSH_DOWN_AGG_MODE);
         }
     }
 
