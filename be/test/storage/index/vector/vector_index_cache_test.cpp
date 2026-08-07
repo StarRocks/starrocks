@@ -349,14 +349,15 @@ TEST_F(VectorIndexCacheTest, GetOrCreate_EstimateExceptionDoesNotLeaveLoading) {
     });
 
     tenann::IndexCacheHandle handle;
-    EXPECT_FALSE(
-            cache_->GetOrCreate(tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_FALSE(cache_->GetOrCreate(
+            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
     EXPECT_FALSE(handle.valid());
     EXPECT_EQ(0, cache_->entry_count());
 
     SyncPoint::GetInstance()->DisableProcessing();
     SyncPoint::GetInstance()->ClearAllCallBacks();
-    EXPECT_TRUE(cache_->GetOrCreate(tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
+    EXPECT_TRUE(cache_->GetOrCreate(
+            tenann::CacheKey("/estimate-throws.vi"), [] { return make_dummy_ref(); }, &handle));
     EXPECT_TRUE(handle.valid());
 }
 
