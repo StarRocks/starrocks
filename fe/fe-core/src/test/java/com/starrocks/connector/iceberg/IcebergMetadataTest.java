@@ -206,11 +206,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-import java.util.stream.Collectors;
-=======
 import java.util.concurrent.atomic.AtomicReference;
->>>>>>> 6bac0f4a69a... [BugFix] Invalidate Iceberg metadata cache after truncate (#77385)
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES;
