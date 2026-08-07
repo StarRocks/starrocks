@@ -14,9 +14,14 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.google.gson.GsonBuilder;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.LocalTablet;
+>>>>>>> 12d1845322 ([BugFix] Do not fold COUNT(*) from row counts that never covered the visible version (#77190))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
@@ -112,10 +117,14 @@ public class AggregateMetaTest extends PlanTestBase {
                 return 3;
             }
         };
-        new MockUp<TabletStatMgr>() {
+        // The COUNT(*) fold no longer trusts a wall-clock stamp from TabletStatMgr, nor the row count
+        // cached on the index: it sums the tablets, and each must produce a count a stat collection
+        // proved was computed from that partition's visible version (issue #72271). t0 has 3 tablets,
+        // so one row apiece keeps the folded total at the 3 this test asserts.
+        new MockUp<LocalTablet>() {
             @Mock
-            public boolean workTimeIsMustAfter(LocalDateTime time) {
-                return true;
+            public long getRowCountAtVersion(long version) {
+                return 1;
             }
         };
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
@@ -163,4 +172,60 @@ public class AggregateMetaTest extends PlanTestBase {
         assertContains(descTbl, "TSlotDescriptor(id:4, parent:0, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))])");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDisableCountMetaFastPathForRangeDistributionTable() throws Exception {
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public long getRowCount() {
+                return 3;
+            }
+        };
+        // The COUNT(*) fold no longer trusts a wall-clock stamp from TabletStatMgr, nor the row count
+        // cached on the index: it sums the tablets, and each must produce a count a stat collection
+        // proved was computed from that partition's visible version (issue #72271). t0 has 3 tablets,
+        // so one row apiece keeps the folded total at the 3 this test asserts.
+        new MockUp<LocalTablet>() {
+            @Mock
+            public long getRowCountAtVersion(long version) {
+                return 1;
+            }
+        };
+
+        boolean oldEnableRangeDistribution = connectContext.getSessionVariable().isEnableRangeDistribution();
+        boolean oldEnableRewriteSimpleAggToMetaScan = connectContext.getSessionVariable().isEnableRewriteSimpleAggToMetaScan();
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+        try {
+            String createTableSql = "CREATE TABLE `t_range_dist_dup` (\n" +
+                    "  `k1` int NULL COMMENT \"\",\n" +
+                    "  `v1` int NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createTableSql, (tbl) -> {
+                OlapTable table = getOlapTable((String) tbl);
+                Assertions.assertTrue(table.isRangeDistribution(), "Expect range distribution table: " + tbl);
+
+                String plan = getFragmentPlan("SELECT COUNT(*) FROM " + tbl);
+                assertContains(plan, "OlapScanNode", "TABLE: " + tbl);
+                assertNotContains(plan, "MetaScan");
+                assertNotContains(plan, "constant exprs");
+
+                // COUNT(1) has the same semantics as COUNT(*) and may share the same fast path
+                plan = getFragmentPlan("SELECT COUNT(1) FROM " + tbl);
+                assertContains(plan, "OlapScanNode", "TABLE: " + tbl);
+                assertNotContains(plan, "MetaScan");
+                assertNotContains(plan, "constant exprs");
+            });
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(oldEnableRangeDistribution);
+            connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(oldEnableRewriteSimpleAggToMetaScan);
+        }
+    }
+>>>>>>> 12d1845322 ([BugFix] Do not fold COUNT(*) from row counts that never covered the visible version (#77190))
 }
