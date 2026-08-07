@@ -394,10 +394,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      *
      * <p>Unlike {@link #getLatestBaseIndex()}, which fails a {@code Preconditions} check, this never
      * throws. A physical partition can legitimately carry no base index: {@link ExternalOlapTable}
-     * builds its physical partitions with the id-only constructor and never reaches
-     * {@link #setBaseIndex}, so {@code baseIndexMetaId} stays -1. Read-only paths that merely display
-     * metadata use this variant, so such a partition degrades to a fallback value instead of failing
-     * the whole statement.
+     * builds its physical partitions with the id-only constructor and installs an index only when the
+     * synced metadata's partition id equals the locally minted physical-partition id, which it never
+     * does because the two come from different id spaces, so {@code baseIndexMetaId} stays -1.
+     * Read-only paths that merely display metadata use this variant, so such a partition degrades to
+     * a fallback value instead of failing the whole statement.
      *
      * <p>Resolves visible indexes only, deliberately: unlike {@link #getLatestIndex(long)}, it does
      * not fall back to {@code idToShadowIndex}.

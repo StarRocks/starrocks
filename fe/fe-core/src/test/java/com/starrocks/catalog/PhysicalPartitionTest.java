@@ -526,8 +526,10 @@ public class PhysicalPartitionTest {
 
     @Test
     public void testGetLatestBaseIndexOrNullReturnsNullWhenBaseIndexUnresolvable() {
-        // An external OLAP table builds its physical partitions this way and never reaches
-        // setBaseIndex, so baseIndexMetaId stays -1.
+        // An external OLAP table builds its physical partitions this way and installs an index only
+        // when the synced metadata's partition id equals the locally minted physical-partition id,
+        // which it never does because the two come from different id spaces, so baseIndexMetaId
+        // stays -1.
         PhysicalPartition partition = new PhysicalPartition(1L, 2L);
 
         Assertions.assertNull(partition.getLatestBaseIndexOrNull());
