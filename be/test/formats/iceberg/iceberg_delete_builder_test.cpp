@@ -18,7 +18,6 @@
 #include <roaring/roaring64.h>
 
 #include <cstring>
-
 #include <string>
 #include <utility>
 #include <vector>
