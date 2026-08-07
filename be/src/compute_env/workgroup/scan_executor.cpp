@@ -32,7 +32,7 @@ ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_
         // so the target is capped by it.
         const int32_t expected = std::min(_num_threads_setter.expect_num(), _thread_pool->max_threads());
         return pipeline::ScanThreadPoolMetrics::Sample{static_cast<uint64_t>(std::max(0, expected)),
-                                                      static_cast<uint64_t>(std::max(0, _thread_pool->num_threads()))};
+                                                       static_cast<uint64_t>(std::max(0, _thread_pool->num_threads()))};
     });
 }
 
