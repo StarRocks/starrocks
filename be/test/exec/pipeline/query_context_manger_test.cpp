@@ -327,4 +327,386 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_EQ(0, wg->num_running_queries());
 }
 
+<<<<<<< HEAD
+=======
+TEST(QueryContextManagerTest, testReadStats) {
+    QueryContext ctx;
+    ctx.incr_read_stats(100, 200);
+    ASSERT_EQ(100, ctx.get_read_local_cnt());
+    ASSERT_EQ(200, ctx.get_read_remote_cnt());
+}
+
+class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
+public:
+    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
+                    bool is_pipeline) override {
+        (void)query_options;
+        (void)params;
+        ++num_opened_queries;
+        last_query_id = query_id;
+        last_is_pipeline = is_pipeline;
+    }
+
+    void close_query(const TUniqueId& query_id) override {
+        ++num_closed_queries;
+        last_query_id = query_id;
+    }
+
+    int num_opened_queries = 0;
+    int num_closed_queries = 0;
+    TUniqueId last_query_id;
+    bool last_is_pipeline = false;
+};
+
+TEST(QueryContextManagerTest, testRuntimeFilterCoordinatorClosedOnQueryContextDestruction) {
+    RuntimeFilterCache cache(1);
+    MockRuntimeFilterQueryLifecycle lifecycle;
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_query_lifecycle = &lifecycle;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 1000;
+    query_id.lo = 2000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+        query_ctx->set_is_runtime_filter_coordinator(true);
+    }
+
+    ASSERT_EQ(1, lifecycle.num_closed_queries);
+    ASSERT_EQ(query_id, lifecycle.last_query_id);
+}
+
+TEST(QueryContextManagerTest, testNonRuntimeFilterCoordinatorDoesNotCloseRuntimeFilterQuery) {
+    RuntimeFilterCache cache(1);
+    MockRuntimeFilterQueryLifecycle lifecycle;
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_query_lifecycle = &lifecycle;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 3000;
+    query_id.lo = 4000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+    }
+
+    ASSERT_EQ(0, lifecycle.num_closed_queries);
+}
+
+TEST(QueryContextManagerTest, testRuntimeFilterCoordinatorToleratesMissingLifecycle) {
+    RuntimeFilterCache cache(1);
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 5000;
+    query_id.lo = 6000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+        query_ctx->set_is_runtime_filter_coordinator(true);
+    }
+}
+
+class MockQueryLifecycle final : public QueryLifecycle {
+public:
+    void on_query_releasable(const TUniqueId& query_id) override {
+        ++num_releasable_queries;
+        last_query_id = query_id;
+    }
+
+    int num_releasable_queries = 0;
+    TUniqueId last_query_id;
+};
+
+TEST(QueryContextManagerTest, testQueryLifecycleNotifiedOnlyWhenLastFragmentFinishes) {
+    MockQueryLifecycle lifecycle;
+    QueryContext ctx;
+    TUniqueId query_id;
+    query_id.hi = 10;
+    query_id.lo = 20;
+    ctx.set_query_id(query_id);
+    ctx.set_query_lifecycle(&lifecycle);
+    ctx.increment_num_fragments();
+    ctx.increment_num_fragments();
+
+    ctx.count_down_fragment();
+    ASSERT_EQ(1, ctx.num_active_fragments());
+    ASSERT_EQ(0, lifecycle.num_releasable_queries);
+
+    ctx.count_down_fragment();
+    ASSERT_EQ(0, ctx.num_active_fragments());
+    ASSERT_EQ(1, lifecycle.num_releasable_queries);
+    ASSERT_EQ(query_id, lifecycle.last_query_id);
+}
+
+class DroppingQueryLifecycle final : public QueryLifecycle {
+public:
+    explicit DroppingQueryLifecycle(QueryContextPtr* query_ctx) : _query_ctx(query_ctx) {}
+
+    void on_query_releasable(const TUniqueId& query_id) override {
+        last_query_id = query_id;
+        _query_ctx->reset();
+        query_ctx_alive_during_callback = !weak_query_ctx.expired();
+    }
+
+    QueryContextPtr* _query_ctx;
+    std::weak_ptr<QueryContext> weak_query_ctx;
+    bool query_ctx_alive_during_callback = false;
+    TUniqueId last_query_id;
+};
+
+TEST(QueryContextManagerTest, testCountDownFragmentKeepsSelfAliveDuringLifecycleCallback) {
+    auto query_ctx = QueryContext::create();
+    auto* raw_query_ctx = query_ctx.get();
+    TUniqueId query_id;
+    query_id.hi = 30;
+    query_id.lo = 40;
+    query_ctx->set_query_id(query_id);
+    query_ctx->increment_num_fragments();
+
+    DroppingQueryLifecycle lifecycle(&query_ctx);
+    lifecycle.weak_query_ctx = query_ctx;
+    query_ctx->set_query_lifecycle(&lifecycle);
+
+    raw_query_ctx->count_down_fragment();
+
+    ASSERT_EQ(query_id, lifecycle.last_query_id);
+    ASSERT_TRUE(lifecycle.query_ctx_alive_during_callback);
+    ASSERT_EQ(nullptr, query_ctx);
+    ASSERT_TRUE(lifecycle.weak_query_ctx.expired());
+}
+
+TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateExecStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    TUniqueId query_id;
+    query_id.hi = 3;
+    query_id.lo = 4;
+    ctx.set_query_id(query_id);
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+    ctx.query_runtime_state().init_node_exec_stats({10});
+    ctx.query_runtime_state().update_push_rows_stats(10, 7);
+    ctx.query_runtime_state().update_pull_rows_stats(10, 5);
+    ctx.query_runtime_state().update_pred_filter_stats(10, 3);
+    ctx.query_runtime_state().update_index_filter_stats(10, 2);
+    ctx.query_runtime_state().update_rf_filter_stats(10, 1);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    ASSERT_EQ(1, intermediate_pb.node_exec_stats_items_size());
+    const auto& intermediate_item = intermediate_pb.node_exec_stats_items(0);
+    EXPECT_EQ(10, intermediate_item.node_id());
+    EXPECT_EQ(7, intermediate_item.push_rows());
+    EXPECT_EQ(5, intermediate_item.pull_rows());
+    EXPECT_EQ(3, intermediate_item.pred_filter_rows());
+    EXPECT_EQ(2, intermediate_item.index_filter_rows());
+    EXPECT_EQ(1, intermediate_item.rf_filter_rows());
+
+    auto snapshot_stats = ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot_stats);
+    PQueryStatistics snapshot_pb;
+    snapshot_stats->to_pb(&snapshot_pb);
+    ASSERT_EQ(1, snapshot_pb.node_exec_stats_items_size());
+    const auto& snapshot_item = snapshot_pb.node_exec_stats_items(0);
+    EXPECT_EQ(10, snapshot_item.node_id());
+    EXPECT_EQ(0, snapshot_item.push_rows());
+    EXPECT_EQ(0, snapshot_item.pull_rows());
+    EXPECT_EQ(0, snapshot_item.pred_filter_rows());
+    EXPECT_EQ(0, snapshot_item.index_filter_rows());
+    EXPECT_EQ(0, snapshot_item.rf_filter_rows());
+}
+
+TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScanStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    auto& query_runtime_state = ctx.query_runtime_state();
+    query_runtime_state.incr_cpu_cost(17);
+    query_runtime_state.incr_cur_scan_rows_num(5);
+    query_runtime_state.incr_cur_scan_bytes(7);
+    query_runtime_state.update_scan_stats(100, 5, 7);
+    query_runtime_state.incr_cur_scan_rows_num(3);
+    query_runtime_state.incr_cur_scan_bytes(4);
+    query_runtime_state.update_scan_stats(100, 3, 4);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    EXPECT_EQ(17, intermediate_pb.cpu_cost_ns());
+    EXPECT_EQ(8, intermediate_pb.scan_rows());
+    EXPECT_EQ(11, intermediate_pb.scan_bytes());
+    ASSERT_EQ(1, intermediate_pb.stats_items_size());
+    EXPECT_EQ(100, intermediate_pb.stats_items(0).table_id());
+    EXPECT_EQ(8, intermediate_pb.stats_items(0).scan_rows());
+    EXPECT_EQ(11, intermediate_pb.stats_items(0).scan_bytes());
+
+    auto second_intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, second_intermediate_stats);
+    PQueryStatistics second_intermediate_pb;
+    second_intermediate_stats->to_pb(&second_intermediate_pb);
+    EXPECT_EQ(0, second_intermediate_pb.cpu_cost_ns());
+    EXPECT_EQ(0, second_intermediate_pb.scan_rows());
+    EXPECT_EQ(0, second_intermediate_pb.scan_bytes());
+    EXPECT_EQ(0, second_intermediate_pb.stats_items_size());
+
+    auto snapshot_stats = ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot_stats);
+    PQueryStatistics snapshot_pb;
+    snapshot_stats->to_pb(&snapshot_pb);
+    EXPECT_EQ(17, snapshot_pb.cpu_cost_ns());
+    EXPECT_EQ(8, snapshot_pb.scan_rows());
+    EXPECT_EQ(11, snapshot_pb.scan_bytes());
+    ASSERT_EQ(1, snapshot_pb.stats_items_size());
+    EXPECT_EQ(100, snapshot_pb.stats_items(0).table_id());
+    EXPECT_EQ(8, snapshot_pb.stats_items(0).scan_rows());
+    EXPECT_EQ(11, snapshot_pb.stats_items(0).scan_bytes());
+}
+
+TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
+    auto query_ctx = std::make_shared<QueryContext>();
+    TUniqueId query_id;
+    query_id.hi = 3;
+    query_id.lo = 4;
+    query_ctx->set_query_id(query_id);
+    query_ctx->query_runtime_state().set_delivery_expire_seconds(60);
+    query_ctx->query_runtime_state().set_query_expire_seconds(30);
+    query_ctx->query_runtime_state().extend_delivery_lifetime();
+    query_ctx->query_runtime_state().extend_query_lifetime();
+
+    RuntimeState runtime_state;
+    query_ctx->attach_to_runtime_state(&runtime_state);
+
+    ASSERT_EQ(query_ctx.get(), runtime_state.query_ctx());
+    ASSERT_EQ(&query_ctx->query_runtime_state(), runtime_state.query_runtime_state());
+    EXPECT_EQ(query_ctx->object_pool(), runtime_state.global_obj_pool());
+    EXPECT_EQ(3, runtime_state.query_runtime_state()->query_id().hi);
+    EXPECT_EQ(4, runtime_state.query_runtime_state()->query_id().lo);
+    EXPECT_FALSE(runtime_state.query_runtime_state()->is_delivery_expired());
+    EXPECT_FALSE(runtime_state.query_runtime_state()->is_query_expired());
+    EXPECT_EQ(30, runtime_state.query_runtime_state()->get_query_expire_seconds());
+}
+
+TEST(QueryContextManagerTest, testInitMemTrackerWiresQueryRuntimeStateMemTracker) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 5;
+    query_id.lo = 6;
+    query_ctx.set_query_id(query_id);
+
+    query_ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    ASSERT_NE(nullptr, query_ctx.mem_tracker());
+    EXPECT_EQ(query_ctx.mem_tracker().get(), query_ctx.query_runtime_state().query_mem_tracker());
+}
+
+// The reserve limit is the early-warning line the AUTO spill trigger probes through
+// try_mem_reserve, so it must always stay below the hard limit the query is checked against.
+class QueryContextReserveLimitTest : public ::testing::Test {
+protected:
+    static constexpr int64_t kParentMemLimit = 100L * 1024 * 1024 * 1024; // 100GB
+    static constexpr int64_t kQueryMemLimit = 64L * 1024 * 1024;          // 64MB
+    static constexpr int64_t kBigQueryMemLimit = 128L * 1024 * 1024;      // 128MB
+    static constexpr double kSpillMemReserveRatio = 0.8;
+
+    // The production code truncates the double product, so the expectations must do the same.
+    static int64_t expected_reserve_limit(int64_t limit) { return limit * kSpillMemReserveRatio; }
+
+    void SetUp() override {
+        _parent_mem_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, kParentMemLimit, "parent", nullptr);
+        // init_mem_tracker runs under std::call_once, so every case needs a fresh QueryContext.
+        _query_ctx = std::make_unique<QueryContext>();
+        TUniqueId query_id;
+        query_id.hi = 7;
+        query_id.lo = 8;
+        _query_ctx->set_query_id(query_id);
+    }
+
+    std::shared_ptr<MemTracker> _parent_mem_tracker;
+    std::unique_ptr<QueryContext> _query_ctx;
+};
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsSmallQueryMemLimit) {
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), -1, kSpillMemReserveRatio);
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kQueryMemLimit), tracker->reserve_limit());
+    // The early-warning line must sit below the hard limit, otherwise the reservation probe never
+    // fails and an AUTO mode query OOMs instead of spilling.
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitFallsBackToParentWhenNoQueryLimit) {
+    _query_ctx->init_mem_tracker(-1, _parent_mem_tracker.get(), -1, kSpillMemReserveRatio);
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(expected_reserve_limit(kParentMemLimit), tracker->reserve_limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitUnsetWhenRatioAbsent) {
+    // Spill is disabled, so no reserve limit is set and the reservation path falls back to limit().
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(-1, tracker->reserve_limit());
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsBigQueryMemLimit) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(-1, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio, wg.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, tracker->type());
+    EXPECT_EQ(kBigQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kBigQueryMemLimit), tracker->reserve_limit());
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitTakesMinOfAllLimits) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
+                                 wg.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kQueryMemLimit), tracker->reserve_limit());
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, StaticQueryMemLimitTakesMinOfAllLimits) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
+                                 wg.get());
+
+    // Computing the effective limit earlier must not change its value.
+    EXPECT_EQ(kQueryMemLimit, _query_ctx->get_static_query_mem_limit());
+    EXPECT_EQ(kQueryMemLimit, _query_ctx->query_runtime_state().static_query_mem_limit());
+}
+
+>>>>>>> 152ab7b138 ([BugFix] Derive the query tracker reserve limit from the effective query memory limit (#77408))
 } // namespace starrocks::pipeline
