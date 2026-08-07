@@ -838,6 +838,13 @@ under the License.
             <artifactId>ranger-plugins-common</artifactId>
         </dependency>
 
+        <!-- Solr audit destination (split out of the monolithic audit jar in Ranger 2.8.0).
+             Required because ranger-starrocks-audit.xml sets xasecure.audit.solr.is.enabled=true. -->
+        <dependency>
+            <groupId>org.apache.ranger</groupId>
+            <artifactId>ranger-audit-dest-solr</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.airlift</groupId>
             <artifactId>concurrent</artifactId>
