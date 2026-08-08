@@ -1,0 +1,23 @@
+-- name: test_show_warnings
+create database db_${uuid0};
+use db_${uuid0};
+create table t_src (v varchar(16));
+insert into t_src values ('1'), ('not_a_number'), ('2');
+create table t_dst (c1 int not null);
+set enable_insert_strict = false;
+set insert_max_filter_ratio = 0.5;
+insert into t_dst select cast(v as int) from t_src;
+show warnings;
+show warnings;
+select * from t_dst order by c1;
+show warnings;
+[UC]select * from table_that_does_not_exist;
+show errors;
+[UC]selct 1;
+show errors;
+begin;
+insert into t_dst select cast(v as int) from t_src;
+show warnings;
+commit;
+show warnings;
+drop database db_${uuid0} force;
