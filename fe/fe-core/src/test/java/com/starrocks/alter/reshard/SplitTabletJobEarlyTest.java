@@ -296,6 +296,11 @@ public class SplitTabletJobEarlyTest {
         // them: in one index the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet
         // is reached, so the assertion would read 10 whether or not the early policy was captured.
         setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
+        // Pin the cap rather than inheriting the default: the contrast this test draws only exists
+        // while the early delta is admissible, so a future change to the default would quietly restore
+        // the "reads 10 either way" state the separate indexes above exist to prevent. tearDown
+        // restores it.
+        Config.tablet_reshard_max_parallel_tablets = 100L;
         new MockUp<TabletReshardJobMgr>() {
             @Mock
             public long getTotalParallelTablets() {
