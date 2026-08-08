@@ -606,7 +606,18 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                     if (redundantGroupToShards.get(groupId) != null) {
                         starmgrShardIdsSet = redundantGroupToShards.get(groupId);
                     } else {
-                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        List<Long> starmgrShardIds;
+                        try {
+                            starmgrShardIds = starOSAgent.listShard(groupId);
+                        } catch (DdlException e) {
+                            if (isShardGroupNotExist(e) && table.getPhysicalPartition(physicalPartition.getId()) == null) {
+                                LOG.info("skip syncing removed partition {} shard group {}, because it has been removed " +
+                                                "from StarMgr",
+                                        physicalPartition.getParentId(), groupId);
+                                continue;
+                            }
+                            throw e;
+                        }
                         starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
                     }
 
@@ -660,6 +671,11 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
             SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
         }
         return !shardToDelete.isEmpty();
+    }
+
+    private boolean isShardGroupNotExist(DdlException e) {
+        String message = e.getMessage();
+        return message != null && (message.contains("NOT_EXIST") || message.contains("not exist"));
     }
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
