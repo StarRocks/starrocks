@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.TabletMeta;
@@ -56,6 +57,9 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     private static final long MIN_SPLIT_SIZE = 2 * GIB;
     // A split fires at ceil(1.5 x its target size); both pinned sizes are even, so 3/2 is exact.
     private static final long EARLY_SPLIT_THRESHOLD = MIN_SPLIT_SIZE * 3 / 2;
+    // Tablet ids of the second index used by the per-index attribution test; disjoint from the helper's.
+    private static final long WIDE_INDEX_FIRST_TABLET_ID = 9200L;
+    private static final int WIDE_INDEX_TABLET_COUNT = 4;
 
     private final List<ComputeNode> registeredNodes = new ArrayList<>();
     private long savedTargetSize;
@@ -103,7 +107,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     }
 
     private record PublishFixture(LakeTableTxnLogApplier applier, TransactionState state,
-                                  TableCommitInfo tableCommitInfo, Database db) {
+                                  TableCommitInfo tableCommitInfo, Database db, LakeTable table) {
     }
 
     /**
@@ -149,7 +153,7 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
                 return false;
             }
         };
-        return new PublishFixture(applier, state, tableCommitInfo, new Database(dbId, "test_db"));
+        return new PublishFixture(applier, state, tableCommitInfo, new Database(dbId, "test_db"), table);
     }
 
     @Test
@@ -166,6 +170,27 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         PublishFixture f = newPublishFixture(EARLY_SPLIT_THRESHOLD - 1);
         f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
         Assertions.assertFalse(resolved[0], "a publish with no early-split-sized tablet must pay nothing");
+    }
+
+    @Test
+    public void aTableThatCannotConsumeTheEarlySignalPaysNothingForIt() {
+        boolean[] resolved = {false};
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
+                resolved[0] = true;
+                return WarehouseComputeResource.DEFAULT;
+            }
+        };
+        registerComputeNodes(16);
+        PublishFixture f = newPublishFixture(TARGET_SIZE * 2);
+        // Only a range-distributed table can consume the early signal, and hash distribution is the
+        // common case. Resolving a node count for such a table would be an O(backends + compute nodes)
+        // scan under the table write lock, on every publish, whose result is always discarded.
+        f.table().setDefaultDistributionInfo(new HashDistributionInfo());
+        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
+        Assertions.assertFalse(resolved[0],
+                "a table that cannot consume the early signal must not resolve its node count");
     }
 
     @Test
@@ -293,6 +318,58 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
         Assertions.assertEquals(earlyOnlySize, captured[0],
                 "an index below its ceiling must emit its largest tablet as the early signal");
+    }
+
+    @Test
+    public void attributesTheEarlySignalToTheIndexThatIsActuallyNarrow() {
+        long[] captured = {-1L};
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
+                return WarehouseComputeResource.DEFAULT;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int computeNodeCount(ComputeResource resource) {
+                return WIDE_INDEX_TABLET_COUNT;   // ceiling 4: the wide index is at it, the base index is not
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+                captured[0] = maxUnderProvisionedTabletSize;
+            }
+        };
+        registerComputeNodes(16);
+        long narrowIndexSize = EARLY_SPLIT_THRESHOLD + GIB;
+        long wideIndexSize = narrowIndexSize * 2;   // the partition's largest, but in an index at its ceiling
+        // The fixture's base index keeps its two tablets and reports the SMALLER size.
+        PublishFixture f = newPublishFixture(narrowIndexSize);
+
+        // A second visible index, already at the ceiling, holding the LARGER tablet. Without per-index
+        // attribution the emitted signal is the partition-wide maximum, which is this index's tablet --
+        // a tablet the early rule must not act on, because splitting it would push an index that already
+        // matches the cluster's parallelism past the ceiling.
+        MaterializedIndex wideIndex = new MaterializedIndex(indexId + 500);
+        for (int i = 0; i < WIDE_INDEX_TABLET_COUNT; i++) {
+            long id = WIDE_INDEX_FIRST_TABLET_ID + i;
+            TabletMeta meta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(id, meta);
+            wideIndex.addTablet(new LakeTablet(id), meta);
+        }
+        f.table().getPartition(partitionId).getDefaultPhysicalPartition().createRollupIndex(wideIndex);
+        TabletStatPB wideStat = new TabletStatPB();
+        wideStat.numRows = 5L;
+        wideStat.dataSize = wideIndexSize;
+        f.tableCommitInfo().getIdToPartitionCommitInfo().get(physicalPartitionId)
+                .getTabletStats().put(WIDE_INDEX_FIRST_TABLET_ID, wideStat);
+
+        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
+        Assertions.assertEquals(narrowIndexSize, captured[0],
+                "the early signal must be the largest tablet of an index below its ceiling, "
+                        + "not the largest tablet in the partition");
     }
 
     @Test

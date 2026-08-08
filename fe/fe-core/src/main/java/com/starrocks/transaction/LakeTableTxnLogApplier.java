@@ -213,6 +213,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                     break;
                 }
             }
+            // The null check is unreachable today, but nothing catches here: an NPE would fail the publish.
             if (!(tablet instanceof LakeTablet) || owningIndex == null) {
                 continue;
             }
@@ -228,9 +229,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             indexById.putIfAbsent(owningIndex.getId(), owningIndex);
         }
         long maxUnderProvisionedTabletSize = 0L;
-        // Pure arithmetic gate: a publish with no early-split-sized tablet pays nothing below.
-        if (TabletReshardUtils.needEarlySplit(maxTabletSize)) {
-            // Best-effort O(1) fast path: the cluster-wide node total is an upper bound on any single
+        // An instanceof and a comparison: nothing below runs for a table the early rule cannot act on,
+        // nor for a publish with no early-split-sized tablet. Only a range-distributed table can consume
+        // this signal, so resolving it for any other table would be work whose result is always dropped.
+        if (table.isRangeDistribution() && TabletReshardUtils.needEarlySplit(maxTabletSize)) {
+            // Best-effort pre-check, O(indexes reported), guarding a resolution that is
+            // O(backends + compute nodes): the cluster-wide node total is an upper bound on any single
             // worker group's count, hence on the ceiling. It only helps when the table's group is most
             // of the cluster, and a concurrent node addition can make it briefly stale — the worst
             // outcome is one skipped early signal, never a wrong split.
@@ -251,7 +255,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                             Config.tablet_reshard_max_split_count);
                     for (Map.Entry<Long, Long> e : maxSizeByIndexId.entrySet()) {
                         MaterializedIndex idx = indexById.get(e.getKey());
-                        if (idx != null && idx.getTablets().size() < ceiling) {
+                        if (idx.getTablets().size() < ceiling) {
                             maxUnderProvisionedTabletSize = Math.max(maxUnderProvisionedTabletSize, e.getValue());
                         }
                     }
