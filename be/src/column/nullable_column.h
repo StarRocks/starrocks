@@ -184,7 +184,7 @@ public:
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override {
-        return sizeof(bool) + _data_column->max_one_element_serialize_size();
+        return saturate_serialize_size(sizeof(bool) + _data_column->max_one_element_serialize_size());
     }
 
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
@@ -202,7 +202,7 @@ public:
         if (immutable_null_column_data()[idx]) {
             return sizeof(uint8_t);
         }
-        return sizeof(uint8_t) + _data_column->serialize_size(idx);
+        return saturate_serialize_size(sizeof(uint8_t) + _data_column->serialize_size(idx));
     }
 
     MutableColumnPtr clone_empty() const override {

@@ -510,6 +510,9 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
         slice_sizes.assign(num_rows, 0);
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(serialize_size_overflow(cur_max_one_row_size))) {
+            return Status::InternalError(serialize_key_size_overflow_message());
+        }
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
             inner_mem_pool->clear();
@@ -539,11 +542,11 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
     }
 
     uint32_t get_max_serialize_size(const Columns& key_columns) {
-        uint32_t max_size = 0;
+        size_t max_size = 0;
         for (const auto& key_column : key_columns) {
             max_size += key_column->max_one_element_serialize_size();
         }
-        return max_size;
+        return saturate_serialize_size(max_size);
     }
 };
 
