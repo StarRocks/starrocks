@@ -133,6 +133,30 @@ TEST_F(KeyCacheTest, WrapEncryptionMeta) {
     }
 }
 
+TEST_F(KeyCacheTest, RejectDownstreamPlaceholderKeyType) {
+    EncryptionKeyPB master;
+    master.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+    master.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    master.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    master.set_plain_key("0000000000000000");
+
+    EncryptionKeyPB placeholder;
+    placeholder.set_id(2);
+    placeholder.set_type(EncryptionKeyTypePB::PLACEHOLDER_21);
+
+    EncryptionMetaPB metaPb;
+    *metaPb.add_key_hierarchy() = master;
+    *metaPb.add_key_hierarchy() = placeholder;
+    std::string encryption_meta;
+    ASSERT_TRUE(metaPb.SerializeToString(&encryption_meta));
+
+    KeyCache cache;
+    auto st = cache.create_encryption_meta_pair(encryption_meta);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_not_supported()) << st.status();
+    ASSERT_EQ(0, cache.size());
+}
+
 TEST_F(KeyCacheTest, RefreshKeys) {
     EncryptionKeyPB pb;
     pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
