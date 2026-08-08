@@ -4507,6 +4507,7 @@ public class PlanFragmentBuilder {
             scanNode.setUseVectorizedLoad(true);
             scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
             scanNode.setFileScanType(table.isLoadType() ? TFileScanType.FILES_INSERT : TFileScanType.FILES_QUERY);
+            scanNode.setJSONOptions(table.getJsonOptions());
 
             try {
                 scanNode.init(execPlan.getDescTbl());
