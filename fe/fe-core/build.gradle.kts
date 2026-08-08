@@ -96,6 +96,7 @@ dependencies {
     testImplementation("com.github.hazendaz.jmockit:jmockit")
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
+    implementation("com.google.auth:google-auth-library-oauth2-http")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
     implementation("com.google.code.gson:gson")
     implementation("com.google.guava:guava")
@@ -213,6 +214,7 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-bundled-guava")
     implementation("org.apache.iceberg:iceberg-common")
     implementation("org.apache.iceberg:iceberg-core")
+    implementation("org.apache.iceberg:iceberg-gcp")
     implementation("org.apache.iceberg:iceberg-hive-metastore")
     implementation("org.apache.ivy:ivy")
     implementation("org.apache.kudu:kudu-client") {

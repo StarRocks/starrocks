@@ -63,6 +63,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.hadoop.SerializableConfiguration;
@@ -176,8 +177,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public InputFile newInputFile(String path) {
         try {
-            wrappedIO.setConf(buildConfFromProperties(properties, path));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+            return new CachingInputFile(fileContentCache, delegateFileIO(path).newInputFile(path));
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -188,8 +188,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-            wrappedIO.setConf(buildConfFromProperties(properties, path));
-            return wrappedIO.newOutputFile(path);
+            return delegateFileIO(path).newOutputFile(path);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -199,9 +198,34 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void deleteFile(String path) {
-        wrappedIO.deleteFile(path);
+        try {
+            delegateFileIO(path).deleteFile(path);
+        } catch (StarRocksException e) {
+            String errorMessage = String.format("Failed to delete file for path: %s, properties: %s", path, properties);
+            LOG.error(errorMessage, e);
+            throw new StarRocksConnectorException(errorMessage, e);
+        }
         // remove from cache.
         fileContentCache.invalidate(path);
+    }
+
+    // StarRocks maps credentials for these schemes into fs.* Hadoop keys, so they must stay on
+    // HadoopFileIO. ResolvingFileIO would hand them to the cloud SDK FileIO when its class is
+    // loadable (e.g. GCSFileIO once iceberg-gcp is on the classpath), which ignores the Hadoop
+    // configuration entirely.
+    private FileIO delegateFileIO(String path) throws StarRocksException {
+        Configuration pathConf = buildConfFromProperties(properties, path);
+        // keep the wrapped IO's conf in sync even when it is not the delegate performing the read:
+        // getWrappedIO() is serialized for BE/JNI metadata-table scans and must carry the fs.*
+        // credential keys (e.g. the vended GCS token)
+        wrappedIO.setConf(pathConf);
+        String scheme = schemeOf(pathConf, path);
+        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
+            HadoopFileIO hadoopFileIO = new HadoopFileIO(pathConf);
+            hadoopFileIO.initialize(properties);
+            return hadoopFileIO;
+        }
+        return wrappedIO;
     }
 
     public FileIO getWrappedIO() {
@@ -254,21 +278,26 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         return copied;
     }
 
-    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to
-    // HadoopFileIO, whose FileSystem cache key is (scheme, authority, ugi) and excludes the
-    // Configuration holding the credential — one shared instance would serve every catalog on a bucket
-    // with whichever credential created it first. Kept to Azure and GCS deliberately: bypassing the
-    // cache leaks an unclosed FileSystem per call, so other schemes wait for a credential-keyed cache.
+    // These schemes go through HadoopFileIO (see delegateFileIO), whose FileSystem cache key is
+    // (scheme, authority, ugi) and excludes the Configuration holding the credential — one shared
+    // instance would serve every catalog on a bucket with whichever credential created it first.
+    // Kept to Azure and GCS deliberately: bypassing the cache leaks an unclosed FileSystem per call,
+    // so other schemes wait for a credential-keyed cache.
     private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
             Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
 
-    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+    private static String schemeOf(Configuration conf, String path) {
         String scheme = new Path(path).toUri().getScheme();
         if (scheme == null) {
             // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
             // the flag, so the flag has to be keyed on the default scheme rather than skipped.
             scheme = FileSystem.getDefaultUri(conf).getScheme();
         }
+        return scheme;
+    }
+
+    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+        String scheme = schemeOf(conf, path);
         if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
             conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
         }
