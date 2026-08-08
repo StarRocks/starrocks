@@ -63,6 +63,8 @@ public class TableFunction extends Function {
     // not serialized
     private boolean isLeftJoin = false;
 
+    private boolean isArrayJoin = false;
+
     protected TableFunction() {
     }
 
@@ -100,6 +102,8 @@ public class TableFunction extends Function {
         defaultColumnNames = other.defaultColumnNames;
         tableFnReturnTypes = other.tableFnReturnTypes;
         symbolName = other.symbolName;
+        isLeftJoin = other.isLeftJoin;
+        isArrayJoin = other.isArrayJoin;
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
@@ -172,7 +176,13 @@ public class TableFunction extends Function {
         return this.isLeftJoin;
     }
 
+    public void setIsArrayJoin(boolean isArrayJoin) {
+        this.isArrayJoin = isArrayJoin;
+    }
 
+    public boolean isArrayJoin() {
+        return this.isArrayJoin;
+    }
 
     @Override
     public TFunction toThrift() {
@@ -181,6 +191,7 @@ public class TableFunction extends Function {
         tableFn.setSymbol(symbolName);
         tableFn.setRet_types(tableFnReturnTypes.stream().map(TypeSerializer::toThrift).collect(Collectors.toList()));
         tableFn.setIs_left_join(isLeftJoin);
+        tableFn.setIs_array_join(isArrayJoin);
         fn.setTable_fn(tableFn);
         return fn;
     }

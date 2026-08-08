@@ -43,6 +43,10 @@ public:
 
     bool get_is_left_join() { return _is_left_join; }
 
+    void set_is_array_join_mode(bool _is_array_join_mode) { this->_is_array_join_mode = _is_array_join_mode; }
+
+    bool get_is_array_join_mode() { return _is_array_join_mode; }
+
     // How many rows of `get_columns()` have been processed/consumed by the table function.
     //
     // If `processed_rows()` < `input_rows()`, the table function will be invoked again with the same parameter columns.
@@ -83,6 +87,7 @@ private:
 
     // used to identify left join for table function
     bool _is_left_join = false;
+    bool _is_array_join_mode = false;
     bool _is_required = true;
 };
 
