@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -226,4 +227,65 @@ public class ColumnRangePredicateTest {
         Assertions.assertEquals("1: col > 9223372036854775807", s, s);
     }
 
+    /**
+     * Scenario 1: query WHERE = AND(pt=20251212, OR(gmv>0, id>0)), target WHERE = OR(gmv>0, id>0)
+     * should be pt=20251212
+     * Scenario 2: query WHERE = AND(pt=20251212, gmv>0), target WHERE = OR(gmv>0, id>0)
+     * should be pt=20251212
+     */
+    @Test
+    public void testColumnRangeSimplifyOrRangeEncloses() {
+        // pt=20251212
+        ColumnRefOperator pt = new ColumnRefOperator(2, DateType.DATE, "pt", false);
+        ConstantOperator ptVal = ConstantOperator.createDate(java.time.LocalDateTime.of(2025, 12, 12, 0, 0));
+        TreeRangeSet<ConstantOperator> ptRangeSet = TreeRangeSet.create();
+        ptRangeSet.add(Range.singleton(ptVal));
+        ColumnRangePredicate ptRange = new ColumnRangePredicate(pt, ptRangeSet);
+
+        // gmv>0
+        ColumnRefOperator gmv = new ColumnRefOperator(3, FloatType.DOUBLE, "gmv", true);
+        TreeRangeSet<ConstantOperator> gmvRangeSet = TreeRangeSet.create();
+        gmvRangeSet.add(Range.greaterThan(ConstantOperator.createDouble(0)));
+        ColumnRangePredicate gmvRange = new ColumnRangePredicate(gmv, gmvRangeSet);
+
+        // id>0
+        ColumnRefOperator id = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        TreeRangeSet<ConstantOperator> idRangeSet = TreeRangeSet.create();
+        idRangeSet.add(Range.greaterThan(ConstantOperator.createInt(0)));
+        ColumnRangePredicate idRange = new ColumnRangePredicate(id, idRangeSet);
+
+        // OR(gmv>0, id>0)
+        OrRangePredicate orRange = new OrRangePredicate(Lists.newArrayList(gmvRange, idRange));
+        {
+            // gmv>0
+            // target is OR(gmv>0, id>0)
+            // simplify should be gmv>0
+            Assertions.assertEquals(gmvRange.toScalarOperator(), gmvRange.simplify(orRange));
+            // id>0
+            // target is OR(gmv>0, id>0)
+            // simplify should be id>0
+            Assertions.assertEquals(idRange.toScalarOperator(), idRange.simplify(orRange));
+        }
+        {
+            // AND(pt=20251212, OR(gmv>0,id>0))
+            // target is OR(gmv>0, id>0)
+            // simplify should be pt=2025-12-12
+            AndRangePredicate andRange = new AndRangePredicate(Lists.newArrayList(ptRange, orRange));
+            ScalarOperator result = andRange.simplify(orRange);
+            Assertions.assertNotNull(result);
+            Assertions.assertNotEquals(ConstantOperator.TRUE, result);
+            Assertions.assertTrue(result.toString().contains("2: pt"));
+        }
+        {
+            // AND(pt=20251212, gmv>0)
+            // target is OR(gmv>0, id>0)
+            // simplify should be pt=2025-12-12
+            AndRangePredicate andRange = new AndRangePredicate(Lists.newArrayList(ptRange, gmvRange));
+            ScalarOperator result = andRange.simplify(orRange);
+            Assertions.assertNotNull(result);
+            Assertions.assertNotEquals(ConstantOperator.TRUE, result);
+            Assertions.assertTrue(result.toString().contains("2: pt"));
+        }
+    }
 }
+
