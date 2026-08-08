@@ -19,6 +19,7 @@ endif()
 
 set(DATA_WORKFLOWS_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    clone/engine_clone_task_test.cpp
     load/batch_write/batch_write_mgr_test.cpp
     load/batch_write/batch_write_util_test.cpp
     load/batch_write/isomorphic_batch_write_test.cpp
