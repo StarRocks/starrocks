@@ -23,7 +23,7 @@ Returns `NULL` for `NULL` input. Returns 0 for an empty sketch.
 ## Syntax
 
 ```Haskell
-BIGINT ds_theta_estimate(sketch)
+DOUBLE ds_theta_estimate(sketch)
 ```
 
 - `sketch`: `VARBINARY` compact theta sketch.

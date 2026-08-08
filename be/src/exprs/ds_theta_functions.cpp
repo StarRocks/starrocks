@@ -116,10 +116,14 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_intersect(FunctionContext* contex
         }
         int64_t mem = 0;
         try {
-            theta_intersection_type inter(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a_slice = lhs.value(row);
             auto b_slice = rhs.value(row);
-            // intersection: feeding an empty sketch yields empty result, matching set semantics
+            if (a_slice.size == 0 || b_slice.size == 0) {
+                // empty ∩ X = empty; return an empty compact sketch
+                append_compact(theta_union_type::builder(alloc_type(&mem)).build().get_result(), builder);
+                continue;
+            }
+            theta_intersection_type inter(datasketches::DEFAULT_SEED, alloc_type(&mem));
             inter.update(wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size));
             inter.update(wrapped_compact_theta_sketch::wrap(b_slice.data, b_slice.size));
             append_compact(inter.get_result(), builder);
@@ -143,9 +147,19 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_a_not_b(FunctionContext* context,
         }
         int64_t mem = 0;
         try {
-            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a_slice = lhs.value(row);
             auto b_slice = rhs.value(row);
+            if (a_slice.size == 0) {
+                // ∅ \ X = ∅
+                append_compact(theta_union_type::builder(alloc_type(&mem)).build().get_result(), builder);
+                continue;
+            }
+            if (b_slice.size == 0) {
+                // X \ ∅ = X
+                append_compact(wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size), builder);
+                continue;
+            }
+            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
             auto b = wrapped_compact_theta_sketch::wrap(b_slice.data, b_slice.size);
             append_compact(anb.compute(a, b), builder);
