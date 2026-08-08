@@ -222,6 +222,10 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+### Usage notes
+
+- Row-level DELETE (position deletes) requires Iceberg **format version 2**. On tables with other format versions, DELETE is supported only when the predicate matches entire files or partitions (executed as a metadata-only delete); otherwise the statement is rejected.
+
 ## UPDATE
 
 You can use the UPDATE statement to modify rows in an Iceberg table based on specified conditions. This feature is supported from v4.2 and later.

@@ -211,6 +211,10 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+### 使用上の注意
+
+- 行レベル DELETE（position delete）は **format-version 2** の Iceberg テーブルのみサポートされます。それ以外のバージョンのテーブルでは、述語がファイルまたはパーティション全体に一致する場合（メタデータのみの削除として実行）に限り DELETE がサポートされ、それ以外は拒否されます。
+
 ## UPDATE
 
 指定された条件に基づいて Iceberg テーブルの行を更新するには、UPDATE ステートメントを使用できます。この機能は v4.2 以降でサポートされています。

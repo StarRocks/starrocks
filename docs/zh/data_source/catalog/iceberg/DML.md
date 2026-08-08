@@ -211,6 +211,10 @@ DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHE
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
+### 使用说明
+
+- 行级 DELETE（position delete）仅支持 **format-version 2** 的 Iceberg 表。对于其他版本的表，仅当谓词能匹配完整文件或分区（以元数据方式删除）时才支持 DELETE，否则语句会被拒绝。
+
 ## UPDATE
 
 您可以使用 UPDATE 语句根据指定条件更新 Iceberg 表中的数据。此功能从 v4.2 起支持。
