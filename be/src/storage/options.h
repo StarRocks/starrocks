@@ -79,9 +79,7 @@ struct LakeIOOptions {
     int64_t metadata_buffer_size = -1;
 
     // Buffer size to use for footer / short-key index reads.
-    int64_t footer_index_buffer_size() const {
-        return metadata_buffer_size >= 0 ? metadata_buffer_size : buffer_size;
-    }
+    int64_t footer_index_buffer_size() const { return metadata_buffer_size >= 0 ? metadata_buffer_size : buffer_size; }
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
     bool cache_file_only = false; // only used for CACHE SELECT
