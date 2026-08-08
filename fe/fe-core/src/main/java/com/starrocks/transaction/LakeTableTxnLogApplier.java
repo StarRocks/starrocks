@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -23,6 +24,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
@@ -32,9 +34,11 @@ import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -179,6 +183,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
      * partition's), so a per-partition crossing is decision-safe. Merge is left to the periodic scan,
      * whose adjacency signal requires every neighbor to be fresh — a single publish rarely satisfies that.
      *
+     * <p>The candidate also carries the largest tablet living in an index whose tablet count is still
+     * below the early-split ceiling, so a partition created under continuous load reaches useful write
+     * parallelism without waiting for the next periodic scan. That signal costs nothing until some
+     * just-published tablet is large enough for an early split, and resolving it is probe-free and
+     * best-effort: a failure drops the hint and leaves the publish itself untouched.
+     *
      * <p>{@code tabletStats} is transient transport: it is consumed here and cleared to bound FE heap,
      * since the LakeTablet row counts set above persist independently and the post-visible first-load
      * statistics collector samples from LakeTablet.getFuzzyRowCount(), not from this map.
@@ -187,17 +197,23 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             Map<Long, TabletStatPB> tabletStats, Database db, long version, long versionTime) {
         List<MaterializedIndex> indexes = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
         long maxTabletSize = 0L;
+        // Per-index maxima, keyed by INDEX ID. Never key by the MaterializedIndex object: it overrides
+        // equals/hashCode over mutable content, so it is both an unstable and an O(tablets) hash key.
+        Map<Long, Long> maxSizeByIndexId = new HashMap<>();
+        Map<Long, MaterializedIndex> indexById = new HashMap<>();
         // Walk only the tablets this publish actually reported, not every tablet in the partition: this
         // runs under the table write lock, so resolve each reported id directly (O(1) per index).
         for (Map.Entry<Long, TabletStatPB> entry : tabletStats.entrySet()) {
             Tablet tablet = null;
+            MaterializedIndex owningIndex = null;
             for (MaterializedIndex index : indexes) {
                 tablet = index.getTablet(entry.getKey());
                 if (tablet != null) {
+                    owningIndex = index;
                     break;
                 }
             }
-            if (!(tablet instanceof LakeTablet)) {
+            if (!(tablet instanceof LakeTablet) || owningIndex == null) {
                 continue;
             }
             LakeTablet lakeTablet = (LakeTablet) tablet;
@@ -208,10 +224,47 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
             maxTabletSize = Math.max(maxTabletSize, dataSize);
+            maxSizeByIndexId.merge(owningIndex.getId(), dataSize, Math::max);
+            indexById.putIfAbsent(owningIndex.getId(), owningIndex);
+        }
+        long maxUnderProvisionedTabletSize = 0L;
+        // Pure arithmetic gate: a publish with no early-split-sized tablet pays nothing below.
+        if (TabletReshardUtils.needEarlySplit(maxTabletSize)) {
+            // Best-effort O(1) fast path: the cluster-wide node total is an upper bound on any single
+            // worker group's count, hence on the ceiling. It only helps when the table's group is most
+            // of the cluster, and a concurrent node addition can make it briefly stale — the worst
+            // outcome is one skipped early signal, never a wrong split.
+            SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            int ceilingUpperBound = clusterInfo.getTotalBackendNumber() + clusterInfo.getTotalComputeNodeNumber();
+            boolean anyPossiblyUnderProvisioned = indexById.values().stream()
+                    .anyMatch(idx -> idx.getTablets().size() < ceilingUpperBound);
+            if (anyPossiblyUnderProvisioned) {
+                try {
+                    // NOT txnState.getComputeResource(): publishVersionBatch substitutes the background
+                    // resource when the transaction's is unavailable without writing it back, so it is
+                    // not reliably the resource publish ran on. Probe-free — this runs under the table
+                    // write lock and must not reach StarMgr.
+                    int cn = TabletReshardUtils.computeNodeCount(
+                            GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                    .getBackgroundComputeResourceWithoutProbe(table.getId()));
+                    int ceiling = TabletReshardUtils.earlySplitCeiling(cn,
+                            Config.tablet_reshard_max_split_count);
+                    for (Map.Entry<Long, Long> e : maxSizeByIndexId.entrySet()) {
+                        MaterializedIndex idx = indexById.get(e.getKey());
+                        if (idx != null && idx.getTablets().size() < ceiling) {
+                            maxUnderProvisionedTabletSize = Math.max(maxUnderProvisionedTabletSize, e.getValue());
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    // Optional scheduling must never fail visible-log application.
+                    LOG.warn("Skipping the early-split signal for table {}: {}", table.getId(), e.getMessage());
+                }
+            }
         }
         if (maxTabletSize > 0 && table.isRangeDistribution()) {
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
-                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE, 0L);
+                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE,
+                            maxUnderProvisionedTabletSize);
         }
         tabletStats.clear();
     }
