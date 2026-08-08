@@ -781,4 +781,24 @@ public class PartitionPruneTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
 
     }
+
+    @Test
+    public void testListPartitionCastPredicateDoesNotFailQuery() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_lp_cast (id INT, region VARCHAR(32)) " +
+                "PARTITION BY LIST(region) (" +
+                "  PARTITION p_num  VALUES IN ('100','200')," +
+                "  PARTITION p_text VALUES IN ('east','west')" +
+                ") DISTRIBUTED BY HASH(id) PROPERTIES('replication_num'='1')");
+        try {
+            // 'east'/'west' cannot cast to INT; the per-partition cast in the LIST pruner used to throw
+            // StarRocksConnectorException and abort the whole (valid) query. Pruning is best-effort, so
+            // these must still plan.
+            String plan = getFragmentPlan("select * from t_lp_cast where cast(region as int) = 100");
+            Assertions.assertTrue(plan.contains("t_lp_cast"), plan);
+            plan = getFragmentPlan("select * from t_lp_cast where cast(region as int) in (100, 200)");
+            Assertions.assertTrue(plan.contains("t_lp_cast"), plan);
+        } finally {
+            starRocksAssert.dropTable("t_lp_cast");
+        }
+    }
 }
