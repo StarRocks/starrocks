@@ -211,7 +211,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         }
         if (maxTabletSize > 0 && table.isRangeDistribution()) {
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
-                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE);
+                    .addReshardCandidate(db.getId(), table.getId(), maxTabletSize, Long.MAX_VALUE, 0L);
         }
         tabletStats.clear();
     }

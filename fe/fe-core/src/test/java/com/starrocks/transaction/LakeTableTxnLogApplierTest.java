@@ -144,7 +144,8 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         };
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
                 addCandidateCalls.incrementAndGet();
             }
         };
@@ -203,7 +204,8 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         };
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize, long minAdjacentTabletPairSize) {
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
                 addCandidateCalls.incrementAndGet();
             }
         };

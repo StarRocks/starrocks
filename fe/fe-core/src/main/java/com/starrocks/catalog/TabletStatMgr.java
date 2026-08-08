@@ -226,7 +226,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 // carries the merge signal too.
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
-                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize, 0L);
                 }
             }
         }
