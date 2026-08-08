@@ -185,7 +185,15 @@ public class TransactionStmtExecutor {
                 transactionState.setDbId(database.getId());
                 DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getDatabaseTransactionMgr(database.getId());
-                databaseTransactionMgr.upsertTransactionState(transactionState);
+                try {
+                    databaseTransactionMgr.upsertTransactionState(transactionState);
+                } catch (Exception e) {
+                    // Registration failed (e.g. running-txn limit, duplicate label, quota). Undo the db binding
+                    // so a later statement re-attempts registration instead of skipping it (getDbId() != 0) and
+                    // then failing COMMIT against a transaction the DatabaseTransactionMgr never registered.
+                    transactionState.setDbId(0);
+                    throw e;
+                }
             }
 
             if (database.getId() != transactionState.getDbId()) {
