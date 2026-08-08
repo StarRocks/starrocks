@@ -316,6 +316,7 @@ def generate_cpp(path):
         "ConditionFunctions",
         "HyperloglogFunctions",
         "BitmapFunctions",
+        "DsThetaFunctions",
         "HashFunctions",
         "GroupingSetsFunctions",
         "StructFunctions",
