@@ -18,6 +18,7 @@
 
 #include <vector>
 
+#include "base/phmap/btree.h"
 #include "base/phmap/phmap.h"
 
 namespace starrocks {
@@ -76,6 +77,50 @@ TEST(STLCountingAllocatorTest, normal) {
         m.insert({2, 2});
         ASSERT_GE(memory_usage, memory_usage_after_first_insert);
     }
+    ASSERT_EQ(memory_usage, 0);
+}
+
+TEST(STLCountingAllocatorTest, logical_size_when_malloc_hook_delta_is_unavailable) {
+    int64_t memory_usage = 0;
+    tls_delta_memory = 0;
+    STLCountingAllocator<int64_t> allocator(&memory_usage);
+
+    constexpr size_t kNumElements = 7;
+    auto* ptr = allocator.allocate(kNumElements);
+    ASSERT_NE(ptr, nullptr);
+    ASSERT_EQ(kNumElements * sizeof(int64_t), memory_usage);
+
+    allocator.deallocate(ptr, kNumElements);
+    ASSERT_EQ(0, memory_usage);
+}
+
+TEST(STLCountingAllocatorTest, btree) {
+    using MapValue = std::pair<const int, int>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<int, int, std::less<>, MapAllocator>;
+
+    int64_t memory_usage = 0;
+    Map map{std::less<>(), MapAllocator(&memory_usage)};
+    ASSERT_EQ(map.bytes_used(), sizeof(map));
+    ASSERT_EQ(memory_usage, 0);
+
+    constexpr int kNumEntries = 2048;
+    for (int i = 0; i < kNumEntries; ++i) {
+        ASSERT_TRUE(map.emplace(i, i).second);
+        ASSERT_GE(memory_usage, 0);
+        ASSERT_EQ(map.bytes_used(), sizeof(map) + static_cast<size_t>(memory_usage)) << "insert index: " << i;
+    }
+
+    const auto memory_usage_before_duplicate = memory_usage;
+    ASSERT_FALSE(map.emplace(0, 1).second);
+    ASSERT_EQ(memory_usage_before_duplicate, memory_usage);
+
+    for (int i = 0; i < kNumEntries; ++i) {
+        ASSERT_EQ(1, map.erase(i));
+        ASSERT_GE(memory_usage, 0);
+        ASSERT_EQ(map.bytes_used(), sizeof(map) + static_cast<size_t>(memory_usage)) << "erase index: " << i;
+    }
+    ASSERT_TRUE(map.empty());
     ASSERT_EQ(memory_usage, 0);
 }
 } // namespace starrocks

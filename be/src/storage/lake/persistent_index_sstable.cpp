@@ -27,6 +27,7 @@
 #include "gen_cpp/types.pb.h"
 #include "io/input_stream.h"
 #include "platform/key_cache.h"
+#include "runtime/memory/counting_allocator.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
@@ -127,9 +128,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz,
-                                             PersistentIndexSstableRangePB* range_pb) {
+template <typename Allocator>
+Status PersistentIndexSstable::build_sstable(
+        const phmap::btree_map<std::string, IndexValueWithVer, std::less<>, Allocator>& map, WritableFile* wf,
+        uint64_t* filesz, PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -156,6 +158,17 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     }
     return Status::OK();
 }
+
+using PersistentIndexMapValue = std::pair<const std::string, IndexValueWithVer>;
+using DefaultPersistentIndexMapAllocator = std::allocator<PersistentIndexMapValue>;
+using CountingPersistentIndexMapAllocator = STLCountingAllocator<PersistentIndexMapValue>;
+
+template Status PersistentIndexSstable::build_sstable<DefaultPersistentIndexMapAllocator>(
+        const phmap::btree_map<std::string, IndexValueWithVer, std::less<>, DefaultPersistentIndexMapAllocator>& map,
+        WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
+template Status PersistentIndexSstable::build_sstable<CountingPersistentIndexMapAllocator>(
+        const phmap::btree_map<std::string, IndexValueWithVer, std::less<>, CountingPersistentIndexMapAllocator>& map,
+        WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
 Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                          IndexValue* values, KeyIndexSet* found_key_indexes) const {
