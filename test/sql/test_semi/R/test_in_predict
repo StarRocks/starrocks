@@ -395,9 +395,9 @@ select [] in (array1), [] not in (array1), [null] in (array1), [null] not in (ar
 -- result:
 None	None	None	None	None	None	None	None	None	None	None	None
 0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
-0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	1	0	0	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
+0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	0	1	None	0	0	1	None	1
 0	1	0	1	0	1	None	1	0	1	None	1
 0	1	0	1	0	1	None	1	1	0	0	1
@@ -413,12 +413,12 @@ None	None	None
 None	None	None
 0	None	0
 0	None	1
-0	None	1
-0	None	0
-0	None	1
-0	None	None
 0	None	None
 0	None	0
+0	None	0
+0	None	1
+0	None	1
+0	None	None
 0	None	None
 1	0	0
 1	None	1
@@ -433,9 +433,9 @@ None	None	None
 1	None	1
 1	None	0
 1	None	None
-1	None	0
-1	None	0
 1	None	1
+1	None	0
+1	None	0
 1	None	None
 1	None	None
 -- !result
@@ -550,8 +550,8 @@ None	None	None	None	None	None
 0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	0	1
-0	1	0	1	1	0
 0	1	0	1	0	1
+0	1	0	1	1	0
 0	1	0	1	0	1
 0	1	0	1	0	1
 0	1	0	1	0	1
@@ -611,12 +611,12 @@ select map1 in (map{1:10, 2:20, 4:40}, map{}), map2 in (map{2:[2,3,4], 1:[1,2,3]
 -- result:
 None	None	None
 None	1	1
+0	0	0
 0	0	1
 0	None	1
+0	0	0
 0	1	0
-0	0	0
 0	0	1
-0	0	0
 0	None	0
 1	0	None
 1	0	1
@@ -630,11 +630,11 @@ None	None
 None	None
 None	None
 None	None
-None	None
-None	None
-None	None
 None	1
 None	1
+None	None
+None	None
+None	None
 None	1
 0	1
 0	None
@@ -858,4 +858,72 @@ E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 20. 
 select st1 not in (map{}) from sc2 order by 1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+-- !result
+select 10 in (select v1 from sc2), 10 not in (select v1 from sc2) from sc2;
+-- result:
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+1	0
+-- !result
+drop table if exists sc3;
+-- result:
+-- !result
+CREATE TABLE `sc3` (`v1` int NOT NULL) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into sc3 values (1), (2), (10);
+-- result:
+-- !result
+select 10 in (select v1 from sc3), 10 not in (select v1 from sc3);
+-- result:
+1	0
+-- !result
+select 100 in (select v1 from sc3), 100 not in (select v1 from sc3);
+-- result:
+0	1
+-- !result
+drop table if exists sc4;
+-- result:
+-- !result
+CREATE TABLE `sc4` (`v1` int NULL) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into sc4 values (1), (2), (null);
+-- result:
+-- !result
+select 100 in (select v1 from sc4), 100 not in (select v1 from sc4);
+-- result:
+None	None
+-- !result
+select 1 in (select v1 from sc4), 1 not in (select v1 from sc4);
+-- result:
+1	0
+-- !result
+select null in (select v1 from sc3), null not in (select v1 from sc3);
+-- result:
+None	None
+-- !result
+select 10 in (select v1 from sc3 where false), 10 not in (select v1 from sc3 where false);
+-- result:
+0	1
+-- !result
+select null in (select v1 from sc3 where false), null not in (select v1 from sc3 where false);
+-- result:
+0	1
 -- !result
