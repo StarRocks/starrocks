@@ -215,10 +215,6 @@
     "message": "SQL 参考",
     "description": "The label for category SQL Statements in sidebar docs"
   },
-  "sidebar.docs.category.SQL Statements.link.generated-index.title": {
-    "message": "SQL 命令",
-    "description": "The generated-index page title for category SQL Statements in sidebar docs"
-  },
   "sidebar.docs.category.User account management": {
     "message": "用户账户管理",
     "description": "The label for category User account management in sidebar docs"
@@ -566,14 +562,6 @@
   "sidebar.docs.category.Query Tuning": {
     "message": "查询调优",
     "description": "The label for category Query Tuning in sidebar docs"
-  },
-  "sidebar.docs.category.Query Tuning.link.generated-index.title": {
-    "message": "查询调优最佳实践",
-    "description": "The generated-index page title for category Query Tuning in sidebar docs"
-  },
-  "sidebar.docs.category.Query Tuning.link.generated-index.description": {
-    "message": "学习如何在 StarRocks 中分析、调优和优化查询。",
-    "description": "The generated-index page description for category Query Tuning in sidebar docs"
   },
   "sidebar.docs.category.数据分布": {
     "message": "数据分布",

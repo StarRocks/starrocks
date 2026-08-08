@@ -52,7 +52,7 @@ const ChineseFeatureList = [
   },
   {
     title: '半结构化类型',
-    url: '../../category/semi-structured/',
+    url: '../../sql-reference/data-types/semi_structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -79,7 +79,7 @@ const ChineseFeatureList = [
   },
   {
     title: '参考手册',
-    url: '../../category/reference/',
+    url: '../../sql-reference/',
     description: (
       <>
         SQL 语法、命令、函数、变量
@@ -154,7 +154,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Work with semi-structured data',
-    url: '../../category/semi-structured/',
+    url: '../../sql-reference/data-types/semi_structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -181,7 +181,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Reference',
-    url: '../../category/reference/',
+    url: '../../sql-reference/',
     description: (
       <>
         SQL, functions, error codes, …
@@ -256,7 +256,7 @@ const JapaneseFeatureList = [
   },
   {
     title: 'セミ構造化データ',
-    url: '../../category/semi-structured/',
+    url: '../../sql-reference/data-types/semi_structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -283,7 +283,7 @@ const JapaneseFeatureList = [
   },
   {
     title: 'リファレンス',
-    url: '../../category/reference/',
+    url: '../../sql-reference/',
     description: (
       <>
         SQL, 関数, エラーコード, …
@@ -316,6 +316,8 @@ const JapaneseFeatureList = [
 const LEGACY_URLS = {
   '../../loading/loading_introduction/Loading_intro/': '../../loading/Loading_intro/',
   '../../data_source/': '../../data_source/data_lakes/',
+  '../../sql-reference/data-types/semi_structured/': '../../category/semi-structured/',
+  '../../sql-reference/': '../../category/reference/',
 };
 
 function forLayout(list, layout) {

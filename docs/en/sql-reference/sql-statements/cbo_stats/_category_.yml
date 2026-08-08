@@ -3,4 +3,5 @@ label: 'CBO statistics'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: cbo_stats
