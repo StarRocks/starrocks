@@ -1,0 +1,59 @@
+-- name: test_nljoin_empty_chunk_common_expr
+CREATE TABLE `nlj_probe` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `nlj_build` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- More than one chunk on the build side, so the operator also walks the path where a permuted
+-- chunk comes back empty because the previous round already consumed the last probe row.
+CREATE TABLE `nlj_build_multi_chunk` (
+  `k` bigint(20) NULL COMMENT "",
+  `v` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into nlj_probe select generate_series, generate_series from table(generate_series(1, 10));
+insert into nlj_build select generate_series, generate_series from table(generate_series(1, 10000));
+insert into nlj_build_multi_chunk select generate_series, generate_series from table(generate_series(1, 5000));
+
+-- The nest loop join node carries a join conjunct AND a where predicate whose repeated sub
+-- expression is extracted into the node's common sub expressions. Once the join conjunct filters
+-- every row out of a permuted chunk, those common exprs used to be evaluated on an empty chunk.
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+
+set enable_predicate_expr_reuse = false;
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+set enable_predicate_expr_reuse = true;
+
+-- Same shape, but the join conjunct does match, so the common exprs still have to be applied.
+select count(*) from nlj_probe left join nlj_build on nlj_probe.k > nlj_build.k
+where abs(nlj_probe.v + coalesce(nlj_build.v, 0)) > 5 or abs(nlj_probe.v + coalesce(nlj_build.v, 0)) < 3;
+
+select count(*) from nlj_probe full outer join nlj_build on nlj_probe.k > nlj_build.k + 1000000
+where abs(coalesce(nlj_probe.v, 0) + coalesce(nlj_build.v, 0)) > 5
+   or abs(coalesce(nlj_probe.v, 0) + coalesce(nlj_build.v, 0)) < 3;
+
+select count(*) from nlj_build_multi_chunk left join nlj_probe on nlj_build_multi_chunk.k > nlj_probe.k + 1000000
+where abs(nlj_build_multi_chunk.v + coalesce(nlj_probe.v, 0)) > 5
+   or abs(nlj_build_multi_chunk.v + coalesce(nlj_probe.v, 0)) < 3;
