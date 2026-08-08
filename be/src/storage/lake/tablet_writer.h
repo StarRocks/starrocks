@@ -112,6 +112,13 @@ public:
     // that produced no such losers (e.g. the sort-key==PK eager path). PK table only.
     const std::vector<std::vector<uint32_t>>& seg_delvecs() const { return _seg_delvecs; }
 
+    // Parallel to dels(): the pre-built tombstone sstable for each del file, built at write time when
+    // its serialized size reaches pk_index_eager_build_threshold_bytes. An empty entry means publish
+    // applies that delete via the memtable erase path. del_sst_ranges() carries each sstable's key range.
+    const std::vector<FileInfo>& del_ssts() const { return _del_ssts; }
+
+    const std::vector<PersistentIndexSstableRangePB>& del_sst_ranges() const { return _del_sst_ranges; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -239,6 +246,12 @@ public:
     // (for example, during large imports or major compaction tasks), it will invoke this function.
     // However, whether eager PK index build is actually enabled still depends on the schema.
     void try_enable_pk_index_eager_build();
+    // Parallel to _dels: pre-built tombstone sstable + its key range for each del file (an empty FileInfo
+    // when this del file has no sstable). Built when the serialized del-file size reaches
+    // pk_index_eager_build_threshold_bytes; shared-data primary-key tablets always use the cloud-native
+    // persistent index, so publish can ingest it directly.
+    std::vector<FileInfo> _del_ssts;
+    std::vector<PersistentIndexSstableRangePB> _del_sst_ranges;
 
     bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
     void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
