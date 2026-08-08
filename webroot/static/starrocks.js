@@ -17,15 +17,23 @@
 
 function download_query() {
     let tableThs = Array.from($('table th')).map(v=>{return v.textContent})
-    let tableTds = Array.from($('table td')).map(v=>{return v.textContent})
+    let cellValue = (el)=>{
+        let titled = el.querySelector('[title]')
+        return titled ? titled.getAttribute('title') : el.textContent
+    }
+    let tableTds = Array.from($('table td')).map(cellValue)
     let combine = tableThs.concat(tableTds)
     let csv = ''
-    let colWidth = 9
+    let colWidth = tableThs.length
     let column = []
+    let escapeCsv = (v)=>{
+        v = (v == null ? '' : v).toString()
+        return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v
+    }
     combine.map((v,i)=>{
-        column.push(v.trim())
+        column.push(escapeCsv(v.trim()))
         if((i+1)%colWidth === 0){
-            csv += column.join(",")+'\n'
+            csv += column.join(",")+'\r\n'
             column = []
         }
     })
