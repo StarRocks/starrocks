@@ -42,6 +42,7 @@ import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
@@ -50,6 +51,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.DateTimeUtil;
@@ -72,6 +74,7 @@ import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPar
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static org.apache.iceberg.TableProperties.AVRO_COMPRESSION;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -700,6 +703,61 @@ public class IcebergApiConverterTest {
         assertFalse(columns.get(0).isAllowNull());
         assertTrue(columns.get(1).isAllowNull());
         assertEquals("9", IcebergApiConverter.getWriteDefaultValue(schema, "c_optional"));
+    }
+
+    @Test
+    public void testToFullSchemasAppliesNameMappingPhysicalName() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("DateID").withId(1).ofType(Types.IntegerType.get()).build());
+        fields.add(Types.NestedField.optional("Temperature").withId(2).ofType(Types.DoubleType.get()).build());
+        Schema schema = new Schema(fields);
+
+        // Column "DateID" (field-id 1) is physically stored in the Parquet file under the
+        // Delta column-mapping name "col-11111111-1111-1111-1111-111111111111", while
+        // "Temperature" (field-id 2) has only a single, matching name.
+        String nameMappingJson = "["
+                + "{\"field-id\":1,\"names\":[\"DateID\",\"col-11111111-1111-1111-1111-111111111111\"]},"
+                + "{\"field-id\":2,\"names\":[\"Temperature\"]}"
+                + "]";
+
+        Table table = mock(Table.class);
+        when(table.properties()).thenReturn(ImmutableMap.of(DEFAULT_NAME_MAPPING, nameMappingJson));
+
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema, table);
+
+        Column dateId = columns.stream().filter(c -> c.getName().equals("DateID")).findFirst().orElseThrow();
+        Column temperature = columns.stream().filter(c -> c.getName().equals("Temperature")).findFirst().orElseThrow();
+
+        assertEquals("col-11111111-1111-1111-1111-111111111111", dateId.getPhysicalName());
+        // Only one (matching) name in the mapping entry -> no alias, physicalName stays unset.
+        assertTrue(StringUtils.isEmpty(temperature.getPhysicalName()));
+    }
+
+    @Test
+    public void testToFullSchemasSkipsNameMappingWhenPropertyAbsent() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("DateID").withId(1).ofType(Types.IntegerType.get()).build());
+        Schema schema = new Schema(fields);
+
+        Table table = mock(Table.class);
+        when(table.properties()).thenReturn(ImmutableMap.of());
+
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema, table);
+        assertTrue(StringUtils.isEmpty(columns.get(0).getPhysicalName()));
+    }
+
+    @Test
+    public void testToFullSchemasIgnoresMalformedNameMapping() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("DateID").withId(1).ofType(Types.IntegerType.get()).build());
+        Schema schema = new Schema(fields);
+
+        Table table = mock(Table.class);
+        when(table.properties()).thenReturn(ImmutableMap.of(DEFAULT_NAME_MAPPING, "not-a-valid-json"));
+
+        // Should not throw; malformed name-mapping is logged and ignored.
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema, table);
+        assertTrue(StringUtils.isEmpty(columns.get(0).getPhysicalName()));
     }
 
     @Test
