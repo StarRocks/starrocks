@@ -18,7 +18,8 @@
 
 #include <sstream>
 
-#include "gen_cpp/AgentService_types.h"
+// TFlatJsonConfig now lives in Types.thrift (shared by sink/agent paths).
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 class FlatJsonConfig {

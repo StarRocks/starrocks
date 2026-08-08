@@ -99,6 +99,10 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _merge_condition = table_sink.merge_condition;
     _encryption_meta = table_sink.encryption_meta;
     _partial_update_mode = table_sink.partial_update_mode;
+    if (table_sink.__isset.flat_json_config) {
+        _has_flat_json_config = true;
+        _flat_json_config = table_sink.flat_json_config;
+    }
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
