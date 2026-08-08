@@ -15,7 +15,7 @@ StarRocks の [Lateral Join](../../../using_starrocks/Lateral_join.md) は、unn
 
 ## 構文
 
-```Haskell
+```plaintext
 unnest_bitmap(bitmap)
 ```
 

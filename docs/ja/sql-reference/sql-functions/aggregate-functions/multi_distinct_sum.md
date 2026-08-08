@@ -9,7 +9,7 @@ description: "expr 内の異なる値の合計を返し、sum(distinct expr) と
 
 ## 構文
 
-```Haskell
+```plaintext
 multi_distinct_sum(expr)
 ```
 

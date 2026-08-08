@@ -11,7 +11,7 @@ Returns a random UUID of the LARGEINT type. This function has an execution perfo
 
 ## Syntax
 
-```Haskell
+```plaintext
 uuid_numeric();
 ```
 

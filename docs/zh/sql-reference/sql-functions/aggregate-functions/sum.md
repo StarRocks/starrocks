@@ -12,7 +12,7 @@ description: "返回指定列所有值的总和，忽略NULL值并支持DISTINCT
 
 ## 语法
 
-```Haskell
+```plaintext
 SUM(expr)
 ```
 

@@ -11,7 +11,7 @@ description: "返回e的x次幂。"
 
 ## 语法
 
-```Haskell
+```plaintext
 EXP(x);
 ```
 

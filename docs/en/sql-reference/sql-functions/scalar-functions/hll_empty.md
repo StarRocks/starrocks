@@ -11,7 +11,7 @@ Generates an empty HLL column to supplement the default values when inserting or
 
 ## Syntax
 
-```Haskell
+```plaintext
 HLL_EMPTY()
 ```
 

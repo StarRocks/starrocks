@@ -11,7 +11,7 @@ description: "若 expr1 不为 NULL，返回 expr1，否则返回 expr2。"
 
 ## 语法
 
-```Haskell
+```plaintext
 ifnull(expr1,expr2);
 ```
 

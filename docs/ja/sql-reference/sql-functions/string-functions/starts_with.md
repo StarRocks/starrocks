@@ -9,7 +9,7 @@ description: "文字列が指定されたプレフィックスで始まる場合
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN starts_with(VARCHAR str, VARCHAR prefix)
 ```
 

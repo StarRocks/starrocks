@@ -11,7 +11,7 @@ This function is used for finding the location of a substring in a string (start
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT locate(VARCHAR substr, VARCHAR str[, INT pos])
 ```
 

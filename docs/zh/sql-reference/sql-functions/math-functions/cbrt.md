@@ -13,7 +13,7 @@ description: "计算参数的立方根。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE cbrt(DOUBLE arg)
 ```
 

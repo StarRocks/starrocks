@@ -9,7 +9,7 @@ description: "入力値がビットマップ列に含まれているかどうか
 
 ## Syntax
 
-```Haskell
+```plaintext
 B00LEAN BITMAP_CONTAINS(BITMAP bitmap, BIGINT input)
 ```
 

@@ -11,7 +11,7 @@ description: "multi_distinct_sum 返回表达式中去除重复值后的总和�
 
 ## 语法
 
-```Haskell
+```plaintext
 multi_distinct_sum(expr)
 ```
 

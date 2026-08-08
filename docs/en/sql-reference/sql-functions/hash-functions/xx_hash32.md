@@ -9,7 +9,7 @@ Returns the 32-bit XXH32 hash value of the input string.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT XX_HASH32(VARCHAR input, ...)
 ```
 

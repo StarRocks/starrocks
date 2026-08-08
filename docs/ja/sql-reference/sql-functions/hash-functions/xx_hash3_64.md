@@ -11,7 +11,7 @@ description: "入力文字列の64ビットのxxhash3ハッシュ値を返しま
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT XX_HASH3_64(VARCHAR input, ...)
 ```
 

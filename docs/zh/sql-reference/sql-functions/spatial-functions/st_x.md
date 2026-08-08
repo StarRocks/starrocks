@@ -11,7 +11,7 @@ description: "如果 point 是有效的点类型，返回对应的 X 坐标值�
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_X(point)
 ```
 

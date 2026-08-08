@@ -14,7 +14,7 @@ Lambda 表达式使用运算符 `->` 来表示，读作 “goes to”。运算�
 
 ## 语法
 
-```Haskell
+```plaintext
 parameter -> expression
 ```
 
@@ -58,7 +58,7 @@ x -> if(x>0,"positive","negative")
 
 在高阶函数里使用 lambda 表达式：
 
-```Haskell
+```plaintext
 select array_map((x,y,z) -> x + y, [1], [2], [4]);
 +----------------------------------------------+
 | array_map((x, y, z) -> x + y, [1], [2], [4]) |

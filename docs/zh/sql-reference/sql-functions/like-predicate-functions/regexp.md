@@ -11,7 +11,7 @@ description: "检查字符串是否匹配给定的正则表达式。"
 
 ## 语法
 
-```Haskell
+```plaintext
 BOOLEAN regexp(VARCHAR expr, VARCHAR pattern);
 ```
 

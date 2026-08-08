@@ -11,7 +11,7 @@ description: "根据过滤条件返回数组中匹配的元素，支持Lambda函
 
 ## 语法
 
-```Haskell
+```plaintext
 array_filter(array, array<bool>)
 array_filter(lambda_function, arr1,arr2...)
 ```

@@ -11,7 +11,7 @@ description: "返回字符串的字节长度。"
 
 ## 语法
 
-```Haskell
+```plaintext
 length(str)
 ```
 

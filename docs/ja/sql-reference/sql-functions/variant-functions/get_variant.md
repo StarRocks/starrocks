@@ -11,7 +11,7 @@ description: "VARIANT オブジェクト内の指定パスから型付きの値�
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT get_variant_int(variant_expr, path)
 DOUBLE get_variant_double(variant_expr, path)
 VARCHAR get_variant_string(variant_expr, path)

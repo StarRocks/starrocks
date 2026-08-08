@@ -23,7 +23,7 @@ description: "返回多个输入参数中的最大值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 greatest(expr1,...);
 ```
 

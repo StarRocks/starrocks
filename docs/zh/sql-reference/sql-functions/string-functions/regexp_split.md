@@ -11,7 +11,7 @@ description: "根据正则表达式拆分字符串，返回最多指定数量的
 
 ## 语法
 
-```Haskell
+```plaintext
 regexp_split(str, pattern[, max_split])
 ```
 

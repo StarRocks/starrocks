@@ -9,7 +9,7 @@ description: "指定された位置から指定した長さのサブストリン
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR substr(VARCHAR str, pos[, len])
 ```
 

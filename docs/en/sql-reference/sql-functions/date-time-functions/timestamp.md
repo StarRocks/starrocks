@@ -11,7 +11,7 @@ Returns the DATETIME value of a date or datetime expression.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME timestamp(DATETIME|DATE expr);
 ```
 

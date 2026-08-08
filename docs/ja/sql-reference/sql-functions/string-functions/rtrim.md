@@ -9,7 +9,7 @@ description: "文字列の末尾から空白または指定された文字を削
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR rtrim(VARCHAR str[, VARCHAR characters]);
 ```
 

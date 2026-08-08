@@ -11,7 +11,7 @@ description: "计算参数x的平方根。"
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE SQRT(DOUBLE x);
 DOUBLE DSQRT(DOUBLE x);
 ```

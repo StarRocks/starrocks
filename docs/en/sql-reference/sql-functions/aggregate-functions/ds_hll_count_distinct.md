@@ -13,7 +13,7 @@ It is slower than APPROX_COUNT_DISTINCT(expr) but with higher precision because 
 
 ## Syntax
 
-```Haskell
+```plaintext
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
 - `log_k`: Integer. Range [4, 21]. Default: 17.

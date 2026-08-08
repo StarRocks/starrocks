@@ -15,7 +15,7 @@ description: "json_path式で特定できる要素の値をJSONオブジェク�
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_query(json_object_expr, json_path)
 ```
 

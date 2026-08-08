@@ -11,7 +11,7 @@ description: "将嵌套数组展平一层。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_flatten(param)
 ```
 

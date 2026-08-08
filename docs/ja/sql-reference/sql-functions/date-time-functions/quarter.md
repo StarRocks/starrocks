@@ -9,7 +9,7 @@ description: "日付の四半期部分を返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT quarter(DATETIME|DATE date);
 ```
 

@@ -11,7 +11,7 @@ description: "現在のタイムゾーンを取得し、VARCHAR 値を返しま�
 
 ## 構文
 
-```Haskell
+```plaintext
 TIME CURTIME()
 ```
 
