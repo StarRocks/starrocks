@@ -50,6 +50,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -928,12 +929,32 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
         // no need to do merge
         return Status::OK();
     }
+    // Corrupted bytes usually come from the local cache copy of an input sstable. Drop
+    // those cache entries so the next compaction round re-reads from remote storage,
+    // instead of hitting the same bad blocks and failing forever.
+    auto drop_input_cache_on_corruption = [&](const Status& st) {
+        if (!st.is_corruption()) {
+            return;
+        }
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst compaction hit corruption, dropping local cache of " << sstable_vec.size()
+                     << " input sstables, tablet_id=" << metadata->id() << ", error: " << st;
+        for (const auto& sst : sstable_vec) {
+            (void)drop_corrupted_sstable_cache(sst->filename());
+        }
+    };
     if (!merging_iter_ptr->Valid()) {
+        drop_input_cache_on_corruption(merging_iter_ptr->status());
         return merging_iter_ptr->status();
     }
     // merge sstable files.
-    ASSIGN_OR_RETURN(auto merge_results, merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr,
-                                                        metadata, contain_shared_sstables));
+    auto merge_results_or = merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata,
+                                           contain_shared_sstables);
+    if (!merge_results_or.ok()) {
+        drop_input_cache_on_corruption(merge_results_or.status());
+        return merge_results_or.status();
+    }
+    auto& merge_results = merge_results_or.value();
     if (merge_results.empty()) {
         // no output file generated.
         return Status::OK();

@@ -48,6 +48,8 @@ io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
     return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
 }
 
+} // namespace
+
 Status drop_corrupted_sstable_cache(const std::string& path) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     if (!config::lake_clear_corrupted_cache_data) {
@@ -66,8 +68,6 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
     return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
 #endif
 }
-
-} // namespace
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter, DelVectorPtr delvec,
