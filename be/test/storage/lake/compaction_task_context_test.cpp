@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/time/time.h"
 #include "storage/olap_common.h"
 
 namespace starrocks::lake {
@@ -68,6 +69,21 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     reader_stats.io_count_remote = 700;
     reader_stats.compressed_bytes_read_remote = 1024;
     reader_stats.compressed_bytes_read_local_disk = 1024;
+    reader_stats.create_segment_iter_ns = 101;
+    reader_stats.decompress_ns = 102;
+    reader_stats.block_load_ns = 103;
+    reader_stats.block_fetch_ns = 104;
+    reader_stats.block_seek_ns = 105;
+    reader_stats.block_seek_num = 106;
+    reader_stats.decode_dict_ns = 107;
+    reader_stats.get_rowsets_ns = 108;
+    reader_stats.get_delvec_ns = 109;
+    reader_stats.get_delta_column_group_ns = 110;
+    reader_stats.del_filter_ns = 111;
+    reader_stats.blocks_load = 112;
+    reader_stats.raw_rows_read = 113;
+    reader_stats.compressed_bytes_read = 114;
+    reader_stats.uncompressed_bytes_read = 115;
 
     stats.in_queue_time_sec = 5;
     stats.pk_sst_merge_ns = 5;
@@ -81,6 +97,21 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(stats.io_count_remote, 700);
     EXPECT_EQ(stats.io_bytes_read_remote, 1024);
     EXPECT_EQ(stats.io_bytes_read_local_disk, 1024);
+    EXPECT_EQ(stats.create_segment_iter_ns, 101);
+    EXPECT_EQ(stats.decompress_ns, 102);
+    EXPECT_EQ(stats.block_load_ns, 103);
+    EXPECT_EQ(stats.block_fetch_ns, 104);
+    EXPECT_EQ(stats.block_seek_ns, 105);
+    EXPECT_EQ(stats.block_seek_count, 106);
+    EXPECT_EQ(stats.decode_dict_ns, 107);
+    EXPECT_EQ(stats.get_rowsets_ns, 108);
+    EXPECT_EQ(stats.get_delvec_ns, 109);
+    EXPECT_EQ(stats.get_delta_column_group_ns, 110);
+    EXPECT_EQ(stats.del_filter_ns, 111);
+    EXPECT_EQ(stats.blocks_load, 112);
+    EXPECT_EQ(stats.raw_rows_read, 113);
+    EXPECT_EQ(stats.compressed_bytes_read, 114);
+    EXPECT_EQ(stats.uncompressed_bytes_read, 115);
     EXPECT_EQ(stats.in_queue_time_sec, 5);
     EXPECT_EQ(stats.pk_sst_merge_ns, 5);
 
@@ -118,6 +149,47 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(stats.io_ns_write_remote, 10);
     EXPECT_EQ(stats.write_segment_bytes, 100);
     EXPECT_EQ(stats.write_segment_count, 1000);
+}
+
+TEST_F(CompactionTaskContextTest, test_task_timing_accounting) {
+    CompactionTaskStats stats;
+    stats.compaction_type = "horizontal";
+    stats.task_attempt_count = 1;
+    stats.task_prepare_ns = 10;
+    stats.input_prepare_ns = 20;
+    stats.reader_get_next_ns = 30;
+    stats.writer_write_ns = 40;
+    stats.pk_sst_merge_ns = 50;
+    stats.task_execute_ns = 190;
+    stats.task_total_ns = 200;
+
+    // Nested reader metrics explain reader_get_next_ns but do not participate
+    // in top-level wall-time accounting.
+    stats.io_ns_read_remote = 1000;
+    stats.block_load_ns = 500;
+
+    EXPECT_EQ(150, stats.task_accounted_ns());
+    EXPECT_EQ(50, stats.task_unaccounted_ns());
+
+    auto combined = stats + stats;
+    EXPECT_EQ("horizontal", combined.compaction_type);
+    EXPECT_EQ(2, combined.task_attempt_count);
+    EXPECT_EQ(400, combined.task_total_ns);
+    EXPECT_EQ(300, combined.task_accounted_ns());
+    EXPECT_EQ(100, combined.task_unaccounted_ns());
+
+    CompactionTaskStats vertical;
+    vertical.compaction_type = "vertical";
+    EXPECT_EQ("mixed", (stats + vertical).compaction_type);
+
+    std::string json_stats = stats.to_json_stats();
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("profile_version":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("profile_final":true)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("compaction_type":"horizontal")"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("task_total_ns":200)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("task_accounted_ns":150)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("task_unaccounted_ns":50)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_ns":1000)"));
 }
 
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
@@ -180,5 +252,23 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats_with_subtask_metadata) {
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("input_rowsets":5)"));
     EXPECT_THAT(json_profile, testing::Not(testing::HasSubstr(R"("input_bytes")")));
     EXPECT_THAT(json_profile, testing::HasSubstr(R"("is_parallel_subtask":true)"));
+}
+
+TEST_F(CompactionTaskContextTest, test_live_stats_snapshot) {
+    context.stats->task_execute_ns = 100;
+    context.stats->task_total_ns = 200;
+
+    const int64_t now_ns = MonotonicNanos();
+    context.task_attempt_start_ns.store(now_ns - 5'000'000, std::memory_order_release);
+    context.task_execute_start_ns.store(now_ns - 3'000'000, std::memory_order_release);
+
+    auto live_stats = context.stats_snapshot(true);
+    EXPECT_GE(live_stats.task_total_ns, 5'000'200);
+    EXPECT_GE(live_stats.task_execute_ns, 3'000'100);
+    EXPECT_THAT(live_stats.to_json_stats(false), testing::HasSubstr(R"("profile_final":false)"));
+
+    auto final_stats = context.stats_snapshot(false);
+    EXPECT_EQ(final_stats.task_total_ns, 200);
+    EXPECT_EQ(final_stats.task_execute_ns, 100);
 }
 } // namespace starrocks::lake

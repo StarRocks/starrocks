@@ -1101,6 +1101,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
         EXPECT_EQ(txn_id, info.txn_id);
         EXPECT_EQ(tablet_id, info.tablet_id);
         EXPECT_EQ(version, info.version);
+        EXPECT_GE(info.subtask_id, 0);
     }
 
     block_promise.set_value();
@@ -1642,6 +1643,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     bool found_completed_profile = false;
     for (const auto& info : infos) {
         if (info.finish_time > 0 && info.runs > 0) {
+            EXPECT_EQ(0, info.subtask_id);
             EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);
