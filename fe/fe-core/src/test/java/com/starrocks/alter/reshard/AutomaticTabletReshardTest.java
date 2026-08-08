@@ -15,21 +15,15 @@
 package com.starrocks.alter.reshard;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -38,7 +32,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -309,30 +302,6 @@ public class AutomaticTabletReshardTest {
     }
 
     @Test
-    void aRunningJobLeavesTheAutomaticPlanIdenticalToTodays() throws Exception {
-        // With another job running the early contribution is dropped, so the job the factory builds
-        // must carry exactly the split_count the size rule alone produces.
-        new MockUp<TabletReshardJobMgr>() {
-            @Mock
-            public long getTotalParallelTablets() {
-                return 4L;
-            }
-        };
-
-        // Exercise the FACTORY directly, not the manager: TabletReshardJobMgr.createTabletReshardJob
-        // admits the job, calls init() (moving the shared table to TABLET_RESHARD) and inserts it into
-        // the manager, none of which this assertion needs and none of which the test would undo.
-        try {
-            setTabletDataSizes(3L << 30, 100L << 30);
-            TabletReshardJob job = new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8)
-                    .createTabletReshardJob();
-            assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits, exactly as today");
-        } finally {
-            setTabletDataSizes();
-        }
-    }
-
-    @Test
     void theSampledNodeCountReachesBothTheSignatureAndTheFactory() {
         // Property: ONE resolution feeds both the latch fingerprint and the factory. Prove it by
         // returning a DIFFERENT count on any second resolution: if the code resolved twice, the
@@ -405,22 +374,4 @@ public class AutomaticTabletReshardTest {
         assertEquals(1, created[0], "capacity release lets the early split fire");
     }
 
-    /**
-     * Replaces the shared table's base index with exactly one LakeTablet per given size, in the order
-     * given; called with no size it just empties the index. Every other test in this class mocks job
-     * creation and asserts on signals it passes in explicitly, so none of them reads the tablet list.
-     */
-    private static void setTabletDataSizes(long... sizes) {
-        PhysicalPartition partition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex index = partition.getLatestBaseIndex();
-        for (Tablet existing : new ArrayList<>(index.getTablets())) {
-            index.removeTablet(existing.getId());
-        }
-        for (long size : sizes) {
-            LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
-            tablet.setDataSize(size);
-            index.addTablet(tablet, new TabletMeta(db.getId(), table.getId(), partition.getId(),
-                    index.getId(), TStorageMedium.HDD, true));
-        }
-    }
 }

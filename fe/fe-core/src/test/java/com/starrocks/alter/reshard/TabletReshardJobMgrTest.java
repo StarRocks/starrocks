@@ -797,6 +797,78 @@ public class TabletReshardJobMgrTest {
     }
 
     @Test
+    public void earlySignalReachesTheTriggerThroughTheDrain() {
+        // The only test that carries a live early signal all the way from the queue to a job: every
+        // other early-path test invokes triggerTabletReshard directly and so cannot see the drain
+        // dropping the signal on its way through.
+        int[] splitCalls = {0};
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                splitCalls[0]++;
+                TestNormalTabletReshardJob job =
+                        new TestNormalTabletReshardJob(4000L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
+            }
+        };
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+
+        // Early-only: no split signal (0L) and no merge signal (Long.MAX_VALUE), so nothing but the
+        // third field can produce a job.
+        long earlySize = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, earlySize);
+        Assertions.assertEquals(1, mgr.getReshardCandidateCount(), "the early-only candidate must be queued");
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, splitCalls[0], "the drain must hand the early signal to the trigger");
+    }
+
+    @Test
+    public void aChangedEarlySignalReArmsTheSuppressedSplit() {
+        // The early signal is an input to the no-progress fingerprint, so a tablet growing into a
+        // different early size band must re-arm a split the latch is suppressing. Fails if the trigger
+        // stops feeding maxUnderProvisionedTabletSize into splitPlanSignature.
+        int[] splitCalls = {0};
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                return 8;   // fixed, so the node count cannot be what moves the fingerprint
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
+                    com.starrocks.sql.ast.SplitTabletClause clause, int computeNodeCount) {
+                splitCalls[0]++;
+                TestNormalTabletReshardJob job =
+                        new TestNormalTabletReshardJob(4500L + splitCalls[0], TabletReshardJob.JobType.SPLIT_TABLET);
+                job.setTableId(table.getId());
+                return job;
+            }
+        };
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = new TabletReshardJobMgr();
+
+        // calcSplitCount(3 GiB, earlyTarget 2 GiB) = 2; calcSplitCount(12 GiB, 2 GiB) = 6.
+        long small = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
+        long large = small * 4;
+
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, splitCalls[0], "first early observation must fire");
+
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(1, splitCalls[0], "an unchanged early signal must stay suppressed");
+
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, large);
+        mgr.runAfterCatalogReadyForTest();
+        Assertions.assertEquals(2, splitCalls[0], "a changed early child count must re-arm the split");
+    }
+
+    @Test
     public void splitPlanSignatureChangesForEachNewInput() {
         long max = Config.tablet_reshard_target_size * 4;
         long early = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);

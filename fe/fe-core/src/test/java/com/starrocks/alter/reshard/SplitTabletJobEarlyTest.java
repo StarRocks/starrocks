@@ -287,6 +287,27 @@ public class SplitTabletJobEarlyTest {
     }
 
     @Test
+    public void aRunningJobLeavesTheAutomaticPlanIdenticalToTodays() throws Exception {
+        // Companion to anotherRunningJobSuppressesTheEarlyContribution, which only shows that an
+        // early-only plan becomes empty. Here a normal-sized tablet is also present, so the job that IS
+        // built must carry exactly the split_count the size rule alone produces: admitting the early
+        // contribution would make it 12.
+        // Separate indexes for the same reason anUnavailableWarehouseFallsBackToTheNormalRule needs
+        // them: in one index the 100 GiB tablet's normal split zeroes headroom before the 3 GiB tablet
+        // is reached, so the assertion would read 10 whether or not the early policy was captured.
+        setTwoIndexesWithSizes(/*earlyOnly=*/ 3L << 30, /*normal=*/ 100L << 30);
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public long getTotalParallelTablets() {
+                return 4L;
+            }
+        };
+        TabletReshardJob job =
+                new SplitTabletJobFactory(db, table, new SplitTabletClause(), 8).createTabletReshardJob();
+        assertEquals(10L, job.getParallelTablets(), "only the 100 GiB tablet splits, exactly as today");
+    }
+
+    @Test
     public void aLaterNormalBaselineIsReservedBeforeAnyEarlyDelta() throws Exception {
         // Two indexes: an early-only one whose early plan has replacement topology 2 against a
         // baseline of 0, i.e. delta 2, and a normal one whose baseline topology is 10. cap 10 is fully
