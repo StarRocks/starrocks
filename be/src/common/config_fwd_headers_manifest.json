@@ -541,6 +541,7 @@
         "enable_adjustment_page_cache_skip",
         "parquet_page_cache_decompress_threshold",
         "parquet_push_down_filter_to_decoder_enable",
+        "parquet_runtime_filter_push_down_enable",
         "orc_coalesce_read_enable",
         "orc_natural_read_size",
         "enable_orc_libdeflate_decompression",
