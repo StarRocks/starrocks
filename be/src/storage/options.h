@@ -71,6 +71,17 @@ struct LakeIOOptions {
     bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    // Buffer size for a segment's footer and short-key index reads. These are small,
+    // scattered structures -- a few KB each -- so they do not want the large streaming
+    // buffer that pays off on data blocks: sizing them the same way reads far more bytes
+    // than the structure needs, once per segment. Negative means "use buffer_size", which
+    // keeps every caller that does not set it on the previous behaviour.
+    int64_t metadata_buffer_size = -1;
+
+    // Buffer size to use for footer / short-key index reads.
+    int64_t footer_index_buffer_size() const {
+        return metadata_buffer_size >= 0 ? metadata_buffer_size : buffer_size;
+    }
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
     bool cache_file_only = false; // only used for CACHE SELECT

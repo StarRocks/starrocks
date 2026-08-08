@@ -63,7 +63,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.lake_io_opts = {.fill_data_cache = true,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction.
@@ -227,6 +228,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes,
                                    .fill_metadata_cache = false};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {

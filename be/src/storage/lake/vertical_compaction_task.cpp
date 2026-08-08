@@ -182,6 +182,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes,
                                    .fill_metadata_cache = true};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
@@ -241,7 +242,8 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes};
 
     // Apply range filter for range-split parallel compaction.
     // Must apply to ALL column groups (key and non-key) so that segment iterators

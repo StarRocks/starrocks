@@ -1479,6 +1479,12 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
+// Buffer size for the segment footer and short-key index reads a compaction issues, once per
+// input segment. Kept separate from lake_compaction_stream_buffer_size_bytes because those are
+// small scattered structures: raising the streaming buffer to help data blocks would otherwise
+// make every footer read fetch far more than the footer. Negative means "same as
+// lake_compaction_stream_buffer_size_bytes".
+CONF_mInt64(lake_compaction_metadata_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 
