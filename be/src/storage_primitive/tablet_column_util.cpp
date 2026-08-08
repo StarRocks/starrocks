@@ -214,6 +214,11 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
     }
+    // single throat for both classic and lake schema conversion. Guarded by
+    // __isset and only set when true so non-compression dict columns stay byte-identical.
+    if (t_column.__isset.use_compression_dict && t_column.use_compression_dict) {
+        column_pb->set_use_compression_dict(true);
+    }
     // agg state type desc
     if (t_column.__isset.agg_state_desc) {
         auto& agg_state_desc = t_column.agg_state_desc;

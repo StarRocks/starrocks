@@ -40,6 +40,8 @@ public abstract class AlterJobV2Builder {
     protected boolean bloomFilterColumnsChanged = false;
     protected Set<ColumnId> bloomFilterColumns;
     protected double bloomFilterFpp;
+    protected boolean compressionDictColumnsChanged = false;
+    protected Set<ColumnId> compressionDictColumns;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
@@ -149,6 +151,16 @@ public abstract class AlterJobV2Builder {
     public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
         this.bloomFilterColumns = bfColumns;
         this.bloomFilterFpp = bfFpp;
+        return this;
+    }
+
+    public AlterJobV2Builder withCompressionDictColumnsChanged(boolean changed) {
+        this.compressionDictColumnsChanged = changed;
+        return this;
+    }
+
+    public AlterJobV2Builder withCompressionDictColumns(@Nullable Set<ColumnId> compressionDictColumns) {
+        this.compressionDictColumns = compressionDictColumns;
         return this;
     }
 

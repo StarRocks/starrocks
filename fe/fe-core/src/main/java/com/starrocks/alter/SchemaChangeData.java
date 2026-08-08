@@ -40,6 +40,8 @@ class SchemaChangeData {
     private final boolean bloomFilterColumnsChanged;
     private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
+    private final boolean compressionDictColumnsChanged;
+    private final Set<ColumnId> compressionDictColumns;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexMetaIdToShortKeyCount;
     private final boolean shortKeyChanged;
@@ -90,6 +92,15 @@ class SchemaChangeData {
         return bloomFilterFpp;
     }
 
+    boolean isCompressionDictColumnsChanged() {
+        return compressionDictColumnsChanged;
+    }
+
+    @Nullable
+    Set<ColumnId> getCompressionDictColumns() {
+        return compressionDictColumns;
+    }
+
     boolean isHasIndexChanged() {
         return hasIndexChanged;
     }
@@ -132,6 +143,8 @@ class SchemaChangeData {
         this.bloomFilterColumnsChanged = builder.bloomFilterColumnsChanged;
         this.bloomFilterColumns = builder.bloomFilterColumns;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.compressionDictColumnsChanged = builder.compressionDictColumnsChanged;
+        this.compressionDictColumns = builder.compressionDictColumns;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexMetaIdToShortKeyCount =
                 Objects.requireNonNull(builder.newIndexMetaIdToShortKeyCount, "newIndexShortKeyCount is null");
@@ -152,6 +165,8 @@ class SchemaChangeData {
         private boolean bloomFilterColumnsChanged = false;
         private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
+        private boolean compressionDictColumnsChanged = false;
+        private Set<ColumnId> compressionDictColumns;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
         private boolean shortKeyChanged = false;
@@ -187,6 +202,16 @@ class SchemaChangeData {
         Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
             this.bloomFilterColumns = bfColumns;
             this.bloomFilterFpp = bfFpp;
+            return this;
+        }
+
+        Builder withCompressionDictColumnsChanged(boolean changed) {
+            this.compressionDictColumnsChanged = changed;
+            return this;
+        }
+
+        Builder withCompressionDictColumns(@Nullable Set<ColumnId> compressionDictColumns) {
+            this.compressionDictColumns = compressionDictColumns;
             return this;
         }
 

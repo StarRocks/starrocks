@@ -89,5 +89,11 @@ protected:
 
     // Track global dict validity for each sub-column
     std::map<std::string, bool> _subcolumn_dict_valid;
+
+    // captured from the parent ColumnWriterOptions so it can be propagated to
+    // the flat string/JSON sub-columns (the `remain` blob is the primary target).
+    // The fallback plain _json_writer already carries this flag via its own opts.
+    bool _use_compression_dict = false;
+    uint32_t _compression_dict_sample_bytes = 0;
 };
 } // namespace starrocks

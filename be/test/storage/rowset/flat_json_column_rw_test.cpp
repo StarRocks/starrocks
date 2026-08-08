@@ -2809,4 +2809,91 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
 }
 
+// compression dict regression guard: a flat-JSON column written with ZSTD + use_compression_dict
+// must actually build a compression dictionary. This pins the fix for the bug where a
+// fresh child ColumnMetaPB carried compression_level=0, making
+// get_block_compression_codec(ZSTD, 0) == nullptr so the compression dict sampling gate (which
+// requires a non-null codec) never fired for JSON columns.
+TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    const std::string fname = TEST_DIR + "/test_e4_compression_dict_flat_json.data";
+    auto segment = create_dummy_segment(fs, fname);
+
+    // Rows with a stable extractable "role" and a large per-row "content" string
+    // (~2KB) so whichever sub-column (or the remain blob) holds it is a PLAIN
+    // string past the compression-dict sample gate.
+    const int N = 300;
+    auto write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    for (int i = 0; i < N; i++) {
+        std::string filler;
+        for (int k = 0; k < 40; k++) {
+            filler += "shared scaffolding tokens that repeat across rows ";
+        }
+        std::string raw =
+                std::string("{\"role\":\"assistant\",\"content\":\"msg ") + std::to_string(i) + " " + filler + "\"}";
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(raw));
+        json_col->append(&jv);
+    }
+
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.use_compression_dict = true; // enable compression dict
+
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+    {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+        writer_opts.meta = _meta.get();
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_JSON);
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+        writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
+        // Mimic segment_writer, which stamps the table compression_level (default
+        // -1), so the flat-JSON child metas inherit a real level instead of the proto
+        // default 0 -- the propagation this test guards.
+        writer_opts.meta->set_compression_level(-1);
+        writer_opts.meta->set_is_nullable(false);
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*write_col).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // compression dict built a compression dictionary somewhere for this JSON column -- either on the
+    // top-level blob (non-flat fallback) or on a flat string/JSON sub-column.
+    bool has_dict = _meta->has_compression_dict_page() && _meta->compression_dict_page().size() > 0;
+    for (int i = 0; i < _meta->children_columns_size() && !has_dict; i++) {
+        const auto& child = _meta->children_columns(i);
+        if (child.has_compression_dict_page() && child.compression_dict_page().size() > 0) {
+            has_dict = true;
+        }
+    }
+    ASSERT_TRUE(has_dict)
+            << "compression dict built no compression dictionary for the JSON column (top-level or any sub-column)";
+
+    // Roundtrip: read every row back.
+    {
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(_meta.get(), segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+        ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->seek_to_first());
+        auto read_col = JsonColumn::create();
+        size_t rows_read = N;
+        ASSERT_OK(iter->next_batch(&rows_read, read_col.get()));
+        ASSERT_EQ(static_cast<size_t>(N), read_col->size());
+    }
+}
+
 } // namespace starrocks

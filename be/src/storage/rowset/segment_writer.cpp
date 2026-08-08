@@ -100,6 +100,13 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
     meta->set_compression_level(_tablet_schema->compression_level());
+    // a compression-dict column must carry its own ZSTD codec (the compression dict is
+    // a ZSTD dictionary), overriding the table-level compression. Gated on the
+    // runtime master switch. The per-column enable flag lives only on the
+    // top-level column, so the subcolumn recursion below never re-triggers this.
+    if (config::enable_compression_dict && column.use_compression_dict()) {
+        meta->set_compression(CompressionTypePB::ZSTD);
+    }
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
@@ -173,6 +180,15 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             _init_column_meta(opts.meta, _opts.referenced_column_ids[column_index], column);
         } else {
             _init_column_meta(opts.meta, column_index, column);
+        }
+
+        // turn on the compression-dictionary write path for this column. The
+        // ScalarColumnWriter samples/builds the dict; for JSON columns the flag
+        // is further propagated to the flat-json sub-columns by
+        // FlatJsonColumnWriter. Gated on the master switch so it can be disabled
+        // at runtime.
+        if (config::enable_compression_dict && column.use_compression_dict()) {
+            opts.use_compression_dict = true;
         }
 
         // now we create zone map for key columns

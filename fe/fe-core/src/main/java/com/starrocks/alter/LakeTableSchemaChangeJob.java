@@ -141,6 +141,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // compression dict info
+    @SerializedName(value = "hasCompressionDictChange")
+    private boolean hasCompressionDictChange;
+    @SerializedName(value = "compressionDictColumns")
+    private Set<ColumnId> compressionDictColumns = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -250,6 +256,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
+    }
+
+    void setCompressionDictInfo(boolean hasCompressionDictChange, Set<ColumnId> compressionDictColumns) {
+        this.hasCompressionDictChange = hasCompressionDictChange;
+        this.compressionDictColumns = compressionDictColumns;
     }
 
     void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -460,6 +471,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setCompressionDictColumnNames(compressionDictColumns)
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
                             .setSchemaHash(0)
@@ -1062,6 +1074,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
+            this.hasCompressionDictChange = other.hasCompressionDictChange;
+            this.compressionDictColumns = other.compressionDictColumns;
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
@@ -1233,6 +1247,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // update bloom filter
         if (hasBfChange) {
             table.setBloomFilterInfo(bfColumns, bfFpp);
+        }
+        // update compression dict columns
+        if (hasCompressionDictChange) {
+            table.setCompressionDictColumns(compressionDictColumns);
         }
         // update index
         if (indexChange) {

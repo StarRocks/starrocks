@@ -59,6 +59,10 @@ class TypeInfo;
 class BlockCompressionCodec;
 class WritableFile;
 
+namespace compression {
+class ZstdCDict;
+} // namespace compression
+
 class Column;
 
 static const size_t dictionary_min_rowcount = 256;
@@ -101,6 +105,15 @@ struct ColumnWriterOptions {
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;
 
+    // compression dict column-level compression dictionary (a ZSTD dictionary). Set true (via segment_writer from
+    // the tablet schema, or propagated to flat-JSON sub-columns) to build a
+    // per-column per-segment sampled dictionary and compress every data page
+    // referencing it. Only meaningful for ZSTD PLAIN string/JSON columns.
+    bool use_compression_dict = false;
+    // Initialized from config::compression_dict_sample_bytes in the constructor
+    // (config.h is deliberately not included by this header).
+    uint32_t compression_dict_sample_bytes;
+
     std::string to_string() const {
         std::string meta_str;
         if (meta) {
@@ -127,6 +140,7 @@ struct ColumnWriterOptions {
         oss << "is_compaction=" << is_compaction << ", ";
         oss << "need_flat=" << need_flat << ", ";
         oss << "field_name=\"" << field_name << "\", ";
+        oss << "use_compression_dict=" << use_compression_dict << ", ";
         oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
         oss << "}";
         return oss.str();
@@ -317,6 +331,44 @@ private:
     bool _is_global_dict_valid = true;
 
     uint64_t _total_mem_footprint = 0;
+
+    // compression dict column-level compression dictionary (a ZSTD dictionary) (write side). Lazily built from the
+    // first eligible page's encoded values; page 0 itself and every subsequent
+    // data page are then compressed referencing it. See finish_current_page()
+    // (sampling gate) and write_data() (dict page emission).
+    std::unique_ptr<compression::ZstdCDict> _compression_cdict;
+    std::string _compression_dict_sample;   // dict bytes, persisted as the dict page
+    bool _compression_dict_ready = false;   // _compression_cdict has been built
+    bool _cdict_used = false;               // at least one data page was actually dict-compressed
+    bool _compression_dict_trained = false; // dict bytes are ZDICT-trained (vs a raw sample)
+
+    // "train" mode (ZDICT-lite) only. The first config::compression_dict_train_pages
+    // pages are held UNCOMPRESSED here while their fragments accumulate into the
+    // training sample buffer; once the dictionary is trained (or training is
+    // given up on) they are compressed and pushed in order, and normal
+    // page-at-a-time compression resumes. Bounded by train_pages * data_page_size.
+    struct DeferredPage {
+        std::vector<OwnedSlice> body; // raw page body: encoded values [+ nullmap]
+        PageFooterPB footer;
+    };
+    bool _compression_dict_train_mode = false;
+    bool _compression_dict_train_done = false;
+    std::vector<DeferredPage> _deferred_pages;
+    // Bytes currently parked in _deferred_pages. They have left the page builder but
+    // have not reached _data_size yet (that only happens in _push_back_page), so
+    // without counting them estimate_buffer_size() under-reports this writer by up to
+    // train_pages * data_page_size, and a wide table would sail past the segment-size
+    // and write-memory thresholds before anything noticed.
+    uint64_t _deferred_pages_bytes = 0;
+
+    // Train the compression dict from the buffered samples (best effort), then
+    // compress and push every deferred page -- with the dict if training
+    // succeeded, without it otherwise. Idempotent.
+    Status _finalize_compression_dict_training();
+    // Level to bake into the CDict (-1 = zstd default).
+    int _effective_compression_level() const;
+    // Compress one already-assembled body and push it as a page.
+    Status _compress_and_push_page(std::vector<OwnedSlice> body, PageFooterPB footer);
 
     Buffer<Slice> _slice_buf;
 };

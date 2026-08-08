@@ -161,6 +161,75 @@ public class PropertyAnalyzerTest {
     }
 
     @Test
+    public void testCompressionDictColumns() throws AnalysisException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", JsonType.JSON, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v3", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.get(0).setIsKey(true);
+
+        // string and json value columns are supported
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "v1,v2");
+        Set<String> compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(properties, columns);
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), compressionDictColumns);
+        // the property key is consumed after analysis
+        Assertions.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS));
+
+        // absent property returns null
+        Assertions.assertNull(PropertyAnalyzer.analyzeCompressionDictColumns(Maps.newHashMap(), columns));
+    }
+
+    @Test
+    public void testCompressionDictColumnsError() {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", VarcharType.VARCHAR));
+        columns.add(new Column("v1", VarcharType.VARCHAR, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v2", JsonType.JSON, false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("v3", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.get(0).setIsKey(true);
+
+        Map<String, String> properties = Maps.newHashMap();
+
+        // column not exist
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "vx");
+        try {
+            PropertyAnalyzer.analyzeCompressionDictColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Invalid compression dict column 'vx'"), e.getMessage());
+        }
+
+        // unsupported type (BIGINT)
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "v3");
+        try {
+            PropertyAnalyzer.analyzeCompressionDictColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("unsupported type"), e.getMessage());
+        }
+
+        // key column forbidden (string key column, so it passes the type check first)
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "k1");
+        try {
+            PropertyAnalyzer.analyzeCompressionDictColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("value columns"), e.getMessage());
+        }
+
+        // duplicate column (case-insensitive)
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "v1,V1");
+        try {
+            PropertyAnalyzer.analyzeCompressionDictColumns(properties, columns);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Duplicate compression dict column 'V1'"), e.getMessage());
+        }
+    }
+
+    @Test
     public void testStorageMedium() throws AnalysisException {
         long tomorrowTs = System.currentTimeMillis() / 1000 + 86400;
         String tomorrowTimeStr = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(tomorrowTs * 1000);

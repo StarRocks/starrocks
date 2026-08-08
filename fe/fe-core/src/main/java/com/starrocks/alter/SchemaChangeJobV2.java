@@ -163,6 +163,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // compression dict info
+    @SerializedName(value = "hasCompressionDictChange")
+    private boolean hasCompressionDictChange;
+    @SerializedName(value = "compressionDictColumns")
+    private Set<ColumnId> compressionDictColumns = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -321,6 +327,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.bfFpp = bfFpp;
     }
 
+    public void setCompressionDictInfo(boolean hasCompressionDictChange, Set<ColumnId> compressionDictColumns) {
+        this.hasCompressionDictChange = hasCompressionDictChange;
+        this.compressionDictColumns = compressionDictColumns;
+    }
+
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
         this.indexChange = indexChange;
         this.indexes = indexes;
@@ -461,6 +472,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setCompressionDictColumnNames(compressionDictColumns)
                             .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
@@ -1028,6 +1040,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // update bloom filter
         if (hasBfChange) {
             tbl.setBloomFilterInfo(bfColumns, bfFpp);
+        }
+        // update compression dict columns
+        if (hasCompressionDictChange) {
+            tbl.setCompressionDictColumns(compressionDictColumns);
         }
         // update index
         if (indexChange) {

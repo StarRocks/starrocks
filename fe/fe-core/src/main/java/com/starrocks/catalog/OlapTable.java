@@ -238,6 +238,10 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    // columns that use a column-level compression dictionary (a ZSTD dictionary)
+    @SerializedName(value = "compressionDictColumns")
+    protected Set<ColumnId> compressionDictColumns;
+
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
@@ -316,6 +320,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.compressionDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -347,6 +352,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.compressionDictColumns = null;
 
         this.colocateGroup = null;
 
@@ -398,6 +404,12 @@ public class OlapTable extends Table {
         } else {
             olapTable.bfColumns = null;
         }
+        if (compressionDictColumns != null) {
+            olapTable.compressionDictColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.compressionDictColumns.addAll(compressionDictColumns);
+        } else {
+            olapTable.compressionDictColumns = null;
+        }
 
         olapTable.keysType = this.keysType;
         if (this.relatedMaterializedViews != null) {
@@ -439,6 +451,9 @@ public class OlapTable extends Table {
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
+        }
+        if (this.compressionDictColumns != null) {
+            olapTable.compressionDictColumns = Sets.newHashSet(this.compressionDictColumns);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -732,6 +747,18 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // A ColumnId is only a name, so an entry left behind by a dropped column does not
+        // just linger: re-creating a column with that name would resolve the stale id again
+        // and silently switch the compression dictionary on for it. The schema index has
+        // just been rebuilt, and every schema mutation ends up here -- fast schema
+        // evolution, the shadow-index jobs and edit-log replay alike -- so this is the one
+        // place that can keep the set honest.
+        if (compressionDictColumns != null) {
+            compressionDictColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (compressionDictColumns.isEmpty()) {
+                compressionDictColumns = null;
+            }
+        }
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -1595,6 +1622,35 @@ public class OlapTable extends Table {
         } else {
             return columnNames;
         }
+    }
+
+    public Set<ColumnId> getCompressionDictColumnIds() {
+        return compressionDictColumns;
+    }
+
+    public Set<String> getCompressionDictColumnNames() {
+        if (compressionDictColumns == null) {
+            return null;
+        }
+
+        Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnId columnId : compressionDictColumns) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
+                continue;
+            }
+            columnNames.add(column.getName());
+        }
+        if (columnNames.isEmpty()) {
+            return null;
+        } else {
+            return columnNames;
+        }
+    }
+
+    public void setCompressionDictColumns(Set<ColumnId> compressionDictColumns) {
+        this.compressionDictColumns = compressionDictColumns;
     }
 
     public List<Index> getCopiedIndexes() {
@@ -3020,6 +3076,13 @@ public class OlapTable extends Table {
         Set<String> bfColumnNames = getBfColumnNames();
         if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
+        }
+
+        // columns using a compression dictionary
+        Set<String> compressionDictColumnNames = getCompressionDictColumnNames();
+        if (compressionDictColumnNames != null && !compressionDictColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS,
+                    Joiner.on(", ").join(compressionDictColumnNames));
         }
 
         // colocate group

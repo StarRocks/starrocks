@@ -1173,4 +1173,205 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
     EXPECT_EQ(0, loader->calls); // probe gated by col_unique_id >= 0
 }
 
+// compression dict column-level compression dictionary: write a PLAIN ZSTD varchar column with
+// use_compression_dict, then verify (1) the compression-dict page was persisted and
+// (2) every value roundtrips (exercises DDict load on read, the page-0 dict
+// frame, subsequent dict pages, and any no-dict frames under I5).
+TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
+    const std::string fname = strings::Substitute("$0/test_compression_dict_roundtrip.data", TEST_DIR);
+
+    const int N = 3000;
+    // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
+    // so the compression dict is effective and values span multiple data pages.
+    // Every value must be DISTINCT: a varchar column goes through
+    // StringColumnWriter, which speculates the encoding from the data and would
+    // pick DICT_ENCODING for a repeating set, and the sample-mode dictionary is
+    // only built for PLAIN_ENCODING (dictionary-encoded values are already
+    // deduplicated, so a compression dictionary would buy nothing).
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        strs[i] = strings::Substitute(
+                R"({"role":"assistant","parts":[{"type":"text","content":"hello world message number $0 with )"
+                R"(shared scaffolding that repeats across rows"}]})",
+                i);
+        slices.emplace_back(strs[i]);
+    }
+
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_VARCHAR);
+        writer_opts.meta->set_length(1024 * 1024);
+        writer_opts.meta->set_encoding(PLAIN_ENCODING);
+        writer_opts.meta->set_compression(starrocks::ZSTD); // compression dict requires ZSTD
+        // Mimic segment_writer, which stamps the table compression_level (default
+        // -1), so the writer resolves the codec the same way production does rather
+        // than through the proto default 0. Same stamp as the sibling
+        // test_compression_dict_train_mode / testCompressionDictOnFlatJson tests.
+        writer_opts.meta->set_compression_level(-1);
+        writer_opts.meta->set_is_nullable(true);
+        writer_opts.use_compression_dict = true; // enable compression dict
+
+        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*col).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // Assert the speculated encoding first: if it ever stops being PLAIN the
+    // dictionary assertion below would fail for a reason that has nothing to do
+    // with the dictionary itself.
+    ASSERT_EQ(PLAIN_ENCODING, meta.encoding());
+
+    // (1) the compression-dict page must have been persisted.
+    ASSERT_TRUE(meta.has_compression_dict_page());
+    ASSERT_GT(meta.compression_dict_page().size(), 0u);
+
+    // (2) read back and verify every value roundtrips.
+    {
+        auto segment = create_dummy_segment(fname);
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+        ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        iter_opts.use_page_cache = true;
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->seek_to_first());
+
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+        dst->reserve(N);
+        size_t total = 0;
+        while (total < static_cast<size_t>(N)) {
+            size_t rows = static_cast<size_t>(N) - total;
+            ASSERT_OK(iter->next_batch(&rows, dst.get()));
+            if (rows == 0) break;
+            total += rows;
+        }
+        ASSERT_EQ(static_cast<size_t>(N), dst->size());
+
+        TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " row " << i;
+        }
+    }
+}
+
+// compression dict "train" mode (ZDICT-lite): the first pages are buffered uncompressed while a
+// dictionary is trained from fragments spread across them, then flushed in order.
+// Pins that (1) a TRAINED dictionary page is emitted and flagged as such, and
+// (2) every row still roundtrips -- i.e. the deferred pages really did get
+// compressed and the reader loads a structured dictionary rather than raw bytes.
+TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
+    std::string saved_mode = config::compression_dict_build_mode.value();
+    auto saved_pages = config::compression_dict_train_pages;
+    config::compression_dict_build_mode = "train";
+    config::compression_dict_train_pages = 4; // keep the test small
+    DeferOp restore([&]() {
+        config::compression_dict_build_mode = saved_mode;
+        config::compression_dict_train_pages = saved_pages;
+    });
+
+    const std::string fname = strings::Substitute("$0/test_e4_compression_dict_train.data", TEST_DIR);
+    const int N = 4000;
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    // Every value must be DISTINCT, for the same reason as
+    // test_compression_dict_roundtrip: StringColumnWriter speculates the encoding
+    // from the data, and a repeating set makes it pick DICT_ENCODING. Under
+    // DICT_ENCODING the whole column collapses into a single ~800-byte page of
+    // dict codes, which is below config::compression_dict_min_sample_bytes (1024),
+    // so training is skipped and no dictionary page is ever emitted. Distinct
+    // values keep the column PLAIN and spread it over enough pages for the
+    // trainer to see many fragments (this test wants "the first pages", plural).
+    for (int i = 0; i < N; i++) {
+        strs[i] = strings::Substitute(
+                R"({"role":"assistant","parts":[{"type":"text","content":"shared scaffolding tokens repeated )"
+                R"(across rows so a dictionary can be trained, row $0"}]})",
+                i);
+        slices.emplace_back(strs[i]);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.page_format = 2;
+        writer_opts.meta = &meta;
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_VARCHAR);
+        writer_opts.meta->set_length(1024 * 1024);
+        writer_opts.meta->set_encoding(PLAIN_ENCODING);
+        writer_opts.meta->set_compression(starrocks::ZSTD);
+        writer_opts.meta->set_compression_level(-1);
+        writer_opts.meta->set_is_nullable(true);
+        writer_opts.use_compression_dict = true;
+
+        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_TRUE(writer->append(*col).ok());
+        ASSERT_TRUE(writer->finish().ok());
+        ASSERT_TRUE(writer->write_data().ok());
+        ASSERT_TRUE(writer->write_ordinal_index().ok());
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSERT_TRUE(meta.has_compression_dict_page());
+    ASSERT_GT(meta.compression_dict_page().size(), 0u);
+    // Training must have produced a structured dictionary, and the writer must
+    // have recorded that so the reader loads it the same way.
+    ASSERT_TRUE(meta.compression_dict_trained());
+
+    {
+        auto segment = create_dummy_segment(fname);
+        ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+        ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        iter_opts.use_page_cache = true;
+        ASSERT_OK(iter->init(iter_opts));
+        ASSERT_OK(iter->seek_to_first());
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+        dst->reserve(N);
+        size_t total = 0;
+        while (total < static_cast<size_t>(N)) {
+            size_t rows = static_cast<size_t>(N) - total;
+            ASSERT_OK(iter->next_batch(&rows, dst.get()));
+            if (rows == 0) break;
+            total += rows;
+        }
+        ASSERT_EQ(static_cast<size_t>(N), dst->size());
+        TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        for (int i = 0; i < N; i++) {
+            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " row " << i;
+        }
+    }
+}
+
 } // namespace starrocks

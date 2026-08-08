@@ -140,6 +140,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
 
+    // column-level compression dictionary (a ZSTD dictionary) columns
+    public static final String PROPERTIES_COMPRESSION_DICT_COLUMNS = "compression_dict_columns";
+
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
 
@@ -1044,6 +1047,64 @@ public class PropertyAnalyzer {
         }
 
         return bfColumns;
+    }
+
+    // analyze the "compression_dict_columns" property. Mirrors analyzeBloomFilterColumns, but:
+    //   - only CHAR/VARCHAR/STRING/JSON columns are supported;
+    //   - only value columns are allowed (key columns are forbidden);
+    //   - there is no fpp / compression companion property.
+    // Returns the set of column names that should use a compression dictionary (a ZSTD dictionary), or null if the
+    // property is not present.
+    public static Set<String> analyzeCompressionDictColumns(Map<String, String> properties, List<Column> columns)
+            throws AnalysisException {
+        Set<String> compressionDictColumns = null;
+        if (properties != null && properties.containsKey(PROPERTIES_COMPRESSION_DICT_COLUMNS)) {
+            compressionDictColumns = Sets.newHashSet();
+            String compressionDictColumnsStr = properties.get(PROPERTIES_COMPRESSION_DICT_COLUMNS);
+            if (Strings.isNullOrEmpty(compressionDictColumnsStr)) {
+                return compressionDictColumns;
+            }
+
+            String[] compressionDictColumnArr = compressionDictColumnsStr.split(COMMA_SEPARATOR);
+            Set<String> compressionDictColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String compressionDictColumn : compressionDictColumnArr) {
+                compressionDictColumn = compressionDictColumn.trim();
+                String finalCompressionDictColumn = compressionDictColumn;
+                Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalCompressionDictColumn))
+                        .findFirst()
+                        .orElse(null);
+                if (column == null) {
+                    throw new AnalysisException(
+                            String.format("Invalid compression dict column '%s': not exists", compressionDictColumn));
+                }
+
+                Type type = column.getType();
+
+                // compression dict only supports string(char/varchar/string) or json columns
+                if (!type.isStringType() && !type.isJsonType()) {
+                    throw new AnalysisException(String.format(
+                            "Invalid compression dict column '%s': unsupported type %s, "
+                                    + "only CHAR/VARCHAR/STRING/JSON are supported", compressionDictColumn, type));
+                }
+
+                // compression dict is only used in value columns, not key columns.
+                if (column.isKey()) {
+                    throw new AnalysisException(
+                            "Compression dict column only used in value columns. invalid column: " + compressionDictColumn);
+                }
+
+                if (compressionDictColumnSet.contains(compressionDictColumn)) {
+                    throw new AnalysisException(String.format("Duplicate compression dict column '%s'", compressionDictColumn));
+                }
+
+                compressionDictColumnSet.add(compressionDictColumn);
+                compressionDictColumns.add(column.getName());
+            }
+
+            properties.remove(PROPERTIES_COMPRESSION_DICT_COLUMNS);
+        }
+
+        return compressionDictColumns;
     }
 
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {

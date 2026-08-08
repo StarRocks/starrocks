@@ -63,7 +63,9 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _json_writer(std::move(json_writer)),
           _flat_json_config(opts.flat_json_config),
           _global_dict(opts.flat_json_dicts),
-          _column_name(opts.field_name) {}
+          _column_name(opts.field_name),
+          _use_compression_dict(opts.use_compression_dict),
+          _compression_dict_sample_bytes(opts.compression_dict_sample_bytes) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -204,8 +206,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
         }
-        // Inherit both the codec and its level from the parent JSON column: the level must be carried
-        // along, otherwise the sub-column meta reads back level 0 and ZSTD falls back to its default.
+        // Inherit both the codec and its level from the parent JSON column.
+        // ColumnMetaPB.compression_level has no proto default, so a fresh child meta
+        // reads back 0; get_block_compression_codec treats that as out of range and
+        // falls back to the default-level ZSTD instance. The sub-columns would then
+        // silently ignore a table that asked for a specific zstd level, and the
+        // compression dictionary built for the `remain` blob would bake the default
+        // level into its CDict rather than the requested one.
         opts.meta->set_compression(_json_meta->compression());
         opts.meta->set_compression_level(_json_meta->compression_level());
 
@@ -231,6 +238,16 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             } else {
                 _subcolumn_dict_valid[sub_column_key] = false;
             }
+        }
+
+        // propagate the compression-dict flag to string/JSON flat sub-columns. The
+        // `remain` blob (TYPE_JSON, DEFAULT/PLAIN encoding) is the primary target.
+        // The write-path sampling gate only fires on PLAIN columns whose first
+        // page reaches the minimum sample size, so setting this on DICT-encoded or
+        // tiny scalar leaves is a harmless no-op.
+        if (_use_compression_dict && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
+            opts.use_compression_dict = true;
+            opts.compression_dict_sample_bytes = _compression_dict_sample_bytes;
         }
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);

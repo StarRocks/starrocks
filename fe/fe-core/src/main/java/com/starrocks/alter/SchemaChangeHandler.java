@@ -1816,6 +1816,44 @@ public class SchemaChangeHandler extends AlterHandler {
 
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
+        // property 2.5: compression dict columns (compression dict)
+        // eg. "compression_dict_columns" = "v1,v2"
+        Set<String> compressionDictColumns = null;
+        try {
+            compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(propertyMap,
+                    indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
+        boolean hasCompressionDictChange = false;
+        Set<String> oriCompressionDictColumns = olapTable.getCompressionDictColumnNames();
+        if (compressionDictColumns != null) {
+            // the property is specified in this ALTER statement
+            if (!compressionDictColumns.equals(oriCompressionDictColumns)) {
+                hasCompressionDictChange = true;
+            }
+        } else {
+            // not specified, keep the existing set unchanged
+            compressionDictColumns = oriCompressionDictColumns;
+        }
+
+        if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
+            compressionDictColumns = null;
+        }
+
+        Set<ColumnId> compressionDictColumnIds = null;
+        if (compressionDictColumns != null) {
+            compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String columnName : compressionDictColumns) {
+                Column column = olapTable.getColumn(columnName);
+                if (column == null) {
+                    throw new DdlException("can not find column by name: " + columnName);
+                }
+                compressionDictColumnIds.add(column.getColumnId());
+            }
+        }
+
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -1827,6 +1865,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
+                .withCompressionDictColumns(compressionDictColumnIds)
+                .withCompressionDictColumnsChanged(hasCompressionDictChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
@@ -1879,6 +1919,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             } else if (hasIndexChange) {
                 needAlter = true;
+            }
+
+            // compression dict columns change should also trigger a schema change on this index
+            if (!needAlter && hasCompressionDictChange) {
+                for (Column alterColumn : alterSchema) {
+                    String columnName = alterColumn.getName();
+                    boolean isOldCompressionDictColumn = oriCompressionDictColumns != null
+                            && oriCompressionDictColumns.contains(columnName);
+                    boolean isNewCompressionDictColumn = compressionDictColumns != null
+                            && compressionDictColumns.contains(columnName);
+                    if (isOldCompressionDictColumn != isNewCompressionDictColumn) {
+                        needAlter = true;
+                        break;
+                    }
+                }
             }
 
             if (!needAlter) {
@@ -4608,6 +4663,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .addColumns(entry.getValue())
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
+                    .setCompressionDictColumnNames(schemaChangeData.getCompressionDictColumns())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
@@ -4706,6 +4762,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(schemaChangeData.getBloomFilterColumns(), schemaChangeData.getBloomFilterFpp())
                 .withBloomFilterColumnsChanged(schemaChangeData.isBloomFilterColumnsChanged())
+                .withCompressionDictColumns(schemaChangeData.getCompressionDictColumns())
+                .withCompressionDictColumnsChanged(schemaChangeData.isCompressionDictColumnsChanged())
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())

@@ -339,6 +339,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
+
+                // analyze compression dict columns
+                Set<String> compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(properties, baseSchema);
+                if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
+                    compressionDictColumns = null;
+                }
+                Set<ColumnId> compressionDictColumnIds = null;
+                if (compressionDictColumns != null && !compressionDictColumns.isEmpty()) {
+                    compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    compressionDictColumnIds.addAll(
+                            compressionDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                }
+                table.setCompressionDictColumns(compressionDictColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
