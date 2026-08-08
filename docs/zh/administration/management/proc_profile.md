@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "收集并可视化 StarRocks FE 和 BE 进程的 CPU 与内存火焰图分析数据。"
+---
+
 # 进程分析 (Proc Profile)
 
 **进程分析** (Proc Profile) 功能提供了一种内置机制，用于收集和可视化 StarRocks 前端 (FE) 和后端 (BE) 进程的性能分析数据。通过生成 CPU、内存分配的火焰图，它帮助开发人员和管理员直接通过 Web UI 诊断性能瓶颈、高资源利用率和复杂的运行时问题。
@@ -71,9 +76,14 @@ FE 分析由内部守护进程管理，并使用 **AsyncProfiler** 采集数据�
 | `proc_profile_cpu_enable` | `true` | 是否启用 FE 的自动 CPU 分析。 |
 | `proc_profile_mem_enable` | `true` | 是否启用 FE 的自动内存分配分析。 |
 | `proc_profile_collect_time_s` | `120` | 每次分析收集的持续时间（秒）。 |
+| `proc_profile_cleanup_interval_s` | `300` | 分析文件清理运行之间的间隔（秒）。 |
 | `proc_profile_jstack_depth` | `128` | 收集的最大 Java 栈深度。 |
 | `proc_profile_file_retained_days` | `1` | 分析文件的保留天数。 |
 | `proc_profile_file_retained_size_bytes` | `2147483648` (2GB) | 保留分析文件的最大总大小。 |
+
+CPU 分析和内存分析相互独立地收集，因此其中一个失败不会导致另一个停止。当一次收集尝试失败时，FE 会按指数退避重试，
+初始为 2 分钟，上限为 15 分钟，而不是每秒重试一次；失败只在进入退避时记录一次日志，恢复时再记录一次。保留策略由独立的
+`proc-profile-cleaner` 守护进程执行，因此在收集失败期间分析文件仍会被清理。
 
 ### 后端 (BE) 配置
 
