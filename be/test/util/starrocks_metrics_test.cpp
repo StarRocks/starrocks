@@ -43,6 +43,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "common/version.h"
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
@@ -165,6 +166,14 @@ TEST_F(BackendMetricsTest, Normal) {
     auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
     // check metric
+    {
+        auto metric = metrics->get_metric(
+                "build_info",
+                MetricLabels().add("version", STARROCKS_VERSION).add("commit_hash", STARROCKS_COMMIT_HASH));
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_EQ(MetricType::GAUGE, metric->type());
+        ASSERT_STREQ("1", metric->to_string().c_str());
+    }
     {
         runtime_metrics->fragment_requests_total.increment(12);
         auto metric = metrics->get_metric("fragment_requests_total");

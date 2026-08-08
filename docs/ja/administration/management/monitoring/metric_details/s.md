@@ -56,6 +56,13 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `starrocks_be_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: BEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -300,6 +307,13 @@ description: "Alphabetical s"
 - タイプ: 累積
 - ラベル: `type` (`add_column`、`drop_column`、または `modify_column`)、`is_leader`
 - 説明: ALTER TABLE の列操作の回数を、タイプ別に集計します。1 つのステートメントに複数の操作を含めることができ (例: `ADD COLUMN a, DROP COLUMN b`)、それぞれがタイプ別に個別にカウントされます。列名の変更、列順の変更、コメントのみの変更はカウントされません。報告するのは Leader FE (`is_leader="true"`) のみです。
+
+## `starrocks_fe_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: FEノードのビルド情報。メトリクスの値は常に `1` です。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
