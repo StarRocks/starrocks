@@ -1,0 +1,33 @@
+-- name: test_iceberg_equality_delete_nan_key @sequential @native
+-- Iceberg spec canonicalizes NaN so an equality-delete row whose key is NaN deletes data rows whose
+-- key is also NaN (NaN == NaN for equality deletes). Fixture is a v2 table (k double, v string) with
+-- 5 rows -- two of them have a NaN key (v = nan1, nan2) -- and one equality-delete file keyed on NaN.
+-- StarRocks applies the delete via a null-safe anti-join; with NaN normalization the two NaN rows are
+-- deleted, leaving exactly a, b, c. Without it (raw float bits, NaN != NaN) they would resurrect.
+-- The fixture embeds absolute paths under /tmp/sr_eq_nan_fixture/warehouse, so it is copied to that
+-- fixed path (hence @sequential); FE and BE must share the local filesystem.
+shell: rm -rf /tmp/sr_eq_nan_fixture && mkdir -p /tmp/sr_eq_nan_fixture/warehouse && cp -r ${root_path}/sql/test_iceberg/data/eq_delete_nan/* /tmp/sr_eq_nan_fixture/warehouse/ > /dev/null || echo "exit 0" > /dev/null
+-- result:
+0
+
+-- !result
+create external catalog iceberg_eqnan_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="file:///tmp/sr_eq_nan_fixture/warehouse");
+-- result:
+-- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
+select v from iceberg_eqnan_${uuid0}.eq_delete_db.eq_del_nan order by v;
+-- result:
+a
+b
+c
+-- !result
+drop catalog iceberg_eqnan_${uuid0};
+-- result:
+-- !result
+shell: rm -rf /tmp/sr_eq_nan_fixture > /dev/null || echo "exit 0" > /dev/null
+-- result:
+0
+
+-- !result
