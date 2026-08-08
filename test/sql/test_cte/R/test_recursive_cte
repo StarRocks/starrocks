@@ -46,6 +46,24 @@ INSERT INTO employees VALUES
 set recursive_cte_throw_limit_exception=false;
 -- result:
 -- !result
+CREATE TABLE recursive_ctas_result_${uuid0} AS
+WITH RECURSIVE numbers(n) AS (
+    SELECT cast(1 as bigint)
+    UNION ALL
+    SELECT n + 1 FROM numbers WHERE n < 3
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true)*/ n FROM numbers;
+-- result:
+-- !result
+SELECT n FROM recursive_ctas_result_${uuid0} ORDER BY n;
+-- result:
+1
+2
+3
+-- !result
+DROP TABLE recursive_ctas_result_${uuid0};
+-- result:
+-- !result
 WITH RECURSIVE org_hierarchy AS (
     SELECT employee_id, name, manager_id, title, cast(1 as bigint) AS `level`, name AS path
     FROM employees
