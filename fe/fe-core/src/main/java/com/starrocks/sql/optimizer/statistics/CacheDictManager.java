@@ -66,7 +66,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
  * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
  * <p>
  * 2. Cache Management:
- * - Uses Caffeine AsyncLoadingCache bounded by total dictionary bytes (Config.low_cardinality_dict_cache_max_bytes)
+ * - Uses Caffeine AsyncLoadingCache bounded by total dictionary bytes (a fraction of the FE heap by default, see
+ * Config.low_cardinality_dict_cache_max_mem_ratio and Config.low_cardinality_dict_cache_max_bytes)
  * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
  * - Cache automatically loads dictionaries asynchronously when accessed
  * <p>
@@ -173,7 +174,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
 
     // Bounded by total dict bytes, not entry count. Empty Optional (non-low-card column) weighs 1.
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
+            .maximumWeight(resolveCacheMaxBytes())
             .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
                     ENTRY_OVERHEAD_BYTES + value.map(ColumnDict::getByteSize).orElse(0))
             .executor(ThreadPoolManager.getStatsCacheThread())
@@ -493,6 +494,14 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 
+    public static long resolveCacheMaxBytes() {
+        double ratio = Config.low_cardinality_dict_cache_max_mem_ratio;
+        if (ratio <= 0) {
+            return Config.low_cardinality_dict_cache_max_bytes;
+        }
+        return Math.round(Runtime.getRuntime().maxMemory() * ratio);
+    }
+
     // Exact total dict bytes, maintained by Caffeine (O(1)). Serialized size, a lower bound on heap.
     public long getCacheWeightedBytes() {
         return dictStatistics.synchronous().policy().eviction()
@@ -500,7 +509,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 .orElse(0L);
     }
 
-    // Apply low_cardinality_dict_cache_max_bytes changes to the live cache. Called once, after GlobalStateMgr is up.
+    // Apply dict cache size config changes to the live cache. Called once, after GlobalStateMgr is up.
     public void registerConfigRefreshListener() {
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::refreshCacheMaximum);
     }
@@ -508,7 +517,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private void refreshCacheMaximum() {
         dictStatistics.synchronous().policy().eviction().ifPresent(eviction -> {
             long oldMax = eviction.getMaximum();
-            long newMax = Config.low_cardinality_dict_cache_max_bytes;
+            long newMax = resolveCacheMaxBytes();
             if (oldMax != newMax) {
                 eviction.setMaximum(newMax);
                 LOG.info("update dict cache max bytes from {} to {}", oldMax, newMax);

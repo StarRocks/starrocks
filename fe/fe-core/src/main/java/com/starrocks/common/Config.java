@@ -2668,8 +2668,13 @@ public class Config extends ConfigBase {
     public static long statistic_dict_columns = 100000;
 
     // Max total bytes of the global dict cache (CacheDictManager).
+    // Only used when low_cardinality_dict_cache_max_mem_ratio is 0.
     @ConfField(mutable = true)
     public static long low_cardinality_dict_cache_max_bytes = 1024L * 1024 * 1024;
+
+    @ConfField(mutable = true, comment = "Bound the global dict cache to this fraction of the FE heap instead of a " +
+            "fixed byte count. Must be in [0, 1]; takes precedence over low_cardinality_dict_cache_max_bytes when > 0.")
+    public static double low_cardinality_dict_cache_max_mem_ratio = 0.1;
 
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
