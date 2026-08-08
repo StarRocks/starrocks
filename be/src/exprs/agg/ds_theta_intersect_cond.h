@@ -187,8 +187,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state,
-                            Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         const auto& s = this->data(state);
         auto* out = down_cast<DoubleColumn*>(to);
 
