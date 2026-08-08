@@ -235,7 +235,7 @@ public class DatabaseTransactionMgr {
                     }
                 }
 
-                checkRunningTxnExceedLimit(sourceType);
+                checkRunningTxnExceedLimit(sourceType, tableIdList);
 
                 // only spark load will persist PREPARE txn state, so it's ok to put this into transaction mgr's lock
                 persistTxnStateInTxnLevelLock(transactionState, wal -> {
@@ -263,12 +263,21 @@ public class DatabaseTransactionMgr {
 
     public void upsertTransactionState(TransactionState transactionState)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
+        upsertTransactionState(transactionState, transactionState.getTableIdList());
+    }
+
+    // admissionTableIds is the set of tables to run the per-table running-txn check against. It usually equals
+    // the transaction's own tableIdList, but an explicit BEGIN...COMMIT transaction registers before its first
+    // statement attaches any table, so the caller passes that first target table here to gate it at admission
+    // like an implicit load, without persisting the table onto the transaction yet.
+    public void upsertTransactionState(TransactionState transactionState, List<Long> admissionTableIds)
+            throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
 
         writeLock();
         try {
             checkLabel(transactionState.getLabel(), transactionState.getRequestId());
-            checkRunningTxnExceedLimit(transactionState.getSourceType());
+            checkRunningTxnExceedLimit(transactionState.getSourceType(), admissionTableIds);
             unprotectUpsertTransactionState(transactionState);
 
             if (MetricRepo.hasInit) {
@@ -781,6 +790,35 @@ public class DatabaseTransactionMgr {
 
     public int getRunningTxnNums() {
         return runningTxnNums;
+    }
+
+    // Number of running (non-final) transactions in this database that touch the given table and count
+    // toward the per-table limit. Computed on demand from idToRunningTransactionState (the authoritative
+    // running set) rather than a maintained counter, so there is no side tally to drift out of sync: the
+    // result needs no bookkeeping across replay or leader failover, and does not depend on when a table is
+    // attached to a transaction. Callers must hold the transaction lock, which serializes this scan against
+    // structural changes to the running set. The count is a best-effort snapshot: an explicit BEGIN...COMMIT
+    // transaction appends to its own tableIdList without this lock, so a table it is still attaching may be
+    // momentarily under-counted; the under-count only biases toward admitting. (Should the append be seen
+    // mid-resize, the scan may instead fail this one begin, which is safe to retry.) The scan
+    // is bounded by the number of running transactions (itself bounded by Config.max_running_txn_num_per_db)
+    // and only runs when the per-table cap is enabled.
+    protected int getRunningTxnNumOfTable(long tableId) {
+        int count = 0;
+        for (TransactionState txnState : idToRunningTransactionState.values()) {
+            if (countsTowardPerTableLimit(txnState) && txnState.getTableIdList().contains(tableId)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Routine-load and lake-compaction transactions are exempt from the per-table limit, exactly as they
+    // are from the per-database limit (see checkRunningTxnExceedLimit).
+    private static boolean countsTowardPerTableLimit(TransactionState txnState) {
+        TransactionState.LoadJobSourceType t = txnState.getSourceType();
+        return t != TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK
+                && t != TransactionState.LoadJobSourceType.LAKE_COMPACTION;
     }
 
     @VisibleForTesting
@@ -2131,7 +2169,7 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType)
+    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType, List<Long> tableIdList)
             throws RunningTxnExceedException {
         switch (sourceType) {
             case ROUTINE_LOAD_TASK:
@@ -2148,6 +2186,18 @@ public class DatabaseTransactionMgr {
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
                     throw new RunningTxnExceedException("current running txns on db " + dbId + " is "
                             + runningTxnNums + ", larger than limit " + Config.max_running_txn_num_per_db);
+                }
+                // Per-table limit: isolate a stalled table so it cannot consume the whole db budget.
+                // Disabled when <= 0. Reject if ANY table the txn touches is already at/over the limit.
+                int perTableLimit = Config.max_running_txn_num_per_table;
+                if (perTableLimit > 0 && tableIdList != null) {
+                    for (long tableId : tableIdList) {
+                        int running = getRunningTxnNumOfTable(tableId);
+                        if (running >= perTableLimit) {
+                            throw new RunningTxnExceedException("current running txns on table " + tableId
+                                    + " (db " + dbId + ") is " + running + ", larger than limit " + perTableLimit);
+                        }
+                    }
                 }
                 break;
         }
