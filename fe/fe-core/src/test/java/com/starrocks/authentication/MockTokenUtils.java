@@ -33,6 +33,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.text.ParseException;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 
 public class MockTokenUtils {
     String getOpenIdConnect(String fileName) throws IOException {
@@ -50,24 +51,30 @@ public class MockTokenUtils {
     }
 
     String generateTestOIDCToken(long validity) throws Exception {
+        return generateTestOIDCToken(validity, Map.of("preferred_username", "harbor"));
+    }
+
+    String generateTestOIDCToken(long validity, Map<String, Object> extraClaims) throws Exception {
         MockJwkMgr mockJwkMgr = new MockJwkMgr();
         RSASSASigner signer = new RSASSASigner(mockJwkMgr.loadPrivateKey("jwks-private-key.pem"));
         JWKSet jwkSet = mockJwkMgr.getJwkSet("signer-jwks.json");
 
-        JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+        JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
                 .issuer("http://localhost:38080/realms/master")
                 .subject("8f7f0fa5-e1eb-45d0-8e82-8c89c1a45663")
                 .audience("12345")
                 .issueTime(new Date())
-                .expirationTime(new Date(new Date().getTime() + validity))
-                .claim("preferred_username", "harbor")
-                .build();
+                .expirationTime(new Date(new Date().getTime() + validity));
+
+        for (Map.Entry<String, Object> entry : extraClaims.entrySet()) {
+            builder.claim(entry.getKey(), entry.getValue());
+        }
 
         JWSHeader.Builder headerBuilder = new JWSHeader.Builder(JWSAlgorithm.RS256)
                 .keyID(jwkSet.getKeys().get(0).getKeyID());
         SignedJWT signedJWT = new SignedJWT(
                 new JWSHeader(headerBuilder.build()),
-                claimsSet);
+                builder.build());
         signedJWT.sign(signer);
 
         return signedJWT.serialize();
