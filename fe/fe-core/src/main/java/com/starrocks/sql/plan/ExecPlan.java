@@ -19,7 +19,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.QueryColumnType;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.HashJoinNode;
@@ -33,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -41,6 +44,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,6 +56,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
+    private static final Logger LOG = LoggerFactory.getLogger(ExecPlan.class);
     private final ConnectContext connectContext;
     private final List<String> colNames;
     private final List<ScanNode> scanNodes = new ArrayList<>();
@@ -375,5 +381,26 @@ public class ExecPlan {
 
     public boolean isShortCircuit() {
         return isShortCircuit;
+    }
+
+    public String getColumnTypeExplain(String queryId) {
+        List<QueryColumnType> queryColumnTypes = new ArrayList<>();
+        if (colNames.size() != outputExprs.size()) {
+            return GsonUtils.GSON.newBuilder().disableHtmlEscaping()
+                    .create().toJson(queryColumnTypes);
+        }
+        for (int i = 0; i < outputExprs.size(); i++) {
+            if (outputExprs.get(i) instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) outputExprs.get(i);
+                QueryColumnType queryColumnType = new QueryColumnType();
+                queryColumnType.setColumnName(colNames.get(i));
+                queryColumnType.setColumnType(slotRef.getType().toString());
+                queryColumnTypes.add(queryColumnType);
+            } else {
+                LOG.info("sql queryId : " + queryId + " other slotRef :" + outputExprs.get(i).toString());
+            }
+        }
+        return GsonUtils.GSON.newBuilder().disableHtmlEscaping()
+                .create().toJson(queryColumnTypes);
     }
 }
