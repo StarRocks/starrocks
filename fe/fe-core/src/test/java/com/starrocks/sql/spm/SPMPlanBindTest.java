@@ -15,6 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
@@ -56,6 +57,47 @@ public class SPMPlanBindTest extends PlanTestBase {
         Preconditions.checkState(statements.size() == 1);
         Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
         return (CreateBaselinePlanStmt) statements.get(0);
+    }
+
+    @Test
+    public void testAIFunctionIsNotSupported() {
+        String oldEndpoint = Config.ai_default_chat_endpoint;
+        String oldModel = Config.ai_default_chat_model;
+        String oldProvider = Config.ai_default_chat_provider;
+        try {
+            Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
+            Config.ai_default_chat_model = "default-model";
+            Config.ai_default_chat_provider = "openai_compatible";
+
+            CreateBaselinePlanStmt aiPlan = createBaselinePlanStmt(
+                    "select generated from "
+                            + "(select ai_complete(cast(v2 as varchar)) generated from t0) t");
+            CreateBaselinePlanStmt aiBind = createBaselinePlanStmt(
+                    "select ai_complete(cast(v2 as varchar)) from t0",
+                    "select cast(v2 as varchar) from t0");
+            CreateBaselinePlanStmt setOperationOrderByAI = createBaselinePlanStmt(
+                    "select 'a' x union all select 'b' x order by ai_complete(x)");
+            CreateBaselinePlanStmt valuesNestedAI = createBaselinePlanStmt(
+                    "select x from (values (concat(ai_complete('p'), '!'))) v(x)");
+            Assertions.assertAll(
+                    () -> assertAIFunctionNotSupported("derived plan", aiPlan),
+                    () -> assertAIFunctionNotSupported("bind SQL", aiBind),
+                    () -> assertAIFunctionNotSupported("set-operation ORDER BY", setOperationOrderByAI),
+                    () -> assertAIFunctionNotSupported("nested VALUES", valuesNestedAI));
+        } finally {
+            Config.ai_default_chat_endpoint = oldEndpoint;
+            Config.ai_default_chat_model = oldModel;
+            Config.ai_default_chat_provider = oldProvider;
+        }
+    }
+
+    private void assertAIFunctionNotSupported(String caseName, CreateBaselinePlanStmt statement) {
+        UnsupportedException exception = Assertions.assertThrows(
+                UnsupportedException.class,
+                () -> new SPMPlanBuilder(connectContext, statement).execute(),
+                caseName);
+        Assertions.assertEquals(
+                "SQL plan management does not support AI functions", exception.getMessage(), caseName);
     }
 
     @Test

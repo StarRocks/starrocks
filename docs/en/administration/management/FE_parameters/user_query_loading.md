@@ -82,6 +82,34 @@ This topic introduces the following types of FE configurations:
 
 ## Query engine
 
+### `ai_default_chat_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a fragment, or control characters. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
+- Introduced in: -
+
+### `ai_default_chat_model`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The default model used by the prompt-only forms of SYSTEM `ai_complete`. It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
+### `ai_default_chat_provider`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Valid values: `openai_compatible`
+- Is mutable: Yes
+- Description: The provider protocol used by SYSTEM `ai_complete`. An empty or unsupported value causes analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - Default: 60000

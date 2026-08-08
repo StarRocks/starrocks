@@ -18,6 +18,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.HintNode;
@@ -160,12 +161,16 @@ public class SPMPlanBuilder {
 
     protected void analyze() {
         QueryStatement p = new QueryStatement(this.planStmt);
+        QueryStatement b = this.bindStmt == null ? null : new QueryStatement(this.bindStmt);
         try (PlannerMetaLocker locker = new PlannerMetaLocker(session, p)) {
             locker.lock();
             Analyzer.analyze(p, session);
-            if (this.bindStmt != null) {
-                Analyzer.analyze(new QueryStatement(this.bindStmt), session);
+            if (b != null) {
+                Analyzer.analyze(b, session);
             }
+        }
+        if (AnalyzerUtils.containsAIFunction(p) || (b != null && AnalyzerUtils.containsAIFunction(b))) {
+            UnsupportedException.unsupportedException("SQL plan management does not support AI functions");
         }
     }
 }

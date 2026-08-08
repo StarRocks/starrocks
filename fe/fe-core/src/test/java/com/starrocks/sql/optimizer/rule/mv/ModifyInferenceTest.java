@@ -16,10 +16,14 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 public class ModifyInferenceTest extends PlanTestBase {
 
@@ -42,6 +46,16 @@ public class ModifyInferenceTest extends PlanTestBase {
     public void testScan() throws Exception {
         assertInferenceModify("select * from t0", ModifyInference.ModifyOp.INSERT_ONLY);
         assertInferenceModify("select v1 from t0", ModifyInference.ModifyOp.INSERT_ONLY);
+    }
+
+    @Test
+    public void testAIProjectPropagatesModifyInference() throws Exception {
+        ExecPlan plan = getExecPlan("select v1 from t0");
+        ColumnRefOperator output = plan.getOutputColumns().get(0);
+        OptExpression aiProject = OptExpression.create(
+                new PhysicalAIProjectOperator(Map.of(output, output), Map.of()), plan.getPhysicalPlan());
+
+        Assertions.assertEquals(ModifyInference.infer(plan.getPhysicalPlan()), ModifyInference.infer(aiProject));
     }
 
     @Test

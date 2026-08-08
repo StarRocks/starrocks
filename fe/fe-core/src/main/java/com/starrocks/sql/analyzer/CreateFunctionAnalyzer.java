@@ -126,6 +126,7 @@ public class CreateFunctionAnalyzer {
             }
             slotRef.setType(argsMap.get(slotRef.getColName()));
         });
+        AnalyzerUtils.verifyNoAIFunctions(expr, "SQL UDF body");
 
         FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(
                 stmt.getFunctionRef(),
