@@ -189,15 +189,24 @@ const config = {
     defaultLocale: "en",
     locales: ["en", "zh", "ja"],
     localeConfigs: {
+      // `path` must be set explicitly on every locale. Since Docusaurus 3.10,
+      // a locale's default `path` is derived from its `htmlLang` rather than
+      // from the locale name, so setting `htmlLang: "zh-CN"` alone makes
+      // Docusaurus look for `i18n/zh-CN/`. That directory does not exist, so it
+      // infers `translate: false` and silently serves the English docs for
+      // every localized page.
       en: {
-        htmlLang: 'en-US',
-	label: 'English',
+        htmlLang: "en-US",
+        label: "English",
+        path: "en",
       },
       zh: {
         htmlLang: "zh-CN",
+        path: "zh",
       },
       ja: {
         htmlLang: "ja-JP",
+        path: "ja",
       },
     },
   },

@@ -482,5 +482,25 @@
   "sidebar.docs.category.システムメタデータベース": {
     "message": "システムメタデータベース",
     "description": "The label for category システムメタデータベース in sidebar docs"
+  },
+  "sidebar.docs.category.datasource-catalog": {
+    "message": "Catalog",
+    "description": "The label for category 'Catalog' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.migration-loading": {
+    "message": "データロード",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.root-loading": {
+    "message": "データロード",
+    "description": "The label for category 'Data Loading' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-data-type-string": {
+    "message": "文字列",
+    "description": "The label for category 'String' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.sql-fxn-string": {
+    "message": "文字列",
+    "description": "The label for category 'String' in sidebar 'docs'"
   }
 }
