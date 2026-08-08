@@ -408,7 +408,9 @@ Status VerticalCompactionTask::compact_column_group(
                 chunk->filter(filter);
             }
         }
-        {
+        // The UNSHARE range filter above can leave the chunk empty; keep the pre-existing
+        // guard so an emptied chunk is skipped rather than written as a zero-row column batch.
+        if (chunk->num_rows() > 0) {
             SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
             if (rssid_rowids.empty()) {
                 RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));

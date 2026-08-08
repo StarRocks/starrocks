@@ -157,40 +157,31 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                 return st;
             }
         }
-<<<<<<< HEAD
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+        _context->stats->read_chunk_count++;
+        {
+            SCOPED_RAW_TIMER(&_context->stats->chunk_transform_ns);
+            ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
-        if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
-            ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
-                                                  _tablet.metadata()->range(), _tablet_schema, *chunk));
-            if (!rssid_rowids.empty()) {
-                DCHECK_EQ(rssid_rowids.size(), filter.size());
-                size_t output_index = 0;
-                for (size_t i = 0; i < rssid_rowids.size(); ++i) {
-                    if (filter[i]) {
-                        rssid_rowids[output_index++] = rssid_rowids[i];
+            if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
+                ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
+                                                      _tablet.metadata()->range(), _tablet_schema, *chunk));
+                if (!rssid_rowids.empty()) {
+                    DCHECK_EQ(rssid_rowids.size(), filter.size());
+                    size_t output_index = 0;
+                    for (size_t i = 0; i < rssid_rowids.size(); ++i) {
+                        if (filter[i]) {
+                            rssid_rowids[output_index++] = rssid_rowids[i];
+                        }
                     }
+                    rssid_rowids.resize(output_index);
                 }
-                rssid_rowids.resize(output_index);
+                chunk->filter(filter);
             }
-            chunk->filter(filter);
         }
         if (chunk->num_rows() == 0) {
             chunk->reset();
             rssid_rowids.clear();
             continue;
-        }
-        if (rssid_rowids.empty()) {
-            RETURN_IF_ERROR(writer->write(*chunk));
-        } else {
-            // pk table compaction
-            RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
-=======
-        _context->stats->read_chunk_count++;
-        {
-            SCOPED_RAW_TIMER(&_context->stats->chunk_transform_ns);
-            ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
->>>>>>> 1cf474479cf ([Enhancement] Add full-chain lake compaction task profiles)
         }
         {
             SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
