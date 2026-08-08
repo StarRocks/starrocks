@@ -316,9 +316,47 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
     // Handle parallel compaction mode
     if (enable_parallel && _parallel_mgr != nullptr) {
-        lock.unlock();
+        // process_parallel_compaction() loads tablet metadata and builds the StarOS/Starlet
+        // filesystem, i.e. it performs blocking remote IO while creating the subtasks. This RPC
+        // handler runs on a brpc bthread, and a bthread can be suspended on one worker pthread and
+        // resumed on another. Doing such IO here is unsafe: a pthread rwlock held across the yield
+        // point (e.g. StarOSWorker::_cache_mtx, a std::shared_mutex held while an evicted FileSystem
+        // instance is destroyed and closes its remote connection) makes pthread_rwlock_wrlock return
+        // EDEADLK on an unrelated bthread that happens to be resumed on the same worker pthread.
+        // std::shared_mutex turns EDEADLK into an uncaught std::system_error("Resource deadlock
+        // avoided") and aborts the whole CN (issue #76882). Offload the IO-heavy task creation to the
+        // dedicated pthread pool, mirroring the non-parallel path which never touches the filesystem
+        // on the bthread.
+        //
+        // Hand ownership of `done` to `cb` before submitting: the pool task may run `done` (via
+        // CompactionTaskCallback::finish_task on another thread) as soon as it is scheduled, so the
+        // ClosureGuard here must no longer own it. `request`/`response` stay alive until `done` runs,
+        // and both the runnable (via `cb`) and the canceller keep them referenced, so reading them
+        // from either callback is safe.
+        //
+        // `done` must run exactly once. We use CancellableRunnable (not submit_func, whose runnable has
+        // a no-op cancel()) so that all three mutually-exclusive outcomes complete the RPC exactly once:
+        //   * task runs      -> process_parallel_compaction -> finish_task runs `done`;
+        //   * task cancelled -> stop()/_threads->shutdown() pops the still-queued task and calls cancel(),
+        //                       which rejects with the shutdown-in-progress status and runs `done` (a
+        //                       no-op cancel() would leak `done` and hang the RPC forever);
+        //   * submit fails   -> the task was never enqueued (so neither run() nor cancel() fires), and we
+        //                       surface the real submit error and run `done` inline below.
         guard.release();
-        process_parallel_compaction(request, response, cb);
+        auto runnable = std::make_shared<CancellableRunnable>(
+                [this, request, response, cb]() { process_parallel_compaction(request, response, cb); },
+                [this, controller, request, response, done]() {
+                    reject_request(controller, request, response);
+                    done->Run();
+                });
+        auto submit_st = _threads->submit(std::move(runnable));
+        lock.unlock();
+        if (!submit_st.ok()) {
+            LOG(WARNING) << "Fail to submit parallel compaction task, txn_id=" << request->txn_id() << ": "
+                         << submit_st;
+            submit_st.to_protobuf(response->mutable_status());
+            done->Run();
+        }
         return;
     }
 
@@ -339,6 +377,9 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
 void CompactionScheduler::process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
                                                       const std::shared_ptr<CompactionTaskCallback>& callback) {
+    // Regression hook for #76882: this must run on a `_threads` pthread pool worker, never on the brpc
+    // bthread that invoked compact(). The test callback records std::this_thread::get_id() here.
+    TEST_SYNC_POINT("CompactionScheduler::process_parallel_compaction:enter");
     VLOG(1) << "Processing parallel compaction request. txn_id: " << request->txn_id()
             << ", tablet_ids size: " << request->tablet_ids_size()
             << ", max_parallel: " << request->parallel_config().max_parallel_per_tablet()
@@ -358,9 +399,46 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
     };
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto result = _parallel_mgr->create_parallel_tasks(
-                tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
-                request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+        // create_parallel_tasks() loads the tablet metadata and builds the StarOS/Starlet filesystem, so it can
+        // throw: std::system_error("Resource deadlock avoided") is exactly the #76882 failure mode, and
+        // std::bad_alloc is always possible. Now that this function runs on a `_threads` worker instead of the
+        // brpc bthread, an escaping exception would silently hang the RPC: ThreadPool::dispatch_thread only logs
+        // it (it does not call the runnable's cancel()), compact() has already done `guard.release()`, and
+        // ~CompactionTaskCallback() does not run `done`. finish_task() completes the RPC only once it has
+        // collected one context per tablet id, so a skipped tablet means `done` never runs -- the FE's compact
+        // RPC blocks until its timeout and `request`/`response` are leaked.
+        //
+        // Translate the exception into a Status and take the existing fallback-to-normal-compaction path, which
+        // keeps the "exactly one finish_task() per tablet id" invariant intact. Running `done` here instead
+        // would be unsafe: tablets scheduled by earlier iterations are still writing into `response` from their
+        // own threads, and completing the RPC frees it under them.
+        //
+        // Falling back is only safe when NO subtask was submitted for this tablet: an already-running subtask
+        // owns the tablet's single finish_task(), so a fallback context would produce a second one for the same
+        // tablet id, push _contexts past tablet_ids_size() and dereference the `_response` that the first
+        // completion already nulled out -> SIGSEGV. That decision cannot be made here -- it is only race-free
+        // inside create_parallel_tasks(), which tracks the submitted count on its own stack -- so it handles the
+        // "already submitted" case itself and only lets an exception escape when nothing was submitted.
+        auto result = [&]() -> StatusOr<int> {
+            try {
+                TEST_SYNC_POINT("CompactionScheduler::process_parallel_compaction:create_parallel_tasks");
+                return _parallel_mgr->create_parallel_tasks(
+                        tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
+                        request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+            } catch (const std::exception& e) {
+                LOG(WARNING) << "Exception while creating parallel compaction tasks, falling back to normal "
+                                "compaction. tablet_id="
+                             << tablet_id << ", txn_id=" << request->txn_id() << ": " << e.what();
+                _parallel_mgr->cleanup_tablet(tablet_id, request->txn_id());
+                return Status::InternalError(fmt::format("exception in create_parallel_tasks: {}", e.what()));
+            } catch (...) {
+                LOG(WARNING) << "Unknown exception while creating parallel compaction tasks, falling back to "
+                                "normal compaction. tablet_id="
+                             << tablet_id << ", txn_id=" << request->txn_id();
+                _parallel_mgr->cleanup_tablet(tablet_id, request->txn_id());
+                return Status::InternalError("unknown exception in create_parallel_tasks");
+            }
+        }();
 
         if (result.ok() && result.value() > 0) {
             // Parallel compaction tasks created successfully

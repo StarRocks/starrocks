@@ -18,6 +18,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
 #include "column/schema.h"
@@ -705,8 +706,37 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                                                                       max_bytes, std::move(callback), release_token));
 
     // Step 4: Submit subtasks
-    return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
-                                       acquire_token, release_token);
+    //
+    // Decide here whether an escaping exception may be reported to the caller, because only here is the
+    // "did anything get submitted" answer race-free. `submitted` is on this stack, so it survives; the
+    // tablet state does not answer the question reliably -- a subtask that fails fast (a missing segment
+    // file, an unreachable object store) can complete, run finish_task() and have the state cleaned up
+    // before the exception is even handled, which would make the state look like "nothing was submitted".
+    // Acting on that stale answer lets the caller fall back to normal compaction for a tablet that has
+    // already completed, producing a second finish_task() for one tablet id and a SIGSEGV in it.
+    int submitted = 0;
+    try {
+        return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
+                                           acquire_token, release_token, &submitted);
+    } catch (const std::exception& e) {
+        if (submitted > 0) {
+            LOG(WARNING) << "Exception after submitting " << submitted << " parallel compaction subtask(s); they own "
+                         << "the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id << ": "
+                         << e.what();
+            return submitted;
+        }
+        cleanup_tablet(tablet_id, txn_id);
+        return Status::InternalError(
+                strings::Substitute("exception while submitting parallel compaction subtasks: $0", e.what()));
+    } catch (...) {
+        if (submitted > 0) {
+            LOG(WARNING) << "Unknown exception after submitting " << submitted << " parallel compaction subtask(s); "
+                         << "they own the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id;
+            return submitted;
+        }
+        cleanup_tablet(tablet_id, txn_id);
+        return Status::InternalError("unknown exception while submitting parallel compaction subtasks");
+    }
 }
 
 std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::get_tablet_state(int64_t tablet_id,
@@ -1959,7 +1989,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
 StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         const std::shared_ptr<TabletParallelCompactionState>& state_ptr, std::vector<SubtaskGroup> groups,
         bool force_base_compaction, ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-        const ReleaseTokenFunc& release_token) {
+        const ReleaseTokenFunc& release_token, int* submitted_out) {
     int64_t tablet_id = state_ptr->tablet_id;
     int64_t txn_id = state_ptr->txn_id;
     int64_t version = state_ptr->version;
@@ -1998,6 +2028,24 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     VLOG(1) << "Parallel compaction: acquired all " << tokens_acquired << " tokens for tablet " << tablet_id
             << ", txn_id=" << txn_id;
 
+    int subtasks_created = 0;
+    int64_t submitted_bytes = 0;
+
+    // All `total_groups` tokens are held from here on, and each submitted subtask releases its own on
+    // completion. Every ordinary exit below settles the rest explicitly and sets `tokens_settled`; an exception
+    // would otherwise strand them, and with compact_threads defaulting to 4, leaking a couple per failure
+    // starves lake compaction for the whole BE until it restarts. So install this guard immediately after the
+    // acquisition succeeds -- everything below it, including the split bookkeeping, can throw std::bad_alloc.
+    bool tokens_settled = false;
+    DeferOp release_unused_tokens([&] {
+        if (tokens_settled) {
+            return;
+        }
+        for (int32_t j = subtasks_created; j < total_groups; j++) {
+            release_token(false);
+        }
+    });
+
     // Record expected split counts for each large rowset as a safety net.
     // Even though we've acquired all tokens, thread pool submission can still fail.
     // This allows get_merged_txn_log() to detect incomplete splits.
@@ -2023,12 +2071,49 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // Now create and submit all subtasks. Since we've acquired all tokens,
     // we won't have partial large-rowset splits due to token exhaustion.
     // Thread pool submission failures are still possible but rare.
-    int subtasks_created = 0;
-    int64_t submitted_bytes = 0;
-
     for (size_t group_idx = 0; group_idx < groups.size(); group_idx++) {
         auto& group = groups[group_idx];
         int32_t subtask_id = static_cast<int32_t>(group_idx);
+
+        // Nothing below is exception-safe on its own: the bookkeeping (vector growth, the
+        // running_subtasks[] node allocation) and submit_func() itself can throw std::bad_alloc. If that
+        // happens once this subtask has been registered but before it was handed to the thread pool, the
+        // entry would describe a subtask that never runs, so running_subtasks could never drain and
+        // is_complete() (`running_subtasks.empty() && total_subtasks_created > 0`) would never become true
+        // -- the tablet would never call finish_task() and its compact RPC would hang. Undo the
+        // registration while unwinding so the state keeps describing only subtasks that are really running.
+        bool registered = false;
+        bool submitted = false;
+        DeferOp rollback_registration([&] {
+            if (!registered || submitted) {
+                return;
+            }
+            bool nothing_left_running = false;
+            {
+                std::lock_guard<std::mutex> lock(state_ptr->mutex);
+                auto it = state_ptr->running_subtasks.find(subtask_id);
+                if (it != state_ptr->running_subtasks.end()) {
+                    unmark_rowsets_compacting(state_ptr.get(), it->second.input_rowset_ids);
+                    if (group.type == SubtaskType::LARGE_ROWSET_PART) {
+                        auto& split_ids = state_ptr->large_rowset_split_groups[group.large_rowset_id];
+                        split_ids.erase(std::remove(split_ids.begin(), split_ids.end(), subtask_id), split_ids.end());
+                    }
+                    state_ptr->running_subtasks.erase(it);
+                    state_ptr->total_subtasks_created--;
+                }
+                nothing_left_running = state_ptr->running_subtasks.empty();
+            }
+            _running_subtasks--;
+            if (nothing_left_running && submitted_out != nullptr) {
+                // Every subtask submitted so far has already completed, and each of those completions saw
+                // this registration still present -- is_complete() requires running_subtasks to be empty --
+                // so none of them performed the completion transition. Removing the entry here does not
+                // re-check it, and no further completion is coming, so nothing would ever call finish_task()
+                // and the compact RPC would hang. Report that no subtask owns this tablet's completion, which
+                // sends the caller down the fallback path instead.
+                *submitted_out = 0;
+            }
+        });
 
         // Collect rowset IDs
         std::vector<uint32_t> rowset_ids;
@@ -2078,6 +2163,14 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         }
 
         _running_subtasks++;
+        // From here on the subtask is registered: rollback_registration owns undoing it until the submit
+        // below succeeds.
+        registered = true;
+
+        // Test hook for the opposite window of ":after_submit": lets a test throw while this subtask is
+        // registered but has NOT been handed to the thread pool, which is the case rollback_registration
+        // exists for.
+        TEST_SYNC_POINT("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
 
         // Submit task to thread pool (token already acquired)
         Status submit_st;
@@ -2133,6 +2226,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                 }
             }
             _running_subtasks--;
+            // This branch has just undone the registration itself; stop rollback_registration from
+            // repeating it.
+            registered = false;
 
             // Release token for this failed subtask
             release_token(false);
@@ -2142,6 +2238,9 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             for (int32_t j = 0; j < remaining_tokens; j++) {
                 release_token(false);
             }
+            // This branch has accounted for every unused token; release_unused_tokens must not repeat it,
+            // whether we return just below or break out of the loop.
+            tokens_settled = true;
 
             if (subtasks_created == 0) {
                 cleanup_tablet(tablet_id, txn_id);
@@ -2156,6 +2255,17 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
         }
 
         subtasks_created++;
+        // The subtask is now owned by the thread pool and will report its own completion, so the
+        // registration must survive this scope.
+        submitted = true;
+        if (submitted_out != nullptr) {
+            *submitted_out = subtasks_created;
+        }
+
+        // Test hook: lets a test throw from here, i.e. *after* a subtask has been submitted and is running.
+        // A throw in this window must not route the tablet into the caller's fallback path, or the tablet
+        // would get a second CompactionTaskContext and thus a second finish_task().
+        TEST_SYNC_POINT("TabletParallelCompactionManager::submit_subtasks_from_groups:after_submit");
 
         if (group.type == SubtaskType::NORMAL) {
             VLOG(1) << "Parallel compaction: created NORMAL subtask " << subtask_id << " for tablet " << tablet_id
@@ -2171,6 +2281,8 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                     << ", is_last=" << group.is_last_range << ", input_bytes=" << input_bytes;
         }
     }
+    // The loop ran to completion (or broke out after settling tokens itself), so nothing is stranded.
+    tokens_settled = true;
 
     if (subtasks_created == 0) {
         cleanup_tablet(tablet_id, txn_id);
