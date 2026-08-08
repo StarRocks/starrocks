@@ -346,6 +346,14 @@ public class ConfigBase {
                     }
                 }
                 break;
+            case "low_cardinality_dict_cache_max_mem_ratio":
+                double memRatio = Double.parseDouble(confVal);
+                // Negated range check so NaN and Infinity are rejected too.
+                if (!(memRatio >= 0 && memRatio <= 1)) {
+                    throw new InvalidConfException("'low_cardinality_dict_cache_max_mem_ratio' must be in [0, 1]. "
+                            + "Current value: " + confVal);
+                }
+                break;
             default:
                 break;
         }

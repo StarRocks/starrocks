@@ -85,8 +85,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 字节
 - 是否可变: Yes
-- 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
+- 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。仅当 `low_cardinality_dict_cache_max_mem_ratio` 为 `0` 时生效。
 - 引入版本: v4.1.0
+
+### `low_cardinality_dict_cache_max_mem_ratio`
+
+- 默认值: 0.1
+- 类型: Double
+- 单位: -
+- 是否可变: Yes
+- 描述: 将低基数全局字典缓存（`CacheDictManager`）的上界设置为 FE 堆内存（`Runtime.maxMemory()`，即 `-Xmx`，或 JVM 根据 `-XX:MaxRAMPercentage` 推导出的堆大小）的该比例，使缓存随 FE 实际获得的堆大小伸缩，而不使用固定字节数。有效取值范围：[0, 1]。大于 `0` 时优先于 `low_cardinality_dict_cache_max_bytes`；设置为 `0` 则改用 `low_cardinality_dict_cache_max_bytes` 限制缓存。修改会在一个配置刷新周期内应用到运行中的缓存。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true

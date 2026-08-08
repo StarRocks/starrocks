@@ -277,6 +277,25 @@ public class ConfigTest {
     }
 
     @Test
+    void testLowCardinalityDictCacheMaxMemRatio() throws Exception {
+        double saved = Config.low_cardinality_dict_cache_max_mem_ratio;
+        try {
+            for (String valid : new String[] {"0", "0.1", "1"}) {
+                Config.setMutableConfig("low_cardinality_dict_cache_max_mem_ratio", valid, false, "");
+                Assertions.assertEquals(Double.parseDouble(valid), Config.low_cardinality_dict_cache_max_mem_ratio);
+            }
+
+            // Outside [0, 1], plus non-finite values that would otherwise bypass a plain range check
+            for (String invalid : new String[] {"-0.1", "1.1", "10", "NaN", "Infinity"}) {
+                Assertions.assertThrows(DdlException.class, () ->
+                        Config.setMutableConfig("low_cardinality_dict_cache_max_mem_ratio", invalid, false, ""));
+            }
+        } finally {
+            Config.low_cardinality_dict_cache_max_mem_ratio = saved;
+        }
+    }
+
+    @Test
     void testHttpRequestIpAllowlist() throws Exception {
         // Valid: single IPv4
         Config.setMutableConfig("http_request_ip_allowlist", "192.168.1.1", false, "");

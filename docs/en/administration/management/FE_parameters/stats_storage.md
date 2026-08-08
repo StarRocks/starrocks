@@ -85,8 +85,18 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
+- Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric. Only used when `low_cardinality_dict_cache_max_mem_ratio` is `0`.
 - Introduced in: v4.1.0
+
+### `low_cardinality_dict_cache_max_mem_ratio`
+
+- Default: 0.1
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Bounds the low-cardinality global dictionary cache (`CacheDictManager`) to this fraction of the FE heap (`Runtime.maxMemory()`, that is, `-Xmx` or the heap the JVM derived from `-XX:MaxRAMPercentage`), so the cache scales with the heap the FE was given instead of using a fixed byte count. Valid range: [0, 1]. When greater than `0`, this takes precedence over `low_cardinality_dict_cache_max_bytes`; set it to `0` to bound the cache by `low_cardinality_dict_cache_max_bytes` instead. Changes apply to the live cache within one config-refresh cycle.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
