@@ -15,10 +15,6 @@
     "message": "最佳实践",
     "description": "The label for category Best Practices in sidebar docs"
   },
-  "sidebar.docs.category.Project Help": {
-    "message": "技术支持",
-    "description": "The label for category Project Help in sidebar docs"
-  },
   "sidebar.docs.category.Deployment": {
     "message": "部署 StarRocks",
     "description": "The label for category Deployment in sidebar docs"

@@ -300,7 +300,7 @@ You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` 
 
 ### Monitoring metrics
 
-You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/Monitor_and_Alert.md) feature. The following FE metrics are derived from the statistical data of each FE node.
+You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/monitoring.md) feature. The following FE metrics are derived from the statistical data of each FE node.
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

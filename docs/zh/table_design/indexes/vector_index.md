@@ -125,7 +125,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 
 ##### index_build_threshold
 
-- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
+- **默认值**: 10000（由 BE 配置项 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) 决定）
 - **必需**: 否
 - **描述**: 触发向量索引构建的行数阈值。写入的数据行数低于该阈值时不构建索引，查询回退到暴力检索。取值必须为大于等于 `1` 的整数。对于 IVFPQ 索引，该值还必须大于等于 `nlist`，因为 IVFPQ 的 k-means 训练至少需要 `nlist` 条向量。违反该约束的 DDL 语句会被拒绝。
 
@@ -135,7 +135,7 @@ HNSW提供了效率和精度的平衡，使其适应各种数据和查询分布�
 - **必需**: 否
 - **描述**: 存算分离集群中的索引构建方式。有效值：
   - `sync`：在数据写入时同步构建索引。查询可立即使用索引，但导入延迟较高。
-  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
+  - `async`：数据写入完成后由后台任务构建索引。在构建完成前，涉及相应 Segment 的查询自动回退到暴力检索。可以通过 [`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) 选择构建 Warehouse，并通过 [`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) 控制 Load Tail 的调度延迟。
 
 ##### M
 

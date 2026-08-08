@@ -649,7 +649,7 @@ SHOW PARTITIONS FROM site_access;
 
 - 仅支持明细表。
 - 不支持指定 [Colocation Group](../../using_starrocks/Colocate_join.md)。
-- 不支持 [Spark Load](../../loading/SparkLoad.md)。
+- 不支持 [Spark Load](../../loading/spark/SparkLoad.md)。
 
 如下建表示例中，没有使用 `DISTRIBUTED BY xxx` 语句，即表示默认由 StarRocks 使用随机分桶，并且由 StarRocks 自动设置分桶数量。
 

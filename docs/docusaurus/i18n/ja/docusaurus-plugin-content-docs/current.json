@@ -15,10 +15,6 @@
     "message": "ベストプラクティス",
     "description": "The label for category Best Practices in sidebar docs"
   },
-  "sidebar.docs.category.Project Help": {
-    "message": "プロジェクトヘルプ",
-    "description": "The label for category Project Help in sidebar docs"
-  },
   "sidebar.docs.category.Deployment": {
     "message": "デプロイ",
     "description": "The label for category Deployment in sidebar docs"
