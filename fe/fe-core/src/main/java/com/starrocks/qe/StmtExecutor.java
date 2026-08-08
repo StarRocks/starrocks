@@ -4020,7 +4020,14 @@ public class StmtExecutor {
             } while (!batch.isEos());
             processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
-            LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+            // A global dict collection that finds no dict is an expected outcome, not a failure: the caller
+            // turns it into a "not a low cardinality column" decision. Keep it out of the warn log, the same
+            // way DefaultCoordinator suppresses it, so it can't drown the real failures on this path.
+            if (coord != null && coord.getExecStatus().isSuppressedError()) {
+                LOG.debug("Failed to execute executeStmtWithExecPlan: {}", e.getMessage());
+            } else {
+                LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+            }
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
