@@ -91,14 +91,22 @@ public:
             _init_anchor_if_needed(state);
             auto* mem = &(this->data(state).anchor_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(slice, mem);
+            DataSketchesTheta tmp(mem);
+            if (!tmp.deserialize(slice)) {
+                ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch input");
+                return;
+            }
             this->data(state).anchor_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         } else {
             _init_window_if_needed(state);
             auto* mem = &(this->data(state).window_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(slice, mem);
+            DataSketchesTheta tmp(mem);
+            if (!tmp.deserialize(slice)) {
+                ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch input");
+                return;
+            }
             this->data(state).window_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
@@ -108,11 +116,17 @@ public:
         DCHECK(column->is_binary());
         const BinaryColumn* binary = down_cast<const BinaryColumn*>(column);
         auto slice = binary->get_slice(row_num);
-        if (slice.size < 4) return;
+        if (slice.size < 4) {
+            ctx->set_error("ds_theta_intersect_cond_agg: malformed merge state: too short");
+            return;
+        }
 
         uint32_t anchor_size;
         memcpy(&anchor_size, slice.data, 4);
-        if (4 + anchor_size > static_cast<uint32_t>(slice.size)) return;
+        if (4 + anchor_size > static_cast<uint32_t>(slice.size)) {
+            ctx->set_error("ds_theta_intersect_cond_agg: malformed merge state: anchor_size exceeds buffer");
+            return;
+        }
 
         Slice anchor_slice(slice.data + 4, anchor_size);
         Slice window_slice(slice.data + 4 + anchor_size, slice.size - 4 - anchor_size);
@@ -121,7 +135,11 @@ public:
             _init_anchor_if_needed(state);
             auto* mem = &(this->data(state).anchor_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(anchor_slice, mem);
+            DataSketchesTheta tmp(mem);
+            if (!tmp.deserialize(anchor_slice)) {
+                ctx->set_error("ds_theta_intersect_cond_agg: malformed anchor sketch in merge state");
+                return;
+            }
             this->data(state).anchor_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
@@ -129,7 +147,11 @@ public:
             _init_window_if_needed(state);
             auto* mem = &(this->data(state).window_mem);
             int64_t prev = *mem;
-            DataSketchesTheta tmp(window_slice, mem);
+            DataSketchesTheta tmp(mem);
+            if (!tmp.deserialize(window_slice)) {
+                ctx->set_error("ds_theta_intersect_cond_agg: malformed window sketch in merge state");
+                return;
+            }
             this->data(state).window_sketch->merge(tmp);
             ctx->add_mem_usage(*mem - prev);
         }
@@ -165,7 +187,7 @@ public:
         }
     }
 
-    void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override {
         const auto& s = this->data(state);
         auto* out = down_cast<DoubleColumn*>(to);
@@ -192,7 +214,8 @@ public:
             inter.update(wrapped_compact_theta_sketch::wrap(reinterpret_cast<const char*>(a_bytes.data()), a_sz));
             inter.update(wrapped_compact_theta_sketch::wrap(reinterpret_cast<const char*>(w_bytes.data()), w_sz));
             out->append(inter.get_result().get_estimate());
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
+            ctx->set_error(e.what());
             out->append(0.0);
         }
     }

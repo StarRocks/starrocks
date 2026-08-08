@@ -94,7 +94,11 @@ private:
         }
         auto* mem_usage = &(this->data(state).memory_usage);
         int64_t prev_memory = *mem_usage;
-        DataSketchesTheta theta(slice, mem_usage);
+        DataSketchesTheta theta(mem_usage);
+        if (!theta.deserialize(slice)) {
+            ctx->set_error("ds_theta_combine: malformed sketch input");
+            return;
+        }
         this->data(state).theta_sketch->merge(theta);
         ctx->add_mem_usage(*mem_usage - prev_memory);
     }

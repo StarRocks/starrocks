@@ -14,7 +14,7 @@
 ## 语法
 
 ```Haskell
-BIGINT ds_theta_estimate(sketch)
+DOUBLE ds_theta_estimate(sketch)
 ```
 
 - `sketch`: `VARBINARY` 紧凑 theta 草图。
