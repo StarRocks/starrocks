@@ -80,7 +80,14 @@ public class TabletStatMgrTest {
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
-    // Set by the scan fixture, which is the only thing here that touches the singleton metastore.
+    // The scan fixture is the only thing here that registers a database in the singleton metastore, so
+    // its id must be one no built-in owns: ids below GlobalStateMgr.NEXT_ID_INIT_VALUE (10000) are
+    // reserved, and LocalMetastore's constructor seeds idToDb with information_schema at
+    // SystemId.INFORMATION_SCHEMA_DB_ID (1) and sys at SystemId.SYS_DB_ID (100). Registering over either
+    // would evict the built-in from idToDb for the rest of the JVM.
+    private static final long SCAN_DB_ID = 10001L;
+    private static final String SCAN_DB_NAME = "tablet_stat_scan_test";
+
     private Database registeredDb;
 
     @BeforeEach
@@ -638,7 +645,8 @@ public class TabletStatMgrTest {
         MaterializedIndex index =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
         index.clearTabletsForRestore();
-        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta =
+                new TabletMeta(SCAN_DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD, true);
         long tabletId = 100L;
         for (long tabletSize : tabletSizes) {
             LakeTablet tablet = new LakeTablet(tabletId++);
@@ -648,7 +656,7 @@ public class TabletStatMgrTest {
             index.addTablet(tablet, tabletMeta, false);
         }
 
-        registeredDb = new Database(DB_ID, "db");
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
         registeredDb.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
     }
@@ -697,8 +705,10 @@ public class TabletStatMgrTest {
 
     @Test
     public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
-        // 4 compute nodes -> early ceiling 4; an index holding a single 5 GiB tablet sits below it.
-        assertEquals(5L << 30, runScanAndCaptureEarlySignal(4, 5L << 30));
+        // 4 compute nodes -> early ceiling 4; an index holding 3 tablets sits below it. The largest is
+        // neither the first nor the last the scan walks, so a fold that keeps the wrong one of them
+        // cannot land on the right answer by accident.
+        assertEquals(5L << 30, runScanAndCaptureEarlySignal(4, 3L << 30, 5L << 30, 4L << 30));
         assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
                 "the merge floor and the early ceiling must derive from ONE probed sample per table");
     }
