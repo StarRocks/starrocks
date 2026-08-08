@@ -66,7 +66,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
  * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
  * <p>
  * 2. Cache Management:
- * - Uses Caffeine AsyncLoadingCache bounded by total dictionary bytes (Config.low_cardinality_dict_cache_max_bytes)
+ * - Uses Caffeine AsyncLoadingCache bounded by the estimated heap the cached dictionaries retain
+ * (Config.low_cardinality_dict_cache_max_bytes)
  * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
  * - Cache automatically loads dictionaries asynchronously when accessed
  * <p>
@@ -171,11 +172,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 }
             };
 
-    // Bounded by total dict bytes, not entry count. Empty Optional (non-low-card column) weighs 1.
+    // Bounded by estimated retained heap, not entry count. Empty Optional (non-low-card column) weighs 1.
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
             .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
             .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
-                    ENTRY_OVERHEAD_BYTES + value.map(ColumnDict::getByteSize).orElse(0))
+                    ENTRY_OVERHEAD_BYTES + value.map(CacheDictManager::estimateRetainedBytes).orElse(0))
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(dictLoader);
 
@@ -493,7 +494,15 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 
-    // Exact total dict bytes, maintained by Caffeine (O(1)). Serialized size, a lower bound on heap.
+    // Heap retained by one dictionary, including the ImmutableMap, its ByteBuffer keys and their backing arrays.
+    // Counting serialized bytes instead omits ~100 B of object overhead per key, which under-reports actual memory
+    // by up to an order of magnitude for dictionaries of short strings. Caffeine weighs on write, so this runs once
+    // per dictionary load, alongside the BE RPC that produced it.
+    private static int estimateRetainedBytes(ColumnDict dict) {
+        return (int) Math.min(Integer.MAX_VALUE, Estimator.estimate(dict));
+    }
+
+    // Total estimated retained heap of the cached dicts, maintained by Caffeine (O(1)).
     public long getCacheWeightedBytes() {
         return dictStatistics.synchronous().policy().eviction()
                 .map(eviction -> eviction.weightedSize().orElse(0L))

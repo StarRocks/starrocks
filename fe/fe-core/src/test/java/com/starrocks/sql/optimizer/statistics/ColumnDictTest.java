@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.memory.estimate.ByteBufferEstimator;
+import com.starrocks.memory.estimate.Estimator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +58,25 @@ public class ColumnDictTest {
 
         ColumnDict dict = new ColumnDict(dictMap, 1);
         Assertions.assertEquals(300, dict.getDictSize());
+    }
+
+    @Test
+    void estimatedHeapExceedsSerializedBytes() {
+        Estimator.registerCustomEstimator("java.nio.HeapByteBuffer", new ByteBufferEstimator());
+
+        ImmutableMap.Builder<ByteBuffer, Integer> builder = ImmutableMap.builder();
+        int serializedBytes = 0;
+        for (int i = 0; i < 255; i++) {
+            byte[] keyBytes = String.format("%04d", i).getBytes(StandardCharsets.UTF_8);
+            builder.put(ByteBuffer.wrap(keyBytes), i);
+            serializedBytes += keyBytes.length + Integer.BYTES;
+        }
+
+        // For short strings the per-key object overhead (ByteBuffer, backing array, map slots, boxed id) dominates,
+        // so the heap the dict retains is several times the serialized byte count the cache used to be sized by.
+        long estimatedBytes = Estimator.estimate(new ColumnDict(builder.build(), 1));
+        Assertions.assertTrue(estimatedBytes > 5L * serializedBytes,
+                "estimated " + estimatedBytes + " should be several times serialized " + serializedBytes);
     }
 
     @Test

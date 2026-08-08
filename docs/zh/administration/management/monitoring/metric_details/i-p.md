@@ -349,7 +349,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 类型：Gauge
-- 描述：当前 FE 上低基数全局字典缓存（`CacheDictManager`）中缓存的字典数据总字节数。由缓存精确统计（非采样），统计的是序列化后的字典数据大小，是实际堆内存占用的下界。该缓存以此字节大小为上界，由配置项 `low_cardinality_dict_cache_max_bytes` 控制。
+- 描述：当前 FE 上低基数全局字典缓存（`CacheDictManager`）中缓存的字典数据总字节数。由缓存精确统计（非采样），该值是所缓存字典保持的堆内存预估值，其中包含字典 Map 中每个键的对象开销。该缓存以此字节大小为上界，由配置项 `low_cardinality_dict_cache_max_bytes` 控制。
 
 ## `max_disk_io_util_percent`
 
