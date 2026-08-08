@@ -269,4 +269,23 @@ TEST_F(InternalServiceTest, test_get_load_replica_status) {
     ASSERT_EQ(1, response.replica_statuses_size());
 }
 
+TEST_F(InternalServiceTest, test_update_exchange_senders_unknown_receiver) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
+    PUpdateExchangeSendersRequest request;
+    request.mutable_finst_id()->set_hi(0x1122334455667788L);
+    request.mutable_finst_id()->set_lo(0x99aabbccddeeff00L);
+    request.set_node_id(1);
+    request.set_be_number(1001);
+    request.set_unregister(false);
+    PUpdateExchangeSendersResult response;
+    brpc::Controller cntl;
+    MockCountDownClosure closure;
+    // The receiver does not exist, so the handler runs its task and reports the stream manager's
+    // NotFound status; this exercises the RPC entrypoint including the error branch and the closure.
+    service.update_exchange_senders(&cntl, &request, &response, &closure);
+    closure.wait();
+    ASSERT_TRUE(response.has_status());
+    ASSERT_FALSE(Status(response.status()).ok());
+}
+
 } // namespace starrocks

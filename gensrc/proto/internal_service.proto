@@ -145,6 +145,27 @@ message PTransmitRuntimeFilterResult {
     optional int32 filter_id = 2;
 };
 
+// Register or unregister an exchange sender on a running receiver, so the
+// coordinator can add fragment instances to a running query. Registration is
+// keyed by sender identity (be_number) and idempotent: re-registering a known
+// sender or unregistering an unknown one is a no-op, which makes the RPC safe
+// to retry on timeout.
+message PUpdateExchangeSendersRequest {
+    // receiver fragment instance
+    optional PUniqueId finst_id = 1;
+    // exchange plan node id of the receiver
+    optional int32 node_id = 2;
+    // sender identity, the backend_num assigned by the coordinator
+    optional int32 be_number = 3;
+    // false/absent = register, true = unregister (compensation for an
+    // aborted instance add; the sender never sent any chunk)
+    optional bool unregister = 4;
+};
+
+message PUpdateExchangeSendersResult {
+    optional StatusPB status = 1;
+};
+
 message PTabletWithPartition {
     required int64 partition_id = 1;
     required int64 tablet_id = 2;
@@ -850,4 +871,7 @@ service PInternalService {
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
     rpc lookup(PLookUpRequest) returns (PLookUpResponse);
     rpc lookup_close(PLookUpCloseRequest) returns (PLookUpCloseResponse);
+
+    // Register/unregister an exchange sender on a running receiver.
+    rpc update_exchange_senders(PUpdateExchangeSendersRequest) returns (PUpdateExchangeSendersResult);
 };
