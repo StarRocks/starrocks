@@ -508,6 +508,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
 - 導入バージョン: v3.3
 
+### lake_enable_horizontal_compaction_fill_data_cache
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで horizontal compaction タスクが読み取った入力データをローカルディスクにキャッシュすることを許可するかどうか。horizontal compaction は各入力セグメントを一度だけ読み取り、入力 rowset はタスク終了後すぐに置き換えられるため、そのデータをキャッシュすると主にクエリのホットデータがローカルキャッシュから追い出されます。`true` に設定すると、常にキャッシュする従来の動作に戻ります。
+- 導入バージョン: v4.2
+
 ### lake_enable_vertical_compaction_fill_data_cache
 
 - デフォルト: true
