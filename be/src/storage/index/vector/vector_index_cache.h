@@ -111,15 +111,15 @@ public:
     [[nodiscard]] bool GetOrCreate(const tenann::CacheKey& key, const IndexLoader& loader,
                                    tenann::IndexCacheHandle* handle) override;
 
-    // Query-only APIs. ProbeForQuery never waits for loader I/O: it immediately
-    // returns kLoading after observing the atomic state. TryGetOrSchedule
+    // Query-only APIs. ProbeForQuery returns kLoading immediately unless the
+    // caller requests the synchronous cache contract. TryGetOrSchedule
     // single-flights EMPTY -> LOADING and returns kLoading for both an accepted
     // task and a duplicate request. GetOrCreateForQuery continues a preceding
-    // ProbeForQuery miss without waiting or counting the same query twice.
-    [[nodiscard]] VectorIndexCacheProbeResult ProbeForQuery(const tenann::CacheKey& key);
+    // ProbeForQuery miss without counting the same query twice.
+    [[nodiscard]] VectorIndexCacheProbeResult ProbeForQuery(const tenann::CacheKey& key, bool wait_for_loading = false);
     [[nodiscard]] VectorIndexCacheProbeResult TryGetOrSchedule(const tenann::CacheKey& key, AsyncIndexLoader loader);
     [[nodiscard]] VectorIndexCacheProbeResult GetOrCreateForQuery(const tenann::CacheKey& key,
-                                                                  const IndexLoader& loader);
+                                                                  const IndexLoader& loader, bool wait_for_loading);
 
     Status init_async_load_pool(int num_threads, int max_queue_size);
     void shutdown_async_load_pool();

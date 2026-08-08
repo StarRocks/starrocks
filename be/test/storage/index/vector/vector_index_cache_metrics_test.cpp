@@ -43,6 +43,8 @@ TEST(VectorIndexCacheMetricsTest, InstallRegistersMetrics) {
     assert_metric_registered(&registry, "vector_index_cache_dynamic_hit_ratio");
     assert_metric_registered(&registry, "vector_index_cache_async_load_rejected");
     assert_metric_registered(&registry, "vector_index_cache_async_load_failure");
+    assert_metric_registered(&registry, "vector_index_cache_async_load_success");
+    assert_metric_registered(&registry, "vector_index_cache_async_load_ns");
 }
 
 TEST(VectorIndexCacheMetricsTest, DestructorDeregistersHook) {

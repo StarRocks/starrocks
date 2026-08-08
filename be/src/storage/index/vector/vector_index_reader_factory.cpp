@@ -42,7 +42,7 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
     VectorIndexCacheProbeResult probe;
     {
         SCOPED_RAW_TIMER(&options.stats.vector_index_cache_lookup_ns);
-        probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path));
+        probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path), !async_load_on_miss);
     }
     if (probe.state == VectorIndexCacheProbeState::kLoading) {
         ++options.stats.vector_index_cache_miss_count;

@@ -103,20 +103,26 @@ public:
             : _cache(cache), _token(std::move(token)), _loader(std::move(loader)), _key(std::move(key)) {}
 
     void run() noexcept override {
+        const int64_t start_ns = MonotonicNanos();
+        DeferOp record_load_time([&] {
+            _cache->_metrics.vector_index_cache_async_load_ns.increment(
+                    std::max<int64_t>(0, MonotonicNanos() - start_ns));
+        });
         try {
             Status status = run_impl();
             if (status.ok()) {
                 _token.finish();
+                _cache->_metrics.vector_index_cache_async_load_success.increment(1);
             } else {
                 _token.abort();
                 _cache->_metrics.vector_index_cache_async_load_failure.increment(1);
-                LOG(WARNING) << "Failed to load vector index into cache asynchronously, key=" << _key
-                             << ", status=" << status;
+                LOG_EVERY_SECOND(WARNING) << "Failed to load vector index into cache asynchronously, key=" << _key
+                                          << ", status=" << status;
             }
         } catch (...) {
             _token.abort();
             _cache->_metrics.vector_index_cache_async_load_failure.increment(1);
-            LOG(WARNING) << "Unexpected exception while loading vector index asynchronously, key=" << _key;
+            LOG_EVERY_SECOND(WARNING) << "Unexpected exception while loading vector index asynchronously, key=" << _key;
         }
     }
 
@@ -230,7 +236,7 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
     {
         auto lock = entry->value().guard();
         // Lookup preserves the synchronous cache contract. Async queries use
-        // ProbeForQuery(), which returns immediately for LOADING.
+        // the non-waiting ProbeForQuery path instead.
         if (entry->value().state(std::memory_order_relaxed) == VectorIndexCacheEntryState::kLoading) {
             entry->value().wait_until_not_loading(lock);
         }
@@ -246,7 +252,7 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
     return true;
 }
 
-VectorIndexCacheProbeResult VectorIndexCache::ProbeForQuery(const tenann::CacheKey& key) {
+VectorIndexCacheProbeResult VectorIndexCache::ProbeForQuery(const tenann::CacheKey& key, bool wait_for_loading) {
     _lookup_count.fetch_add(1, std::memory_order_relaxed);
     Entry* entry = _cache.get(key.to_string());
     if (entry == nullptr) {
@@ -259,6 +265,10 @@ VectorIndexCacheProbeResult VectorIndexCache::ProbeForQuery(const tenann::CacheK
     {
         auto lock = entry->value().guard();
         state = entry->value().state(std::memory_order_relaxed);
+        if (state == VectorIndexCacheEntryState::kLoading && wait_for_loading) {
+            entry->value().wait_until_not_loading(lock);
+            state = entry->value().state(std::memory_order_relaxed);
+        }
         if (state == VectorIndexCacheEntryState::kReady) {
             ref = entry->value().ref();
         }
@@ -384,10 +394,10 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
 }
 
 VectorIndexCacheProbeResult VectorIndexCache::GetOrCreateForQuery(const tenann::CacheKey& key,
-                                                                  const IndexLoader& loader) {
-    // VectorIndexReaderFactory has already counted this query's non-blocking
-    // ProbeForQuery miss. This continuation must not count it a second time.
-    return _get_or_create(key, loader, false, false);
+                                                                  const IndexLoader& loader, bool wait_for_loading) {
+    // VectorIndexReaderFactory has already counted this query's probe miss.
+    // This continuation must not count it a second time.
+    return _get_or_create(key, loader, wait_for_loading, false);
 }
 
 VectorIndexCacheProbeResult VectorIndexCache::_get_or_create(const tenann::CacheKey& key, const IndexLoader& loader,

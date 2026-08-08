@@ -52,6 +52,8 @@ bool VectorIndexCacheMetrics::install(MetricRegistry* registry) {
         !registry->register_metric("vector_index_cache_dynamic_hit_ratio", &vector_index_cache_dynamic_hit_ratio) ||
         !registry->register_metric("vector_index_cache_async_load_rejected", &vector_index_cache_async_load_rejected) ||
         !registry->register_metric("vector_index_cache_async_load_failure", &vector_index_cache_async_load_failure) ||
+        !registry->register_metric("vector_index_cache_async_load_success", &vector_index_cache_async_load_success) ||
+        !registry->register_metric("vector_index_cache_async_load_ns", &vector_index_cache_async_load_ns) ||
         !registry->register_hook(kVectorIndexCacheMetricsHookName, [this] { refresh(); })) {
         hide();
         return false;
@@ -77,6 +79,8 @@ void VectorIndexCacheMetrics::hide() {
     vector_index_cache_dynamic_hit_ratio.hide();
     vector_index_cache_async_load_rejected.hide();
     vector_index_cache_async_load_failure.hide();
+    vector_index_cache_async_load_success.hide();
+    vector_index_cache_async_load_ns.hide();
 }
 
 void VectorIndexCacheMetrics::update(size_t capacity, size_t usage, uint64_t lookup_count, uint64_t hit_count) {

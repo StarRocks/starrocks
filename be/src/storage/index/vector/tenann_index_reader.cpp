@@ -36,6 +36,7 @@
 #include "tenann_index_reader.h"
 
 #include <algorithm>
+#include <new>
 #include <stdexcept>
 
 #include "base/utility/defer_op.h"
@@ -113,8 +114,14 @@ StatusOr<tenann::IndexRef> load_vector_index(const tenann::IndexMeta& meta, cons
             return Status::InternalError("vector index loader returned a null IndexRef");
         }
         return index_ref;
+    } catch (const tenann::Error& e) {
+        return tenann_error_to_status(e);
+    } catch (const std::bad_alloc& e) {
+        return Status::MemoryLimitExceeded(e.what());
+    } catch (const std::exception& e) {
+        return Status::InternalError(e.what());
     } catch (...) {
-        return Status::InternalError("vector index loader failed with an exception");
+        return Status::InternalError("unknown vector index loader exception");
     }
 }
 
@@ -183,24 +190,20 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(tenann::IndexM
 
             int64_t get_or_create_ns = 0;
             bool cache_ok = false;
-            bool loading = false;
             {
                 SCOPED_RAW_TIMER(&get_or_create_ns);
-                auto result = _vector_index_cache.GetOrCreateForQuery(tenann::CacheKey(index_path), loader);
-                loading = result.state == VectorIndexCacheProbeState::kLoading;
+                auto result = _vector_index_cache.GetOrCreateForQuery(tenann::CacheKey(index_path), loader,
+                                                                      /*wait_for_loading=*/true);
                 cache_ok = result.state == VectorIndexCacheProbeState::kReady;
                 _cache_handle = std::move(result.handle);
             }
             // Exclude this caller's loader time so a cold leader reports cache bookkeeping,
             // while a concurrent follower reports its singleflight wait.
             stats.vector_index_cache_lookup_ns += std::max<int64_t>(0, get_or_create_ns - loader_ns);
-            if (loader_invoked || loading) {
+            if (loader_invoked) {
                 ++stats.vector_index_cache_miss_count;
             } else {
                 ++stats.vector_index_cache_hit_count;
-            }
-            if (loading) {
-                return VectorIndexReaderInitResult::kFallback;
             }
             if (!cache_ok) {
                 return !load_status.ok() ? load_status

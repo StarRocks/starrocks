@@ -48,6 +48,8 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_rejected, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_failure, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_success, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_ns, MetricUnit::NANOSECONDS);
 
 private:
     static uint64_t _delta_since_last_refresh(uint64_t current, uint64_t previous);
