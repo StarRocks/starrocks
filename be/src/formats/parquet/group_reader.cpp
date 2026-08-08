@@ -781,30 +781,42 @@ void GroupReader::_setup_runtime_filter_predicates() {
         return;
     }
 
-    // add_lazy_column() pushes _lazy_column_indices and _lazy_slot_ids together, so
-    // this is exactly the set of physical columns this row group defers. Note
-    // active_slot_ids() is NOT the mirror image -- it also carries variant hidden
-    // slots -- so "has a reader and is not lazy" is what identifies an active column.
+    // Membership must be tested against exactly the sets the two probe paths can
+    // serve, and nothing else. active_slot_ids() is precisely what
+    // create_active_chunk() materializes, and lazy_slot_ids() is precisely what
+    // materialize_slot() can read. A runtime filter may target a slot in neither --
+    // ConnectorPredicateParser::can_pushdown() accepts every slot, so partition,
+    // not-existed and extended slots all reach us, as do columns pruned from this
+    // file by schema evolution. Those must be dropped: deriving "active" as "not
+    // lazy" would wrongly admit them and then fail looking them up.
+    const auto& active_ids = _column_materializer->active_slot_ids();
     const auto& lazy_ids = _column_materializer->lazy_slot_ids();
+    const std::unordered_set<SlotId> active_slots(active_ids.begin(), active_ids.end());
     const std::unordered_set<SlotId> lazy_slots(lazy_ids.begin(), lazy_ids.end());
 
     RuntimeFilterPredicates preds(src->driver_sequence());
     std::unordered_set<SlotId> probe_columns_seen;
     for (auto* pred : src->rf_predicates()) {
+        // Group-colocate filters hold one sub-filter per driver and are only valid for
+        // the driver that built them. Every other pushdown consumer excludes them via
+        // can_push_down_runtime_filter() -- the operator-level collector, project and
+        // aggregate nodes -- but get_runtime_filter_predicates() does not, so do it
+        // here. Bucket-aware execution on lake tables really does produce colocate
+        // joins over connector scans, and applying another driver's filter silently
+        // drops rows belonging to the other buckets.
+        if (!pred->get_rf_desc()->can_push_down_runtime_filter()) continue;
         // ConnectorPredicateParser::column_id() returns SlotDescriptor::id(), so the
         // predicate's ColumnId is the probe slot id.
         const auto slot_id = static_cast<SlotId>(pred->get_column_id());
-        // Drops anything this row group cannot supply: partition, not-existed and
-        // extended slots, extended variant virtual columns (skipped by
-        // _create_column_readers), and columns absent from this file after schema
-        // evolution pruned the materialized set.
+        const bool is_active = active_slots.count(slot_id) > 0;
+        if (!is_active && lazy_slots.count(slot_id) == 0) continue;
         if (_column_readers.find(slot_id) == _column_readers.end()) continue;
         preds.add_predicate(pred);
         // Several filters may probe the same column. _rf_probe_columns drives building
         // the probe chunk, which keys columns by id and rejects duplicates, so it must
         // hold each column once even though every predicate is kept.
         if (probe_columns_seen.insert(slot_id).second) {
-            _rf_probe_columns.push_back({slot_id, /*is_active=*/lazy_slots.count(slot_id) == 0});
+            _rf_probe_columns.push_back({slot_id, is_active});
         }
     }
     if (_rf_probe_columns.empty()) {

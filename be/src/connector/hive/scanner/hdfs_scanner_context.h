@@ -141,15 +141,12 @@ struct HdfsScannerContext {
     // runtime_membership_filter_eval_context.  Mirrors what the lake connector
     // already does; the hive path simply never plumbed it.
     //
-    // RuntimeFilterProbeDescriptor::runtime_filter() only consults this argument for
-    // group-colocate filters -- for every other filter it is ignored.  Such a filter
-    // cannot reach a connector scan today: FE adds every connector scan node to its
-    // exec group with disableColocateGroup=true (PlanFragmentBuilder), so
-    // build_from_group_execution is never set on filters probed here.  Carrying the
-    // real value is therefore defensive, not a fix for a live bug.  It is still worth
-    // it: the runtime filter predicates below re-resolve their filter once per chunk,
-    // and the -1 sentinel would index group_colocate_filter() out of bounds if
-    // connector scans ever do join a colocate group (e.g. bucket-aware execution).
+    // RuntimeFilterProbeDescriptor::runtime_filter() indexes group_colocate_filter()
+    // with this value for group-colocate filters, so the -1 sentinel reads out of
+    // bounds.  Connector scans DO reach that path: bucket-aware execution on lake
+    // tables (enable_bucket_aware_execution_on_lake) produces colocate joins over
+    // Iceberg scans.  normalize_join_runtime_filter() already resolves filters with
+    // this value, so it must be real regardless of the runtime filter pushdown below.
     int32_t driver_sequence = -1;
     const TupleDescriptor* tuple_desc = nullptr;
     FormatScanContext format_scan_context;
