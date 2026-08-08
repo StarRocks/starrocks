@@ -148,15 +148,16 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     DCHECK(_request != nullptr);
     _status.update(context->status);
 
-    // For parallel merged context, register it to the scheduler's _contexts list
-    // so that it's visible in list_tasks() until RPC response is sent.
+    // Register a parallel merged context so remove_states() can defer cleanup of
+    // its individual subtask rows until the RPC response is sent. list_tasks()
+    // deliberately hides this aggregation-only context.
     if (context->is_parallel_merged && _scheduler != nullptr) {
         std::lock_guard ctx_lock(_scheduler->_contexts_lock);
         _scheduler->_contexts.Append(context.get());
     }
 
-    // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
-    // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
+    // Keep the context until the RPC request finishes. Regular contexts remain
+    // visible through list_tasks(); a merged context anchors parallel-state cleanup.
     _contexts.emplace_back(std::move(context));
     //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
 
@@ -405,6 +406,12 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
              node = node->next()) {
             CompactionTaskContext* context = node->value();
+            // A merged parallel context is an RPC aggregation artifact rather than
+            // an executed compaction unit. The individual subtasks are exposed by
+            // TabletParallelCompactionManager::list_tasks().
+            if (context->is_parallel_merged) {
+                continue;
+            }
             auto& info = infos->emplace_back();
             info.txn_id = context->txn_id;
             info.tablet_id = context->tablet_id;
@@ -417,7 +424,8 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
             // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
             info.finish_time = context->finish_time.load(std::memory_order_acquire);
             if (info.runs > 0) {
-                info.profile = context->stats->to_json_stats();
+                const bool profile_final = info.finish_time > 0;
+                info.profile = context->stats_snapshot(!profile_final).to_json_stats(profile_final);
             }
             if (info.finish_time > 0) {
                 info.status = context->status;
@@ -475,9 +483,9 @@ void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<Compac
         context->RemoveFromList();
     }
 
-    // Cleanup parallel compaction states for merged contexts.
-    // This is deferred from on_subtask_complete to ensure parallel compaction tasks
-    // remain visible in list_tasks until RPC response is sent.
+    // Cleanup parallel compaction states for merged contexts. This is deferred
+    // from on_subtask_complete so individual subtask rows remain visible through
+    // list_tasks() until the RPC response is sent.
     if (_parallel_mgr != nullptr) {
         for (auto& context : states) {
             if (context->is_parallel_merged) {
@@ -522,17 +530,26 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
 
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
+    const auto start_time_ns = MonotonicNanos();
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
+    context->task_attempt_start_ns.store(start_time_ns, std::memory_order_release);
+
     int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
     context->stats->in_queue_time_sec += in_queue_time_sec;
+    if (context->enqueue_time_ns > 0 && start_time_ns > context->enqueue_time_ns) {
+        context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
+    }
+    context->stats->task_attempt_count++;
     context->start_time.store(start_time, std::memory_order_relaxed);
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
+    auto task_prepare_start_ns = MonotonicNanos();
     auto task_or = _tablet_mgr->compact(context.get());
+    context->stats->task_prepare_ns += MonotonicNanos() - task_prepare_start_ns;
     if (task_or.ok()) {
         auto should_cancel = [&]() { return compaction_should_cancel(context.get()); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
@@ -541,16 +558,28 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
             // CAUTION: we reuse delta writer's memory table flush pool here
             flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
             if (UNLIKELY(flush_pool == nullptr)) {
-                return Status::InternalError("Get memory table flush pool failed");
+                status.update(Status::InternalError("Get memory table flush pool failed"));
             }
         }
-        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+        if (status.ok()) {
+            auto task_execute_start_ns = MonotonicNanos();
+            context->task_execute_start_ns.store(task_execute_start_ns, std::memory_order_release);
+            status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+            context->stats->task_execute_ns += MonotonicNanos() - task_execute_start_ns;
+            context->task_execute_start_ns.store(0, std::memory_order_release);
+        }
     } else {
         status.update(task_or.status());
     }
+    context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
+    context->task_attempt_start_ns.store(0, std::memory_order_release);
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
+
+    LOG(INFO) << "Compaction task attempt finished. tablet_id=" << tablet_id << " version=" << version
+              << " txn_id=" << txn_id << " status=" << status << " profile=" << context->stats->to_json_stats()
+              << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
 
     // Task failure due to memory limitations allows for retries, more threads allow for more retries.
     // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
@@ -585,15 +614,20 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
 void CompactionScheduler::abort_compaction(std::unique_ptr<CompactionTaskContext> context) {
     const auto start_time = ::time(nullptr);
+    const auto start_time_ns = MonotonicNanos();
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
     int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
     context->stats->in_queue_time_sec += in_queue_time_sec;
+    if (context->enqueue_time_ns > 0 && start_time_ns > context->enqueue_time_ns) {
+        context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
+    }
     context->status = Status::Aborted("Compaction task aborted due to BE/CN shutdown!");
     LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id << " : "
-                 << context->status;
+                 << context->status << " profile=" << context->stats->to_json_stats()
+                 << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
     // make sure every task can be finished no matter it is succeeded or failed.
     context->callback->finish_task(std::move(context));
 }
