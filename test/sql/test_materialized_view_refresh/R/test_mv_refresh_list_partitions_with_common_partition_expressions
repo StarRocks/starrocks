@@ -117,9 +117,9 @@ select * from mv1 order by 1, 2;
 2024-05-01 00:00:00	2024-05-02 00:00:00	2
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
@@ -145,9 +145,9 @@ select * from mv1 order by 1, 2;
 2024-05-01 00:00:00	2024-05-02 00:00:00	2
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
@@ -171,9 +171,9 @@ select * from mv1 order by 1, 2;
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
@@ -210,9 +210,9 @@ select * from mv1 order by 1, 2;
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
@@ -241,9 +241,9 @@ select * from mv1 order by 1, 2;
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
@@ -270,9 +270,9 @@ select * from mv1 order by 1, 2;
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 2024-06-01 00:00:00	2024-06-02 00:00:00	3
 -- !result
-function: print_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
+function: check_no_hit_materialized_view("select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2)", "mv1")
 -- result:
-False
+None
 -- !result
 select date_trunc('month', dt2), count(1) from t1 group by date_trunc('month', dt2) order by 1;
 -- result:
