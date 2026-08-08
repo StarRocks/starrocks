@@ -21,6 +21,7 @@ import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,6 +74,14 @@ public class CredentialUtil {
                 AwsProperties.REST_ACCESS_KEY_ID);
         doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 AwsProperties.REST_SECRET_ACCESS_KEY);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                AwsProperties.REST_SESSION_TOKEN);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.ACCESS_KEY_ID);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.SECRET_ACCESS_KEY);
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                S3FileIOProperties.SESSION_TOKEN);
 
         // Mask for iceberg jdbc catalog credential
         doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
