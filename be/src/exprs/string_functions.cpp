@@ -2797,6 +2797,105 @@ StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Colu
     return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
+<<<<<<< HEAD
+=======
+// strpos without instance parameter
+StatusOr<ColumnPtr> StringFunctions::strpos(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
+    ColumnPtr instance = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
+    return strpos_instance(context, {haystack, needle, instance});
+}
+
+// strpos with instance parameter
+StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
+    const ColumnPtr& instance = columns[2];
+
+    ColumnViewer<TYPE_VARCHAR> haystack_viewer(haystack);
+    ColumnViewer<TYPE_VARCHAR> needle_viewer(needle);
+    ColumnViewer<TYPE_INT> instance_viewer(instance);
+
+    size_t size = haystack->size();
+    ColumnBuilder<TYPE_BIGINT> builder(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (haystack_viewer.is_null(i) || needle_viewer.is_null(i) || instance_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+
+        const Slice& haystack_slice = haystack_viewer.value(i);
+        const Slice& needle_slice = needle_viewer.value(i);
+        int32_t instance_value = instance_viewer.value(i);
+
+        // instance is 0, return 0
+        if (instance_value == 0) {
+            builder.append(0);
+            continue;
+        }
+
+        // needle is empty, return 1
+        if (needle_slice.size == 0) {
+            builder.append(1);
+            continue;
+        }
+
+        if (instance_value > 0) {
+            int pos = -1;
+            int count = 0;
+            int from_index = 0;
+
+            while (count < instance_value) {
+                pos = StringFunctions::index_of(haystack_slice.data, haystack_slice.size, needle_slice.data,
+                                                needle_slice.size, from_index);
+                if (pos == -1) {
+                    break;
+                }
+                count++;
+                from_index = pos + 1;
+            }
+            builder.append(count == instance_value ? pos + 1 : 0);
+        } else {
+            // instance is negative, search from end
+            std::vector<int> positions;
+            int pos = -1;
+            int from_index = 0;
+
+            while (true) {
+                pos = StringFunctions::index_of(haystack_slice.data, haystack_slice.size, needle_slice.data,
+                                                needle_slice.size, from_index);
+                if (pos == -1) {
+                    break;
+                }
+                positions.push_back(pos);
+                from_index = pos + 1;
+            }
+
+            // Widened on purpose. instance_value is int32_t, so std::abs(INT32_MIN) is undefined and
+            // in practice yields INT32_MIN again -- still negative, because +2147483648 does not fit
+            // in an int32. The bounds check below then passes for a negative value, and
+            // positions.size() - abs_instance converts it to size_t, ADDING 2^31 instead of
+            // subtracting. With 4-byte elements that indexes 2^33 bytes past the vector, which is
+            // exactly the SIGSEGV @0x200000000 this was first reported as.
+            int64_t abs_instance = std::abs(static_cast<int64_t>(instance_value));
+            if (abs_instance <= static_cast<int64_t>(positions.size())) {
+                builder.append(positions[positions.size() - abs_instance] + 1);
+            } else {
+                builder.append(0);
+            }
+        }
+    }
+
+    return builder.build(ColumnHelper::is_all_const({haystack, needle, instance}));
+}
+
+>>>>>>> c14abd5508 ([BugFix] Stop strpos from indexing out of bounds on an INT32_MIN instance (#77260))
 static inline ColumnPtr concat_const_not_null(Columns const& columns, const BinaryColumn* src,
                                               const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
