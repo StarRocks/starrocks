@@ -47,6 +47,7 @@
 #include "formats/parquet/variant_projection.h"
 #include "formats/reserved_columns.h"
 #include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
 
@@ -805,6 +806,36 @@ void GroupReader::_setup_runtime_filter_predicates() {
         // joins over connector scans, and applying another driver's filter silently
         // drops rows belonging to the other buckets.
         if (!pred->get_rf_desc()->can_push_down_runtime_filter()) continue;
+        // Bucket-aware join modes build one sub-filter per bucket, and picking the right
+        // one per row assumes the probe side is distributed exactly the way the builder
+        // expected. Bucket-aware execution over lake tables breaks that assumption here
+        // in a way that silently drops rows, so keep the pushdown to filters where a
+        // single membership test applies to every row. The join mode comes from the plan
+        // and is known before the filter arrives, unlike num_hash_partitions(). The
+        // operator-level probe still handles the excluded ones, exactly as it does today.
+        //
+        // TODO: the pre-existing statistics path may share this flaw and is NOT fixed
+        // here. normalize_join_runtime_filter() (scan_conjuncts_manager.cpp) resolves the
+        // filter the same way -- desc->runtime_filter(driver_sequence) -- and feeds its
+        // min/max into row-group and scan-range pruning (see also RuntimeScanRangePruner
+        // in file_reader.cpp). Collapsing a filter to a min/max envelope does not make
+        // the lookup correct: if the resolved sub-filter is the wrong one, the envelope
+        // is simply too narrow and whole row groups get pruned that should have
+        // survived. It has not been observed to misfire -- disabling only the row-level
+        // probe here leaves the bucket-aware tests passing, and q27 prunes no row groups
+        // at all -- but "never observed" is not "cannot happen", and no test constructs
+        // the case. Proving it needs data where a row group's value range falls outside
+        // one driver's local envelope yet inside the global one; that, plus deciding
+        // what driver_sequence should even mean for a connector scan under bucket-aware
+        // execution, is a separate investigation and deliberately out of scope here.
+        switch (pred->get_rf_desc()->join_mode()) {
+        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
+        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET:
+        case TRuntimeFilterBuildJoinMode::COLOCATE:
+            continue;
+        default:
+            break;
+        }
         // ConnectorPredicateParser::column_id() returns SlotDescriptor::id(), so the
         // predicate's ColumnId is the probe slot id.
         const auto slot_id = static_cast<SlotId>(pred->get_column_id());
