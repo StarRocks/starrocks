@@ -172,7 +172,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         {
             SCOPED_TIMER(_join_builder->build_metrics().build_runtime_filter_timer);
             auto status = _partial_rf_merger->add_partial_filters(
-                    merger_index, ht_row_count, std::move(partial_in_filters),
+                    merger_index, ht_row_count, _join_builder->get_ht_ndv_estimate(), std::move(partial_in_filters),
                     std::move(partial_bloom_filter_build_params), std::move(partial_bloom_filters));
             ASSIGN_OR_RETURN(all_build_merged, status);
         }
