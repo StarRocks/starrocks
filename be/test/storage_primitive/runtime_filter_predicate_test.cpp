@@ -179,8 +179,7 @@ TEST_F(RuntimeFilterPredicateTest, BucketAwareFilterKeepsEveryRowItWasBuiltFrom)
     }
     std::vector<uint16_t> target_sel(column->size());
     uint16_t kept = 0;
-    ASSIGN_OR_ABORT(kept,
-                    pred.evaluate(chunk.get(), sel.data(), static_cast<uint16_t>(sel.size()), target_sel.data()));
+    ASSIGN_OR_ABORT(kept, pred.evaluate(chunk.get(), sel.data(), static_cast<uint16_t>(sel.size()), target_sel.data()));
     EXPECT_EQ(kept, column->size());
 }
 

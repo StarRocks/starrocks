@@ -85,8 +85,7 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
             _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, &_running_ctx);
         } else {
             hash_values.resize(column->size());
-            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values,
-                                         &_running_ctx);
+            _rf->compute_partition_index(_rf_desc->layout(), {column.get()}, sel, sel_size, hash_values, &_running_ctx);
         }
     }
     uint16_t ret = _rf->evaluate(column.get(), hash_values, sel, sel_size, target_sel);
