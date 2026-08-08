@@ -1,0 +1,87 @@
+{
+  "settings": {
+    "minWordSizefor1Typo": 3,
+    "minWordSizefor2Typos": 7,
+    "hitsPerPage": 20,
+    "maxValuesPerFacet": 100,
+    "minProximity": 1,
+    "searchableAttributes": [
+      "unordered(keywords)",
+      "unordered(pinyin)",
+      "unordered(description)",
+      "unordered(hierarchy.lvl0)",
+      "unordered(hierarchy.lvl1)",
+      "unordered(hierarchy.lvl2)",
+      "unordered(hierarchy.lvl3)",
+      "unordered(hierarchy.lvl4)",
+      "unordered(hierarchy.lvl5)",
+      "unordered(hierarchy.lvl6)",
+      "content"
+    ],
+    "numericAttributesToIndex": null,
+    "attributesToRetrieve": [
+      "hierarchy",
+      "content",
+      "anchor",
+      "url",
+      "url_without_anchor",
+      "type"
+    ],
+    "allowTyposOnNumericTokens": false,
+    "ignorePlurals": true,
+    "camelCaseAttributes": [
+      "hierarchy",
+      "hierarchy_radio",
+      "content"
+    ],
+    "advancedSyntax": true,
+    "attributeCriteriaComputedByMinProximity": true,
+    "distinct": true,
+    "unretrievableAttributes": null,
+    "optionalWords": null,
+    "userData": {
+      "lastCrawl": "2023-11-01T01:39:30.071614"
+    },
+    "attributesForFaceting": [
+      "docusaurus_tag",
+      "lang",
+      "language",
+      "type",
+      "version"
+    ],
+    "attributesToSnippet": [
+      "content:10",
+      "keywords:10"
+    ],
+    "attributesToHighlight": [
+      "content",
+      "hierarchy"
+    ],
+    "paginationLimitedTo": 1000,
+    "attributeForDistinct": "url_without_anchor",
+    "exactOnSingleWordQuery": "attribute",
+    "ranking": [
+      "words",
+      "filters",
+      "typo",
+      "attribute",
+      "proximity",
+      "exact",
+      "custom"
+    ],
+    "customRanking": [
+      "desc(weight.pageRank)",
+      "desc(weight.level)",
+      "desc(weight.position)"
+    ],
+    "separatorsToIndex": "_",
+    "removeWordsIfNoResults": "allOptional",
+    "queryType": "prefixLast",
+    "highlightPreTag": "<span class=\"algolia-docsearch-suggestion--highlight\">",
+    "highlightPostTag": "</span>",
+    "alternativesAsExact": [
+      "ignorePlurals",
+      "singleWordSynonym"
+    ]
+  }
+}
