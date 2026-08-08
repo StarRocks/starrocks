@@ -1082,6 +1082,88 @@ public class WindowTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+    @Test
+    public void testRankingWindowPreAggNotInSameSortGroup() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // The agg window and the rank window have the same partition expressions as a SET, but they do
+        // not share a sort group, so the pre-Agg optimization must be skipped instead of hitting an
+        // assertion. The plain rank push-down still applies, hence a PARTITION-TOP-N without pre agg.
+        // NOTE: the agg window has to be listed first, otherwise the rank window does not end up on
+        // top of it and neither push-down rule matches the plan shape.
+
+        // Partition expressions in a different order: WindowTransformer groups sort columns by an
+        // ordered prefix, so the two windows land in different sort groups.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v3) over (partition by v3, v2) as _sum, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+            assertNotContains(plan, "pre agg functions");
+        }
+        // Same, through PushDownLimitRankingWindowRule.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v3) over (partition by v3, v2) as _sum, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+            assertNotContains(plan, "pre agg functions");
+        }
+        // A hash-partitioned window is never placed in a sort group at all.
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v3) over ([hash] partition by v3) as _sum, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+            assertNotContains(plan, "pre agg functions");
+        }
+        // The query reported in issue #76711: window_partition_mode=2 makes the agg window
+        // hash-partitioned while the rank window stays sort-based.
+        {
+            String sql = "select /*+ SET_VAR(window_partition_mode=2) */ * from (\n" +
+                    "    select *, " +
+                    "        sum(v3) over (partition by v3) as _sum, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk = 1;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 1\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+            assertNotContains(plan, "pre agg functions");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
     // TODO:support this case later
     @Test
     public void testRankingWindowWithoutPartitionCanNotPushDown() throws Exception {
