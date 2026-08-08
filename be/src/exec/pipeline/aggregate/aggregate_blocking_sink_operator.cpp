@@ -39,6 +39,9 @@ Status AggregateBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
+    // Best-effort reserve of the merge hash table from the FE NDV estimate. A reserve
+    // OOM is non-fatal: ignore it and let the table grow incrementally.
+    (void)_aggregator->reserve_hash_table_from_estimate();
 
     // The limit optimization drops rows whose group-by key is not already in the hash map once the
     // limit is reached. That is only sound because a key reaches exactly one hash map: the input is
@@ -186,6 +189,9 @@ OperatorPtr AggregateBlockingSinkOperatorFactory::create(int32_t degree_of_paral
 
     // init operator
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
+    // Record the local DOP so the aggregator can divide the FE NDV estimate across
+    // the drivers that share the keyspace after local-shuffle (reserve divisor).
+    aggregator->set_degree_of_parallelism(degree_of_parallelism);
     auto op = std::make_shared<AggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id, driver_sequence,
                                                               _aggregator_factory->get_shared_limit_countdown());
     return op;

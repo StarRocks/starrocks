@@ -49,6 +49,14 @@ This topic introduces the following types of BE configurations:
 - Description: Software prefetch distance (in rows) for the aggregation hash-map / hash-set probe loop. While building the aggregation hash table, the loop prefetches the bucket for the row this many positions ahead of the one it is currently processing, hiding memory latency on large tables. Setting it to `0` disables software prefetch. The value is read once per chunk, so changes take effect on the next chunk. The default 16 is empirical for L3-resident tables; raise it for DRAM-resident workloads and lower it for cache-resident ones. Prefetch is additionally gated by `agg_prefetch_l2_ratio`: regardless of this distance, no prefetch is issued while the hash table still fits in L2.
 - Introduced in: -
 
+### agg_hashtable_reserve_max_bytes
+
+- Default: 268435456
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: When an NDV (cardinality) estimate is available for the GROUP BY keys, the aggregator pre-allocates its hash table to that size instead of growing it from empty, which avoids repeated rehashing on a high-cardinality GROUP BY. This setting is the upper bound on how much a single aggregator may pre-allocate. Set it to `0` to turn pre-allocation off.
+
 ### agg_prefetch_l2_ratio
 
 - Default: 1.0
