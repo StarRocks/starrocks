@@ -386,7 +386,7 @@ TEST_F(QueryContextReserveLimitTest, ReserveLimitUnsetWhenRatioAbsent) {
 }
 
 TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsBigQueryMemLimit) {
-    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL);
     _query_ctx->init_mem_tracker(-1, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio, wg.get());
 
     auto tracker = _query_ctx->mem_tracker();
@@ -398,7 +398,7 @@ TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsBigQueryMemLimit) {
 }
 
 TEST_F(QueryContextReserveLimitTest, ReserveLimitTakesMinOfAllLimits) {
-    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL);
     _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
                                  wg.get());
 
@@ -410,7 +410,7 @@ TEST_F(QueryContextReserveLimitTest, ReserveLimitTakesMinOfAllLimits) {
 }
 
 TEST_F(QueryContextReserveLimitTest, StaticQueryMemLimitTakesMinOfAllLimits) {
-    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL);
     _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
                                  wg.get());
 
