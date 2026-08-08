@@ -17,7 +17,6 @@
 import argparse
 import base64
 import json
-import os
 import sys
 import time
 import zipimport
@@ -232,20 +231,17 @@ class UDFFlightServer(flight.FlightServerBase):
                     started = True
                 writer.write_batch(result_batch)
 
-def main(unix_socket_path):
-    location = unix_socket_path
+def main(location):
     server = UDFFlightServer(location)
     print("Pywork start success")
     sys.stdout.flush()
     server.wait()
 
-def build_socket_url(prefix):
-    pid = os.getpid()
-    return prefix + str(pid)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run an Arrow Flight echo server over Unix socket.")
-    parser.add_argument("unix_socket_path", type=str, help="The path to the Unix socket.")
+    # Full Flight location handed down by BE, e.g. grpc+unix:///.../pyworker_<n>_<rand>.
+    # BE and worker no longer derive the socket name from the pid, so a launcher
+    # wrapper (sandbox) can sit between them without breaking the handshake.
+    parser.add_argument("location", type=str, help="The Flight server location (grpc+unix:// URL).")
     args = parser.parse_args()
-    url = build_socket_url(args.unix_socket_path)
-    main(url)
+    main(args.location)

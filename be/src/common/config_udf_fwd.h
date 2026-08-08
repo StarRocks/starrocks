@@ -40,4 +40,33 @@ CONF_Int32(python_worker_expire_time_sec, "300");
 // the longest expected UDF query. 0 (default) disables the timeout (wait indefinitely).
 CONF_mInt32(python_udf_rpc_timeout_ms, "0");
 
+// Python UDF worker sandbox. Selects how the spawned python worker is isolated:
+//   "off"     - no isolation (default; the worker runs as the BE OS user)
+//   "seccomp" - seccomp syscall filter + rlimit only (zero privilege, works in any container)
+//   "nsjail"  - full Linux-namespace isolation via nsjail (see python_udf_sandbox_mode)
+CONF_String(python_udf_sandbox, "off");
+
+// Namespace strategy for the "nsjail" sandbox:
+//   "auto"       - rootless (unprivileged user namespace) if available, else CAP_SYS_ADMIN,
+//                  else degrade to seccomp-only (unless python_udf_sandbox_required)
+//   "rootless"   - force unprivileged user namespace
+//   "privileged" - force host CAP_SYS_ADMIN (no user namespace)
+CONF_String(python_udf_sandbox_mode, "auto");
+
+// If true, refuse to run a python UDF when the requested sandbox level cannot be
+// established (fail-closed). If false, log a warning and fall back (fail-open).
+CONF_Bool(python_udf_sandbox_required, "false");
+
+// Path to the nsjail binary used by the "seccomp"/"nsjail" sandbox.
+CONF_String(python_udf_nsjail_path, "${STARROCKS_HOME}/lib/nsjail");
+
+// nsjail config file for the full-namespace ("nsjail") sandbox. All isolation
+// policy (namespaces, mounts, caps, uid map, rlimits, seccomp policy) lives in
+// this file; the BE only renders the deployment paths into it at startup.
+CONF_String(python_udf_nsjail_config, "${STARROCKS_HOME}/conf/pyudf-nsjail.conf");
+
+// nsjail config file for the seccomp-only sandbox ("seccomp", and the automatic
+// fallback of "nsjail" when namespaces are unavailable).
+CONF_String(python_udf_nsjail_seccomp_config, "${STARROCKS_HOME}/conf/pyudf-nsjail-seccomp.conf");
+
 } // namespace starrocks::config

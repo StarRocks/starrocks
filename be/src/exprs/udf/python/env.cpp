@@ -15,18 +15,25 @@
 #include "exprs/udf/python/env.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <poll.h>
+#include <sched.h>
 #include <spawn.h>
 #include <sys/poll.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <csignal>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -38,6 +45,7 @@
 #include "butil/fd_utility.h"
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
+#include "common/logging.h"
 #include "common/util/misc.h"
 #include "platform/python/env.h"
 
@@ -62,23 +70,246 @@ void LocalPyWorker::wait() {
 }
 
 void LocalPyWorker::remove_unix_socket() {
-    unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
+    if (!_sock_path.empty()) {
+        unlink(_sock_path.c_str());
+    }
 }
 
-std::string PyWorkerManager::unix_socket(pid_t pid) {
-    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
-    return unix_socket;
+std::string PyWorkerManager::socket_dir() {
+    return fmt::format("{}/pyworker", config::local_library_dir);
 }
 
-std::string PyWorkerManager::unix_socket_prefix() {
-    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_", config::local_library_dir);
-    return unix_socket;
+Status PyWorkerManager::ensure_socket_dir() {
+    std::string dir = socket_dir();
+    if (mkdir(dir.c_str(), 0700) != 0 && errno != EEXIST) {
+        return Status::InternalError(fmt::format("create pyworker socket dir {} error: {}", dir, std::strerror(errno)));
+    }
+    // Tighten permissions to the BE user even if the directory pre-existed with
+    // a looser mode: any local user able to reach the socket can drive the
+    // worker's Flight server, which executes arbitrary UDF code.
+    if (chmod(dir.c_str(), 0700) != 0) {
+        return Status::InternalError(fmt::format("chmod pyworker socket dir {} error: {}", dir, std::strerror(errno)));
+    }
+    return Status::OK();
 }
 
-std::string PyWorkerManager::unix_socket_path(pid_t pid) {
-    std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
-    return unix_socket_path;
+std::string PyWorkerManager::new_socket_path() {
+    // A process-local counter keeps names unique among live workers; the random
+    // suffix avoids colliding with a stale socket left behind by a prior BE run.
+    static std::atomic<uint64_t> seq{0};
+    uint64_t n = seq.fetch_add(1, std::memory_order_relaxed);
+    uint32_t r = Random::GetTLSInstance()->Next();
+    return fmt::format("{}/pyworker_{}_{:08x}", socket_dir(), n, r);
 }
+
+namespace {
+
+// How the worker process is launched: the program to exec, its argv, and an
+// explicit environment (an empty envp vector means "empty environment").
+struct SpawnSpec {
+    std::string exe;
+    std::vector<std::string> argv;
+    std::vector<std::string> envp;
+};
+
+// CAP_SYS_ADMIN is capability bit 21. Reads this process's effective set.
+bool has_cap_sys_admin() {
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+        if (line.rfind("CapEff:", 0) == 0) {
+            uint64_t caps = std::strtoull(line.c_str() + 7, nullptr, 16);
+            return (caps >> 21) & 1ULL;
+        }
+    }
+    return false;
+}
+
+// Probe (once, cached) whether an unprivileged user namespace can be created.
+// Launch nsjail (which creates the userns) via posix_spawn rather than an
+// in-process fork()+unshare(): fork() is unreliable from the large multi-GB BE
+// process, whereas posix_spawn is exactly how the worker itself is launched.
+// Only a user namespace is created here (all other namespaces and procfs are
+// disabled) so /bin/true runs directly on the host filesystem.
+bool unprivileged_userns_available(const std::string& nsjail_path) {
+    static std::atomic<int> cached{-1};
+    int v = cached.load(std::memory_order_acquire);
+    if (v >= 0) {
+        return v != 0;
+    }
+    // This is a fixed capability check (not operator-tunable policy), so the flags
+    // are inline: create only a user namespace, disable everything else, run /bin/true.
+    const char* argv[] = {"nsjail",
+                          "-Mo",
+                          "-q",
+                          "-l",
+                          "/dev/null",
+                          "--user",
+                          "99999",
+                          "--group",
+                          "99999",
+                          "--disable_clone_newns",
+                          "--disable_clone_newnet",
+                          "--disable_clone_newpid",
+                          "--disable_clone_newipc",
+                          "--disable_clone_newuts",
+                          "--disable_clone_newcgroup",
+                          "--disable_proc",
+                          "--",
+                          "/bin/true",
+                          nullptr};
+    const char* envp[] = {nullptr};
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_addopen(&fa, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&fa, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    pid_t pid;
+    int rc = posix_spawnp(&pid, nsjail_path.c_str(), &fa, nullptr, const_cast<char* const*>(argv),
+                          const_cast<char* const*>(envp));
+    posix_spawn_file_actions_destroy(&fa);
+    int result = 0;
+    if (rc == 0) {
+        int status = 0;
+        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+        }
+        result = (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 1 : 0;
+    }
+    cached.store(result, std::memory_order_release);
+    return result != 0;
+}
+
+std::string render_placeholders(std::string content, const std::string& python_home, const std::string& pypkgs,
+                                const std::string& socket_dir, const std::string& conf_dir) {
+    auto replace_all = [&](const std::string& from, const std::string& to) {
+        for (size_t p = content.find(from); p != std::string::npos; p = content.find(from, p + to.size())) {
+            content.replace(p, from.size(), to);
+        }
+    };
+    replace_all("{{PYTHON_HOME}}", python_home);
+    replace_all("{{PYPKGS}}", pypkgs);
+    replace_all("{{SOCKET_DIR}}", socket_dir);
+    replace_all("{{CONF}}", conf_dir);
+    return content;
+}
+
+// Render an nsjail config template (substituting the deployment paths) into a
+// file under the socket dir, once per template path. nsjail loads it via --config,
+// so all isolation policy stays in the (operator-editable) config file.
+StatusOr<std::string> ensure_rendered_config(const std::string& template_path, const std::string& python_home,
+                                             const std::string& pypkgs, const std::string& socket_dir) {
+    static std::mutex mu;
+    static std::unordered_map<std::string, std::string> cache;
+    std::lock_guard<std::mutex> guard(mu);
+    if (auto it = cache.find(template_path); it != cache.end()) {
+        return it->second;
+    }
+    std::ifstream in(template_path);
+    if (!in) {
+        return Status::InternalError(fmt::format("cannot read nsjail config template '{}'", template_path));
+    }
+    std::stringstream ss;
+    ss << in.rdbuf();
+    std::string conf_dir = std::filesystem::path(template_path).parent_path().string();
+    std::string content = render_placeholders(ss.str(), python_home, pypkgs, socket_dir, conf_dir);
+
+    std::string rendered =
+            fmt::format("{}/{}.rendered", socket_dir, std::filesystem::path(template_path).filename().string());
+    std::ofstream out(rendered, std::ios::trunc);
+    if (!out || !(out << content) || (out.close(), !out.good())) {
+        return Status::InternalError(fmt::format("cannot write rendered nsjail config '{}'", rendered));
+    }
+    cache.emplace(template_path, rendered);
+    return rendered;
+}
+
+// Build the program + argv + env used to launch the worker, applying the
+// configured sandbox. Returns an error only when the sandbox is required
+// (fail-closed) but cannot be established.
+StatusOr<SpawnSpec> build_spawn_spec(const std::string& python_path, const std::string& script,
+                                     const std::string& sock_url, const std::string& python_home) {
+    SpawnSpec direct{python_path, {"python3", script, sock_url}, {fmt::format("PYTHONHOME={}", python_home)}};
+
+    const std::string& sandbox = config::python_udf_sandbox;
+    if (sandbox.empty() || sandbox == "off") {
+        return direct;
+    }
+    if (sandbox != "seccomp" && sandbox != "nsjail") {
+        return Status::InvalidArgument(fmt::format("unknown python_udf_sandbox '{}'", sandbox));
+    }
+
+    const std::string& nsjail = config::python_udf_nsjail_path;
+    if (nsjail.empty() || !std::filesystem::exists(nsjail)) {
+        if (config::python_udf_sandbox_required) {
+            return Status::InternalError(fmt::format(
+                    "python UDF sandbox '{}' required but nsjail binary not found at '{}'", sandbox, nsjail));
+        }
+        LOG(WARNING) << "python UDF sandbox '" << sandbox << "' requested but nsjail not found at '" << nsjail
+                     << "'; running python UDF WITHOUT a sandbox";
+        return direct;
+    }
+
+    // Decide whether full namespace isolation is available (nsjail mode only).
+    bool full_ns = false;
+    bool privileged = false;
+    if (sandbox == "nsjail") {
+        const std::string& mode = config::python_udf_sandbox_mode;
+        if (mode == "rootless") {
+            // Operator asserts unprivileged user namespaces are available; trust the
+            // config instead of probing.
+            full_ns = true;
+        } else if (mode == "privileged") {
+            // Operator asserts CAP_SYS_ADMIN is available; trust the config.
+            full_ns = true;
+            privileged = true;
+        } else { // auto: detect. Prefer rootless (unprivileged userns), else CAP_SYS_ADMIN.
+            bool userns = unprivileged_userns_available(nsjail);
+            bool cap = has_cap_sys_admin();
+            LOG(INFO) << "python UDF nsjail sandbox auto-detect: unprivileged_userns=" << userns
+                      << " cap_sys_admin=" << cap;
+            if (userns) {
+                full_ns = true;
+            } else if (cap) {
+                full_ns = true;
+                privileged = true;
+            }
+        }
+        if (!full_ns) {
+            if (config::python_udf_sandbox_required) {
+                return Status::InternalError(
+                        "python UDF nsjail sandbox required but neither unprivileged user namespaces "
+                        "nor CAP_SYS_ADMIN are available");
+            }
+            LOG(WARNING) << "python UDF nsjail namespace isolation unavailable "
+                            "(no unprivileged userns, no CAP_SYS_ADMIN); degrading to seccomp-only";
+        }
+    }
+
+    // All isolation policy lives in the nsjail config file; the BE only renders
+    // the deployment paths into it and passes it via --config.
+    const std::string& template_path =
+            full_ns ? config::python_udf_nsjail_config : config::python_udf_nsjail_seccomp_config;
+    std::string pypkgs = std::filesystem::path(script).parent_path().string();
+    ASSIGN_OR_RETURN(std::string cfg,
+                     ensure_rendered_config(template_path, python_home, pypkgs, PyWorkerManager::socket_dir()));
+
+    // Send nsjail's own logs to a file (not the worker's stdout/stderr pipe) so the
+    // "Pywork start success" readiness handshake is not corrupted, while still keeping
+    // the diagnostics for troubleshooting a failed sandbox launch.
+    std::string nsjail_log = PyWorkerManager::socket_dir() + "/nsjail.log";
+    std::vector<std::string> argv = {"nsjail", "-Mo", "-l", nsjail_log, "--config", cfg};
+    // Privileged mode reuses the full-namespace config but drops the user namespace.
+    if (privileged) {
+        argv.emplace_back("--disable_clone_newuser");
+    }
+    argv.emplace_back("--");
+    argv.push_back(python_path);
+    argv.push_back(script);
+    argv.push_back(sock_url);
+
+    return SpawnSpec{nsjail, std::move(argv), {}};
+}
+
+} // namespace
 
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
@@ -139,15 +370,30 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
     }
 #endif
 
+    RETURN_IF_ERROR(ensure_socket_dir());
     std::string script = PyWorkerManager::bootstrap();
-    std::string unix_socket = PyWorkerManager::unix_socket_prefix();
-    std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
+    std::string sock_path = new_socket_path();
+    std::string sock_url = "grpc+unix://" + sock_path;
 
-    const char* args[] = {"python3", script.c_str(), unix_socket.c_str(), nullptr};
-    const char* envs[] = {python_home_env.c_str(), nullptr};
+    // Apply the configured sandbox: this may wrap the interpreter in nsjail, or
+    // return the interpreter directly when the sandbox is off/unavailable.
+    ASSIGN_OR_RETURN(SpawnSpec spec, build_spawn_spec(python_path, script, sock_url, py_env.home));
 
-    int rc = posix_spawnp(&pid, python_path.c_str(), &actions, &attrs, const_cast<char* const*>(args),
-                          const_cast<char* const*>(envs));
+    std::vector<const char*> argv;
+    argv.reserve(spec.argv.size() + 1);
+    for (const auto& a : spec.argv) {
+        argv.push_back(a.c_str());
+    }
+    argv.push_back(nullptr);
+    std::vector<const char*> envp;
+    envp.reserve(spec.envp.size() + 1);
+    for (const auto& e : spec.envp) {
+        envp.push_back(e.c_str());
+    }
+    envp.push_back(nullptr);
+
+    int rc = posix_spawnp(&pid, spec.exe.c_str(), &actions, &attrs, const_cast<char* const*>(argv.data()),
+                          const_cast<char* const*>(envp.data()));
     close(pipefd[1]);
 
     if (rc != 0) {
@@ -155,6 +401,9 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
     }
 
     *child_process = std::make_unique<LocalPyWorker>(pid);
+    // Record the socket path up front so it is removed on every failure/cleanup
+    // path below, even if the worker bound the socket before failing to start.
+    (*child_process)->set_sock_path(sock_path);
 
     pollfd fds[1];
     fds[0].fd = pipefd[0];
@@ -194,7 +443,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
         (*child_process)->terminate_and_wait();
         return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
     }
-    (*child_process)->set_url(PyWorkerManager::unix_socket(pid));
+    (*child_process)->set_url(sock_url);
 
     return Status::OK();
 }
