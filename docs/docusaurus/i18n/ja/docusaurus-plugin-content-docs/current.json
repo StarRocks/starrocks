@@ -500,7 +500,7 @@
     "description": "The label for category 'String' in sidebar 'docs'"
   },
   "sidebar.docs.category.sql-fxn-string": {
-    "message": "文字列",
+    "message": "文字列関数",
     "description": "The label for category 'String' in sidebar 'docs'"
   }
 }

@@ -600,7 +600,7 @@
     "description": "The label for category 'String' in sidebar 'docs'"
   },
   "sidebar.docs.category.sql-fxn-string": {
-    "message": "字符串类型",
+    "message": "字符串函数",
     "description": "The label for category 'String' in sidebar 'docs'"
   }
 }
