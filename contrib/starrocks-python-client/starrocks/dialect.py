@@ -88,9 +88,11 @@ from .datatype import (
     SMALLINT,
     STRING,
     STRUCT,
+    TIME,
     TINYINT,
     VARBINARY,
     VARCHAR,
+    VARIANT,
 )
 from .engine.interfaces import ReflectedMVState, ReflectedState, ReflectedViewState
 from .reflection import StarRocksInspector, StarRocksTableDefinitionParser
@@ -160,10 +162,12 @@ ischema_names = {
     "char": CHAR,
     "string": STRING,
     "json": JSON,
+    "variant": VARIANT,
     # === Date and time ===
     "date": DATE,
     "datetime": DATETIME,
     "timestamp": DATETIME,
+    "time": TIME,
     # == binary ==
     "binary": BINARY,
     "varbinary": VARBINARY,
@@ -252,6 +256,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
 
     def visit_BITMAP(self, type_, **kw):
         return "BITMAP"
+
+    def visit_VARIANT(self, type_, **kw):
+        return "VARIANT"
 
     def visit_BLOB(self, type_, **kw):
         return "BINARY"
