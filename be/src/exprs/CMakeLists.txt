@@ -83,6 +83,7 @@ set(EXPR_FILES
   function_helper.cpp
   find_in_set.cpp
   geo_functions.cpp
+  h3_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp
@@ -149,4 +150,4 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Expr ${EXPR_FILES})
-target_link_libraries(Expr PUBLIC Runtime ColumnSortCore Platform Geo)
+target_link_libraries(Expr PUBLIC Runtime ColumnSortCore Platform Geo libh3)
