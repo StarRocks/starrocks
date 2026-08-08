@@ -986,6 +986,7 @@
     {
       "path": "be/src/common/config_compression_fwd.h",
       "configs": [
+        "enable_zstd_compression_dict_ctx_cache",
         "lz4_acceleration",
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps"

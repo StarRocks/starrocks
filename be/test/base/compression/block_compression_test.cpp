@@ -40,6 +40,7 @@
 #include <thread>
 
 #include "base/compression/compression_context_pool_singletons.h"
+#include "base/compression/zstd_dict.h"
 #include "base/container/raw_container.h"
 #include "base/random/random.h"
 #include "base/string/faststring.h"
@@ -647,4 +648,237 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
     }
 }
 #endif
+
+// ===================== compression dict compression-dict codec tests =====================
+
+// Roundtrip: a body compressed referencing a CDict decodes correctly with the
+// matching DDict built from the same sample.
+TEST_F(BlockCompressionTest, zstd_compression_dict_roundtrip) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int i = 0; i < 200; i++) {
+        sample += R"({"role":"user","parts":[{"type":"text","content":"hello world )";
+        sample += std::to_string(i);
+        sample += R"("}]})";
+    }
+    auto cdict_or = compression::ZstdCDict::create(Slice(sample), /*level=*/3);
+    ASSERT_TRUE(cdict_or.ok());
+    auto ddict_or = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(ddict_or.ok());
+
+    std::string body;
+    for (int i = 0; i < 500; i++) {
+        body += R"({"role":"assistant","parts":[{"type":"text","content":"hello world )";
+        body += std::to_string(i % 50);
+        body += R"("}]})";
+    }
+
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice cslice(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &cslice, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                                cdict_or.value().get())
+                        .ok());
+    compressed.resize(cslice.size);
+
+    std::string out(body.size(), '\0');
+    Slice oslice(out);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &oslice, ddict_or.value().get()).ok());
+    ASSERT_EQ(body.size(), oslice.size);
+    ASSERT_EQ(body, std::string(oslice.data, oslice.size));
+}
+
+// Reset-safety: a dict-bearing borrow must not leak its sticky refCDict to the
+// next borrower. Interleave dict/no-dict compresses; the no-dict output must
+// always equal a clean no-dict reference (the reset-on-return rule that
+// prevents a dictionary leaking from one borrower to the next).
+TEST_F(BlockCompressionTest, dict_reset_safety_no_leak_to_next_borrow) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+    std::string sample(4096, 'x');
+    auto cdict_or = compression::ZstdCDict::create(Slice(sample), /*level=*/3);
+    ASSERT_TRUE(cdict_or.ok());
+
+    std::string body = generate_str(8000);
+    auto nodict_compress = [&](std::string* out) {
+        out->resize(codec->max_compressed_len(body.size()));
+        Slice o(*out);
+        EXPECT_TRUE(codec->compress(body, &o).ok());
+        out->resize(o.size);
+    };
+    std::string ref;
+    nodict_compress(&ref);
+
+    for (int i = 0; i < 50; i++) {
+        std::string dictc(codec->max_compressed_len(body.size()), '\0');
+        Slice dc(dictc);
+        std::vector<Slice> in{Slice(body)};
+        ASSERT_TRUE(codec->compress(in, &dc, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                                    cdict_or.value().get())
+                            .ok());
+        std::string again;
+        nodict_compress(&again);
+        ASSERT_EQ(ref, again) << "no-dict compress diverged after a dict compress at iter " << i;
+    }
+}
+
+// I5: a no-dict frame (dictID=0) decodes identically whether or not a
+// raw-content DDict is referenced. This is what makes mixed dict/no-dict pages
+// (raw pages, value-dict pages) in one compression dict column safe on the read path.
+TEST_F(BlockCompressionTest, nodict_frame_decodes_under_ddict) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample(2048, 'q');
+    auto ddict_or = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(ddict_or.ok());
+
+    std::string body = generate_str(5000);
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice cslice(compressed);
+    ASSERT_TRUE(codec->compress(body, &cslice).ok()); // no-dict frame
+    compressed.resize(cslice.size);
+
+    std::string with_dict(body.size(), '\0');
+    Slice wd(with_dict);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &wd, ddict_or.value().get()).ok());
+
+    std::string without_dict(body.size(), '\0');
+    Slice wod(without_dict);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &wod).ok());
+
+    ASSERT_EQ(body, std::string(wd.data, wd.size));
+    ASSERT_EQ(std::string(wod.data, wod.size), std::string(wd.data, wd.size));
+}
+
+// Contract: the dict overloads fail loudly (NotSupported) on a non-ZSTD codec
+// instead of silently producing undecodable bytes.
+TEST_F(BlockCompressionTest, dict_overload_not_supported_on_non_zstd) {
+    const BlockCompressionCodec* lz4 = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::LZ4, &lz4).ok());
+    std::string body = generate_str(1000);
+
+    std::string out(lz4->max_compressed_len(body.size()), '\0');
+    Slice o(out);
+    std::vector<Slice> in{Slice(body)};
+    Status s = lz4->compress(in, &o, /*use_compression_buffer=*/false, body.size(), nullptr, nullptr,
+                             static_cast<const compression::ZstdCDict*>(nullptr));
+    ASSERT_TRUE(s.is_not_supported());
+
+    std::string dummy(body.size(), '\0');
+    Slice d(dummy);
+    Status s2 = lz4->decompress(Slice(body), &d, static_cast<const compression::ZstdDDict*>(nullptr));
+    ASSERT_TRUE(s2.is_not_supported());
+}
+
+// The dictionary decompression path uses its own thread-local contexts (kept warm
+// so consecutive pages do not re-establish the dictionary session) instead of the
+// shared pool. Pin the two properties that could break:
+//   1. alternating between SEVERAL dictionaries stays correct (the cache is keyed
+//      by dictionary identity, and a stale entry must never be treated as a hit);
+//   2. it does not disturb the shared pool -- interleaved no-dict decompression
+//      still matches a clean reference.
+TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    // Three different dictionaries + matching bodies.
+    struct Arm {
+        std::string sample, body, compressed;
+        std::unique_ptr<compression::ZstdDDict> ddict;
+    };
+    std::vector<Arm> arms(3);
+    for (int i = 0; i < 3; i++) {
+        for (int k = 0; k < 300; k++) {
+            arms[i].sample += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " ";
+        }
+        for (int k = 0; k < 600; k++) {
+            arms[i].body += "dict" + std::to_string(i) + " frequent phrase " + std::to_string(k % 40) + " payload ";
+        }
+        auto cd = compression::ZstdCDict::create(Slice(arms[i].sample), 3);
+        ASSERT_TRUE(cd.ok());
+        auto dd = compression::ZstdDDict::create(Slice(arms[i].sample));
+        ASSERT_TRUE(dd.ok());
+        arms[i].ddict = std::move(dd.value());
+        arms[i].compressed.resize(codec->max_compressed_len(arms[i].body.size()));
+        Slice out(arms[i].compressed);
+        std::vector<Slice> in{Slice(arms[i].body)};
+        ASSERT_TRUE(codec->compress(in, &out, false, arms[i].body.size(), nullptr, nullptr, cd.value().get()).ok());
+        arms[i].compressed.resize(out.size);
+    }
+    // Every dictionary must have a distinct identity, which is what the cache keys on.
+    ASSERT_NE(arms[0].ddict->id(), arms[1].ddict->id());
+    ASSERT_NE(arms[1].ddict->id(), arms[2].ddict->id());
+
+    // A clean no-dict reference to compare the interleaved no-dict work against.
+    std::string plain = generate_str(4000);
+    std::string plain_c(codec->max_compressed_len(plain.size()), '\0');
+    Slice pc(plain_c);
+    ASSERT_TRUE(codec->compress(plain, &pc).ok());
+    plain_c.resize(pc.size);
+
+    // Interleave: dict 0, 1, 2, 0, ... plus no-dict in between. More rounds than
+    // the cache has slots, so entries really do get evicted and re-loaded.
+    for (int round = 0; round < 25; round++) {
+        for (int i = 0; i < 3; i++) {
+            std::string got(arms[i].body.size(), '\0');
+            Slice g(got);
+            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok())
+                    << "round " << round << " dict " << i;
+            ASSERT_EQ(arms[i].body, std::string(g.data, g.size)) << "round " << round << " dict " << i;
+        }
+        std::string pgot(plain.size(), '\0');
+        Slice pg(pgot);
+        ASSERT_TRUE(codec->decompress(Slice(plain_c), &pg).ok());
+        ASSERT_EQ(plain, std::string(pg.data, pg.size)) << "no-dict decode disturbed at round " << round;
+    }
+}
+
+// The dictionary builders reject bad input instead of trusting it. The two size
+// guards matter most: zstd_compression_dict_max_size is an operator-settable mutable
+// config, and a value that is non-positive (widening to a huge size_t) or simply
+// absurd would otherwise reach std::string::resize on a flush or compaction
+// thread -- an allocation failure where the documented behaviour is "give up and
+// write without a dictionary".
+TEST_F(BlockCompressionTest, dict_builders_reject_bad_input) {
+    // empty dictionary bytes
+    ASSERT_FALSE(compression::ZstdCDict::create(Slice(), /*level=*/3).ok());
+    ASSERT_FALSE(compression::ZstdDDict::create(Slice()).ok());
+
+    std::string sample(64 * 1024, 'a');
+    for (size_t i = 0; i < sample.size(); i += 7) sample[i] = 'a' + (i % 23); // avoid a degenerate sample
+    std::vector<size_t> sizes;
+    for (size_t off = 0; off < sample.size(); off += 4096) {
+        sizes.push_back(std::min<size_t>(4096, sample.size() - off));
+    }
+
+    // no samples at all
+    ASSERT_FALSE(compression::ZstdCDict::train(Slice(), sizes, 64 * 1024).ok());
+    ASSERT_FALSE(compression::ZstdCDict::train(Slice(sample), {}, 64 * 1024).ok());
+
+    // requested dictionary size below the floor: too small to be worth training
+    auto too_small = compression::ZstdCDict::train(Slice(sample), sizes, 1024);
+    ASSERT_FALSE(too_small.ok());
+
+    // requested dictionary size above the cap -- this is the branch that stands
+    // between a negative config value and a huge allocation
+    auto too_big = compression::ZstdCDict::train(Slice(sample), sizes, 64ULL * 1024 * 1024);
+    ASSERT_FALSE(too_big.ok());
+    // and what a non-positive int32 config widens into
+    auto widened = compression::ZstdCDict::train(Slice(sample), sizes, static_cast<size_t>(-1));
+    ASSERT_FALSE(widened.ok());
+
+    // a sane request still succeeds and stays within what was asked for
+    auto ok = compression::ZstdCDict::train(Slice(sample), sizes, 64 * 1024);
+    if (ok.ok()) {
+        ASSERT_GT(ok.value().size(), 0u);
+        ASSERT_LE(ok.value().size(), 64u * 1024);
+        // a trained dictionary must be usable by both sides
+        ASSERT_TRUE(compression::ZstdCDict::create(Slice(ok.value()), 3, /*trained=*/true).ok());
+        ASSERT_TRUE(compression::ZstdDDict::create(Slice(ok.value()), /*trained=*/true).ok());
+    }
+}
+
 } // namespace starrocks
