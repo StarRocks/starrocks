@@ -67,6 +67,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
@@ -77,6 +79,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -133,6 +136,7 @@ import org.xnio.StreamConnection;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -2107,6 +2111,238 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), killStatement);
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+    }
+
+    @Test
+    public void testDropTaskStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        // Install a task owned by ROOT and a task owned by testUser, bypassing
+        // SUBMIT TASK so the test focuses on DROP TASK authorization only.
+        String rootTaskName = "priv_drop_task_root";
+        Task rootTask = new Task(rootTaskName);
+        rootTask.setUserIdentity(UserIdentity.ROOT);
+        taskManager.replayCreateTask(rootTask);
+
+        String testTaskName = "priv_drop_task_test";
+        Task testTask = new Task(testTaskName);
+        testTask.setUserIdentity(testUser);
+        taskManager.replayCreateTask(testTask);
+
+        try {
+            // 1) testUser cannot drop ROOT's task without OPERATE on SYSTEM.
+            StatementBase dropRootAsTest = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + rootTaskName, ctx);
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropRootAsTest, ctx);
+                Assertions.fail("expected AccessDeniedException for cross-user DROP TASK");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+                // Lock the creator-ownership hint so the standard AccessDenied template
+                // never silently drops it again — users rely on this to discover the
+                // task-owner alternative path.
+                Assertions.assertTrue(e.getMessage().contains("(or be the task creator)"), e.getMessage());
+            }
+
+            // 2) After granting OPERATE on SYSTEM, the same DROP succeeds at auth time.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            Authorizer.check(dropRootAsTest, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+
+            // 3) testUser can drop their own task without any extra privilege.
+            StatementBase dropOwnAsTest = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + testTaskName, ctx);
+            ctxToTestUser();
+            Authorizer.check(dropOwnAsTest, ctx);
+
+            // 4) IF EXISTS on a non-existent task is delegated to the executor and
+            //    must not fail at authorization time.
+            StatementBase dropMissing = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK IF EXISTS priv_drop_task_does_not_exist", ctx);
+            ctxToTestUser();
+            Authorizer.check(dropMissing, ctx);
+
+            // sanity: parsed shape
+            Assertions.assertTrue(dropOwnAsTest instanceof DropTaskStmt);
+        } finally {
+            ctxToRoot();
+            Task t1 = taskManager.getTask(rootTaskName);
+            if (t1 != null) {
+                taskManager.dropTasks(Collections.singletonList(t1.getId()));
+            }
+            Task t2 = taskManager.getTask(testTaskName);
+            if (t2 != null) {
+                taskManager.dropTasks(Collections.singletonList(t2.getId()));
+            }
+        }
+    }
+
+    @Test
+    public void testDropTaskStmtLegacyTaskNoUserIdentity() throws Exception {
+        // Legacy task images (pre-#47561) deserialize with userIdentity == null.
+        // The visitor's `creator != null && creator.equals(...)` guard means an
+        // unmigrated legacy task is treated as "not owned by anyone" — every caller
+        // (including the original creator) needs OPERATE on SYSTEM.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String legacyTaskName = "priv_drop_task_legacy";
+        Task legacyTask = new Task(legacyTaskName);
+        // Intentionally do NOT call setUserIdentity — simulates legacy state.
+        taskManager.replayCreateTask(legacyTask);
+
+        try {
+            StatementBase dropLegacy = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + legacyTaskName, ctx);
+
+            // 1) testUser without OPERATE is denied.
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropLegacy, ctx);
+                Assertions.fail("expected AccessDeniedException for legacy DROP TASK without OPERATE");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // 2) After GRANT OPERATE on SYSTEM, the same DROP succeeds.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            Authorizer.check(dropLegacy, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(legacyTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
+    }
+
+    @Test
+    public void testTaskGsonPostProcessMigratesLegacyCreateUser() throws Exception {
+        // gsonPostProcess() must back-fill userIdentity from the deprecated
+        // createUser field so that owners of legacy task images keep ownership
+        // semantics under the new DROP TASK auth rule.
+        Task legacy = new Task("legacy_post_process");
+        legacy.setCreateUser("test");
+        // userIdentity stays null until gsonPostProcess runs.
+        Assertions.assertNull(legacy.getUserIdentity());
+
+        legacy.gsonPostProcess();
+
+        UserIdentity migrated = legacy.getUserIdentity();
+        Assertions.assertNotNull(migrated, "gsonPostProcess must back-fill userIdentity");
+        Assertions.assertEquals("test", migrated.getUser());
+        Assertions.assertEquals("%", migrated.getHost());
+        // Equality with the live testUser ('test'@'%') — the visitor's guard relies on this.
+        Assertions.assertEquals(testUser, migrated);
+
+        // Idempotency: a task already carrying userIdentity must not be overwritten.
+        Task modern = new Task("modern_post_process");
+        modern.setCreateUser("test");
+        modern.setUserIdentity(UserIdentity.ROOT);
+        modern.gsonPostProcess();
+        Assertions.assertEquals(UserIdentity.ROOT, modern.getUserIdentity());
+    }
+
+    @Test
+    public void testDropTaskStmtExecutorReChecksAfterAnalyzerSkip() throws Exception {
+        // Reproduce the analyzer→executor TOCTOU window: at analyze time the task
+        // does not exist (so AuthorizerStmtVisitor.visitDropTaskStmt skips the
+        // check), then a concurrent SUBMIT TASK registers a task owned by ROOT
+        // before the executor runs. The executor must re-check authorization
+        // against the resolved task and reject testUser's drop.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String raceTaskName = "priv_drop_task_race";
+        try {
+            // 1) Analyze phase: task absent — analyzer must allow the statement
+            //    (existence is left to the executor to avoid leaking).
+            StatementBase dropRace = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + raceTaskName, ctx);
+            ctxToTestUser();
+            Authorizer.check(dropRace, ctx);
+
+            // 2) Race: a concurrent SUBMIT TASK installs a task owned by ROOT
+            //    between analyze and execute.
+            Task rootTask = new Task(raceTaskName);
+            rootTask.setUserIdentity(UserIdentity.ROOT);
+            taskManager.replayCreateTask(rootTask);
+
+            // 3) Execute phase: testUser has no OPERATE on SYSTEM and is not the
+            //    creator. Without the executor-side re-check this would silently
+            //    drop ROOT's task; with it, the executor must reject.
+            try {
+                DDLStmtExecutor.execute(dropRace, ctx);
+                Assertions.fail("expected access denial in DDLStmtExecutor for TOCTOU race");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // Sanity: the task must still exist — the failed execute did not drop it.
+            Assertions.assertNotNull(taskManager.getTask(raceTaskName),
+                    "executor must not drop the task when re-check fails");
+
+            // 4) After GRANT OPERATE on SYSTEM, the executor allows the drop.
+            grantRevokeSqlAsRoot("grant OPERATE on system to test");
+            ctxToTestUser();
+            DDLStmtExecutor.execute(dropRace, ctx);
+            grantRevokeSqlAsRoot("revoke OPERATE on system from test");
+
+            Assertions.assertNull(taskManager.getTask(raceTaskName),
+                    "task should be dropped once OPERATE on SYSTEM is granted");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(raceTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
+    }
+
+    @Test
+    public void testDropTaskStmtForceDoesNotBypassAuth() throws Exception {
+        // FORCE only bypasses the source-type guard (MV/PIPE), never the
+        // privilege check. Lock this in so a future change that nests the
+        // auth check inside the !isForce() block silently regressing into
+        // "FORCE = anyone" will fail this test.
+        ConnectContext ctx = starRocksAssert.getCtx();
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        String forceTaskName = "priv_drop_task_force";
+        Task rootTask = new Task(forceTaskName);
+        rootTask.setUserIdentity(UserIdentity.ROOT);
+        taskManager.replayCreateTask(rootTask);
+
+        try {
+            StatementBase dropForce = UtFrameUtils.parseStmtWithNewParser(
+                    "DROP TASK " + forceTaskName + " FORCE", ctx);
+            ctxToTestUser();
+            try {
+                Authorizer.check(dropForce, ctx);
+                Assertions.fail("expected AccessDeniedException — FORCE must not bypass auth");
+            } catch (Exception e) {
+                logSysInfo(e.getMessage());
+                Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+            }
+
+            // Sanity: the task was not dropped at analyze time.
+            Assertions.assertNotNull(taskManager.getTask(forceTaskName),
+                    "auth failure must not drop the task");
+        } finally {
+            ctxToRoot();
+            Task t = taskManager.getTask(forceTaskName);
+            if (t != null) {
+                taskManager.dropTasks(Collections.singletonList(t.getId()));
+            }
+        }
     }
 
     @Test
