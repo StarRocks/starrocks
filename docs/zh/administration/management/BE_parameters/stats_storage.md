@@ -1134,6 +1134,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：快照文件清理的间隔。
 - 引入版本：-
 
+### sort_key_limit_size
+
+- 默认值：1024
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：单行编码后排序键的最大长度。如果导入（包括 Spark Load）或 Schema Change 会写入排序键超过该长度的数据行，则该操作会失败并返回不可重试的错误。该限制用于约束全量排序键索引页的大小及其加载后占用的内存。Compaction 与事务提交后的 Segment 重写不做该检查，因为此时事务已经提交，失败无法反馈给发起方；因此在该限制生效前写入的数据行不受影响。只要排序键可被编码，该检查就会生效，且不受 `enable_full_sort_key_index` 影响，以保证数据准入与 Segment 写入两侧的判断一致。设置为 0 或负数可关闭该检查。
+- 引入版本：-
+
 ### stale_memtable_flush_time_sec
 
 - 默认值：0

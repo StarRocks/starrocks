@@ -21,6 +21,7 @@
 #include "data_workflows/load/push_broker_reader.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -105,6 +106,10 @@ Status SparkLoadHandler::_load_convert(VersionedTablet& cur_tablet) {
                 }
 
                 ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
+                // Lake Spark push admits new rows without a MemTable. Checked after padding, so the
+                // chunk is in the same form the segment writer will encode.
+                RETURN_IF_ERROR(
+                        check_sort_key_size(schema, tablet_schema->sort_key_idxes(), *chunk, 0, chunk->num_rows()));
                 RETURN_IF_ERROR(writer->write(*chunk));
                 chunk->reset();
             }
