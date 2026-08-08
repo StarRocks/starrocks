@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <set>
+
 #include "base/testutil/assert.h"
 #include "base/uuid/uuid_generator.h"
 #include "column/chunk_factory.h"
@@ -26,12 +29,17 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/index_descriptor.h"
+#ifndef __APPLE__
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
@@ -77,7 +85,7 @@ public:
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int64_t version, int32_t schema_hash,
-                                  bool multi_column_key = false) {
+                                  bool multi_column_key = false, bool with_gin = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(version);
@@ -122,8 +130,26 @@ public:
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
-        k3.column_type.type = TPrimitiveType::INT;
+        if (with_gin) {
+            k3.column_type.type = TPrimitiveType::VARCHAR;
+            k3.column_type.len = 65535;
+            if (GetParam() == TKeysType::type::AGG_KEYS) {
+                k3.aggregation_type = TAggregationType::REPLACE;
+            }
+        } else {
+            k3.column_type.type = TPrimitiveType::INT;
+        }
         request.tablet_schema.columns.push_back(k3);
+        if (with_gin) {
+            request.tablet_schema.__isset.indexes = true;
+            request.tablet_schema.indexes.emplace_back();
+            auto& gin_index = request.tablet_schema.indexes.back();
+            gin_index.__set_index_id(1);
+            gin_index.__set_index_name("v2_gin");
+            gin_index.__set_index_type(TIndexType::GIN);
+            gin_index.__set_columns({"v2"});
+            gin_index.__set_common_properties({{"imp_lib", "clucene"}});
+        }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -181,6 +207,73 @@ public:
         }
         return *writer->build();
     }
+
+    void recreate_tablets_with_gin() {
+        auto tablet_manager = StorageEngine::instance()->tablet_manager();
+        ASSERT_OK(tablet_manager->drop_tablet(_tablet_id, kDeleteFiles));
+        ASSERT_OK(tablet_manager->drop_tablet(_src_tablet_id, kDeleteFiles));
+        ASSERT_OK(tablet_manager->delete_shutdown_tablet(_tablet_id));
+        ASSERT_OK(tablet_manager->delete_shutdown_tablet(_src_tablet_id));
+
+        auto tablet = create_tablet(_tablet_id, 1, _schema_hash, false, true);
+        auto src_tablet = create_tablet(_src_tablet_id, 1, _schema_hash, false, true);
+        std::vector<int64_t> keys{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+        for (int64_t version = 2; version <= _version; ++version) {
+            auto rowset = create_rowset(tablet, keys);
+            if (tablet->updates() == nullptr) {
+                ASSERT_OK(tablet->add_inc_rowset(rowset, version));
+            } else {
+                ASSERT_OK(tablet->rowset_commit(version, rowset));
+            }
+        }
+        for (int64_t version = 2; version <= _src_version; ++version) {
+            auto rowset = create_rowset(src_tablet, keys);
+            if (src_tablet->updates() == nullptr) {
+                ASSERT_OK(src_tablet->add_inc_rowset(rowset, version));
+            } else {
+                ASSERT_OK(src_tablet->rowset_commit(version, rowset));
+            }
+        }
+    }
+
+#ifndef __APPLE__
+    static void assert_tablet_gin_indexes(const TabletSharedPtr& tablet) {
+        std::set<std::string> files;
+        ASSERT_OK(fs::list_dirs_files(tablet->schema_hash_path(), nullptr, &files));
+        ASSERT_TRUE(std::none_of(files.begin(), files.end(),
+                                 [](const std::string& file) { return CLucenePlugin::is_index_files(file); }));
+
+        size_t index_directory_count = 0;
+        auto assert_rowset_indexes = [&](const std::string& rowset_id, int32_t num_segments) {
+            for (int32_t segment_id = 0; segment_id < num_segments; ++segment_id) {
+                const auto index_dir =
+                        IndexDescriptor::inverted_index_file_path(tablet->schema_hash_path(), rowset_id, segment_id, 1);
+                auto is_directory = fs::is_directory(index_dir);
+                ASSERT_OK(is_directory.status());
+                ASSERT_TRUE(is_directory.value()) << index_dir;
+
+                std::set<std::string> index_files;
+                ASSERT_OK(fs::list_dirs_files(index_dir, nullptr, &index_files));
+                ASSERT_FALSE(index_files.empty()) << index_dir;
+                ++index_directory_count;
+            }
+        };
+
+        if (tablet->updates() != nullptr) {
+            std::vector<RowsetSharedPtr> rowsets;
+            ASSERT_OK(tablet->updates()->get_applied_rowsets(tablet->max_version().second, &rowsets));
+            for (const auto& rowset : rowsets) {
+                ASSERT_NO_FATAL_FAILURE(assert_rowset_indexes(rowset->rowset_id().to_string(), rowset->num_segments()));
+            }
+        } else {
+            for (const auto& rowset_meta : tablet->tablet_meta()->all_rs_metas()) {
+                ASSERT_NO_FATAL_FAILURE(
+                        assert_rowset_indexes(rowset_meta->rowset_id().to_string(), rowset_meta->num_segments()));
+            }
+        }
+        ASSERT_GT(index_directory_count, 0);
+    }
+#endif
 
 protected:
     int64_t _transaction_id = 200;
@@ -386,6 +479,59 @@ TEST_P(ReplicationTxnManagerTest, test_run_normal) {
 
     StorageEngine::instance()->replication_txn_manager()->clear_expired_snapshots();
 }
+
+#ifndef __APPLE__
+TEST_P(ReplicationTxnManagerTest, test_run_normal_with_gin_index) {
+    if (GetParam() != TKeysType::type::PRIMARY_KEYS) {
+        GTEST_SKIP() << "Non-primary GIN replication is covered by the follow-up fix";
+    }
+    ASSERT_NO_FATAL_FAILURE(recreate_tablets_with_gin());
+
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_visible_version(_version);
+    remote_snapshot_request.__set_src_token(get_master_token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
+
+    TSnapshotInfo remote_snapshot_info;
+    ASSERT_OK(StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                    &remote_snapshot_info));
+
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_visible_version(_version);
+    replicate_snapshot_request.__set_src_token(get_master_token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+
+    ASSERT_OK(StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_request));
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
+    ASSERT_NE(tablet, nullptr);
+    ASSERT_OK(StorageEngine::instance()->replication_txn_manager()->publish_txn(_transaction_id, _partition_id, tablet,
+                                                                                _src_version));
+    ASSERT_EQ(_src_version, tablet->max_version().second);
+    ASSERT_NO_FATAL_FAILURE(assert_tablet_gin_indexes(tablet));
+
+    StorageEngine::instance()->replication_txn_manager()->clear_txn(_transaction_id);
+}
+#endif
 
 INSTANTIATE_TEST_SUITE_P(ReplicationTxnManagerTest, ReplicationTxnManagerTest,
                          testing::Values(TKeysType::type::AGG_KEYS, TKeysType::type::PRIMARY_KEYS));
