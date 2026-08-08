@@ -270,7 +270,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         }
 
         EquivalenceClasses queryEc = new EquivalenceClasses();
-        deduceEquivalenceClassesFromRangePredicates(predicates, queryEc, false);
+        deduceEquivalenceClassesFromRangePredicates(predicates, queryEc, true);
 
         for (ScalarOperator diffPredicate : diffPredicates) {
             BinaryPredicateOperator diffBinaryPredicate = (BinaryPredicateOperator) diffPredicate;
@@ -281,7 +281,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             Preconditions.checkState(left.isColumnRef() && right.isColumnRef());
             ColumnRefOperator l = (ColumnRefOperator) left;
             ColumnRefOperator r = (ColumnRefOperator) right;
-            if (!queryEc.containsEquivalentKey(l) || !queryEc.containsEquivalentKey(r)) {
+            Set<ColumnRefOperator> leftEc = queryEc.getEquivalenceClassByEquivalentColumn(l);
+            if (leftEc == null || leftEc.stream().noneMatch(col -> ScalarOperator.isEquivalent(col, r))) {
                 return false;
             }
         }
