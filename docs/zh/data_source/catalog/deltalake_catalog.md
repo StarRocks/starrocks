@@ -12,7 +12,6 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 ## 使用说明
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
-- StarRocks 不支持 Delta Lake 的数据类型为 MAP 和 STRUCT。
 
 ## 集成准备
 

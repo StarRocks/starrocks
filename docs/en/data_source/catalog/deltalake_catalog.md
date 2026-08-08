@@ -14,7 +14,6 @@ import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.
 ## Usage notes
 
 - The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
 
 ## Integration preparations
 
