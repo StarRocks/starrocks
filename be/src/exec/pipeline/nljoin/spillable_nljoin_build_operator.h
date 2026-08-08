@@ -36,12 +36,18 @@ public:
     Status set_finishing(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override;
+
     void set_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
 private:
-    bool _is_finished = false;
+    Status _spill_buffered_chunks(RuntimeState* state, bool should_finalize);
+
+private:
     SpillProcessChannelPtr _spill_channel;
-    spill::SpillStrategy _strategy;
+    spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
+    bool _should_spill_buffered_chunks = true;
 };
 
 class SpillableNLJoinBuildOperatorFactory final : public OperatorFactory {

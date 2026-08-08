@@ -162,6 +162,11 @@ StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::
     auto spill_process_factory_ptr = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;
 
+    if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
+        ::starrocks::pipeline::builder::interpolate_spill_process(context, id(), spill_process_factory_ptr,
+                                                                  num_right_partitions);
+    }
+
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
 
     // cross_join_right as sink operator

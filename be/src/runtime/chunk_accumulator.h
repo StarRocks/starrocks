@@ -41,12 +41,14 @@ public:
     bool reach_limit() const;
     Status push(ChunkPtr&& chunk);
     ChunkPtr pull();
+    size_t memory_usage() const;
 
 private:
     size_t _desired_size;
     ChunkPtr _tmp_chunk;
     std::deque<ChunkPtr> _output;
     size_t _accumulate_count = 0;
+    size_t _memory_usage = 0;
 };
 
 } // namespace starrocks

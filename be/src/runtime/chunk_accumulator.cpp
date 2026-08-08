@@ -35,6 +35,7 @@ void ChunkAccumulator::reset() {
     _output.clear();
     _tmp_chunk.reset();
     _accumulate_count = 0;
+    _memory_usage = 0;
 }
 
 bool check_json_schema_compatibility(const Chunk* one, const Chunk* two) {
@@ -75,6 +76,7 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
             // Check JSON schema compatibility before appending
             if (!check_json_schema_compatibility(_tmp_chunk.get(), chunk.get())) {
                 // Schema mismatch, output current chunk and create a new one
+                _memory_usage += _tmp_chunk->memory_usage();
                 _output.emplace_back(std::move(_tmp_chunk));
                 _tmp_chunk = chunk->clone_empty(_desired_size);
                 TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
@@ -89,6 +91,7 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         }
 
         if (_tmp_chunk->num_rows() >= _desired_size) {
+            _memory_usage += _tmp_chunk->memory_usage();
             _output.emplace_back(std::move(_tmp_chunk));
         }
         start += need_rows;
@@ -105,11 +108,16 @@ bool ChunkAccumulator::reach_limit() const {
     return _accumulate_count >= kAccumulateLimit;
 }
 
+size_t ChunkAccumulator::memory_usage() const {
+    return _tmp_chunk ? _memory_usage + _tmp_chunk->memory_usage() : _memory_usage;
+}
+
 ChunkPtr ChunkAccumulator::pull() {
     if (!_output.empty()) {
         auto res = std::move(_output.front());
         _output.pop_front();
         _accumulate_count = 0;
+        _memory_usage -= res->memory_usage();
         return res;
     }
     return nullptr;
@@ -117,6 +125,7 @@ ChunkPtr ChunkAccumulator::pull() {
 
 void ChunkAccumulator::finalize() {
     if (_tmp_chunk) {
+        _memory_usage += _tmp_chunk->memory_usage();
         _output.emplace_back(std::move(_tmp_chunk));
     }
     _accumulate_count = 0;
