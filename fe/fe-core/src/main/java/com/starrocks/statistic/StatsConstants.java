@@ -110,6 +110,9 @@ public class StatsConstants {
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
     public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
 
+    // Builtin audit loader table (in the STATISTICS_DB_NAME database).
+    public static final String AUDIT_LOADER_TABLE_NAME = "starrocks_audit_tbl";
+
     /**
      * Deprecated stats properties
      */
