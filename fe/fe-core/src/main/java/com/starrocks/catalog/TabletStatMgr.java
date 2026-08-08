@@ -135,6 +135,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 long totalRowCount = 0L;
                 long maxTabletSize = 0L;
                 long minAdjacentTabletPairSize = Long.MAX_VALUE;
+                long maxUnderProvisionedTabletSize = 0L;
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
@@ -152,6 +153,10 @@ public class TabletStatMgr extends FrontendDaemon {
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(computeNodeCount,
                                 Config.tablet_reshard_max_split_count);
+                // No zero guard here, unlike the floor above: the ceiling is bounded by the node count,
+                // so an unresolved count already yields 0 and leaves no index under-provisioned.
+                int earlySplitCeiling = TabletReshardUtils.earlySplitCeiling(computeNodeCount,
+                        Config.tablet_reshard_max_split_count);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -169,12 +174,21 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
                                 // inside an admitted job, so the floor holds even for manual size-based merges.
                                 boolean eligibleForMerge = tablets.size() > parallelismFloor;
+                                // Symmetrically, only an index still below the early-split ceiling
+                                // contributes the early signal. That ceiling sits at or below the merge
+                                // floor, so no index can be under-provisioned and mergeable at the same
+                                // time and the two rules cannot pull one index back and forth.
+                                boolean underProvisioned = tablets.size() < earlySplitCeiling;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
+                                    if (underProvisioned) {
+                                        maxUnderProvisionedTabletSize =
+                                                Math.max(maxUnderProvisionedTabletSize, dataSize);
+                                    }
                                     if (!(tablet instanceof LakeTablet)
                                             || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
                                         prevFreshTabletSize = -1L;
@@ -226,7 +240,8 @@ public class TabletStatMgr extends FrontendDaemon {
                 // carries the merge signal too.
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
-                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize, 0L);
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize,
+                            maxUnderProvisionedTabletSize);
                 }
             }
         }

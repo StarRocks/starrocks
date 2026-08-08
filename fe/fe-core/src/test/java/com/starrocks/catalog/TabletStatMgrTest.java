@@ -16,6 +16,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.alter.reshard.TabletReshardUtils;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -28,6 +31,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
@@ -47,6 +51,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,8 +62,10 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
@@ -67,9 +74,29 @@ public class TabletStatMgrTest {
     private static final long INDEX_ID = 4;
     private static final long PH_PARTITION_ID = 5;
 
+    // A JMockit @Mock for a static method must itself be static, so it cannot read a captured local or
+    // an instance field of the test; what the compute-node stub answers, and how often it was asked,
+    // lives here instead. Reset at the start of every scan.
+    private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
+    private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
+
+    // Set by the scan fixture, which is the only thing here that touches the singleton metastore.
+    private Database registeredDb;
+
     @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
+    }
+
+    @AfterEach
+    public void after() {
+        if (registeredDb == null) {
+            return;
+        }
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.getIdToDb().remove(registeredDb.getId());
+        metastore.getFullNameToDb().remove(registeredDb.getFullName());
+        registeredDb = null;
     }
 
     @Test
@@ -597,5 +624,102 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
+    }
+
+    /**
+     * Registers a range-distribution LakeTable whose base index holds exactly these tablets, all with a
+     * fresh size, so one scan cycle sees a single index of the requested shape.
+     */
+    private void registerRangeDistributionTable(long... tabletSizes) {
+        LakeTable table = createLakeTableForTest();
+        // Reshard, and with it the early-split signal, only looks at range-distribution tables.
+        table.setDefaultDistributionInfo(new RangeDistributionInfo());
+
+        MaterializedIndex index =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
+        index.clearTabletsForRestore();
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD, true);
+        long tabletId = 100L;
+        for (long tabletSize : tabletSizes) {
+            LakeTablet tablet = new LakeTablet(tabletId++);
+            tablet.setDataSize(tabletSize);
+            // Fresh by construction, so the merge-freshness walk of the same scan is well defined.
+            tablet.setDataSizeUpdateTime(Long.MAX_VALUE);
+            index.addTablet(tablet, tabletMeta, false);
+        }
+
+        registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+    }
+
+    /** Runs one tablet-stat cycle over such a table and returns the early signal it emitted. */
+    private long runScanAndCaptureEarlySignal(int stubbedNodeCount, long... tabletSizes) {
+        long[] captured = {-1L};
+        STUBBED_NODE_COUNT.set(stubbedNodeCount);
+        NODE_COUNT_RESOLUTIONS.set(0);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int safeComputeNodeCountForTable(long tableId) {
+                // Answer the stub only on the FIRST call. A second resolution would mean the merge floor
+                // and the early ceiling came from different samples, which a warehouse resize could make
+                // inconsistent, so make that show up as a wrong answer rather than a silent pass.
+                return NODE_COUNT_RESOLUTIONS.incrementAndGet() == 1 ? STUBBED_NODE_COUNT.get() : 1;
+            }
+        };
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addReshardCandidate(long dbId, long tableId, long maxTabletSize,
+                    long minAdjacentTabletPairSize, long maxUnderProvisionedTabletSize) {
+                captured[0] = maxUnderProvisionedTabletSize;
+            }
+        };
+
+        int savedMaxSplitCount = Config.tablet_reshard_max_split_count;
+        // Pinned above every node count used below so the early ceiling is governed by the node count;
+        // a change to this default must not be able to flatten these cases into each other.
+        Config.tablet_reshard_max_split_count = 1024;
+        try {
+            registerRangeDistributionTable(tabletSizes);
+            new TabletStatMgr().runAfterCatalogReady();
+        } finally {
+            Config.tablet_reshard_max_split_count = savedMaxSplitCount;
+        }
+        return captured[0];
+    }
+
+    @Test
+    public void emitsTheEarlySignalOnlyForUnderProvisionedIndexes() {
+        // 4 compute nodes -> early ceiling 4; an index holding a single 5 GiB tablet sits below it.
+        assertEquals(5L << 30, runScanAndCaptureEarlySignal(4, 5L << 30));
+        assertEquals(1, NODE_COUNT_RESOLUTIONS.get(),
+                "the merge floor and the early ceiling must derive from ONE probed sample per table");
+    }
+
+    @Test
+    public void emitsNoEarlySignalWhenTheIndexIsAtTheCeiling() {
+        // 2 compute nodes -> early ceiling 2, and the index already holds 2 tablets.
+        assertEquals(0L, runScanAndCaptureEarlySignal(2, 5L << 30, 5L << 30));
+    }
+
+    @Test
+    public void emitsNoEarlySignalForASingleNodeWarehouse() {
+        // 1 compute node -> early ceiling min(1, floor 2) = 1, so even a one-tablet index is already at
+        // it. This is the one live-warehouse tablet count where the ceiling and the merge floor differ,
+        // so it is what keeps the ceiling from being replaced by the floor already in scope.
+        assertEquals(0L, runScanAndCaptureEarlySignal(1, 5L << 30));
+    }
+
+    @Test
+    public void emitsNoEarlySignalWhenTheNodeCountIsUnavailable() {
+        assertEquals(0L, runScanAndCaptureEarlySignal(0, 5L << 30),
+                "an unresolved node count keeps the merge floor at 0 and emits no early signal");
     }
 }
