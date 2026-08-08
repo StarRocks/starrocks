@@ -77,6 +77,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MergeTabletJobTest {
@@ -731,6 +732,78 @@ public class MergeTabletJobTest {
         int oldTabletCount = oldIndex.getTablets().size();
         int newTabletCount = reshardingIndex.getMaterializedIndex().getTablets().size();
         Assertions.assertEquals(oldTabletCount - 1, newTabletCount);
+    }
+
+    @Test
+    public void testCleaningClearsPlacementPreferenceBeforeFinishing() throws Exception {
+        ensureTabletCount(3);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        TabletGroupList tabletGroupList = new TabletGroupList(
+                List.of(List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId())));
+        MergeTabletClause clause = new MergeTabletClause(null, tabletGroupList, null);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        mergeJob.init();   // reserves the table: NORMAL -> TABLET_RESHARD
+        try {
+            mergeJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            mergeJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+
+            AtomicReference<List<List<Long>>> cleared = new AtomicReference<>();
+            AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) {
+                    calls.incrementAndGet();
+                    cleared.set(new ArrayList<>(preferenceMembers));
+                    stateAtCall.set(mergeJob.getJobState());
+                }
+            };
+
+            List<List<Long>> expected = new ArrayList<>();
+            for (ReshardingPhysicalPartition partition : mergeJob.getReshardingPhysicalPartitions().values()) {
+                for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                    for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                        for (long oldId : tablet.getOldTabletIds()) {
+                            for (long newId : tablet.getNewTabletIds()) {
+                                expected.add(List.of(oldId, newId));
+                            }
+                        }
+                    }
+                }
+            }
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce preference members");
+
+            mergeJob.runCleaningJob();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+            Assertions.assertEquals(1, calls.get(), "the finish path must clear the pin exactly once");
+            Assertions.assertEquals(expected, cleared.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, stateAtCall.get(),
+                    "the pin must be cleared before the job is marked FINISHED");
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                mergeJob.replayAbortedJob();   // restores NORMAL on the shared table fixture
+            }
+        }
     }
 
     @Test
