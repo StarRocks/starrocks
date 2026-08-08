@@ -2693,12 +2693,27 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
             functionRefs.forEach(functionRef -> {
                 String functionName = functionRef.getFunctionName();
-                List<Function> fns = db.getFunctionsByName(functionName);
+                String qualifierDbName = functionRef.getDbName();
+
+                // For qualified names (e.g. fn_db2.my_func), check privileges against the
+                // qualifier's DB rather than the backup target DB, consistent with the fix
+                // in FunctionNameAnalyzer and BackupHandler.
+                Database fnDb;
+                if (qualifierDbName != null) {
+                    fnDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(qualifierDbName);
+                    if (fnDb == null) {
+                        fnDb = db;
+                    }
+                } else {
+                    fnDb = db;
+                }
+
+                List<Function> fns = fnDb.getFunctionsByName(functionName);
 
                 for (Function fn : fns) {
                     try {
                         Authorizer.checkFunctionAction(context,
-                                db, fn, PrivilegeType.USAGE);
+                                fnDb, fn, PrivilegeType.USAGE);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
