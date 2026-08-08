@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.starrocks.authorization.AllowAllAccessController;
 import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.opa.OpaAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.common.Config;
@@ -53,6 +54,9 @@ public class LazyConnector implements Connector {
                         if (accessControl.equals("ranger")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new RangerStarRocksAccessController());
+                        } else if (accessControl.equals("opa")) {
+                            Authorizer.getInstance()
+                                    .setAccessControl(context.getCatalogName(), new OpaAccessController());
                         } else if (accessControl.equals("allowall")) {
                             Authorizer.getInstance()
                                     .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
