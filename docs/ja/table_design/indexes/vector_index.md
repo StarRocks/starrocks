@@ -125,7 +125,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 ##### index_build_threshold
 
-- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
+- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
 - **必須**: いいえ
 - **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
 
@@ -135,7 +135,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **必須**: いいえ
 - **説明**: 共有データクラスタでのインデックス構築方式です。有効な値：
   - `sync`：データ書き込み時に同期してインデックスを構築します。クエリはすぐにインデックスを使用できますが、ロード遅延が増加します。
-  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
+  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
 
 ##### M
 

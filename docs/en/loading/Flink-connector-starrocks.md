@@ -1,4 +1,5 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "How to use the StarRocks Flink connector to continuously load data from Apache Flink into StarRocks, supporting DataStream API, Table API & SQL, and Python API."
 ---
@@ -140,7 +141,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: AUTO
 - **Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. Valid Values:
-  - `V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
+  - `V1`: Use [Stream Load](./StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
   - `V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation.
   - `AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1`
 
@@ -503,7 +504,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) (default: `8040`).
 
 ### Run with Flink SQL
 

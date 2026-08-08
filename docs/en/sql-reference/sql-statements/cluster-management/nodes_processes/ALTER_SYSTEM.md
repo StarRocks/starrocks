@@ -121,7 +121,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 
 ### Broker
 
-- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Loading](../../../../loading/Loading_intro.md).
+- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Loading](../../../../loading/loading_introduction/Loading_intro.md).
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "JWT 認証と一時的な資格情報を使用した、Iceberg REST Catalog のセキュアなアクセス設定。"
 ---

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks Connector for Apache Flink でテーブルデータを一括読み取りします。"
 ---
@@ -103,7 +104,7 @@ Flink コネクタをデプロイするには、次の手順に従います。
 
 ### ネットワーク設定
 
-Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/management/BE_configuration.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認します。
+Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port)（デフォルト: `9060`）を介してアクセスできることを確認します。
 
 ## パラメータ
 
