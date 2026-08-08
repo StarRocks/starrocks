@@ -236,6 +236,8 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
+import com.starrocks.thrift.TDumpPartitionAccessTimesRequest;
+import com.starrocks.thrift.TDumpPartitionAccessTimesResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -357,6 +359,7 @@ import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TOlapTableTablet;
+import com.starrocks.thrift.TPartitionAccessTimeEntry;
 import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
@@ -3201,6 +3204,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         response.setPartition_id_to_access_time_ms(result);
         response.setStatus(new TStatus(TStatusCode.OK));
+        return response;
+    }
+
+    @Override
+    public TDumpPartitionAccessTimesResponse dumpPartitionAccessTimes(TDumpPartitionAccessTimesRequest request)
+            throws TException {
+        TDumpPartitionAccessTimesResponse response = new TDumpPartitionAccessTimesResponse();
+        List<TPartitionAccessTimeEntry> entries = new ArrayList<>();
+        if (Config.enable_collect_partition_access_time) {
+            PartitionAccessTimeMgr mgr = GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+            entries = mgr.dumpAccessTimes();
+        }
+        response.setEntries(entries);
         return response;
     }
 

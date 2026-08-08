@@ -1509,11 +1509,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_collect_partition_access_time`
 
-- デフォルト：true
+- デフォルト：false
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
 - 説明：`SHOW PARTITIONS` および `information_schema.partitions_meta` で、パーティションごとの `LAST_ACCESS_TIME`（パーティションがユーザークエリによって最後にスキャンされた時刻）を収集して公開するかどうかを制御します。無効にすると、アクセス時刻は記録されず、FE 間で集約もされず、`LAST_ACCESS_TIME` 列は `NULL` を表示します。この項目は `LAST_UPDATE_TIME` には影響しません。
+- 導入時期：v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- デフォルト：60
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：Leader FE が収集したパーティションごとの `LAST_ACCESS_TIME` を、再起動やフェイルオーバーをまたいで永続化するために内部テーブル `_statistics_.partition_access_time` にフラッシュする間隔です。`enable_collect_partition_access_time` が `true` の場合のみ有効です。
 - 導入時期：v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`

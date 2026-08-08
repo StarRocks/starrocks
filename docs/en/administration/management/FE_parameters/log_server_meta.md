@@ -1518,11 +1518,20 @@ This topic introduces the following types of FE configurations:
 
 ### `enable_collect_partition_access_time`
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to collect and expose the per-partition `LAST_ACCESS_TIME` (the last time a partition was scanned by a user query) in `SHOW PARTITIONS` and `information_schema.partitions_meta`. When disabled, the access time is neither recorded nor aggregated across FEs, and the `LAST_ACCESS_TIME` column shows `NULL`. This does not affect `LAST_UPDATE_TIME`.
+- Introduced in: v4.2.0
+
+### `partition_access_time_flush_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the leader FE flushes the collected per-partition `LAST_ACCESS_TIME` to the internal `_statistics_.partition_access_time` table for durability across restart/failover. Only effective when `enable_collect_partition_access_time` is `true`.
 - Introduced in: v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`
