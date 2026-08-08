@@ -337,6 +337,13 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
+    // Number of finished transactions evicted purely by count (label_keep_max_num) before reaching
+    // label_keep_max_second. A sustained non-zero rate means finished-txn history is being purged by
+    // age-ignoring count pressure, which can break connector re-commit after a savepoint/resume.
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_COUNT_EVICTION;
+    // Number of times a re-commit/probe of an already-evicted transaction was answered from the
+    // terminal-state cache instead of failing with "transaction not found".
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_TERMINAL_CACHE_HIT;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -1009,6 +1016,14 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
+        COUNTER_TXN_COUNT_EVICTION = new LeaderAwareCounterMetricLong(
+                "txn_count_eviction", MetricUnit.REQUESTS,
+                "counter of finished transactions evicted by count (label_keep_max_num) before label_keep_max_second");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_COUNT_EVICTION);
+        COUNTER_TXN_TERMINAL_CACHE_HIT = new LeaderAwareCounterMetricLong(
+                "txn_terminal_cache_hit", MetricUnit.REQUESTS,
+                "counter of evicted-transaction re-commits/probes answered from the terminal-state cache");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_TERMINAL_CACHE_HIT);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");

@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -324,7 +325,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull long dbId, long transactionId, long preparedTimeoutMs, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long lockTimeoutMs) throws StarRocksException {
-        TransactionState transactionState = getTransactionStateOrThrow(dbId, transactionId);
+        TransactionState transactionState = getTransactionState(dbId, transactionId);
+        if (transactionState == null) {
+            // The full state may have been evicted (count-based eviction ignores age). There are no
+            // tables to lock; delegate to the db mgr, which resolves the outcome from the
+            // terminal-state cache: idempotent success for VISIBLE/COMMITTED, commit-failed for
+            // ABORTED, or transaction-not-found otherwise. This is the Flink savepoint/resume path.
+            getDatabaseTransactionMgr(dbId).prepareTransaction(
+                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment,
+                    TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE);
+            return;
+        }
         List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
         Locker locker = new Locker();
@@ -371,9 +382,32 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        if (transactionState == null) {
+            // The full state may have been evicted (count-based eviction ignores age). There are no
+            // tables to lock; resolve the outcome from the terminal-state cache. commitPreparedTransaction
+            // returns an already-visible waiter for a cached VISIBLE outcome and throws for
+            // ABORTED/not-found. This is the Flink savepoint/resume re-commit path.
+            getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+            MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+            return;
+        }
+        // Live transaction: use upstream's rate-limit-aware retry path (lock + commit under the intensive
+        // db lock, retrying on CommitRateExceededException within the timeout budget).
+        try {
+            waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
+        } catch (TransactionNotFoundException e) {
+            // The transaction was count-evicted between the pre-check above and this path's own re-read
+            // (commitPreparedTransactionUnderIntensiveDbLock -> getTransactionStateOrThrow, which runs
+            // before it takes table locks). removeExpiredTxns has since moved the terminal outcome into
+            // the cache, so resolve it there instead of failing the recommit with "transaction not found";
+            // for a genuinely absent transaction the cache path re-throws the same exception.
+            getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+            MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+            return;
+        }
         if (waiter == null) {
-            TransactionState transactionState = getTransactionStateOrThrow(db.getId(), transactionId);
+            // transactionState was fetched above and is non-null here (the evicted case returned early).
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
                     transactionState.toString()));
         }
@@ -570,6 +604,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException, LockTimeoutException {
+        // commitAndPublishTransaction is the synchronous load/INSERT commit path, not an evicted-recommit
+        // entrypoint (Flink savepoint/resume recommits go through prepareTransaction / commitPreparedTransaction,
+        // which consult the terminal-state cache). A null here means the transaction is genuinely gone, so throw
+        // "transaction not found" as upstream does -- this also avoids an NPE on getTableIdList() below.
         TransactionState transactionState = getTransactionStateOrThrow(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
@@ -1019,6 +1057,22 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         });
 
         putTransactionStats(transactionStates);
+
+        // Optional trailing section: terminal-state cache records (see saveTransactionStateV2). Older
+        // images predate it, so an EOF here just means "no cached outcomes to restore".
+        try {
+            reader.readCollection(TerminalStateImageRecord.class, record -> {
+                try {
+                    getDatabaseTransactionMgr(record.dbId).restoreTerminalStateCacheRecord(
+                            record.txnId, record.label, record.status, record.reason, record.finishTime,
+                            record.sourceType);
+                } catch (AnalysisException e) {
+                    LOG.warn("skip terminal-state cache record for missing db {}: {}", record.dbId, e.getMessage());
+                }
+            });
+        } catch (SRMetaBlockEOFException e) {
+            LOG.info("No terminal-state cache in image (older format), skip");
+        }
     }
 
     private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {
@@ -1071,14 +1125,65 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    // Flat, GSON-serializable image record for a terminal-state cache entry. Carries dbId so load can
+    // route it back to the owning DatabaseTransactionMgr, mirroring how TransactionState carries dbId.
+    static class TerminalStateImageRecord {
+        @SerializedName("dbId")
+        long dbId;
+        @SerializedName("txnId")
+        long txnId;
+        @SerializedName("label")
+        String label;
+        @SerializedName("status")
+        TransactionStatus status;
+        @SerializedName("reason")
+        String reason;
+        @SerializedName("finishTime")
+        long finishTime;
+        // Optional: absent (null) in images written before source-type persistence. A null decodes back
+        // to a null Record.sourceType, which source-gated callers treat as "unknown source", never a match.
+        @SerializedName("sourceType")
+        LoadJobSourceType sourceType;
+
+        TerminalStateImageRecord() {
+        }
+
+        TerminalStateImageRecord(long dbId, long txnId, String label, TransactionStatus status, String reason,
+                                 long finishTime, LoadJobSourceType sourceType) {
+            this.dbId = dbId;
+            this.txnId = txnId;
+            this.label = label;
+            this.status = status;
+            this.reason = reason;
+            this.finishTime = finishTime;
+            this.sourceType = sourceType;
+        }
+    }
+
     public void saveTransactionStateV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
-        final int cnt = 2 + txnNum;
+        // The checkpoint worker count-evicts finished transactions (clearExpiredJobs) BEFORE saveImage,
+        // so the terminal outcomes of just-evicted transactions live only in the in-memory
+        // terminal-state cache. Serialize them too, otherwise a restart/failover that loads this image
+        // would answer a recommit with "transaction not found" (the loop this feature prevents).
+        List<TerminalStateImageRecord> terminalRecords = new ArrayList<>();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            long dbId = dbTransactionMgr.getDbId();
+            for (TxnTerminalStateCache.Record r : dbTransactionMgr.getTerminalStateCacheSnapshot()) {
+                terminalRecords.add(new TerminalStateImageRecord(
+                        dbId, r.txnId, r.label, r.status, r.reason, r.finishTime, r.sourceType));
+            }
+        }
+        final int cnt = 2 + txnNum + 1 + terminalRecords.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
         writer.writeInt(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
+        }
+        writer.writeInt(terminalRecords.size());
+        for (TerminalStateImageRecord record : terminalRecords) {
+            writer.writeJson(record);
         }
         writer.close();
     }
