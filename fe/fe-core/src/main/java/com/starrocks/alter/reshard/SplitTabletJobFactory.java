@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
@@ -37,12 +38,15 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -227,6 +231,19 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     private static void validateTableLevel(Database db, OlapTable table) throws StarRocksException {
         validateTableDistribution(db, table);
+        if (hasSeparatePrimaryKeySortKey(table)) {
+            if (!Config.tablet_reshard_enable_pk_order_by) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key is disabled");
+            }
+            if (!table.isFileBundling()) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key requires "
+                        + "file_bundling=true");
+            }
+            if (table.getIndexMetaIdToMeta().size() != 1) {
+                throw new StarRocksException("Tablet reshard for ORDER BY different from the primary key does not "
+                        + "support rollup indexes in the initial implementation");
+            }
+        }
         // Refuse to start a split while any peer GroupId is unstable: range-colocate group
         // membership is shared across DBs, so a still-unaligned split compounds the unaligned state.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -235,6 +252,11 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             throw new StarRocksException("Cannot split tablets for range-colocate group "
                     + myGroupId.grpId + ": group is unstable; wait for alignment to complete before retrying");
         }
+    }
+
+    private static boolean hasSeparatePrimaryKeySortKey(OlapTable table) {
+        return table.getKeysType() == KeysType.PRIMARY_KEYS
+                && MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
     }
 
     /**
@@ -347,6 +369,19 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         }
     }
 
+    /**
+     * Source tablets ordered largest first, so a job capped by
+     * {@code tablet_reshard_orderby_max_split_tablets_per_job} spends its budget on the tablets that
+     * most need splitting. Ties keep tablet-id order so a leader-switch re-run selects the same set.
+     */
+    @VisibleForTesting
+    static List<Tablet> largestFirst(Collection<Tablet> tablets) {
+        List<Tablet> ordered = new ArrayList<>(tablets);
+        ordered.sort(Comparator.comparingLong((Tablet t) -> t.getDataSize(true)).reversed()
+                .thenComparingLong(Tablet::getId));
+        return ordered;
+    }
+
     /*
      * Create physical partition contexts for all tablets that need to split
      */
@@ -359,6 +394,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
             checkTableNormalState(db, table);
 
+            // A split whose children must be UNSHARE-rewritten is bounded twice: how far one tablet may
+            // fan out (read amplification per generation) and how many tablets one job may take (how long
+            // that job holds the partition's only compaction slot). Both are no-ops for an ordinary split.
+            final int maxSplitCount = TabletReshardUtils.effectiveMaxSplitCount(table);
+            final int[] tabletBudget = {TabletReshardUtils.maxSplitTabletsPerJob(
+                    table, GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getBackgroundComputeResource(table.getId()))};
+
             if (splitTabletClause.getTabletList() != null) {
                 Map<PhysicalPartition, Map<MaterializedIndex, Collection<Tablet>>> tablets = getTabletsByTabletIds(
                         splitTabletClause.getTabletList().getTabletIds());
@@ -370,9 +413,12 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                         MaterializedIndex oldIndex = indexEntry.getKey();
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
-                        for (Tablet tablet : indexEntry.getValue()) {
+                        for (Tablet tablet : largestFirst(indexEntry.getValue())) {
+                            if (tabletBudget[0] <= 0) {
+                                break;
+                            }
                             int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                    splitTabletClause.getTabletReshardTargetSize());
+                                    splitTabletClause.getTabletReshardTargetSize(), maxSplitCount);
 
                             if (newTabletCount <= 0) {
                                 throw new StarRocksException("Invalid tablet_reshard_target_size: "
@@ -384,6 +430,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                             }
 
                             splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
+                            tabletBudget[0]--;
                         }
 
                         if (splittingTablets.isEmpty()) {
@@ -422,7 +469,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
-                        for (Tablet tablet : oldIndex.getTablets()) {
+                        for (Tablet tablet : largestFirst(oldIndex.getTablets())) {
+                            if (tabletBudget[0] <= 0) {
+                                break;
+                            }
                             // When not specifying which tablets to split,
                             // tablet_reshard_target_size must be greater than 0
                             Preconditions.checkState(splitTabletClause.getTabletReshardTargetSize() > 0,
@@ -430,13 +480,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                                             + splitTabletClause.getTabletReshardTargetSize());
 
                             int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                    splitTabletClause.getTabletReshardTargetSize());
+                                    splitTabletClause.getTabletReshardTargetSize(), maxSplitCount);
 
                             if (newTabletCount <= 1) {
                                 continue;
                             }
 
                             splittingTablets.put(tablet.getId(), createSplittingTablet(tablet.getId(), newTabletCount));
+                            tabletBudget[0]--;
                         }
 
                         if (splittingTablets.isEmpty()) {

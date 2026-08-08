@@ -527,6 +527,7 @@ public class CreateTableAnalyzerTest {
     public void testPkTableSortKeyOrder() {
         // Force range distribution via the session variable (ungated by run mode) so the range
         // sort-key-order validation is exercised regardless of the suite's ambient run mode.
+        boolean oldEnablePkOrderBy = Config.tablet_reshard_enable_pk_order_by;
         connectContext.getSessionVariable().setEnableRangeDistribution(true);
         try {
             // PK columns: (v1, v2), Sort keys: (v2, v1) -> Should fail
@@ -551,6 +552,17 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql2);
 
+            Config.tablet_reshard_enable_pk_order_by = true;
+            String sqlWithSeparateSortKey = "CREATE TABLE test_create_table_db.pk_table_separate_sort_key\n" +
+                    "(v1 int not null, v2 int not null, v3 int) PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v3) PROPERTIES (\"replication_num\" = \"1\", \"file_bundling\" = \"true\");";
+            analyzeSuccess(sqlWithSeparateSortKey);
+
+            String sqlWithoutFileBundling = "CREATE TABLE test_create_table_db.pk_table_no_bundle\n" +
+                    "(v1 int not null, v2 int not null, v3 int) PRIMARY KEY(v1, v2)\n" +
+                    "ORDER BY(v3) PROPERTIES (\"replication_num\" = \"1\", \"file_bundling\" = \"false\");";
+            analyzeFail(sqlWithoutFileBundling, "require file_bundling=true");
+
             // range distribution off -> Should pass even if order is different (hash-distributed)
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
             String sql3 = "CREATE TABLE test_create_table_db.pk_table_diff_order_range_off\n" +
@@ -564,6 +576,7 @@ public class CreateTableAnalyzerTest {
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql3);
         } finally {
+            Config.tablet_reshard_enable_pk_order_by = oldEnablePkOrderBy;
             connectContext.getSessionVariable().setEnableRangeDistribution(false);
         }
     }

@@ -507,8 +507,8 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
-        List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes = partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -794,8 +794,8 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
-        List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes = partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -840,8 +840,8 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = partitions.stream().findFirst().orElse(null);
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
-        List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes = partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -883,8 +883,8 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runRunningJob();
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
-        List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        List<MaterializedIndex> shadowIndexes = partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.

@@ -36,6 +36,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * Physical Partition implementation
@@ -65,7 +66,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     /**
      * Deprecated, use baseIndexMetaId and indexMetaIdToIndexIds instead.
      *
-     * indexMetaIdToIndexIds.get(baseIndexMetaId).getLast() is the latest version of base index.
+     * indexMetaIdToIndexIds.get(baseIndexMetaId).getLast() is the latest (writable) base index.
      */
     @Deprecated
     @SerializedName(value = "baseIndex")
@@ -82,6 +83,17 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      */
     @SerializedName(value = "indexMetaIdToIndexIds")
     private Map<Long, List<Long>> indexMetaIdToIndexIds = Maps.newHashMap();
+
+    /**
+     * Transitional query layout for an ORDER BY != PK tablet split.
+     *
+     * <p>Writes and publish always use the latest index id in {@link #indexMetaIdToIndexIds} (the
+     * children). Queries stay pinned to the superseded parent index until the atomic UNSHARE
+     * compaction becomes visible. Empty means queries use the latest (writable) layout, preserving the
+     * historical behavior for every other table and partition.
+     */
+    @SerializedName(value = "queryIndexMetaIdToIndexId")
+    private Map<Long, Long> queryIndexMetaIdToIndexId = Maps.newHashMap();
 
     /**
      * Visible indexes are indexes which are visible to user.
@@ -382,11 +394,20 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         idToVisibleIndex.put(baseIndex.getId(), baseIndex);
     }
 
+    /**
+     * Returns the latest base index, which is also the layout that accepts new writes. During UNSHARE this is the
+     * child layout. Query paths must use {@link #getQueryableBaseIndex()} instead.
+     */
     public MaterializedIndex getLatestBaseIndex() {
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
         Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
                 String.format("base index meta id %d not exist or index list is empty", baseIndexMetaId));
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
+    }
+
+    /** Returns the base index used by scans. During UNSHARE this can remain pinned to the parent layout. */
+    public MaterializedIndex getQueryableBaseIndex() {
+        return getQueryableIndex(baseIndexMetaId);
     }
 
     public List<MaterializedIndex> getBaseIndices() {
@@ -442,6 +463,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
 
         if (index != null) {
+            queryIndexMetaIdToIndexId.remove(index.getMetaId(), indexId);
             List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
             Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
                     String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
@@ -543,12 +565,45 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
+    /**
+     * Resolves an index meta id to its latest layout, which is also the layout that accepts new writes. Query paths
+     * must use {@link #getQueryableIndex(long)} instead.
+     */
     public MaterializedIndex getLatestIndex(long indexMetaId) {
         List<Long> indexIds = indexMetaIdToIndexIds.get(indexMetaId);
         if (indexIds == null || indexIds.isEmpty()) {
             return null;
         }
         return getIndex(indexIds.get(indexIds.size() - 1));
+    }
+
+    /** Resolves an index meta id to the layout visible to queries. */
+    public MaterializedIndex getQueryableIndex(long indexMetaId) {
+        Long queryIndexId = queryIndexMetaIdToIndexId.get(indexMetaId);
+        return queryIndexId == null ? getLatestIndex(indexMetaId) : getIndex(queryIndexId);
+    }
+
+    public void pinQueryableIndex(long indexMetaId, long indexId) {
+        MaterializedIndex index = getIndex(indexId);
+        Preconditions.checkState(index != null && index.getMetaId() == indexMetaId,
+                String.format("query index id %d not exist for meta id %d", indexId, indexMetaId));
+        queryIndexMetaIdToIndexId.put(indexMetaId, indexId);
+    }
+
+    public boolean isQueryableIndexPinned(long indexMetaId) {
+        return queryIndexMetaIdToIndexId.containsKey(indexMetaId);
+    }
+
+    public boolean finishUnshare() {
+        if (queryIndexMetaIdToIndexId.isEmpty()) {
+            return false;
+        }
+        queryIndexMetaIdToIndexId.clear();
+        return true;
+    }
+
+    public boolean isUnsharing() {
+        return !queryIndexMetaIdToIndexId.isEmpty();
     }
 
     public MaterializedIndex getIndex(long indexId) {
@@ -574,6 +629,45 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
+    /** Enumerates query-visible layouts; visible indexes may be pinned while shadow indexes stay writable-only. */
+    public List<MaterializedIndex> getQueryableMaterializedIndices(IndexExtState extState) {
+        if (queryIndexMetaIdToIndexId.isEmpty()) {
+            return getLatestMaterializedIndices(extState);
+        }
+        List<MaterializedIndex> indices = Lists.newArrayList();
+        if (extState == IndexExtState.ALL || extState == IndexExtState.VISIBLE) {
+            for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+                MaterializedIndex index = getQueryableIndex(entry.getKey());
+                if (index != null && idToVisibleIndex.containsKey(index.getId())) {
+                    indices.add(index);
+                }
+            }
+        }
+        if (extState == IndexExtState.ALL || extState == IndexExtState.SHADOW) {
+            indices.addAll(getLatestShadowIndices());
+        }
+        return indices;
+    }
+
+    /**
+     * Returns every layout whose files must stay visible to vacuum. During UNSHARE this is the
+     * union of the latest (writable) layout and the pinned query layout; outside the transition it is
+     * exactly the latest-layout result.
+     */
+    public List<MaterializedIndex> getMaterializedIndicesForVacuum(IndexExtState extState) {
+        List<MaterializedIndex> indices = Lists.newArrayList(getLatestMaterializedIndices(extState));
+        if (queryIndexMetaIdToIndexId.isEmpty()) {
+            return indices;
+        }
+        Set<Long> indexIds = indices.stream().map(MaterializedIndex::getId).collect(Collectors.toSet());
+        for (MaterializedIndex index : getQueryableMaterializedIndices(extState)) {
+            if (indexIds.add(index.getId())) {
+                indices.add(index);
+            }
+        }
+        return indices;
+    }
+
     private List<MaterializedIndex> getLatestShadowIndices() {
         List<MaterializedIndex> indices = Lists.newArrayList();
         for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
@@ -588,6 +682,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
+    /**
+     * Enumerates the latest layouts, which accept writes and participate in publish/compaction/alter workflows.
+     * Query paths must use {@link #getQueryableMaterializedIndices(IndexExtState)} instead.
+     */
     public List<MaterializedIndex> getLatestMaterializedIndices(IndexExtState extState) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         switch (extState) {
@@ -784,6 +882,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     @Override
     public void gsonPostProcess() throws IOException {
+        if (queryIndexMetaIdToIndexId == null) {
+            queryIndexMetaIdToIndexId = Maps.newHashMap();
+        }
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
         }

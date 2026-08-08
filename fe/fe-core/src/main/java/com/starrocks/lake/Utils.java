@@ -29,6 +29,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -411,6 +412,32 @@ public class Utils {
 
         request.setComputeNodes(computeNodes);
         request.setPublishReqs(publishReqs);
+
+        // This marker comes from the persisted transaction attachment rather than the scheduler's
+        // in-memory job map. It therefore remains correct when a committed UNSHARE transaction is
+        // published by a new FE leader.
+        boolean unsharePublish = txnInfos.stream()
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+        if (!unsharePublish) {
+            Set<Long> publishedTabletIds = publishReqs.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .flatMap(publishReq -> Optional.ofNullable(publishReq.getTabletIds())
+                            .orElseGet(List::of).stream())
+                    .collect(java.util.stream.Collectors.toSet());
+            List<ParentTabletPublishInfoPB> parentInfos = request.parentTabletPublishInfos == null
+                    ? new ArrayList<>() : new ArrayList<>(request.parentTabletPublishInfos);
+            Set<Long> existingParents = parentInfos.stream()
+                    .map(ParentTabletPublishInfoPB::getParentTabletId)
+                    .collect(java.util.stream.Collectors.toSet());
+            for (ParentTabletPublishInfoPB parentInfo : GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                    .collectParentPublishInfos(publishedTabletIds)) {
+                if (!existingParents.add(parentInfo.getParentTabletId())) {
+                    continue;
+                }
+                parentInfos.add(parentInfo);
+            }
+            request.parentTabletPublishInfos = parentInfos;
+        }
 
         if (nodeToTablets != null) {
             for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {

@@ -835,6 +835,7 @@ public class CompactionSchedulerTest {
             {
                 BrpcProxy.getLakeService("192.168.0.3", 9050);
                 result = lakeService;
+                times = 2;
             }
         };
 
@@ -871,8 +872,21 @@ public class CompactionSchedulerTest {
             Assertions.assertNotNull(req.parallelConfig, "parallelConfig should be set when enabled");
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            Assertions.assertFalse(req.unshareSegments);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
+        }
+
+        CompactionTask unshareTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                PartitionStatistics.CompactionPriority.UNSHARE,
+                WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+        AggregateCompactRequest unshareRequest = (AggregateCompactRequest) requestField.get(unshareTask);
+        for (CompactRequest req : unshareRequest.requests) {
+            Assertions.assertTrue(req.unshareSegments);
+            Assertions.assertNotNull(req.parallelConfig);
+            Assertions.assertTrue(req.parallelConfig.enableParallel);
+            Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            Assertions.assertFalse(req.allowPartialSuccess);
         }
     }
 
@@ -1071,8 +1085,8 @@ public class CompactionSchedulerTest {
         long tableId = 200L;
         long otherTableId = 999L;
         long endTransactionId = 2000L;
-        // Partitions 1, 2 and 5 are being resharded; 3 and 4 are not.
-        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L);
+        // Partitions 1, 2, 5 and 7 are being resharded; 3 and 4 are not.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L, 7L);
 
         // Included partition, uncommitted, <= watermark -> abort the task (the scheduler thread aborts the
         // transaction later).
@@ -1091,6 +1105,15 @@ public class CompactionSchedulerTest {
         CompactionJob late = Mockito.mock(CompactionJob.class);
         Mockito.when(late.getTxnId()).thenReturn(3000L);
         compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 5), late);
+
+        // The current reshard's UNSHARE transaction can equal the watermark because the job records
+        // peekNextTransactionId() before triggering UNSHARE. It must be allowed to finish and publish.
+        CompactionJob unshareAtWatermark = Mockito.mock(CompactionJob.class);
+        Mockito.when(unshareAtWatermark.getTxnId()).thenReturn(endTransactionId);
+        Mockito.when(unshareAtWatermark.isUnshare()).thenReturn(true);
+        Mockito.when(unshareAtWatermark.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(
+                new PartitionIdentifier(dbId, tableId, 7), unshareAtWatermark);
 
         // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
         CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
@@ -1114,6 +1137,7 @@ public class CompactionSchedulerTest {
         Mockito.verify(prepared).abort();
         Mockito.verify(committed, Mockito.never()).abort();
         Mockito.verify(late, Mockito.never()).abort();
+        Mockito.verify(unshareAtWatermark, Mockito.never()).abort();
         Mockito.verify(otherPartitionPrepared, Mockito.never()).abort();
         Mockito.verify(otherPartitionCommitted, Mockito.never()).abort();
         Mockito.verify(otherTable, Mockito.never()).abort();

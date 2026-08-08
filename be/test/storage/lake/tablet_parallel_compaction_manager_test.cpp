@@ -278,6 +278,48 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_initial_value) {
     EXPECT_EQ(0, _manager->completed_subtasks());
 }
 
+TEST_F(TabletParallelCompactionManagerTest, test_create_unshare_groups_cover_all_segments) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_id(90001);
+    metadata->set_version(2);
+    std::vector<RowsetPtr> rowsets;
+    for (uint32_t rowset_id = 0; rowset_id < 2; ++rowset_id) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_num_rows(600);
+        rowset->set_data_size(600);
+        rowset->set_overlapped(false);
+        for (int segment = 0; segment < 6; ++segment) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("unshare_{}_{}", rowset_id, segment));
+            segment_meta->set_size(100);
+            segment_meta->set_shared(true);
+        }
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), metadata, rowset_id, 0));
+    }
+
+    auto groups = _manager->_create_unshare_subtask_groups(metadata->id(), rowsets, 4, 200);
+    ASSERT_EQ(4, groups.size());
+    EXPECT_TRUE(_manager->_validate_unshare_group_coverage(rowsets, groups).ok());
+    EXPECT_TRUE(std::all_of(groups.begin(), groups.end(),
+                            [](const SubtaskGroup& group) { return group.type == SubtaskType::LARGE_ROWSET_PART; }));
+
+    groups.front().segment_start = 1;
+    auto invalid = _manager->_validate_unshare_group_coverage(rowsets, groups);
+    EXPECT_FALSE(invalid.ok());
+    EXPECT_TRUE(invalid.message().find("gap/overlap") != std::string::npos);
+
+    const int64_t txn_id = 90002;
+    auto state_or = _manager->create_and_register_tablet_state(metadata->id(), txn_id, metadata->version(), 4, 200,
+                                                               true, nullptr, [](bool /*success*/) {});
+    ASSERT_TRUE(state_or.ok());
+    state_or.value()->expected_unshare_subtask_count = 2;
+    auto merged_log = _manager->get_merged_txn_log(metadata->id(), txn_id);
+    EXPECT_FALSE(merged_log.ok());
+    EXPECT_TRUE(merged_log.status().message().find("Incomplete parallel UNSHARE") != std::string::npos);
+    _manager->cleanup_tablet(metadata->id(), txn_id);
+}
+
 TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_not_exist) {
     int64_t tablet_id = 12345;
     int64_t txn_id = 67890;
@@ -1101,6 +1143,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
         EXPECT_EQ(txn_id, info.txn_id);
         EXPECT_EQ(tablet_id, info.tablet_id);
         EXPECT_EQ(version, info.version);
+        EXPECT_GE(info.subtask_id, 0);
     }
 
     block_promise.set_value();
@@ -1642,6 +1685,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     bool found_completed_profile = false;
     for (const auto& info : infos) {
         if (info.finish_time > 0 && info.runs > 0) {
+            EXPECT_EQ(0, info.subtask_id);
             EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);

@@ -2737,7 +2737,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     // superset of KEY() (e.g. KEY(k1) ORDER BY(k1,k2,k3)) would silently lose its non-key
                     // sort-key columns.
                     List<String> oldSortKeyNames =
-                            MetaUtils.getRangeDistributionColumns(olapTable, olapTable.getBaseIndexMetaId())
+                            MetaUtils.getPhysicalSortKeyColumns(olapTable, olapTable.getBaseIndexMetaId())
                                     .stream().map(Column::getName).collect(Collectors.toList());
                     List<Integer> dropSortKeyIdxes = new ArrayList<>();
                     List<Integer> dropSortKeyUniqueIds = new ArrayList<>();
@@ -4910,7 +4910,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (clause instanceof DropColumnClause) {
             String dropCol = ((DropColumnClause) clause).getColName();
             long baseIndexMetaId = table.getBaseIndexMetaId();
-            return MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+            return MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
                     .anyMatch(c -> c.getName().equalsIgnoreCase(dropCol));
         }
         if (clause instanceof AddColumnClause) {
@@ -4938,7 +4938,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!addedIsKey) {
             return false;
         }
-        List<String> sortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+        List<String> sortKeyNames = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
                 .map(Column::getName).collect(Collectors.toList());
         List<String> keyColumnNames = table.getSchemaByIndexMetaId(baseIndexMetaId).stream()
                 .filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
@@ -4982,7 +4982,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // bypassing those validations when a keyness flip is bundled with another change.
             return false;
         }
-        List<String> currentSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+        List<String> currentSortKeyNames = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
                 .map(Column::getName).collect(Collectors.toList());
         Map<String, Boolean> keynessOverride = Map.of(columnName, newIsKey);
         List<String> candidateSortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId,
@@ -5036,7 +5036,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (oriColumn == null) {
             return false;
         }
-        boolean inRangeSortKey = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+        boolean inRangeSortKey = MetaUtils.getPhysicalSortKeyColumns(table, baseIndexMetaId).stream()
                 .anyMatch(c -> c.getName().equalsIgnoreCase(columnName));
         if (!inRangeSortKey) {
             return false;

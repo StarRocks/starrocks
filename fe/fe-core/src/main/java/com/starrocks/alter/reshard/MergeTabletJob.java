@@ -584,10 +584,10 @@ public class MergeTabletJob extends TabletReshardJob {
                 }
             }
 
-            // Installing the new materialized indexes changes the partition's tablet layout:
-            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
-            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
-            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // Installing the new materialized indexes changes both the writable and queryable tablet
+            // layouts. A query that captured the old layout during planning (OlapScanNode fills
+            // scanTabletIds from getQueryableIndex(), then mapTabletsToPartitions() re-reads it) would
+            // otherwise hard-fail
             // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
             // tablet/version whose metadata object no longer exists. Bump the table's optimistic
             // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects

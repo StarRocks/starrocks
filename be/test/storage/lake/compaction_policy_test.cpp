@@ -738,4 +738,60 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     EXPECT_TRUE(cumulative_rowsets.empty());
 }
 
+TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    metadata->mutable_range();
+
+    auto add_rowset = [&](uint32_t id, std::initializer_list<bool> shared_segments) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->set_overlapped(shared_segments.size() > 1);
+        for (bool shared : shared_segments) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_" +
+                                  std::to_string(rowset->segment_metas_size()));
+            segment->set_shared(shared);
+        }
+    };
+    add_rowset(1, {false});
+    add_rowset(2, {true});
+    add_rowset(3, {false, true, false});
+    add_rowset(4, {false, false});
+
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, true));
+    ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
+    ASSERT_EQ(2, rowsets.size());
+    EXPECT_EQ(2, rowsets[0]->id());
+    EXPECT_EQ(3, rowsets[1]->id());
+    // A mixed rowset is selected as one complete Rowset object, never as an
+    // individual shared-segment slice.
+    EXPECT_EQ(3, rowsets[1]->num_segments());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
+    auto non_pk = generate_simple_tablet_metadata(DUP_KEYS);
+    non_pk->mutable_range();
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), non_pk, false, true).ok());
+
+    auto no_range = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, true).ok());
+
+    auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    dcg->mutable_range();
+    (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
+    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, true);
+    ASSERT_FALSE(dcg_status.ok());
+    EXPECT_TRUE(dcg_status.status().is_not_supported());
+
+    auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    idg->mutable_range();
+    (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
+    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, true);
+    ASSERT_FALSE(idg_status.ok());
+    EXPECT_TRUE(idg_status.status().is_not_supported());
+}
+
 } // namespace starrocks::lake
