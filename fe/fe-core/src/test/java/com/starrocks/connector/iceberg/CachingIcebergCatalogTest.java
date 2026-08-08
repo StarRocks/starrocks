@@ -22,6 +22,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
@@ -44,7 +45,9 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchViewException;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.view.View;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -473,6 +476,196 @@ public class CachingIcebergCatalogTest {
         cachingIcebergCatalog.getTable(connectContext, "db2", "tbl2");
         Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
         Assertions.assertEquals(1L, counts.get("Table"));
+    }
+
+    @Test
+    public void testGetViewUsesCache(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+    }
+
+    @Test
+    public void testGetViewInvalidatedOnDrop(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 2;
+
+                icebergCatalog.dropView(connectContext, "db", "v");
+                result = true;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+        cachingIcebergCatalog.dropView(connectContext, "db", "v");
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+    }
+
+    @Test
+    public void testCreateOrReplaceViewInvalidatesStaleCache(@Mocked IcebergCatalog icebergCatalog,
+                                                             @Mocked View view,
+                                                             @Mocked ConnectorViewDefinition definition) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 2;
+
+                definition.getDatabaseName();
+                result = "db";
+                minTimes = 0;
+                definition.getViewName();
+                result = "v";
+                minTimes = 0;
+
+                icebergCatalog.createView(connectContext, CATALOG_NAME, definition, true);
+                result = true;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+        cachingIcebergCatalog.createView(connectContext, CATALOG_NAME, definition, true);
+        cachingIcebergCatalog.getView(connectContext, "db", "v");
+    }
+
+    @Test
+    public void testGetViewBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog,
+                                                                  @Mocked View view) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        new Expectations() {
+            {
+                restCatalog.getView(ctx, "db", "v");
+                result = view;
+                times = 2;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+    }
+
+    @Test
+    public void testEstimateCountReflectsViewCache(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getView(connectContext, "db2", "v2");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getView(connectContext, "db2", "v2");
+        Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
+        Assertions.assertEquals(1L, counts.get("View"));
+    }
+
+    @Test
+    public void testGetViewCaseSensitiveForRestCatalog(@Mocked IcebergRESTCatalog restCatalog,
+                                                       @Mocked View upperView, @Mocked View lowerView) {
+        ConnectContext ctx = new ConnectContext();
+        new Expectations() {
+            {
+                restCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.REST_CATALOG;
+                minTimes = 0;
+
+                restCatalog.getView(ctx, "db", "V");
+                result = upperView;
+                times = 1;
+
+                restCatalog.getView(ctx, "db", "v");
+                result = lowerView;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        // REST keeps identifiers case-sensitive, so "V" and "v" get separate entries; re-reads hit the cache.
+        Assertions.assertSame(upperView, cachingIcebergCatalog.getView(ctx, "db", "V"));
+        Assertions.assertSame(lowerView, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Assertions.assertSame(upperView, cachingIcebergCatalog.getView(ctx, "db", "V"));
+        Assertions.assertSame(lowerView, cachingIcebergCatalog.getView(ctx, "db", "v"));
+    }
+
+    @Test
+    public void testGetViewFoldsCaseForHiveCatalog(@Mocked IcebergCatalog icebergCatalog, @Mocked View view) {
+        new Expectations() {
+            {
+                icebergCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergCatalog.getView(connectContext, "db", "v");
+                result = view;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        // Hive folds case, so "V" and "v" resolve to one entry and the delegate is hit once.
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "V"));
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(connectContext, "db", "v"));
+    }
+
+    @Test
+    public void testViewCacheRefreshesOnInterval(@Mocked IcebergCatalog icebergCatalog) {
+        // The view cache must refresh on the meta cache interval so an out-of-band view change is reloaded
+        // in the background instead of being served stale until the TTL expires.
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        LoadingCache<?, ?> viewCache = Deencapsulation.getField(cachingIcebergCatalog, "views");
+        long refreshSec = viewCache.policy().refreshAfterWrite().get().getExpiresAfter(TimeUnit.SECONDS);
+        Assertions.assertEquals(DEFAULT_CATALOG_PROPERTIES.getIcebergTableCacheRefreshIntervalSec(), refreshSec);
+    }
+
+    @Test
+    public void testViewCacheEvictsWhenViewDroppedOnRefresh(@Mocked IcebergCatalog delegate, @Mocked View view)
+            throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations() {
+            {
+                delegate.getView((ConnectContext) any, "db", "v");
+                result = new Delegate<View>() {
+                    View get(ConnectContext c, String db, String v) {
+                        // First call populates the cache; the reload sees the view as dropped.
+                        if (calls.getAndIncrement() == 0) {
+                            return view;
+                        }
+                        throw new NoSuchViewException("dropped");
+                    }
+                };
+            }
+        };
+        ExecutorService refreshExecutor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, refreshExecutor);
+        LoadingCache<Object, Object> viewCache = Deencapsulation.getField(cachingIcebergCatalog, "views");
+
+        Assertions.assertSame(view, cachingIcebergCatalog.getView(ctx, "db", "v"));
+        Object key = viewCache.asMap().keySet().iterator().next();
+        viewCache.refresh(key);
+        // refresh dispatches reload() onto refreshExecutor; this FIFO barrier returns once it has run.
+        refreshExecutor.submit(() -> { }).get();
+        Assertions.assertNull(viewCache.getIfPresent(key),
+                "a view dropped out-of-band must be evicted on refresh, not kept until the TTL");
     }
 
     @Test
