@@ -127,8 +127,11 @@ def skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint):
             print('gen_build_version.py {}: old fingerprint = {}, new fingerprint = {}'.format(file_name, old_fingerprint, fingerprint))
             if old_fingerprint == fingerprint:
                 return
-    with open(file_name, 'w') as fh:
-        fh.write(file_content)
+    try:
+        with open(file_name, 'w') as fh:
+            fh.write(file_content)
+    except PermissionError:
+        print('gen_build_version.py {}: PermissionError ignored'.format(file_name))
 
 def generate_java_file(java_path, version, commit_hash, build_type, build_time, user, host, java_version, build_distro_id, build_arch):
     file_format = '''
