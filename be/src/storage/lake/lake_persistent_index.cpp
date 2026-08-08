@@ -717,6 +717,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
     sstable::ReadOptions read_options;
     // No need to cache input sst's blocks.
     read_options.fill_cache = false;
+    // Catch corrupted data blocks as Corruption instead of merging garbage into the
+    // compaction output.
+    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::vector<sstable::Iterator*> iters;
     DeferOp free_iters([&] {
         for (sstable::Iterator* iter : iters) {

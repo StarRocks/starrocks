@@ -522,6 +522,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否允许自动清理损坏的数据缓存。
 - 引入版本：v3.4
 
+### lake_pk_index_sst_verify_checksum
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，读取云原生主键索引 sstable（点查与 Compaction 归并）时是否校验数据块 Checksum。开启后，损坏的字节（通常来自损坏的本地缓存副本）会确定性地报 Corruption 错误并触发损坏缓存清理，而不是被错误解析或静默返回错误的索引值。注意：自动清理损坏缓存还需同时开启 `lake_clear_corrupted_cache_data`。
+- 引入版本：v4.1
+
 ### lake_clear_corrupted_cache_meta
 
 - 默认值：true

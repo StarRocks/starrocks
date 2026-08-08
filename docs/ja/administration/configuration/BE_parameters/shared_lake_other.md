@@ -516,6 +516,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
 - 導入バージョン: v3.4
 
+### lake_pk_index_sst_verify_checksum
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、クラウドネイティブ主キーインデックスの sstable を読み取る際（ポイントルックアップおよび Compaction マージ）にブロックの Checksum を検証するかどうか。有効にすると、破損したバイト列（通常は破損したローカルキャッシュのコピーに起因）は Corruption エラーとして確定的に失敗し、破損キャッシュのクリーンアップがトリガーされます。誤って解析されたり、誤ったインデックス値が静かに返されたりすることを防ぎます。なお、破損キャッシュの自動クリーンアップには `lake_clear_corrupted_cache_data` の有効化も必要です。
+- 導入バージョン: v4.1
+
 ### lake_clear_corrupted_cache_meta
 
 - デフォルト: true
