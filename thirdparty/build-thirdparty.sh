@@ -1758,6 +1758,53 @@ build_benchgen() {
     ${CMAKE_CMD} --install build
 }
 
+# paimon-cpp
+# Third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
+# time from the URLs pinned in its third_party/versions.txt (network required).
+# Protobuf is the one exception and reuses the thirdparty-built one: protoc is
+# a build-time executable, and the protoc built by the bundled protobuf may
+# require a newer runtime libstdc++ than the host provides (e.g. rocky9),
+# while the thirdparty protoc is linked with -static-libstdc++ and runs
+# anywhere. Same pattern as build_arrow. paimon's bundled ORC inherits the
+# resolved protobuf automatically.
+build_paimon_cpp() {
+    check_if_source_exist $PAIMON_CPP_SOURCE
+
+    # build_arrow exports ARROW_*_URL to feed StarRocks' own Arrow build
+    # offline; paimon-cpp's bundled Arrow honors the same env vars, so they
+    # must not leak into this build (those tarballs do not match the
+    # versions pinned by paimon's bundled Arrow and fail its SHA256 check).
+    local arrow_url_var
+    for arrow_url_var in $(compgen -v | grep -E '^ARROW_[A-Z0-9_]+_URL$'); do
+        unset "${arrow_url_var}"
+    done
+
+    cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    # protobuf required for rocky9
+    ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DPAIMON_BUILD_STATIC=OFF \
+        -DPAIMON_ENABLE_ORC=ON \
+        -DPAIMON_ENABLE_AVRO=ON \
+        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUCENE=OFF \
+        -DPAIMON_ENABLE_TANTIVY=OFF \
+        -DPAIMON_ENABLE_JINDO=OFF \
+        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED \
+        -DProtobuf_SOURCE=SYSTEM \
+        -DProtobuf_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_PREFIX_PATH=$TP_INSTALL_DIR
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    restore_compile_flags
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
