@@ -15,11 +15,33 @@
 #pragma once
 
 #include "base/simd/gather.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/system/cpu_info.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_hash_table_descriptor.h"
 
 namespace starrocks {
+
+// Software-prefetch distance (in rows) for the bucket-resolution prefetch into
+// `first[]` in TLinearChainedJoinHashMap, on both the probe (lookup_init) and
+// build (construct_hash_table) paths. Read once per call and captured into a
+// local so the inner loop sees a register, not an atomic load. 0 disables it.
+inline uint32_t join_probe_prefetch_dist() {
+    const int32_t v = config::hash_map_prefetch_dist;
+    return v > 0 ? static_cast<uint32_t>(v) : 0;
+}
+
+// Whether the bucket-resolution prefetch should be armed for a `first[]` of
+// `bucket_size` slots. It only pays once first[] spills past
+// join_probe_prefetch_l2_ratio of L2; below that the bucket array is L1/L2-
+// resident, the access is already fast, and the prefetch is a net loss. The
+// ratio defaults below 1 because the join crossover sits well under L2.
+inline bool join_should_prefetch_buckets(uint32_t bucket_size) {
+    static const size_t l2 = CpuInfo::get_l2_cache_size();
+    const size_t first_bytes = static_cast<size_t>(bucket_size) * sizeof(uint32_t);
+    return first_bytes >= static_cast<size_t>(static_cast<double>(l2) * config::join_probe_prefetch_l2_ratio);
+}
 
 // ------------------------------------------------------------------------------------
 // BucketChainedJoinHashMap
@@ -144,11 +166,12 @@ void TLinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(
     auto* __restrict next = table_items->next.data();
     auto* __restrict first = table_items->first.data();
     const uint8_t* __restrict equi_join_key_nulls = is_nulls.has_value() ? is_nulls->data() : nullptr;
+    const uint32_t pf_dist = join_should_prefetch_buckets(table_items->bucket_size) ? join_probe_prefetch_dist() : 0;
 
     auto linear_probe = [&]<bool BuildChained, bool ReturnAnchor>(const ImmBuffer<CppType>& keys_ref, uint32_t i,
                                                                   auto&& is_null_pred) -> uint32_t {
-        if (i + 16 < num_rows && !is_null_pred(i + 16)) {
-            __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + 16]));
+        if (pf_dist != 0 && i + pf_dist < num_rows && !is_null_pred(i + pf_dist)) {
+            __builtin_prefetch(first + _get_bucket_num_from_hash(next[i + pf_dist]));
         }
 
         const uint32_t hash = next[i];
@@ -322,9 +345,10 @@ void TLinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHash
             }
         }
 
+        const uint32_t pf_dist = join_should_prefetch_buckets(table_items.bucket_size) ? join_probe_prefetch_dist() : 0;
         for (uint32_t i = 0; i < row_count; i++) {
-            if (i + 16 < row_count && !is_null(i + 16)) {
-                __builtin_prefetch(firsts + _get_bucket_num_from_hash(hashes[i + 16]));
+            if (pf_dist != 0 && i + pf_dist < row_count && !is_null(i + pf_dist)) {
+                __builtin_prefetch(firsts + _get_bucket_num_from_hash(hashes[i + pf_dist]));
             }
 
             if (is_null(i)) {
