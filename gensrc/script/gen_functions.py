@@ -325,6 +325,8 @@ def generate_cpp(path):
         "EncryptionFunctions",
         "ESFunctions",
         "GeoFunctions",
+        "H3Functions",
+        "MgrsFunctions",
         "PercentileFunctions",
         "ArrayFunctions",
         "MapFunctions",
