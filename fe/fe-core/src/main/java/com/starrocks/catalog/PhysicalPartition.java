@@ -389,6 +389,24 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
     }
 
+    /**
+     * The latest visible base index, or null when it cannot be resolved.
+     *
+     * <p>Unlike {@link #getLatestBaseIndex()}, which fails a {@code Preconditions} check, this never
+     * throws: a physical partition can legitimately carry no base index at all, as an
+     * {@link ExternalOlapTable}'s metadata sync leaves {@code baseIndexMetaId} at -1. Read-only paths
+     * that merely display metadata use this variant so such a partition degrades to a fallback value
+     * instead of failing the whole statement. Visible indexes only, unlike
+     * {@link #getLatestIndex(long)}.
+     */
+    public MaterializedIndex getLatestBaseIndexOrNull() {
+        List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
+        if (indexIds == null || indexIds.isEmpty()) {
+            return null;
+        }
+        return idToVisibleIndex.get(indexIds.get(indexIds.size() - 1));
+    }
+
     public List<MaterializedIndex> getBaseIndices() {
         List<Long> indexIds = indexMetaIdToIndexIds.get(baseIndexMetaId);
         Preconditions.checkState(indexIds != null && !indexIds.isEmpty(),
@@ -712,6 +730,33 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setBucketNum(int bucketNum) {
         this.bucketNum = bucketNum;
+    }
+
+    /**
+     * The number of buckets to report for this physical partition.
+     *
+     * <p>Under range distribution the tablet count is dynamic -- tablet split, merge and pre-split all
+     * change it -- while {@link RangeDistributionInfo#getBucketNum()} always answers 1 and
+     * {@code bucketNum} is only ever seeded at creation, so the count is taken from the latest visible
+     * base index instead. Rollup indexes on the same partition can hold a different number of tablets;
+     * the base index is the partition's reference layout, and it is the one that already equals
+     * {@code bucketNum} under hash distribution.
+     *
+     * <p>Every other distribution, and a range partition whose base index is unresolvable or holds no
+     * tablets, keeps the stored per-physical bucket number and falls back to the table-level
+     * distribution default.
+     *
+     * @param distributionInfo the partition's own distribution, from {@link Partition#getDistributionInfo()}; must not be null
+     */
+    public int getActualBucketNum(DistributionInfo distributionInfo) {
+        if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            MaterializedIndex baseIndex = getLatestBaseIndexOrNull();
+            int tabletNum = baseIndex != null ? baseIndex.getTablets().size() : 0;
+            if (tabletNum > 0) {
+                return tabletNum;
+            }
+        }
+        return bucketNum > 0 ? bucketNum : distributionInfo.getBucketNum();
     }
 
     @Override
