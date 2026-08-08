@@ -749,8 +749,13 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         }
 
         ResourceGroupUsage usage = currGroupIdToUsage.get(groupId);
-        return usage.group.isMaxCpuCoresEffective() && usage.isCpuCoreUsagePermilleEffective() &&
-                usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 1000;
+        if (usage.group.isMaxCpuCoresEffective() && usage.isCpuCoreUsagePermilleEffective() &&
+                usage.cpuCoreUsagePermille >= usage.group.getMaxCpuCores() * 1000) {
+            return true;
+        }
+
+        return usage.group.isMemUsedPctLimitEffective() && usage.isMemUsagePctEffective() &&
+                usage.getMemUsagePct() >= usage.group.getMemUsedPctLimit();
     }
 
     public Status getStatus() {
@@ -822,6 +827,14 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
         public long getMemLimitBytes() {
             return memLimitBytes;
+        }
+
+        public boolean isMemUsagePctEffective() {
+            return memLimitBytes > 0;
+        }
+
+        public double getMemUsagePct() {
+            return memLimitBytes > 0 ? (double) memUsageBytes / memLimitBytes : 0.0;
         }
 
         public String getMemPool() {
