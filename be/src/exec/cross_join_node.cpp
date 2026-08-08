@@ -121,15 +121,41 @@ void CrossJoinNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
+bool CrossJoinNode::can_generate_global_runtime_filter() const {
+    return std::any_of(_build_runtime_filters.begin(), _build_runtime_filters.end(),
+                       [](const RuntimeFilterBuildDescriptor* rf) { return rf->has_remote_targets(); });
+}
+
 StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
         ObjectPool* pool, const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, Chunk* chunk,
         const std::vector<ExprContext*>& ctxs) {
     std::list<ExprContext*> filters;
 
-    for (auto rf_desc : rf_descs) {
+    for (auto* rf_desc : rf_descs) {
         DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
+        auto* conjunct = ctxs[rf_desc->build_expr_order()];
+        ASSIGN_OR_RETURN(auto value, conjunct->evaluate(conjunct->root()->get_child(1), chunk));
+        ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(pool, conjunct,
+                                                                                                   std::move(value)))
+        filters.push_back(expr);
+    }
+    return filters;
+}
+
+StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
+        ObjectPool* pool, const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, const Columns& boundaries,
+        const std::vector<ExprContext*>& ctxs) {
+    DCHECK_EQ(rf_descs.size(), boundaries.size());
+    std::list<ExprContext*> filters;
+    for (size_t i = 0; i < rf_descs.size(); i++) {
+        if (boundaries[i] == nullptr) {
+            continue;
+        }
+        auto* rf_desc = rf_descs[i];
+        DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
+
         ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(
-                                            pool, ctxs[rf_desc->build_expr_order()], chunk))
+                                            pool, ctxs[rf_desc->build_expr_order()], boundaries[i]))
         filters.push_back(expr);
     }
     return filters;

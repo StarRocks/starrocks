@@ -14,8 +14,11 @@
 
 #include "runtime/runtime_filter_builder.h"
 
+#include <cmath>
+
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {
@@ -98,6 +101,39 @@ Status RuntimeFilterBuilder::fill(RuntimeFilter* filter, LogicalType type, const
         RETURN_IF_ERROR(fill(filter, type, column, column_offset, eq_null, is_skew_join));
     }
     return Status::OK();
+}
+
+ColumnPtr RuntimeFilterBuilder::compute_min_max_boundary(LogicalType type, bool select_min, const Columns& columns) {
+    return type_dispatch_filter(type, ColumnPtr(), [select_min, &columns]<LogicalType LT>() -> ColumnPtr {
+        using CppType = RunTimeCppType<LT>;
+        bool has_boundary = false;
+        CppType boundary{};
+        for (const auto& column : columns) {
+            ColumnViewer<LT> viewer(column);
+            for (size_t row = 0; row < viewer.size(); row++) {
+                if (viewer.is_null(row)) {
+                    continue;
+                }
+                const auto value = viewer.value(row);
+                if constexpr (lt_is_float<LT>) {
+                    if (std::isnan(value)) {
+                        continue;
+                    }
+                }
+                if (!has_boundary || (select_min ? value < boundary : boundary < value)) {
+                    has_boundary = true;
+                    boundary = value;
+                }
+            }
+        }
+
+        if (!has_boundary) {
+            return nullptr;
+        }
+        auto result = RunTimeColumnType<LT>::create();
+        result->append(boundary);
+        return result;
+    });
 }
 
 } // namespace starrocks
