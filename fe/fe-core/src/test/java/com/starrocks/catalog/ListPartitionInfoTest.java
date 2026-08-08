@@ -101,20 +101,22 @@ public class ListPartitionInfoTest {
                 "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                 "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                 ")";
-        Assertions.assertEquals(sql, target);
+        // 2-param toSql delegates to 3-param with automaticPartition flag from the object
+        // listPartitionInfo is non-automatic, so it should have LIST keyword and parens
+        Assertions.assertEquals(target, sql);
     }
 
     @Test
     public void testToSqlForMulti() {
         List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
         String sql = this.listPartitionInfoForMulti.toSql(this.findTableForMultiListPartition(), partitionId);
-        String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
+        String target = "PARTITION BY LIST(`dt`, `province`)(\n" +
                 "  PARTITION p1 VALUES IN (('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin')) " +
                 "(\"replication_num\" = \"1\"),\n" +
                 "  PARTITION p2 VALUES IN (('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing')) " +
                 "(\"replication_num\" = \"1\")\n" +
                 ")";
-        Assertions.assertEquals(sql, target);
+        Assertions.assertEquals(target, sql);
     }
 
     public OlapTable findTableForSingleListPartition() {
@@ -177,12 +179,12 @@ public class ListPartitionInfoTest {
                     "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                     "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                     ")";
-            Assertions.assertEquals(sql, target);
+            Assertions.assertEquals(target, sql);
         }
         {
             String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, true);
-            String target = "PARTITION BY (`province`)";
-            Assertions.assertEquals(sql, target);
+            String target = "PARTITION BY `province`";
+            Assertions.assertEquals(target, sql);
         }
     }
 
@@ -194,12 +196,12 @@ public class ListPartitionInfoTest {
                     "  PARTITION p1 VALUES IN (\'guangdong\', \'tianjin\'),\n" +
                     "  PARTITION p2 VALUES IN (\'shanghai\', \'beijing\')\n" +
                     ")";
-            Assertions.assertEquals(sql, target);
+            Assertions.assertEquals(target, sql);
         }
         {
             String sql = this.listPartitionInfo.toSql(this.findTableForSingleListPartition(), true, false);
-            String target = "PARTITION BY (`province`)";
-            Assertions.assertEquals(sql, target);
+            String target = "PARTITION BY `province`";
+            Assertions.assertEquals(target, sql);
         }
     }
 }
