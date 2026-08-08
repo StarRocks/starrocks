@@ -520,6 +520,12 @@ public class ExpressionStatisticCalculator {
                     "column statistics missing for expr: %s. column statistics: %s",
                     call, childrenColumnStatistics);
 
+            // Nullary functions (COUNT(), ROW_NUMBER(), NOW(), etc.) do not depend on input
+            // column statistics, so handle them before the unknown-stats fallback below.
+            if (call.getChildren().isEmpty()) {
+                return nullaryExpressionCalculate(call);
+            }
+
             if (childrenColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) ||
                     inputStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
                 return deriveBasicColStats(call);
@@ -527,8 +533,6 @@ public class ExpressionStatisticCalculator {
 
             if (SPMFunctions.isSPMFunctions(call)) {
                 return SPMFunctions.getSPMFunctionStatistics(call, childrenColumnStatistics).get(0);
-            } else if (call.getChildren().isEmpty()) {
-                return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));
             } else if (call.getChildren().size() == 2) {
@@ -547,6 +551,11 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.COUNT:
                     minValue = 0;
                     maxValue = inputStatistics.getOutputRowCount();
+                    break;
+                case FunctionSet.ROW_NUMBER:
+                    minValue = 1;
+                    maxValue = inputStatistics.getOutputRowCount();
+                    distinctValue = inputStatistics.getOutputRowCount();
                     break;
                 case FunctionSet.RAND:
                 case FunctionSet.RANDOM:
