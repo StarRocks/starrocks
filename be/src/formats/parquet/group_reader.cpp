@@ -798,44 +798,22 @@ void GroupReader::_setup_runtime_filter_predicates() {
     RuntimeFilterPredicates preds(src->driver_sequence());
     std::unordered_set<SlotId> probe_columns_seen;
     for (auto* pred : src->rf_predicates()) {
-        // Group-colocate filters hold one sub-filter per driver and are only valid for
-        // the driver that built them. Every other pushdown consumer excludes them via
+        // Group-colocate filters hold one sub-filter per driver and are only valid for the
+        // driver that built them. Every other pushdown consumer excludes them via
         // can_push_down_runtime_filter() -- the operator-level collector, project and
-        // aggregate nodes -- but get_runtime_filter_predicates() does not, so do it
-        // here. Bucket-aware execution on lake tables really does produce colocate
-        // joins over connector scans, and applying another driver's filter silently
-        // drops rows belonging to the other buckets.
+        // aggregate nodes -- but get_runtime_filter_predicates() does not, so do it here.
+        // A lake fragment is not expected to produce one (FE adds every connector scan to
+        // its exec group with disableColocateGroup=true), which is why driver_sequence is
+        // never consulted below; this is the cheap guard that keeps that from mattering.
         if (!pred->get_rf_desc()->can_push_down_runtime_filter()) continue;
-        // Bucket-aware join modes build one sub-filter per bucket, and picking the right
-        // one per row assumes the probe side is distributed exactly the way the builder
-        // expected. Bucket-aware execution over lake tables breaks that assumption here
-        // in a way that silently drops rows, so keep the pushdown to filters where a
-        // single membership test applies to every row. The join mode comes from the plan
-        // and is known before the filter arrives, unlike num_hash_partitions(). The
-        // operator-level probe still handles the excluded ones, exactly as it does today.
-        //
-        // TODO: the pre-existing statistics path may share this flaw and is NOT fixed
-        // here. normalize_join_runtime_filter() (scan_conjuncts_manager.cpp) resolves the
-        // filter the same way -- desc->runtime_filter(driver_sequence) -- and feeds its
-        // min/max into row-group and scan-range pruning (see also RuntimeScanRangePruner
-        // in file_reader.cpp). Collapsing a filter to a min/max envelope does not make
-        // the lookup correct: if the resolved sub-filter is the wrong one, the envelope
-        // is simply too narrow and whole row groups get pruned that should have
-        // survived. It has not been observed to misfire -- disabling only the row-level
-        // probe here leaves the bucket-aware tests passing, and q27 prunes no row groups
-        // at all -- but "never observed" is not "cannot happen", and no test constructs
-        // the case. Proving it needs data where a row group's value range falls outside
-        // one driver's local envelope yet inside the global one; that, plus deciding
-        // what driver_sequence should even mean for a connector scan under bucket-aware
-        // execution, is a separate investigation and deliberately out of scope here.
-        switch (pred->get_rf_desc()->join_mode()) {
-        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
-        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET:
-        case TRuntimeFilterBuildJoinMode::COLOCATE:
-            continue;
-        default:
-            break;
-        }
+        // The check above also covers what the storage-layer probe needs:
+        // RuntimeFilterPredicate::evaluate() derives the sub-filter index from the single
+        // probe column, which only matches the operator-level probe while the filter has no
+        // partition-by exprs -- with them, compute_hash_values() evaluates those into a
+        // separate column list and indexes off that instead. Both predicates read
+        // _partition_by_exprs_contexts, so this cannot fail today; state it so the coupling
+        // is visible if can_push_down_runtime_filter() is ever narrowed.
+        DCHECK_EQ(pred->get_rf_desc()->num_partition_by_exprs(), 0);
         // ConnectorPredicateParser::column_id() returns SlotDescriptor::id(), so the
         // predicate's ColumnId is the probe slot id.
         const auto slot_id = static_cast<SlotId>(pred->get_column_id());

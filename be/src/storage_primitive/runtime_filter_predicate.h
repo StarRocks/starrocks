@@ -43,10 +43,19 @@ public:
     bool init(int32_t driver_sequence);
 
 protected:
+    // Only the RunningContext overload of RuntimeFilter::compute_partition_index() knows
+    // about layout.bucket_properties(); the selection-aware overloads do not.  See
+    // RuntimeFilterPredicate::evaluate() for why that distinction is load-bearing.
+    bool _needs_bucket_aware_partition_index() const { return !_rf_desc->layout().bucket_properties().empty(); }
+
     RuntimeFilterProbeDescriptor* _rf_desc;
     const RuntimeFilter* _rf = nullptr;
     ColumnId _column_id;
-    std::vector<uint32_t> hash_values;
+    // Holds hash_values plus the bucket-aware scratch vectors, reused across chunks.  Each
+    // HdfsScanner/OlapChunkSource gets its own RuntimeFilterPredicate instances
+    // (ScanConjunctsManager::get_runtime_filter_predicates news them per call), so this
+    // mutable state is not shared between concurrent readers.
+    RuntimeFilter::RunningContext _running_ctx;
 };
 
 class DictColumnRuntimeFilterPredicate : public RuntimeFilterPredicate {
