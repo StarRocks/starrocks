@@ -2,9 +2,11 @@ name: SYNC PIPELINE
 
 on:
   pull_request_target:
+    # model-2 闸3: sync only main <-> main. Release-branch backports are NOT synced
+    # to the peer (each repo backports its own main via its reconcile engine), which
+    # avoids double-backport / cross-repo loops once reconcile-synced is live.
     branches:
       - main
-      - 'branch-[0-9].[0-9]*'
     types:
       - closed
   workflow_dispatch:

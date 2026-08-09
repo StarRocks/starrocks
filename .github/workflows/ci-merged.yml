@@ -74,17 +74,17 @@ jobs:
   # carrying the bug); backport_reconcile.py then prints the matrix (window /
   # affected / checked / auto / notify) and posts NOTHING. continue-on-error so
   # it can never affect the merge. Needs ci-tool #4934 on the runner.
-  backport-reconcile-shadow:
-    name: Backport Reconcile (dry-run shadow)
+  backport-reconcile:
+    name: Backport Reconcile
     runs-on: [ self-hosted, ubuntu, ai ]
+    # model-2: reverse-synced PRs (label `sync`) are now INCLUDED (previously excluded).
+    # They have no author checkbox -> AI-only-auto. Native PRs keep the checkbox x AI
+    # matrix. cherry-pick/backport PRs are still excluded (they are the backports).
     if: >
       github.event.pull_request.merged == true &&
       github.base_ref == 'main' &&
       github.repository == 'StarRocks/starrocks' &&
       startsWith(github.event.pull_request.title, '[BugFix]') &&
-      !contains(github.event.pull_request.title, '(sync #') &&
-      !contains(github.event.pull_request.labels.*.name, 'sync') &&
-      !contains(github.head_ref, '-sync-') &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     continue-on-error: true
@@ -92,11 +92,22 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
       GITHUB_TOKEN: ${{ secrets.PAT }}
+      # reverse-synced PR (label `sync`) -> AI-only-auto; native PR -> checkbox x AI
+      IS_SYNCED: ${{ contains(github.event.pull_request.labels.*.name, 'sync') }}
+      # SWITCH (default OFF): only 'true' makes synced PRs run REAL (auto @Mergifyio).
+      # Otherwise synced PRs stay dry-run. Native PRs are always dry-run (phase B shadow).
+      SYNCED_REAL: ${{ vars.RECONCILE_SYNCED_REAL }}
     steps:
-      - name: reconcile dry-run (checkbox x AI affected)
+      - name: reconcile (native=dry-run shadow; synced=AI-only-auto)
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+          if [[ "${IS_SYNCED}" == "true" ]]; then
+            if [[ "${SYNCED_REAL}" == "true" ]]; then MODE="--no-dry-run"; else MODE="--dry-run"; fi
+            echo "reverse-synced PR -> AI-only-auto (${MODE})"
+            ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --synced ${MODE}
+          else
+            ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+          fi
 
   thirdparty-filter:
     runs-on: ubuntu-latest
