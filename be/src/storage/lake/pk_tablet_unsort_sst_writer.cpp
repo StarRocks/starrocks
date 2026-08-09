@@ -180,12 +180,15 @@ Status PkTabletUnsortSSTWriter::project_pk_columns(const Chunk& data, const std:
 }
 
 bool PkTabletUnsortSSTWriter::is_map_full() const {
-    // Count the loser rowids too, not just the map: a dup-heavy batch can hold a lot of memory in
-    // _deleted_rowids (which a map spill does not shrink) while _map itself stays small, so spilling the
-    // map keeps the writer's combined footprint near the bound instead of letting _map independently
-    // pile another l0_max_mem_usage on top of the loser vector. (_delete_keys is filled only at flush,
-    // never during append, so it is not part of the footprint at this spill check.)
-    const size_t mem_usage = memory_usage();
+    // Only `_map` is spillable, so only `_map` may drive the trigger. `_deleted_rowids` must survive
+    // until flush to build the segment delvec, and a spill deliberately does not shrink it -- so
+    // counting it here made the trigger latch: once its capacity alone reached l0_max_mem_usage no
+    // spill could bring the total back under, and every subsequent append spilled. That shattered a
+    // run into thousands of tiny intermediate SSTs (measured: ~3000 for a 2 GB input, one per chunk
+    // instead of one per 100 MB) and left flush with a K-way merge whose K was in the thousands,
+    // which then dominated the whole compaction. Bounding the loser vector needs its own mechanism;
+    // spilling the map is not one.
+    const size_t mem_usage = map_memory_usage();
     if (mem_usage >= static_cast<size_t>(config::l0_max_mem_usage)) {
         return true;
     }

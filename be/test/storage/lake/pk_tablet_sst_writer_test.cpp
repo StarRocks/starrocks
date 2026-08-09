@@ -1003,6 +1003,8 @@ static Chunk make_kv_chunk(const std::shared_ptr<Schema>& schema,
 class TestPkTabletUnsortSSTWriter : public PkTabletUnsortSSTWriter {
 public:
     using PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter;
+    using PkTabletUnsortSSTWriter::is_map_full;
+    using PkTabletUnsortSSTWriter::map_memory_usage;
     using PkTabletUnsortSSTWriter::memory_usage;
 
     StatusOr<std::vector<std::string>> encode_keys_for_test(const Chunk& data) {
@@ -1083,6 +1085,54 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
     EXPECT_LT(spill_writer->memory_usage(), expected_map_usage);
     ASSIGN_OR_ABORT(auto spill_flush_result, spill_writer->flush_sst_writer());
     EXPECT_FALSE(spill_flush_result.first.path.empty());
+}
+
+TEST_F(PkTabletSSTWriterTest, test_unsort_spill_trigger_ignores_loser_vector) {
+    // A spill clears the map but by design keeps `_deleted_rowids` for the delvec. If the trigger
+    // counted that vector, then once its capacity alone crossed l0_max_mem_usage no spill could ever
+    // bring the total back under and every following append would spill -- shattering the run into
+    // one intermediate SST per chunk. Charge only the spillable map.
+    const int64_t tablet_id = _tablet_metadata->id();
+    auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    ASSERT_OK(w->reset_sst_writer(lp, _fs));
+
+    ConfigResetGuard<int64_t> max_mem_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+
+    // One row per distinct key, then a long run of duplicates of the first key: the map stays tiny
+    // while every duplicate pushes a loser rowid, growing `_deleted_rowids` without bound.
+    std::vector<std::pair<std::string, int>> rows;
+    for (int i = 0; i < 4; ++i) {
+        rows.emplace_back("k" + std::to_string(i), i);
+    }
+    auto chunk = make_kv_chunk(_schema, rows);
+    std::vector<uint64_t> order(chunk.num_rows());
+    for (uint32_t i = 0; i < chunk.num_rows(); ++i) {
+        order[i] = (static_cast<uint64_t>(1) << 32) | i;
+    }
+    ASSERT_OK(w->append_sst_record(chunk, &order));
+
+    std::vector<std::pair<std::string, int>> dups(64, rows.front());
+    auto dup_chunk = make_kv_chunk(_schema, dups);
+    for (int round = 0; round < 8; ++round) {
+        std::vector<uint64_t> dup_order(dup_chunk.num_rows());
+        for (uint32_t i = 0; i < dup_chunk.num_rows(); ++i) {
+            dup_order[i] = (static_cast<uint64_t>(2 + round) << 32) | i;
+        }
+        ASSERT_OK(w->append_sst_record(dup_chunk, &dup_order));
+    }
+
+    // Set the bound just above the map itself but below the map + loser vector. Under the old
+    // accounting this latched on; the map alone must stay under it.
+    const size_t map_only = w->map_memory_usage();
+    const size_t with_losers = w->memory_usage();
+    ASSERT_GT(with_losers, map_only) << "precondition: the loser vector must carry real bytes";
+    config::l0_max_mem_usage = static_cast<int64_t>((map_only + with_losers) / 2);
+    EXPECT_FALSE(w->is_map_full()) << "a large loser vector must not force a spill";
+
+    // The map crossing the bound on its own still spills.
+    config::l0_max_mem_usage = static_cast<int64_t>(map_only) - 1;
+    EXPECT_TRUE(w->is_map_full());
 }
 
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {
