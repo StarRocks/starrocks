@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.extension.Inject;
 import com.starrocks.metric.MetricVisitor;
@@ -33,6 +34,11 @@ import java.util.stream.Collectors;
 
 public class SlotManager extends BaseSlotManager {
     private static final Logger LOG = LogManager.getLogger(SlotManager.class);
+
+    // Pause before retrying after the worker loop catches a Throwable, so a persistent failure
+    // (for example a still-exhausted leader heap) cannot peg a CPU or flood logs by retrying with
+    // no wait. Only reached on the error path; normal processing is event-driven and never sleeps.
+    private static final long WORKER_ERROR_BACKOFF_MS = 1000L;
 
     private final RequestWorker requestWorker = new RequestWorker();
     private final SlotTracker slotTracker;
@@ -134,15 +140,29 @@ public class SlotManager extends BaseSlotManager {
                         newTasks.add(newTask);
                     }
 
-                    newTasks.forEach(Runnable::run);
+                    for (Runnable task : newTasks) {
+                        try {
+                            task.run();
+                        } catch (Throwable t) {
+                            LOG.warn("[Slot] RequestWorker skips a task that threw", t);
+                        }
+                    }
                     newTasks.clear();
 
                     boolean isAllocatedSlots = true;
                     while (isAllocatedSlots) {
                         isAllocatedSlots = schedule();
                     }
-                } catch (Exception e) {
+                    // Catch Throwable, as Daemon.run() does: this is the only worker for slot
+                    // admission, reclamation and FE-dead cleanup, and it is never recreated, so an
+                    // Error here (for example an OutOfMemoryError under leader heap pressure) must
+                    // not terminate it and halt slot management until the FE restarts.
+                } catch (Throwable e) {
                     LOG.warn("[Slot] RequestWorker throws unexpected error", e);
+                    // Back off before retrying, mirroring the Thread.sleep in Daemon.run(): if the
+                    // failure persists (the leader heap is still exhausted), retrying with no wait
+                    // would peg a CPU and flood logs during the very incident this loop survives.
+                    Uninterruptibles.sleepUninterruptibly(WORKER_ERROR_BACKOFF_MS, TimeUnit.MILLISECONDS);
                 }
             }
         }
