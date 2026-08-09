@@ -29,6 +29,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.AlterResourceGroupLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -76,20 +77,42 @@ public class ResourceGroupMgr implements Writable {
             "'short_query' ResourceGroup cannot set 'exclusive_cpu_cores', " +
                     "since it use 'cpu_weight' as 'exclusive_cpu_cores'";
 
-    // CopyOnWrite volatile references: each write operation under the write lock builds a new
-    // immutable snapshot and atomically replaces the field. Readers capture the field into a
-    // local variable and need no lock — they see a consistent point-in-time snapshot.
-    private volatile Map<String, ResourceGroup> resourceGroupMap =
-            Collections.unmodifiableMap(new HashMap<>());
+    // ---------------------------------------------------------------------------
+    // Immutable holder for all three CopyOnWrite index maps.
+    // A single volatile write of this object provides an atomic, consistent view
+    // of every index — eliminating the window where three separate volatile writes
+    // could be observed in a torn order by a lock-free reader (Issue 2).
+    // ---------------------------------------------------------------------------
+    private static final class ResourceGroupSnapshot {
+        static final ResourceGroupSnapshot EMPTY = new ResourceGroupSnapshot(
+                Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap());
+
+        /** Groups keyed by name. */
+        final Map<String, ResourceGroup>         byName;
+        /** Groups keyed by ID. */
+        final Map<Long, ResourceGroup>           byId;
+        /** All classifiers keyed by classifier ID, across all groups. */
+        final Map<Long, ResourceGroupClassifier> byClassifier;
+
+        ResourceGroupSnapshot(Map<String, ResourceGroup> byName,
+                              Map<Long, ResourceGroup> byId,
+                              Map<Long, ResourceGroupClassifier> byClassifier) {
+            this.byName       = Collections.unmodifiableMap(byName);
+            this.byId         = Collections.unmodifiableMap(byId);
+            this.byClassifier = Collections.unmodifiableMap(byClassifier);
+        }
+    }
+
+    // Single volatile field: writers replace the entire holder; readers capture
+    // the reference once and access all three maps without any lock.
+    // Because ResourceGroup objects are deep-copied on every alter (Issue 1 fix),
+    // holders of an older snapshot always see a consistent pre-alter view.
+    private volatile ResourceGroupSnapshot snapshot = ResourceGroupSnapshot.EMPTY;
 
     // Record the current short_query resource group.
     // There can be only one short_query resource group.
     private volatile ResourceGroup shortQueryResourceGroup = null;
 
-    private volatile Map<Long, ResourceGroup> id2ResourceGroupMap =
-            Collections.unmodifiableMap(new HashMap<>());
-    private volatile Map<Long, ResourceGroupClassifier> classifierMap =
-            Collections.unmodifiableMap(new HashMap<>());
     private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
@@ -124,7 +147,7 @@ public class ResourceGroupMgr implements Writable {
         try {
             ResourceGroup wg = ResourceGroupBuilder.buildFromStmt(stmt);
             boolean needReplace = false;
-            if (resourceGroupMap.containsKey(wg.getName())) {
+            if (snapshot.byName.containsKey(wg.getName())) {
                 if (stmt.isReplaceIfExists()) {
                     needReplace = true;
                 } else if (!stmt.isIfNotExists()) {
@@ -190,7 +213,7 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) {
-        if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
+        if (stmt.getName() != null && !snapshot.byName.containsKey(stmt.getName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
         }
 
@@ -205,14 +228,14 @@ public class ResourceGroupMgr implements Writable {
 
     public List<Long> getResourceGroupIds() {
         // Lock-free: capture volatile snapshot once.
-        return new ArrayList<>(id2ResourceGroupMap.keySet());
+        return new ArrayList<>(snapshot.byId.keySet());
     }
 
     private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
         if (wg.hasDefaultMemPool()) {
             return true;
         }
-        return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+        return snapshot.byName.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
                 wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
 
@@ -253,8 +276,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, boolean verbose, boolean isListAll) {
-        // Lock-free: capture volatile snapshot once.
-        List<ResourceGroup> resourceGroupList = new ArrayList<>(resourceGroupMap.values());
+        // Lock-free: capture volatile snapshot once — all three indexes are consistent.
+        List<ResourceGroup> resourceGroupList = new ArrayList<>(snapshot.byName.values());
         if (isListAll || ConnectContext.get() == null) {
             resourceGroupList.sort(Comparator.comparing(ResourceGroup::getName));
             return resourceGroupList.stream()
@@ -274,18 +297,17 @@ public class ResourceGroupMgr implements Writable {
 
     public List<List<String>> showOneResourceGroup(String name, boolean verbose) {
         // Lock-free: capture volatile snapshot once.
-        Map<String, ResourceGroup> snapshot = this.resourceGroupMap;
-        if (!snapshot.containsKey(name)) {
+        Map<String, ResourceGroup> snap = this.snapshot.byName;
+        if (!snap.containsKey(name)) {
             return Collections.emptyList();
         } else {
-            return snapshot.get(name).show(verbose);
+            return snap.get(name).show(verbose);
         }
     }
 
     public Set<String> getAllResourceGroupNames() {
         // Lock-free: defensive copy of volatile snapshot keyset.
-        // Returns a point-in-time snapshot; do not cache across DDL operations.
-        return new HashSet<>(resourceGroupMap.keySet());
+        return new HashSet<>(snapshot.byName.keySet());
     }
 
     private void replayAddResourceGroup(ResourceGroup workgroup) {
@@ -296,12 +318,12 @@ public class ResourceGroupMgr implements Writable {
 
     public ResourceGroup getResourceGroup(String name) {
         // Lock-free: volatile read gives a consistent snapshot.
-        return resourceGroupMap.getOrDefault(name, null);
+        return snapshot.byName.getOrDefault(name, null);
     }
 
     public ResourceGroup getResourceGroup(long id) {
         // Lock-free: volatile read gives a consistent snapshot.
-        return id2ResourceGroupMap.getOrDefault(id, null);
+        return snapshot.byId.getOrDefault(id, null);
     }
 
     private int getExclusiveCpuCores(Integer exclusiveCpuCores, Integer exclusiveCpuPercent, int minCoreNum) {
@@ -338,8 +360,8 @@ public class ResourceGroupMgr implements Writable {
         Set<Long> boundWhIds = Sets.newHashSet();
         Map<String, WarehouseCoresInfo> boundWhToItem = new HashMap<>();
 
-        List<ResourceGroup> groups = new ArrayList<>(resourceGroupMap.values());
-        if (!resourceGroupMap.containsKey(wg.getName())) {
+        List<ResourceGroup> groups = new ArrayList<>(snapshot.byName.values());
+        if (!snapshot.byName.containsKey(wg.getName())) {
             groups.add(wg);
         }
 
@@ -428,10 +450,10 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
-            if (!resourceGroupMap.containsKey(name)) {
+            if (!snapshot.byName.containsKey(name)) {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
-            ResourceGroup wg = resourceGroupMap.get(name);
+            ResourceGroup wg = snapshot.byName.get(name);
             AlterResourceGroupLog alterResourceGroupLog = new AlterResourceGroupLog();
             alterResourceGroupLog.setName(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
@@ -594,82 +616,92 @@ public class ResourceGroupMgr implements Writable {
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 alterResourceGroupLog.setVersion(GlobalStateMgr.getCurrentState().getNextId());
             }
+            // updateResourceGroup returns the new ResourceGroup (deep copy with mutations applied).
+            // Capture it via an array to cross the lambda boundary, then use it for resourceGroupOps
+            // so BEs receive the post-alter state rather than the pre-alter state.
+            ResourceGroup[] newWgHolder = new ResourceGroup[] {wg};
             GlobalStateMgr.getCurrentState().getEditLog().logAlterResourceGroup(
-                    alterResourceGroupLog, wal -> updateResourceGroup(wg, alterResourceGroupLog));
-            resourceGroupOps.add(new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg).toThrift());
+                    alterResourceGroupLog, wal -> newWgHolder[0] = updateResourceGroup(wg, alterResourceGroupLog));
+            resourceGroupOps.add(new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, newWgHolder[0]).toThrift());
         } finally {
             writeUnlock();
         }
     }
 
-    private void updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+    /**
+     * Applies the alter log to a deep copy of {@code wg} and atomically publishes the result
+     * via {@link #removeResourceGroupInternal}/{@link #addResourceGroupInternal}.
+     *
+     * <p>The deep copy (Issue 1 fix) ensures that threads holding a snapshot captured before
+     * this call continue to observe the pre-alter {@link ResourceGroup} object unmodified.
+     *
+     * @return the new, post-alter {@link ResourceGroup} that was inserted into the snapshot.
+     */
+    private ResourceGroup updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        // GSON round-trip deep-copy: mutations go to newWg only.
+        // Old-snapshot holders retain a reference to the original, unmodified wg object.
+        ResourceGroup newWg = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(wg), ResourceGroup.class);
+
         if (log.getClassifiers() != null) {
-            List<ResourceGroupClassifier> oldClassifiers = wg.getClassifiers();
-            Set<Long> newClassifierIds = log.getClassifiers().stream()
-                    .map(ResourceGroupClassifier::getId).collect(Collectors.toSet());
-            // CopyOnWrite: build new classifier snapshot then replace volatile field.
-            Map<Long, ResourceGroupClassifier> newClassifiers = new HashMap<>(classifierMap);
-            for (ResourceGroupClassifier classifier : oldClassifiers) {
-                if (!newClassifierIds.contains(classifier.getId())) {
-                    newClassifiers.remove(classifier.getId());
-                }
-            }
-            for (ResourceGroupClassifier classifier : log.getClassifiers()) {
-                newClassifiers.put(classifier.getId(), classifier);
-            }
-            classifierMap = Collections.unmodifiableMap(newClassifiers);
-            wg.setClassifiers(log.getClassifiers());
+            newWg.setClassifiers(log.getClassifiers());
         }
         if (log.getCpuWeight() != null) {
-            wg.setCpuWeight(log.getCpuWeight());
-            wg.normalizeCpuWeight();
+            newWg.setCpuWeight(log.getCpuWeight());
+            newWg.normalizeCpuWeight();
         }
         if (log.getCpuWeightPercent() != null) {
-            wg.setCpuWeightPercent(log.getCpuWeightPercent());
+            newWg.setCpuWeightPercent(log.getCpuWeightPercent());
         }
         if (log.getExclusiveCpuCores() != null) {
-            wg.setExclusiveCpuCores(log.getExclusiveCpuCores());
+            newWg.setExclusiveCpuCores(log.getExclusiveCpuCores());
         }
         if (log.getExclusiveCpuPercent() != null) {
-            wg.setExclusiveCpuPercent(log.getExclusiveCpuPercent());
+            newWg.setExclusiveCpuPercent(log.getExclusiveCpuPercent());
         }
         if (log.getMaxCpuCores() != null) {
-            wg.setMaxCpuCores(log.getMaxCpuCores());
+            newWg.setMaxCpuCores(log.getMaxCpuCores());
         }
         if (log.getMemLimit() != null) {
-            wg.setMemLimit(log.getMemLimit());
+            newWg.setMemLimit(log.getMemLimit());
         }
         if (log.getBigQueryMemLimit() != null) {
-            wg.setBigQueryMemLimit(log.getBigQueryMemLimit());
+            newWg.setBigQueryMemLimit(log.getBigQueryMemLimit());
         }
         if (log.getBigQueryScanRowsLimit() != null) {
-            wg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
+            newWg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
         }
         if (log.getBigQueryCpuSecondLimit() != null) {
-            wg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
+            newWg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
         }
         if (log.getConcurrencyLimit() != null) {
-            wg.setConcurrencyLimit(log.getConcurrencyLimit());
+            newWg.setConcurrencyLimit(log.getConcurrencyLimit());
         }
         if (log.getSpillMemLimitThreshold() != null) {
-            wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+            newWg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
         }
         if (log.getMemUsedPctLimit() != null) {
             wg.setMemUsedPctLimit(log.getMemUsedPctLimit());
         }
         if (log.getWarehouses() != null) {
-            wg.setWarehouses(log.getWarehouses());
+            newWg.setWarehouses(log.getWarehouses());
         }
         if (log.getVersion() != 0) {
-            wg.setVersion(log.getVersion());
+            newWg.setVersion(log.getVersion());
         }
+
+        // Atomically publish: remove the old entry (and its classifiers) then add the new one.
+        // Both operations update the single volatile snapshot field, so readers always see
+        // a fully consistent set of all three indexes (Issue 2 fix via ResourceGroupSnapshot).
+        removeResourceGroupInternal(wg.getName());
+        addResourceGroupInternal(newWg);
+        return newWg;
     }
 
     public void dropResourceGroup(DropResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
             String name = stmt.getName();
-            if (!resourceGroupMap.containsKey(name)) {
+            if (!snapshot.byName.containsKey(name)) {
                 if (!stmt.isIfExists()) {
                     throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
                 }
@@ -682,9 +714,11 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void dropResourceGroupUnlocked(String name) {
-        ResourceGroup wg = resourceGroupMap.get(name);
-        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
-        ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
+        ResourceGroup wg = snapshot.byName.get(name);
+        // Deep-copy before setting version so that snapshot holders see the pre-drop version.
+        ResourceGroup wgForOp = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(wg), ResourceGroup.class);
+        wgForOp.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+        ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wgForOp);
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logResourceGroupOp(workGroupOp, wal -> removeResourceGroupInternal(name));
         resourceGroupOps.add(workGroupOp.toThrift());
@@ -716,48 +750,51 @@ public class ResourceGroupMgr implements Writable {
     public void replayAlterResourceGroup(AlterResourceGroupLog log) {
         writeLock();
         try {
-            ResourceGroup wg = resourceGroupMap.get(log.getName());
+            ResourceGroup wg = snapshot.byName.get(log.getName());
             if (wg == null) {
                 return;
             }
-            updateResourceGroup(wg, log);
+            updateResourceGroup(wg, log); // return value intentionally ignored for replay
         } finally {
             writeUnlock();
         }
     }
 
     private void removeResourceGroupInternal(String name) {
-        // CopyOnWrite: build new immutable snapshots then atomically replace volatile fields.
-        ResourceGroup wg = resourceGroupMap.get(name);
-        Map<String, ResourceGroup> newByName = new HashMap<>(resourceGroupMap);
-        newByName.remove(name);
-        Map<Long, ResourceGroup> newById = new HashMap<>(id2ResourceGroupMap);
-        newById.remove(wg.getId());
-        Map<Long, ResourceGroupClassifier> newClassifiers = new HashMap<>(classifierMap);
-        for (ResourceGroupClassifier classifier : wg.classifiers) {
-            newClassifiers.remove(classifier.getId());
+        // CopyOnWrite: build new snapshot from old then atomically publish via single volatile write.
+        ResourceGroupSnapshot old = this.snapshot;
+        ResourceGroup wg = old.byName.get(name);
+        if (wg == null) {
+            return;
         }
-        resourceGroupMap    = Collections.unmodifiableMap(newByName);
-        id2ResourceGroupMap = Collections.unmodifiableMap(newById);
-        classifierMap       = Collections.unmodifiableMap(newClassifiers);
+        Map<String, ResourceGroup> newByName = new HashMap<>(old.byName);
+        newByName.remove(name);
+        Map<Long, ResourceGroup> newById = new HashMap<>(old.byId);
+        newById.remove(wg.getId());
+        Map<Long, ResourceGroupClassifier> newByClassifier = new HashMap<>(old.byClassifier);
+        for (ResourceGroupClassifier classifier : wg.classifiers) {
+            newByClassifier.remove(classifier.getId());
+        }
+        // Single volatile write — readers always see all three maps updated atomically.
+        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier);
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
         }
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
-        // CopyOnWrite: build new immutable snapshots then atomically replace volatile fields.
-        Map<String, ResourceGroup> newByName = new HashMap<>(resourceGroupMap);
+        // CopyOnWrite: build new snapshot from old then atomically publish via single volatile write.
+        ResourceGroupSnapshot old = this.snapshot;
+        Map<String, ResourceGroup> newByName = new HashMap<>(old.byName);
         newByName.put(wg.getName(), wg);
-        Map<Long, ResourceGroup> newById = new HashMap<>(id2ResourceGroupMap);
+        Map<Long, ResourceGroup> newById = new HashMap<>(old.byId);
         newById.put(wg.getId(), wg);
-        Map<Long, ResourceGroupClassifier> newClassifiers = new HashMap<>(classifierMap);
+        Map<Long, ResourceGroupClassifier> newByClassifier = new HashMap<>(old.byClassifier);
         for (ResourceGroupClassifier classifier : wg.classifiers) {
-            newClassifiers.put(classifier.getId(), classifier);
+            newByClassifier.put(classifier.getId(), classifier);
         }
-        resourceGroupMap    = Collections.unmodifiableMap(newByName);
-        id2ResourceGroupMap = Collections.unmodifiableMap(newById);
-        classifierMap       = Collections.unmodifiableMap(newClassifiers);
+        // Single volatile write — readers always see all three maps updated atomically.
+        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier);
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
@@ -818,8 +855,8 @@ public class ResourceGroupMgr implements Writable {
 
             Long minVersion = minVersionPerBe.get(beId);
             Map<Long, TWorkGroup> activeResourceGroup = activeResourceGroupsPerBe.get(beId);
-            // Use volatile snapshot for id2ResourceGroupMap to avoid holding both lock types.
-            Map<Long, ResourceGroup> idSnapshot = this.id2ResourceGroupMap;
+            // Use volatile snapshot to avoid holding both lock types simultaneously.
+            Map<Long, ResourceGroup> idSnapshot = this.snapshot.byId;
             for (TWorkGroupOp op : resourceGroupOps) {
                 TWorkGroup twg = op.getWorkgroup();
                 if (twg.getVersion() < minVersion) {
@@ -866,8 +903,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public TWorkGroup chooseResourceGroupByName(ConnectContext ctx, String wgName) {
-        // Lock-free: volatile read gives a consistent snapshot.
-        ResourceGroup rg = resourceGroupMap.get(wgName);
+        // Lock-free: single volatile snapshot read — consistent with byId/byClassifier.
+        ResourceGroup rg = snapshot.byName.get(wgName);
         if (rg == null) {
             return null;
         }
@@ -878,8 +915,8 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public TWorkGroup chooseResourceGroupByID(ConnectContext ctx, long wgID) {
-        // Lock-free: volatile read gives a consistent snapshot.
-        ResourceGroup rg = id2ResourceGroupMap.get(wgID);
+        // Lock-free: single volatile snapshot read — consistent with byName/byClassifier.
+        ResourceGroup rg = snapshot.byId.get(wgID);
         if (rg == null) {
             return null;
         }
@@ -892,13 +929,15 @@ public class ResourceGroupMgr implements Writable {
     public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
         List<String> activeRoles = getUnqualifiedRole(ctx);
 
-        // CopyOnWrite: capture all volatile snapshot references once — no lock required.
-        // Readers see a consistent point-in-time snapshot; writers swap in a new snapshot
-        // atomically under the write lock without ever mutating these fields in place.
-        Map<String, ResourceGroup> rgSnapshot  = this.resourceGroupMap;
-        Map<Long, ResourceGroup> idSnapshot    = this.id2ResourceGroupMap;
-        Map<Long, ResourceGroupClassifier> clsSnapshot = this.classifierMap;
-        ResourceGroup sqrg                     = this.shortQueryResourceGroup;
+        // CopyOnWrite: capture the volatile snapshot holder once — a single volatile read
+        // guarantees all three indexes (byName, byId, byClassifier) are mutually consistent.
+        // Writers publish them atomically by replacing the single ResourceGroupSnapshot field.
+        ResourceGroupSnapshot snap = this.snapshot;
+        ResourceGroup sqrg        = this.shortQueryResourceGroup;
+
+        Map<String, ResourceGroup>         rgSnapshot  = snap.byName;
+        Map<Long, ResourceGroup>           idSnapshot  = snap.byId;
+        Map<Long, ResourceGroupClassifier> clsSnapshot = snap.byClassifier;
 
         String user          = getUnqualifiedUser(ctx);
         String remoteIp      = ctx.getRemoteIP();
@@ -993,10 +1032,11 @@ public class ResourceGroupMgr implements Writable {
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        int numJson = 1 + resourceGroupMap.size();
+        Map<String, ResourceGroup> byName = snapshot.byName;
+        int numJson = 1 + byName.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.RESOURCE_GROUP_MGR, numJson);
-        writer.writeInt(resourceGroupMap.size());
-        for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
+        writer.writeInt(byName.size());
+        for (ResourceGroup resourceGroup : byName.values()) {
             writer.writeJson(resourceGroup);
         }
 

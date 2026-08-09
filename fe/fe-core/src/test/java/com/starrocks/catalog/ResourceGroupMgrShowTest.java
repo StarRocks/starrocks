@@ -17,8 +17,10 @@ package com.starrocks.catalog;
 import com.starrocks.thrift.TWorkGroupType;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>No {@code UtFrameUtils}, {@code GlobalStateMgr}, or {@code EditLog} is
  * required — {@link ResourceGroup#show} has no such dependencies.
- * Groups are injected directly into the volatile {@code resourceGroupMap}
+ * Groups are injected directly into the volatile {@code snapshot}
  * field via reflection, avoiding {@code createResourceGroup}'s EditLog call.
  *
  * <p>This class intentionally has no {@code @BeforeEach} / {@code @AfterEach}
@@ -58,17 +60,43 @@ public class ResourceGroupMgrShowTest {
 
     /**
      * Injects (name → group) pairs directly into the volatile
-     * {@code resourceGroupMap} field of the given {@link ResourceGroupMgr},
+     * {@code snapshot} field of the given {@link ResourceGroupMgr},
      * bypassing {@code createResourceGroup} and its EditLog dependency.
+     *
+     * <p>Both {@code byName} and {@code byId} are populated so that the full
+     * snapshot is consistent; {@code byClassifier} is left empty.
      */
+    @SuppressWarnings("unchecked")
     private void injectMap(ResourceGroupMgr mgr, Object... namesAndGroups) throws Exception {
-        Map<String, ResourceGroup> snap = new LinkedHashMap<>();
+        Map<String, ResourceGroup> byName = new LinkedHashMap<>();
+        Map<Long, ResourceGroup>   byId   = new HashMap<>();
         for (int i = 0; i < namesAndGroups.length; i += 2) {
-            snap.put((String) namesAndGroups[i], (ResourceGroup) namesAndGroups[i + 1]);
+            ResourceGroup rg = (ResourceGroup) namesAndGroups[i + 1];
+            byName.put((String) namesAndGroups[i], rg);
+            byId.put(rg.getId(), rg);
         }
-        Field f = ResourceGroupMgr.class.getDeclaredField("resourceGroupMap");
+
+        // Locate the private static ResourceGroupSnapshot inner class.
+        Class<?> snapClass = null;
+        for (Class<?> c : ResourceGroupMgr.class.getDeclaredClasses()) {
+            if ("ResourceGroupSnapshot".equals(c.getSimpleName())) {
+                snapClass = c;
+                break;
+            }
+        }
+        if (snapClass == null) {
+            throw new IllegalStateException("ResourceGroupSnapshot inner class not found");
+        }
+
+        // Construct: ResourceGroupSnapshot(byName, byId, emptyMap).
+        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class);
+        ctor.setAccessible(true);
+        Object snap = ctor.newInstance(byName, byId, Collections.emptyMap());
+
+        // Inject into mgr.snapshot.
+        Field f = ResourceGroupMgr.class.getDeclaredField("snapshot");
         f.setAccessible(true);
-        f.set(mgr, Collections.unmodifiableMap(snap));
+        f.set(mgr, snap);
     }
 
     // -------------------------------------------------------------------------
