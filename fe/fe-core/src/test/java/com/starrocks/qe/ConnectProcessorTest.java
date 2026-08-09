@@ -617,6 +617,64 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
+    // A COM_QUERY statement can also fail after its StmtExecutor has been constructed but before
+    // execute() is entered. execute() owns the diagnostics area, so this window must record the
+    // failure too. The executor field cannot decide that: it is already assigned here.
+    @Test
+    public void testQueryFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void addRunningQueryDetail(StatementBase parsedStmt) {
+                throw new IllegalStateException("mock: failed after executor creation, before execute");
+            }
+        };
+
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // The same window on the COM_STMT_EXECUTE path: a prepared statement that fails between
+    // executor creation and execute() must also replace the previous statement's diagnostics.
+    @Test
+    public void testExecuteFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+            ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
+
+            PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+            ctx.putPreparedStmt("1", new PrepareStmtContext(prepareStmt, ctx, null));
+            ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    throw new IllegalStateException("mock: failed after executor creation, before execute");
+                }
+            };
+            processor.processOnce();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertEquals(1, ctx.getWarnings().size());
+            QueryWarning diagnostic = ctx.getWarnings().get(0);
+            Assertions.assertEquals("Error", diagnostic.getLevel());
+            Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
+    }
+
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
     @Test
     public void testMultiStatementLargeInPredicateRetriesCurrentStmtOnly() throws Exception {

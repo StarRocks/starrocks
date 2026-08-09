@@ -53,6 +53,13 @@ show errors;
 -- result:
 [REGEX].*Error.*syntax.*
 -- !result
+[UC]show warnings where no_such_column = 'x';
+-- result:
+-- !result
+show errors;
+-- result:
+[REGEX].*Error.*no_such_column.*
+-- !result
 begin;
 -- result:
 -- !result

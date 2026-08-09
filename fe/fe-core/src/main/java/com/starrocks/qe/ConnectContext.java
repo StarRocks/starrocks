@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -287,10 +288,10 @@ public class ConnectContext {
     private List<Listener> listeners = Lists.newArrayList();
 
     // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
-    // by the most recent warning-generating statement so they can be read back via
-    // SHOW WARNINGS / SHOW ERRORS. Reset semantics follow MySQL: cleared at the start of the next
-    // statement that can generate diagnostics; SET, transaction control, and SHOW statements
-    // (including SHOW WARNINGS itself) leave it unchanged (see StmtExecutor.execute).
+    // by the most recent statement that generated any, so they can be read back via
+    // SHOW WARNINGS / SHOW ERRORS. Cleared at the start of the next statement, except for SET,
+    // transaction control and SHOW statements, which leave it unchanged while they succeed and
+    // replace it with their own error when they fail (see StmtExecutor.execute).
     private final List<QueryWarning> warnings = Lists.newArrayList();
 
     private boolean skipFinishSink = false;
@@ -1970,7 +1971,7 @@ public class ConnectContext {
     }
 
     public List<QueryWarning> getWarnings() {
-        return warnings;
+        return ImmutableList.copyOf(warnings);
     }
 
     public void clearWarnings() {

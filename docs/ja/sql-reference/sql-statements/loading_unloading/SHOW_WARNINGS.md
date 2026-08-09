@@ -24,7 +24,7 @@ SHOW ERRORS [LIMIT [offset,] row_count]
 | Code      | 診断コード。                                              |
 | Message   | 診断情報の可読な説明。                                     |
 
-警告バッファは直前のステートメントの診断情報を保持し、次に診断情報を生成しうるステートメントが実行を開始すると置き換えられます（解析に失敗したステートメントは、それ自身のエラーで置き換えます）。テーブルを使用せずメッセージも生成しないステートメント——`SET`、`BEGIN`/`COMMIT`/`ROLLBACK`、および `SHOW WARNINGS` と `SHOW ERRORS` 自身を含む `SHOW` ステートメント——は、MySQL と同様にバッファを変更しません。そのため `SHOW WARNINGS` は繰り返し発行でき、`COMMIT` の後でも直前のロードの診断情報を返します。
+警告バッファは直前のステートメントの診断情報を保持し、次のステートメントが実行を開始すると置き換えられます。ステートメントが失敗した場合（解析に失敗した場合を含む）は、それ自身のエラーで置き換えられます。次の 3 種類のステートメントは、成功したときにバッファを変更しません。`SET`、`BEGIN`/`COMMIT`/`ROLLBACK`、および `SHOW WARNINGS` と `SHOW ERRORS` 自身を含む `SHOW` ステートメントです。そのため `SHOW WARNINGS` は繰り返し発行でき、`COMMIT` の後でも直前のロードの診断情報を返します。
 
 ## 例
 
@@ -58,3 +58,9 @@ mysql> SHOW ERRORS;
 | Error | 5502 | Getting analyzing error. Detail message: Unknown table 'no_such_table'.  |
 +-------+------+---------------------------------------------------------------------------+
 ```
+
+## 制限事項
+
+- ロードや `INSERT` の場合、OK パケットの `warning_count` はフィルタリングまたは置換された行数を表しますが、`SHOW WARNINGS` はそれらを要約した 1 行を返します。両者の値は一致しません。MySQL では `warning_count` は `SHOW WARNINGS` が返す行数と等しくなります。
+- 診断情報は、そのステートメントを実行した FE に記録されます。セッションが Follower FE に接続している場合、`INSERT` やロードは Leader に転送され、警告は Leader 側に記録されるため、Follower 上の `SHOW WARNINGS` は空の結果を返します。読み取るには Leader FE に接続してください。
+- データの読み取り中に発生する診断情報（`CAST` がオーバーフローして `NULL` になる場合など）は、まだ記録されません。`SHOW WARNINGS` が対象とするのは、ロードや `INSERT` でフィルタリングされた行と、失敗したステートメントのエラーです。

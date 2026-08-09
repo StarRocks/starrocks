@@ -436,7 +436,7 @@ public class ShowExecutor {
             boolean onlyErrors = statement.isShowErrors();
             List<List<String>> rows = Lists.newArrayList();
             for (QueryWarning warning : context.getWarnings()) {
-                if (onlyErrors && !"Error".equalsIgnoreCase(warning.getLevel())) {
+                if (onlyErrors && !warning.isError()) {
                     continue;
                 }
                 rows.add(Lists.newArrayList(warning.getLevel(), warning.getCode(), warning.getMessage()));

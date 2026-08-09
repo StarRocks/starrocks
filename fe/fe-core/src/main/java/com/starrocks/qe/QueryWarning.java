@@ -19,6 +19,15 @@ package com.starrocks.qe;
 // the MySQL diagnostics area: "Note", "Warning", or "Error". The three fields map directly
 // to the Level / Code / Message columns of SHOW WARNINGS.
 public class QueryWarning {
+    private static final String LEVEL_WARNING = "Warning";
+    private static final String LEVEL_ERROR = "Error";
+
+    // MysqlErrPacket sends 1064 when QueryState carries no ErrorCode, and substitutes
+    // "Unknown error" for an empty message. Both are mirrored below so that SHOW ERRORS reports
+    // exactly what the client received in the ERR packet.
+    private static final int DEFAULT_ERROR_CODE = 1064;
+    private static final String UNKNOWN_ERROR_MESSAGE = "Unknown error";
+
     private final String level;
     private final String code;
     private final String message;
@@ -34,9 +43,26 @@ public class QueryWarning {
     // MySQL code 1265 (WARN_DATA_TRUNCATED) is the closest standard diagnostic. Unlike the OK
     // packet's int field, the message keeps the exact long count.
     public static QueryWarning filteredRowsWarning(long filteredRows, String trackingUrl) {
-        return new QueryWarning("Warning", "1265",
+        return new QueryWarning(LEVEL_WARNING, "1265",
                 filteredRows + " row(s) filtered or substituted to NULL during load; "
                         + "tracking_url=" + trackingUrl);
+    }
+
+    // The diagnostic for a statement that failed, shared by the path that fails inside
+    // StmtExecutor.execute() and the path that is rejected before it (ConnectProcessor). Both
+    // read the same QueryState the ERR packet is serialized from, so SHOW ERRORS stays a 1:1
+    // mirror of the error the client received.
+    public static QueryWarning fromErrorState(QueryState state) {
+        String message = state.getErrorMessage();
+        if (message == null || message.isEmpty()) {
+            message = UNKNOWN_ERROR_MESSAGE;
+        }
+        int errorCode = state.getErrorCode() != null ? state.getErrorCode().getCode() : DEFAULT_ERROR_CODE;
+        return new QueryWarning(LEVEL_ERROR, String.valueOf(errorCode), message);
+    }
+
+    public boolean isError() {
+        return LEVEL_ERROR.equalsIgnoreCase(level);
     }
 
     public String getLevel() {

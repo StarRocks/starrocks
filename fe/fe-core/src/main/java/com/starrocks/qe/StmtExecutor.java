@@ -217,7 +217,6 @@ import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowStmt;
-import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
@@ -947,13 +946,14 @@ public class StmtExecutor {
         context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
-        // MySQL diagnostics-area semantics: a statement that can generate new diagnostics
-        // replaces the previous statement's warnings. Statements that use no tables and generate
-        // no messages (SET, transaction control, SHOW - including SHOW WARNINGS / SHOW ERRORS,
-        // which read the buffer back) leave it unchanged, so a load's warnings stay readable
-        // across the SET / COMMIT / SHOW statements a client typically issues before checking
-        // them. A failing statement of any class still replaces the buffer with its own error
-        // (see the finally block below).
+        // A statement replaces the previous statement's diagnostics, following the MySQL
+        // diagnostics area. Three statement classes are exempt while they succeed: SET,
+        // transaction control, and SHOW (which covers SHOW WARNINGS / SHOW ERRORS reading the
+        // buffer back), so a load's warnings stay readable across the SET / COMMIT / SHOW
+        // statements a client typically issues before checking them. This is narrower than the
+        // MySQL rule, which exempts every statement that uses no tables and generates no
+        // messages. A failing statement of any class, including the three above, still replaces
+        // the buffer with its own error (see the finally block below).
         boolean preservesDiagnosticsArea = parsedStmt instanceof ShowStmt
                 || parsedStmt instanceof SetStmt
                 || parsedStmt instanceof BeginStmt
@@ -1350,23 +1350,16 @@ public class StmtExecutor {
             if (context.getState().isError()) {
                 // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /
                 // SHOW WARNINGS can read it back. The code mirrors the ERR packet (default 1064).
-                if (!(parsedStmt instanceof ShowWarningStmt)) {
-                    if (preservesDiagnosticsArea) {
-                        // A failure generates a message, which replaces the diagnostics area even
-                        // for statement classes that preserve it on success (skipped at the top).
-                        context.clearWarnings();
-                    }
-                    String errorMessage = context.getState().getErrorMessage();
-                    if (errorMessage == null || errorMessage.isEmpty()) {
-                        // MysqlErrPacket refuses to send an empty message and substitutes
-                        // "Unknown error"; record the same text so SHOW ERRORS stays a 1:1
-                        // mirror of the ERR packet the client received.
-                        errorMessage = "Unknown error";
-                    }
-                    int errorCode = context.getState().getErrorCode() != null
-                            ? context.getState().getErrorCode().getCode() : 1064;
-                    context.addWarning(new QueryWarning("Error", String.valueOf(errorCode), errorMessage));
+                if (preservesDiagnosticsArea) {
+                    // A failure generates a message, which replaces the diagnostics area even for
+                    // statement classes that preserve it on success (skipped at the top). This
+                    // includes SHOW WARNINGS / SHOW ERRORS themselves: they only read the buffer
+                    // back while they succeed, and a client that just received an ERR packet for
+                    // one of them must find that error in the buffer, not the previous statement's
+                    // diagnostics.
+                    context.clearWarnings();
                 }
+                context.addWarning(QueryWarning.fromErrorState(context.getState()));
                 ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
                 if (coord != null) {
                     coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());

@@ -137,6 +137,12 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    // Whether StmtExecutor.execute() was entered for the statement currently being processed.
+    // execute() owns the session diagnostics area: it clears the previous statement's entries on
+    // entry and records its own failure on exit. The failure paths below must therefore do that
+    // work themselves only when execute() was never reached. The executor field above cannot
+    // answer this, because it is assigned before execute() is called. Reset wherever executor is.
+    private boolean executeInvoked = false;
 
     public ConnectProcessor(ConnectContext context) {
         this.ctx = context;
@@ -537,6 +543,7 @@ public class ConnectProcessor {
 
     private void resetStmtExecutionContext(boolean refreshQueryId) {
         executor = null;
+        executeInvoked = false;
         ctx.setExecutor(null);
         ctx.setQueryDetail(null);
         ctx.getState().reset();
@@ -556,6 +563,7 @@ public class ConnectProcessor {
 
     private void resetStmtRetryContext() {
         executor = null;
+        executeInvoked = false;
         ctx.setExecutor(null);
         ctx.getState().reset();
         ctx.resetReturnRows();
@@ -634,6 +642,7 @@ public class ConnectProcessor {
             if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
             }
+            executeInvoked = true;
             executor.execute();
         } catch (LargeInPredicateException e) {
             // we will retry this sql later, so don't audit here
@@ -719,9 +728,7 @@ public class ConnectProcessor {
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            // executor == null means the failure happened before StmtExecutor.execute() ran
-            // (processOnce resets it per request); execute() records its own failures.
-            if (executor == null) {
+            if (!executeInvoked) {
                 recordPreExecutionFailureDiagnostics();
             }
             // if parse failed, audit stmts together once
@@ -735,7 +742,7 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
-            if (executor == null) {
+            if (!executeInvoked) {
                 recordPreExecutionFailureDiagnostics();
             }
             // for safety
@@ -759,13 +766,7 @@ public class ConnectProcessor {
     // mirrors the ERR packet, following MySQL diagnostics-area semantics.
     private void recordPreExecutionFailureDiagnostics() {
         ctx.clearWarnings();
-        String errorMessage = ctx.getState().getErrorMessage();
-        if (errorMessage == null || errorMessage.isEmpty()) {
-            // Keep in sync with MysqlErrPacket, which substitutes "Unknown error" on the wire.
-            errorMessage = "Unknown error";
-        }
-        int errorCode = ctx.getState().getErrorCode() != null ? ctx.getState().getErrorCode().getCode() : 1064;
-        ctx.addWarning(new QueryWarning("Error", String.valueOf(errorCode), errorMessage));
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
     }
 
     private static class QueryAttemptResult {
@@ -979,6 +980,7 @@ public class ConnectProcessor {
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
                 needAddFinishQueryDetail = true;
+                executeInvoked = true;
                 executor.execute();
                 executor.addFinishedQueryDetail();
                 needAddFinishQueryDetail = false;
@@ -986,6 +988,7 @@ public class ConnectProcessor {
                 // Clear query detail. Otherwise, after collecting the profile, it will be mistakenly added to ctx.queryDetail,
                 // which still belongs to the previous query.
                 ctx.setQueryDetail(null);
+                executeInvoked = true;
                 executor.execute();
             }
 
@@ -1002,7 +1005,7 @@ public class ConnectProcessor {
             // same contract as handleQuery: a COM_STMT_EXECUTE rejected before
             // StmtExecutor.execute() ran (malformed parameters, etc.) must replace the previous
             // statement's diagnostics with its own error; execute() records its own failures.
-            if (executor == null) {
+            if (!executeInvoked) {
                 recordPreExecutionFailureDiagnostics();
             }
             if (enableAudit && executeStmt != null) {
@@ -1451,6 +1454,7 @@ public class ConnectProcessor {
         ctx.getState().reset();
         ctx.setMultiStmt(false);
         executor = null;
+        executeInvoked = false;
 
         packetBuf = req.byteBuffer();
 
@@ -1472,6 +1476,7 @@ public class ConnectProcessor {
         ctx.getState().reset();
         ctx.setMultiStmt(false);
         executor = null;
+        executeInvoked = false;
 
         // reset sequence id of MySQL protocol
         final MysqlChannel channel = ctx.getMysqlChannel();

@@ -15,6 +15,8 @@ show warnings;
 show errors;
 [UC]selct 1;
 show errors;
+[UC]show warnings where no_such_column = 'x';
+show errors;
 begin;
 insert into t_dst select cast(v as int) from t_src;
 show warnings;

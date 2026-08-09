@@ -24,7 +24,7 @@ SHOW ERRORS [LIMIT [offset,] row_count]
 | Code    | 诊断代码。                                            |
 | Message | 诊断信息的可读描述。                                   |
 
-警告缓冲区保存上一条语句的诊断信息，并在下一条可能产生诊断信息的语句开始执行时被替换（解析失败的语句会将其替换为自身的错误信息）。不访问表且不产生消息的语句——`SET`、`BEGIN`/`COMMIT`/`ROLLBACK`，以及包括 `SHOW WARNINGS` 和 `SHOW ERRORS` 在内的 `SHOW` 语句——不会改变缓冲区（与 MySQL 一致）。因此 `SHOW WARNINGS` 可以重复执行，并且在 `COMMIT` 之后仍会返回上一次导入的诊断信息。
+警告缓冲区保存上一条语句的诊断信息，并在下一条语句开始执行时被替换；语句失败时（包括解析失败）则替换为该语句自身的错误信息。以下三类语句执行成功时不会改变缓冲区：`SET`、`BEGIN`/`COMMIT`/`ROLLBACK`，以及包括 `SHOW WARNINGS` 和 `SHOW ERRORS` 在内的 `SHOW` 语句。因此 `SHOW WARNINGS` 可以重复执行，并且在 `COMMIT` 之后仍会返回上一次导入的诊断信息。
 
 ## 示例
 
@@ -58,3 +58,9 @@ mysql> SHOW ERRORS;
 | Error | 5502 | Getting analyzing error. Detail message: Unknown table 'no_such_table'.  |
 +-------+------+---------------------------------------------------------------------------+
 ```
+
+## 限制
+
+- 对于导入或 `INSERT`，OK 包中的 `warning_count` 表示被过滤或被替换的行数，而 `SHOW WARNINGS` 返回一行汇总信息，两者的数值并不一致。在 MySQL 中，`warning_count` 等于 `SHOW WARNINGS` 返回的行数。
+- 诊断信息记录在实际执行该语句的 FE 上。当会话连接到 Follower FE 时，`INSERT` 或导入会被转发到 Leader 并在 Leader 上记录警告，因此在 Follower 上执行 `SHOW WARNINGS` 会返回空结果。需要连接到 Leader FE 才能读取。
+- 读取数据过程中产生的诊断信息（例如 `CAST` 溢出后返回 `NULL`）目前尚未记录。`SHOW WARNINGS` 覆盖的是导入或 `INSERT` 过滤掉的行，以及执行失败的语句的错误信息。

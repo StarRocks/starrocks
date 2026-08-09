@@ -89,4 +89,30 @@ public class ShowWarningsProducerTest {
         Assertions.assertEquals(1, ctx.getWarnings().size());
         Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
     }
+
+    // SHOW WARNINGS / SHOW ERRORS read the buffer back only while they succeed. When one of them
+    // fails the client receives an ERR packet, so the buffer must hold that error instead of the
+    // previous statement's diagnostics, which the client would otherwise read as the outcome of a
+    // statement that never produced them.
+    @Test
+    public void testFailingShowWarningsReplacesDiagnostics() throws Exception {
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ctx.clearWarnings();
+        ctx.addWarning(new QueryWarning("Warning", "1265", "seed from the previous load"));
+
+        // An unknown column in the WHERE clause fails while ShowStmtAnalyzer resolves the slot
+        // against the Level / Code / Message metadata of the statement.
+        new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                "show warnings where no_such_column = 'x'", ctx.getSessionVariable().getSqlMode())).execute();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+
+        ShowResultSet errors = ShowExecutor.execute(new ShowWarningStmt(null, true, NodePosition.ZERO), ctx);
+        Assertions.assertEquals(1, errors.getResultRows().size());
+        Assertions.assertEquals("Error", errors.getResultRows().get(0).get(0));
+    }
 }
