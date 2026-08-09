@@ -100,9 +100,13 @@ void PkTabletUnsortSSTWriter::reconcile_entry(std::string_view key, uint64_t ord
     // not allocate; only a first-seen key materializes the owning std::string on the emplace branch.
     auto it = _map.find(key);
     if (it == _map.end()) {
-        auto [inserted_it, inserted] = _map.emplace(std::string(key), Entry{order, rowid});
-        DCHECK(inserted);
-        _keys_heap_size += is_string_heap_allocated(inserted_it->first) ? inserted_it->first.capacity() : 0;
+        // Pre-#77251 logical estimate. The counting-allocator accounting #77251 introduced makes
+        // is_map_full() fire roughly every chunk on a real UNSHARE run (measured: ~3500 spills for a
+        // 2 GB input, one per 3-8k rows, where the 100 MB bound implies ~20), which leaves flush with
+        // a K-way merge in the thousands. Revert the accounting to isolate that.
+        static constexpr size_t kBtreeEntryOverhead = 24;
+        _keys_heap_size += key.size() + sizeof(Entry) + kBtreeEntryOverhead;
+        _map.emplace(std::string(key), Entry{order, rowid});
     } else if (order > it->second.order) {
         if (it->second.rowid != kDeleteRowid) {
             _deleted_rowids.push_back(it->second.rowid);
@@ -203,8 +207,9 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
-    DCHECK_GE(_map_node_bytes, 0);
-    return sizeof(_map) + static_cast<size_t>(_map_node_bytes) + _keys_heap_size;
+    // `_keys_heap_size` carries the whole per-entry estimate here (key + Entry + node overhead),
+    // so the counting allocator's `_map_node_bytes` is deliberately not added on top.
+    return _keys_heap_size;
 }
 
 size_t PkTabletUnsortSSTWriter::memory_usage() const {
