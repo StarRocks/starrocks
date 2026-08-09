@@ -22,4 +22,6 @@ insert into t_dst select cast(v as int) from t_src;
 show warnings;
 commit;
 show warnings;
+use db_${uuid0};
+show warnings;
 drop database db_${uuid0} force;

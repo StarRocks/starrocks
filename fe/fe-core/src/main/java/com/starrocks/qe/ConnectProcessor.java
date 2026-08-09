@@ -187,6 +187,13 @@ public class ConnectProcessor {
     private void handleChangeUser() throws IOException {
         if (!MysqlProto.changeUser(ctx, packetBuf)) {
             LOG.warn("Failed to execute command `Change user`.");
+            // MysqlProto.changeUser answers a rejected COM_CHANGE_USER itself, leaving the error
+            // on the state (an unsupported authentication mode, or a database that cannot be
+            // opened for the new user), and returns before resetConnectionSession() drops the
+            // buffer. Replace the diagnostics area here so SHOW ERRORS reports that rejection, and
+            // so the previous user's diagnostics do not survive an attempt to hand this connection
+            // to somebody else.
+            replaceDiagnosticsForCommand();
             return;
         }
         handleResetConnection();
@@ -769,6 +776,22 @@ public class ConnectProcessor {
         ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
     }
 
+    // COM_INIT_DB, COM_FIELD_LIST, a rejected COM_CHANGE_USER and a command code that is unknown
+    // or unsupported are answered without ever building a StmtExecutor, so they never reach the
+    // execute() logic that owns the session diagnostics area. They own it here instead: the
+    // previous statement's entries are dropped, and the error that went into the ERR packet, when
+    // there is one, is recorded so SHOW ERRORS keeps mirroring what the client received. COM_PING,
+    // COM_QUIT, COM_STMT_CLOSE and COM_STMT_RESET are left alone because they report no error of
+    // their own, and clearing on them would drop a load's warnings behind a connection pool's
+    // liveness check.
+    private void replaceDiagnosticsForCommand() {
+        if (ctx.getState().isError()) {
+            recordPreExecutionFailureDiagnostics();
+        } else {
+            ctx.clearWarnings();
+        }
+    }
+
     private static class QueryAttemptResult {
         final boolean allStatementsAreSet;
         final boolean shouldTerminate;
@@ -1040,6 +1063,7 @@ public class ConnectProcessor {
             ErrorReport.report(ErrorCode.ERR_UNKNOWN_COM_ERROR);
             ctx.getState().setError("Unknown command(" + command + ")");
             LOG.debug("Unknown MySQL protocol command");
+            replaceDiagnosticsForCommand();
             return;
         }
         ctx.setCommand(command);
@@ -1051,6 +1075,7 @@ public class ConnectProcessor {
         switch (command) {
             case COM_INIT_DB:
                 handleInitDb();
+                replaceDiagnosticsForCommand();
                 break;
             case COM_QUIT:
                 handleQuit();
@@ -1068,6 +1093,7 @@ public class ConnectProcessor {
                 break;
             case COM_FIELD_LIST:
                 handleFieldList();
+                replaceDiagnosticsForCommand();
                 break;
             case COM_CHANGE_USER:
                 handleChangeUser();
@@ -1084,6 +1110,7 @@ public class ConnectProcessor {
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
                 LOG.debug("Unsupported command: {}", command);
+                replaceDiagnosticsForCommand();
                 break;
         }
     }

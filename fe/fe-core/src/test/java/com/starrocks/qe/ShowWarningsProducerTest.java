@@ -19,10 +19,13 @@ import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 
 // End-to-end coverage for the warning producers that feed SHOW WARNINGS / SHOW ERRORS:
@@ -88,6 +91,47 @@ public class ShowWarningsProducerTest {
         Assertions.assertTrue(ctx.getState().isError());
         Assertions.assertEquals(1, ctx.getWarnings().size());
         Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
+    }
+
+    // A statement forwarded to the leader is answered with the leader's own ERR packet, relayed by
+    // ConnectProcessor.finalizeCommand(). TMasterOpResult brings the message back but no error
+    // code, so a diagnostic recorded on this FE would report the 1064 fallback next to the real
+    // code the client just read. Nothing is recorded instead. getOutputPacket() returns non-null
+    // exactly when a leader result came back, which is what this stubs.
+    @Test
+    public void testForwardedFailureRecordsNoDiagnostic() throws Exception {
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ctx.clearWarnings();
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public ByteBuffer getOutputPacket() {
+                return ByteBuffer.allocate(1);
+            }
+        };
+
+        new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                "select * from table_that_does_not_exist", ctx.getSessionVariable().getSqlMode())).execute();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // USE belongs to no preserving class, so it drops the previous statement's diagnostics. The
+    // MySQL client sends USE as the COM_INIT_DB command instead of a statement, and
+    // ConnectProcessor clears the buffer there as well, so the buffer ends up in the same state
+    // whichever route the client takes.
+    @Test
+    public void testUseDatabaseClearsDiagnostics() throws Exception {
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ctx.clearWarnings();
+        ctx.addWarning(new QueryWarning("Warning", "1265", "seed from the previous load"));
+
+        new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                "use test", ctx.getSessionVariable().getSqlMode())).execute();
+
+        Assertions.assertFalse(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
     }
 
     // SHOW WARNINGS / SHOW ERRORS read the buffer back only while they succeed. When one of them

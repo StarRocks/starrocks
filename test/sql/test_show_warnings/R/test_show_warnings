@@ -77,6 +77,12 @@ show warnings;
 -- result:
 [REGEX].*Warning.*1265.*row\(s\) filtered or substituted to NULL during load.*tracking_url.*
 -- !result
+use db_${uuid0};
+-- result:
+-- !result
+show warnings;
+-- result:
+-- !result
 drop database db_${uuid0} force;
 -- result:
 -- !result

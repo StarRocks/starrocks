@@ -406,6 +406,34 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertTrue(ctx.getWarnings().isEmpty());
     }
 
+    // A rejected COM_CHANGE_USER is answered by MysqlProto.changeUser itself and returns before
+    // resetConnectionSession() runs, so the error the client just received has to be recorded on
+    // the way out of handleChangeUser.
+    @Test
+    public void testChangeUserFailureReplacesSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                // Mirrors the real rejection paths: MysqlProto leaves the error on the state and
+                // answers the client itself.
+                context.getState().setError("Unknown database(no_such_db)");
+                return false;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
     @Test
     public void testPing() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
@@ -673,6 +701,116 @@ public class ConnectProcessorTest extends DDLTestBase {
         } finally {
             Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
         }
+    }
+
+    // A client that switches database with COM_INIT_DB instead of a USE statement never builds a
+    // StmtExecutor, so nothing would clear the diagnostics area and the previous statement's
+    // warnings would stay visible after the switch.
+    @Test
+    public void testInitDbClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertFalse(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // A failing COM_INIT_DB answers with an ERR packet, so SHOW ERRORS has to report that error
+    // rather than the previous statement's diagnostics.
+    @Test
+    public void testInitDbFailureReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_INIT_DB.getCommandCode());
+        serializer.writeEofString("db_that_does_not_exist");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // COM_FIELD_LIST is the other command answered without a StmtExecutor that can report an error
+    // of its own, so it follows the same contract.
+    @Test
+    public void testFieldListFailureReplacesSessionWarnings() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_FIELD_LIST.getCommandCode());
+        serializer.writeNulTerminateString("");
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code the dispatcher does not implement is rejected with an ERR packet before any
+    // statement handling, and must replace the diagnostics area like the handled commands do.
+    @Test
+    public void testUnsupportedCommandReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_CREATE_DB.getCommandCode());
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code that maps to no MysqlCommand is rejected before the dispatch switch is even
+    // reached, which is the other path that answers with an ERR packet and no StmtExecutor.
+    @Test
+    public void testUnknownCommandCodeReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(100);
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        // ErrorReport.report writes the error code through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.

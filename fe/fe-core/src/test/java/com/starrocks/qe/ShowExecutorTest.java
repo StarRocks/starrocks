@@ -88,6 +88,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -725,6 +726,27 @@ public class ShowExecutorTest {
         ShowResultSet offset = ShowExecutor.execute(newShowWarning(false, new LimitElement(1, 1)), ctx);
         Assertions.assertEquals(1, offset.getResultRows().size());
         Assertions.assertEquals("2", offset.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowWarningsMessageColumnFitsDiagnostics() {
+        QueryWarning warning = QueryWarning.filteredRowsWarning(3,
+                "http://127.0.0.1:8040/api/_load_error_log?file=error_log_8b2c1d0e4f5a6b7c9d8e7f6a5b4c3d2e");
+        ctx.addWarning(warning);
+
+        ShowResultSet result = ShowExecutor.execute(newShowWarning(false, null), ctx);
+        Assertions.assertEquals(warning.getMessage(), result.getResultRows().get(0).get(2));
+
+        // MysqlCodec.writeField derives the ColumnDefinition41 column length from the declared
+        // type, so the Message column has to advertise at least as much room as the diagnostics
+        // this statement returns. A load warning already carries a tracking URL, and an analysis
+        // error carries the full server message.
+        Column message = result.getMetaData().getColumn(2);
+        Assertions.assertEquals("Message", message.getName());
+        int declaredLength = ((ScalarType) message.getType()).getLength();
+        Assertions.assertTrue(declaredLength >= warning.getMessage().length(),
+                "Message column advertises " + declaredLength + " characters for a "
+                        + warning.getMessage().length() + " character diagnostic");
     }
 
     private static ShowWarningStmt newShowWarning(boolean showErrors, LimitElement limit) {

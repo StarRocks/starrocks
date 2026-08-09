@@ -14,10 +14,11 @@
 
 package com.starrocks.qe;
 
-// A single SQL diagnostic produced during statement execution and surfaced to clients
-// through SHOW WARNINGS / SHOW ERRORS and the MySQL warning_count field. The level follows
-// the MySQL diagnostics area: "Note", "Warning", or "Error". The three fields map directly
-// to the Level / Code / Message columns of SHOW WARNINGS.
+// A single SQL diagnostic produced during statement execution and surfaced to clients through
+// SHOW WARNINGS / SHOW ERRORS. The level follows the MySQL diagnostics area: "Note", "Warning",
+// or "Error". The three fields map directly to the Level / Code / Message columns of
+// SHOW WARNINGS. The OK packet's warning_count is set separately from these entries and is left
+// unchanged by this class.
 public class QueryWarning {
     private static final String LEVEL_WARNING = "Warning";
     private static final String LEVEL_ERROR = "Error";
@@ -51,7 +52,9 @@ public class QueryWarning {
     // The diagnostic for a statement that failed, shared by the path that fails inside
     // StmtExecutor.execute() and the path that is rejected before it (ConnectProcessor). Both
     // read the same QueryState the ERR packet is serialized from, so SHOW ERRORS stays a 1:1
-    // mirror of the error the client received.
+    // mirror of the error the client received. A statement forwarded to the leader is the one
+    // case where the packet is not built from this state, and StmtExecutor.execute() records
+    // nothing for it rather than reporting a code the client never saw.
     public static QueryWarning fromErrorState(QueryState state) {
         String message = state.getErrorMessage();
         if (message == null || message.isEmpty()) {

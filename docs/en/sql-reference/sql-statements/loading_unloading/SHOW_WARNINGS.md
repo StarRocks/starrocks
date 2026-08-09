@@ -24,7 +24,7 @@ SHOW ERRORS [LIMIT [offset,] row_count]
 | Code    | The diagnostic code.                                 |
 | Message | The human-readable description of the diagnostic.    |
 
-The warning buffer holds the diagnostics of the previous statement and is replaced when the next statement begins execution, or with its own error when a statement fails (including a statement that fails to parse). Three statement classes leave the buffer unchanged when they succeed: `SET`, `BEGIN` / `COMMIT` / `ROLLBACK`, and `SHOW` (including `SHOW WARNINGS` and `SHOW ERRORS` themselves). `SHOW WARNINGS` can therefore be issued repeatedly, and still returns the diagnostics of the last load after a `COMMIT`.
+The warning buffer holds the diagnostics of the previous statement and is replaced when the next statement begins execution, or with its own error when a statement fails (including a statement that fails to parse). Three statement classes leave the buffer unchanged when they succeed: `SET`, `BEGIN` / `COMMIT` / `ROLLBACK`, and `SHOW` (including `SHOW WARNINGS` and `SHOW ERRORS` themselves). `SHOW WARNINGS` can therefore be issued repeatedly, and still returns the diagnostics of the last load after a `COMMIT`. Switching database with `USE` replaces the buffer as well, whether the client sends it as a statement or as the MySQL `COM_INIT_DB` command.
 
 ## Examples
 
@@ -62,5 +62,5 @@ mysql> SHOW ERRORS;
 ## Limitations
 
 - For a load or `INSERT`, `warning_count` on the OK packet carries the number of rows that were filtered or substituted, while `SHOW WARNINGS` returns a single row summarizing them. The two values are not expected to match. In MySQL, `warning_count` equals the number of rows `SHOW WARNINGS` returns.
-- The diagnostics are recorded on the FE that executes the statement. When a session is connected to a follower FE, an `INSERT` or load is forwarded to the leader and its warnings are recorded there, so `SHOW WARNINGS` on the follower returns an empty result. Connect to the leader FE to read them.
+- The diagnostics are recorded on the FE that executes the statement. When a session is connected to a follower FE, an `INSERT` or load is forwarded to the leader and its warnings are recorded there, so `SHOW WARNINGS` on the follower returns an empty result. A forwarded statement that fails is answered with the leader's error response, which the follower relays without the error code, so the follower records nothing for it and `SHOW ERRORS` is empty as well. Connect to the leader FE to read them.
 - Diagnostics produced while reading data, such as a `CAST` that overflows and yields `NULL`, are not recorded yet. `SHOW WARNINGS` covers the rows filtered by a load or `INSERT`, and the error of a statement that failed.
