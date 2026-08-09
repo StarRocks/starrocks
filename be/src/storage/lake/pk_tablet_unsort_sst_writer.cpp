@@ -21,6 +21,7 @@
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
@@ -208,6 +209,7 @@ size_t PkTabletUnsortSSTWriter::memory_usage() const {
 }
 
 Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
+    SCOPED_RAW_TIMER(&_spill_ns);
     if (_map.empty()) {
         return Status::OK();
     }
@@ -251,6 +253,8 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
 }
 
 Status PkTabletUnsortSSTWriter::merge_intermediates_into(sstable::TableBuilder* builder) {
+    SCOPED_RAW_TIMER(&_merge_ns);
+    _intermediate_sst_total = _intermediate_ssts.size();
     // Open every intermediate SST for reading. `rfs`/`tables` own the files/tables for the whole
     // merge. `iter_holders` owns the child iterators ONLY until the merging iterator is built: the
     // MergingIterator returned by NewMergingIterator takes ownership of the children and deletes them

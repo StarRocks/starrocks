@@ -26,6 +26,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
@@ -476,6 +477,9 @@ Status VerticalGeneralTabletWriter::flush_columns() {
 }
 
 Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
+    // Chunks were only buffered during write(); this loop is where segments are actually
+    // finalized and uploaded, so it is the leg every writer pays regardless of key layout.
+    SCOPED_RAW_TIMER(&_stats.finish_segment_ns);
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;

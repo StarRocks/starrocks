@@ -215,6 +215,17 @@ struct OlapWriterStatistics {
     int64_t write_remote_ns = 0;    // how much time is spent on write
     int64_t bytes_write_remote = 0; // how many bytes are written
     int64_t segment_count = 0;      // how many files are written
+
+    // finish() breakdown. A lake writer buffers chunks during write() and only materializes files in
+    // finish(), so finish dominates a compaction's wall clock and needs to be attributable. The three
+    // legs are disjoint and sum to the writer's share of writer_finish_ns.
+    int64_t finish_sst_ns = 0;          // PK-index SST flush, including the intermediate merge below
+    int64_t finish_rows_mapper_ns = 0;  // rows-mapper finalize
+    int64_t finish_segment_ns = 0;      // segment footer + upload (every writer pays this)
+    // Inside finish_sst_ns, for a separate-sort-key PK table whose keys arrive unsorted.
+    int64_t unsort_sst_spill_ns = 0;    // spilling the in-memory map to intermediate SSTs
+    int64_t unsort_sst_spill_count = 0; // how many intermediate SSTs the merge below has to K-way merge
+    int64_t unsort_sst_merge_ns = 0;    // merging those intermediates into the final SST
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";

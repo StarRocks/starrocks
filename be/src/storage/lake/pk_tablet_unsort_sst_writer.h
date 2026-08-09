@@ -62,6 +62,11 @@ public:
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                             const std::shared_ptr<FileSystem>& fs) override;
     StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() override;
+    void collect_sst_stats(OlapWriterStatistics* stats) const override {
+        stats->unsort_sst_spill_ns += _spill_ns;
+        stats->unsort_sst_spill_count += static_cast<int64_t>(_intermediate_sst_total);
+        stats->unsort_sst_merge_ns += _merge_ns;
+    }
     bool has_file_info() const override { return _wf != nullptr; }
     std::vector<uint32_t> take_deleted_rowids() override { return std::move(_deleted_rowids); }
     MutableColumnPtr take_delete_keys() override { return std::move(_delete_keys); }
@@ -122,6 +127,12 @@ private:
 
     // Bytes allocated for B-tree nodes. MapAllocator maintains this counter incrementally, so
     // checking the spill threshold does not have to traverse the whole tree.
+    // finish() attribution: how long spilling and the K-way merge took, and how many intermediate
+    // SSTs the merge had to consume (the merge's K).
+    int64_t _spill_ns = 0;
+    int64_t _merge_ns = 0;
+    size_t _intermediate_sst_total = 0;
+
     int64_t _map_node_bytes = 0;
     Map _map;
     std::vector<uint32_t> _deleted_rowids;

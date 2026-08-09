@@ -324,17 +324,22 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
 }
 
 Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
-    for (auto& sst_writer : _pk_sst_writers) {
-        if (sst_writer->has_file_info()) {
-            ASSIGN_OR_RETURN(auto sst_ret, sst_writer->flush_sst_writer());
-            auto [sst_file_info, sst_range] = std::move(sst_ret);
-            _ssts.emplace_back(sst_file_info);
-            _sst_ranges.emplace_back(sst_range);
-            _seg_delvecs.emplace_back(sst_writer->take_deleted_rowids());
+    {
+        SCOPED_RAW_TIMER(&_stats.finish_sst_ns);
+        for (auto& sst_writer : _pk_sst_writers) {
+            if (sst_writer->has_file_info()) {
+                ASSIGN_OR_RETURN(auto sst_ret, sst_writer->flush_sst_writer());
+                auto [sst_file_info, sst_range] = std::move(sst_ret);
+                _ssts.emplace_back(sst_file_info);
+                _sst_ranges.emplace_back(sst_range);
+                _seg_delvecs.emplace_back(sst_writer->take_deleted_rowids());
+            }
+            sst_writer->collect_sst_stats(&_stats);
         }
+        _pk_sst_writers.clear();
     }
-    _pk_sst_writers.clear();
     if (_rows_mapper_builder != nullptr) {
+        SCOPED_RAW_TIMER(&_stats.finish_rows_mapper_ns);
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
         _lcrm_file = _rows_mapper_builder->file_info();
     }

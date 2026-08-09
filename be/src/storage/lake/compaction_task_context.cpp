@@ -60,6 +60,12 @@ void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
     write_segment_count = writer_stats.segment_count;
     write_segment_bytes = writer_stats.bytes_write_remote;
     io_ns_write_remote = writer_stats.write_remote_ns;
+    writer_finish_sst_ns = writer_stats.finish_sst_ns;
+    writer_finish_rows_mapper_ns = writer_stats.finish_rows_mapper_ns;
+    writer_finish_segment_ns = writer_stats.finish_segment_ns;
+    unsort_sst_spill_ns = writer_stats.unsort_sst_spill_ns;
+    unsort_sst_spill_count = writer_stats.unsort_sst_spill_count;
+    unsort_sst_merge_ns = writer_stats.unsort_sst_merge_ns;
 }
 
 CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& that) const {
@@ -86,6 +92,12 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.writer_flush_ns += that.writer_flush_ns;
     diff.writer_finish_ns += that.writer_finish_ns;
     diff.writer_close_ns += that.writer_close_ns;
+    diff.writer_finish_sst_ns += that.writer_finish_sst_ns;
+    diff.writer_finish_rows_mapper_ns += that.writer_finish_rows_mapper_ns;
+    diff.writer_finish_segment_ns += that.writer_finish_segment_ns;
+    diff.unsort_sst_spill_ns += that.unsort_sst_spill_ns;
+    diff.unsort_sst_spill_count += that.unsort_sst_spill_count;
+    diff.unsort_sst_merge_ns += that.unsort_sst_merge_ns;
     diff.mask_io_ns += that.mask_io_ns;
     diff.txn_log_build_ns += that.txn_log_build_ns;
     diff.txn_log_write_ns += that.txn_log_write_ns;
@@ -151,6 +163,12 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.writer_flush_ns -= that.writer_flush_ns;
     diff.writer_finish_ns -= that.writer_finish_ns;
     diff.writer_close_ns -= that.writer_close_ns;
+    diff.writer_finish_sst_ns -= that.writer_finish_sst_ns;
+    diff.writer_finish_rows_mapper_ns -= that.writer_finish_rows_mapper_ns;
+    diff.writer_finish_segment_ns -= that.writer_finish_segment_ns;
+    diff.unsort_sst_spill_ns -= that.unsort_sst_spill_ns;
+    diff.unsort_sst_spill_count -= that.unsort_sst_spill_count;
+    diff.unsort_sst_merge_ns -= that.unsort_sst_merge_ns;
     diff.mask_io_ns -= that.mask_io_ns;
     diff.txn_log_build_ns -= that.txn_log_build_ns;
     diff.txn_log_write_ns -= that.txn_log_write_ns;
@@ -232,6 +250,12 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("writer_flush_ns", rapidjson::Value(s.writer_flush_ns), allocator);
     root.AddMember("writer_finish_ns", rapidjson::Value(s.writer_finish_ns), allocator);
     root.AddMember("writer_close_ns", rapidjson::Value(s.writer_close_ns), allocator);
+    root.AddMember("writer_finish_sst_ns", rapidjson::Value(s.writer_finish_sst_ns), allocator);
+    root.AddMember("writer_finish_rows_mapper_ns", rapidjson::Value(s.writer_finish_rows_mapper_ns), allocator);
+    root.AddMember("writer_finish_segment_ns", rapidjson::Value(s.writer_finish_segment_ns), allocator);
+    root.AddMember("unsort_sst_spill_ns", rapidjson::Value(s.unsort_sst_spill_ns), allocator);
+    root.AddMember("unsort_sst_spill_count", rapidjson::Value(s.unsort_sst_spill_count), allocator);
+    root.AddMember("unsort_sst_merge_ns", rapidjson::Value(s.unsort_sst_merge_ns), allocator);
     root.AddMember("mask_io_ns", rapidjson::Value(s.mask_io_ns), allocator);
     root.AddMember("txn_log_build_ns", rapidjson::Value(s.txn_log_build_ns), allocator);
     root.AddMember("txn_log_write_ns", rapidjson::Value(s.txn_log_write_ns), allocator);
