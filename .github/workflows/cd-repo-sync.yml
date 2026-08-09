@@ -50,9 +50,14 @@ jobs:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
       SOURCE_REPO: ${{ inputs.SOURCE_REPO }}
+      # reverse sync: scrub CelerData mechanism/issue wording from title+body so the
+      # SR PR reads like a normal upstream contribution (get_pr_info.py honors this).
+      REVERSE_SCRUB: "1"
     outputs:
       assignees: ${{ steps.ori_pr_info.outputs.assignees }}
       title: ${{ steps.ori_pr_info.outputs.title }}
+      # source PR's branch name -> used verbatim as the SR PR head branch (native look)
+      head_ref: ${{ steps.ori_pr_info.outputs.head_ref }}
     steps:
       - name: Ori PR Info
         id: ori_pr_info
@@ -69,6 +74,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
       GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      # PR head branch = the source PR's branch name (scrubbed model-2: no cd-sync marker)
+      PR_BRANCH: ${{ needs.pr-info.outputs.head_ref }}
     steps:
       - name: clean
         run: |
@@ -83,8 +90,8 @@ jobs:
 
       - name: Clean Branches
         env:
-          source_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.PR_ID }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          source_branch: ${{ inputs.BRANCH }}-src-${{ inputs.PR_ID }}
+          destination_branch: ${{ env.PR_BRANCH }}
         run: |
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
@@ -92,7 +99,7 @@ jobs:
       - name: sync repo to branch
         env:
           source_branch: ${{ inputs.BRANCH }}
-          destination_branch: ${{ inputs.BRANCH }}-cd-sync-${{ inputs.PR_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-src-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
         run: |
           source_repo_dir=${source_repo#*/}
@@ -112,7 +119,7 @@ jobs:
         run: |
           git pull
           git checkout ${{ inputs.BRANCH }}
-          pr_branch=${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          pr_branch=${{ env.PR_BRANCH }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
           git push -u origin ${pr_branch}
@@ -142,19 +149,21 @@ jobs:
           cd ${{ github.workspace }}/elastic-service
           ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
           cd ${{ github.workspace }}
-          git push -u origin ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
+          git push -u origin ${{ env.PR_BRANCH }}
 
       - name: Create pull request
         id: create_pr
         if: steps.previous-check.outputs.RES == 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
-          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
-          # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
-          # (official template, all sections) via the file get_pr_info.py wrote in the
-          # pr-info job, plus any conflict info run_cherry_pick.sh prepended to it.
+          # model-2: label set is just `sync` (+ SHA/sr labels from cherry-pick); no `cd-sync`
+          PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
+          HEAD: ${{ env.PR_BRANCH }}
+          # title is already scrubbed by get_pr_info.py (REVERSE_SCRUB); no `(cd-sync #N)` marker
+          TITLE: "${{ needs.pr-info.outputs.title }}"
+          # Mirror the forward flow (repo-sync.yml): carry the source PR's full (scrubbed)
+          # body via the file get_pr_info.py wrote in the pr-info job, plus any conflict
+          # info run_cherry_pick.sh prepended to it.
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
@@ -170,9 +179,9 @@ jobs:
         if: steps.previous-check.outputs.RES != 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }},pending
-          HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
-          TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
+          PR_LABEL: sync,${{ steps.cherry-pick.outputs.LABEL }},pending
+          HEAD: ${{ env.PR_BRANCH }}
+          TITLE: "${{ needs.pr-info.outputs.title }}"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}

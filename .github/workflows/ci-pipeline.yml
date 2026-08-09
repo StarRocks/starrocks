@@ -39,9 +39,12 @@ jobs:
     steps:
       - name: Sync Check
         id: check
+        # model-2: reverse-synced PRs (label `sync`, scrubbed title/branch) run the
+        # normal full ci-pipeline. The `sync` label is NO LONGER a skip trigger here
+        # (it stays only for anti-loop in ci-sync). Forward `(sync #` titles and
+        # `-sync-` head branches (CD-side flow) are still skipped.
         if: >
           (!contains(github.event.pull_request.title, '(sync #') &&
-          !contains(github.event.pull_request.labels.*.name, 'sync') &&
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))) ||
           contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
@@ -918,18 +921,10 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - name: check sync
-        id: check-sync
-        run: |
-          labels=`gh pr view ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --json labels -q '.labels[].name'`
-          echo "${labels}"
-          if [[ "${labels}" =~ sync ]]; then
-            echo "IS_SYNC=true" >> $GITHUB_OUTPUT
-          fi
-
+      # model-2: synced PRs run the full build like any normal PR (the old IS_SYNC
+      # skip + the separate cd-sync-pipeline.yml BUILD-only path are removed).
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
-        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: be-path-filter
           path: be-path-filter
@@ -938,7 +933,6 @@ jobs:
 
       - name: Download FE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
-        if: steps.check-sync.outputs.IS_SYNC != 'true'
         with:
           name: fe-path-filter
           path: fe-path-filter
@@ -947,7 +941,6 @@ jobs:
 
       - name: Parsing BE path-filter file
         id: parsing-be-path-filter
-        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e be-path-filter ]]; then
             cd be-path-filter/; ls;
@@ -958,7 +951,6 @@ jobs:
 
       - name: Parsing FE path-filter file
         id: parsing-fe-path-filter
-        if: steps.check-sync.outputs.IS_SYNC != 'true'
         run: |
           if [[ -e fe-path-filter ]]; then
             cd fe-path-filter/; ls;
@@ -978,7 +970,6 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
-        if: steps.check-sync.outputs.IS_SYNC != 'true'
         env:
           package: ${{ env.package }}
           pr_pom_change: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
