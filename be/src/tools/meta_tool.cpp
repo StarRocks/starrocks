@@ -78,6 +78,7 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
@@ -133,7 +134,7 @@ DEFINE_string(
         "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
         "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
         "print_lake_bundle_metadata, print_lake_txn_log, print_lake_combined_txn_log, print_lake_schema, dump_zonemap, "
-        "dump_lake_persistent_index_sst, dump_page_footer");
+        "dump_lake_persistent_index_sst, dump_page_footer, print_delvec");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -155,6 +156,8 @@ DEFINE_string(encryption_meta, "",
               "hex-encoded encryption_meta from PersistentIndexSstablePB (for dump_lake_persistent_index_sst)");
 DEFINE_string(fe_host, "", "FE master hostname for TDE key refresh (for dump_lake_persistent_index_sst)");
 DEFINE_int32(fe_port, 9020, "FE master thrift port for TDE key refresh (for dump_lake_persistent_index_sst)");
+DEFINE_uint64(delvec_offset, 0, "byte offset of the delete vector inside the delvec file (for print_delvec)");
+DEFINE_uint64(delvec_size, 0, "byte size of the delete vector, 0 means to the end of the file (for print_delvec)");
 
 // flag defined in gflags library
 DECLARE_bool(help);
@@ -230,6 +233,11 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=dump_lake_persistent_index_sst --file=</path/to/persistent_index.sst>
                [--encryption_meta=<hex>] [--fe_host=<host>] [--fe_port=<port>]
       (for encrypted SST files, provide --encryption_meta + --fe_host [+ --fe_port])
+    print_delvec:
+      {progname} --operation=print_delvec --file=</path/to/file.delvec>
+               [--delvec_offset=<offset>] [--delvec_size=<size>]
+      (offset/size come from the tablet metadata's delvec_meta, printed by print_lake_metadata;
+       omit them when the file holds a single delete vector)
     )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -433,6 +441,69 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
         std::cerr << "iterator error: " << iter->status() << std::endl;
     }
     std::cout << fmt::format("\nTotal entries: {}\n", entry_count);
+}
+
+// Decode one delete vector and print the rowids it marks as deleted.
+//
+// A delvec file is a plain concatenation of delete vectors; which slice belongs to which
+// segment is recorded outside the file, in the tablet metadata's `delvec_meta`
+// (segment id -> DelvecPagePB {version, offset, size}). So pass the offset/size read from
+// there to decode a single segment's delete vector; `size` == 0 means "to the end of file",
+// which is what a delvec file holding a single delete vector needs.
+//
+// Each delete vector is |1-byte format version (0x01)|serialized roaring bitmap|, and the
+// integers in the bitmap are the deleted rowids (0-based) within that segment.
+void print_delvec(const std::string& file_name, uint64_t offset, uint64_t size) {
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cerr << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto file = std::move(res).value();
+
+    auto size_res = file->get_size();
+    if (!size_res.ok()) {
+        std::cerr << "get file size failed: " << size_res.status() << std::endl;
+        return;
+    }
+    auto file_size = static_cast<uint64_t>(size_res.value());
+    if (offset >= file_size) {
+        std::cerr << fmt::format("offset {} is beyond the end of file, file size: {}\n", offset, file_size);
+        return;
+    }
+    if (size == 0) {
+        size = file_size - offset;
+    } else if (size > file_size - offset) {
+        std::cerr << fmt::format("[{}, {}) is beyond the end of file, file size: {}\n", offset, offset + size,
+                                 file_size);
+        return;
+    }
+
+    std::string buff(size, '\0');
+    auto st = file->read_at_fully(offset, buff.data(), buff.size());
+    if (!st.ok()) {
+        std::cerr << "read delvec failed: " << st << std::endl;
+        return;
+    }
+
+    starrocks::DelVector delvec;
+    // The version lives in the metadata, not in the delvec itself, so pass a placeholder
+    // and don't print it back. Roaring's deserialization throws on a malformed bitmap,
+    // which a mistyped offset/size easily produces, so keep that from aborting the tool.
+    try {
+        st = delvec.load(/*version=*/0, buff.data(), buff.size());
+    } catch (const std::exception& e) {
+        std::cerr << "decode delvec failed: " << e.what() << std::endl;
+        return;
+    }
+    if (!st.ok()) {
+        std::cerr << "load delvec failed: " << st << std::endl;
+        return;
+    }
+    std::cout << fmt::format("File:        {}\n", file_name);
+    std::cout << fmt::format("Range:       [{}, {}) {} bytes\n", offset, offset + size, size);
+    std::cout << fmt::format("Cardinality: {}\n", delvec.cardinality());
+    std::cout << fmt::format("Deleted rowids: {}\n", delvec.empty() ? std::string("{}") : delvec.roaring()->toString());
 }
 
 void show_meta() {
@@ -1927,6 +1998,12 @@ int meta_tool_main(int argc, char** argv) {
             enc_info = std::move(enc_info_res).value();
         }
         dump_lake_persistent_index_sst(FLAGS_file, enc_info);
+    } else if (FLAGS_operation == "print_delvec") {
+        if (FLAGS_file == "") {
+            std::cerr << "no --file specified for print_delvec" << std::endl;
+            return -1;
+        }
+        print_delvec(FLAGS_file, FLAGS_delvec_offset, FLAGS_delvec_size);
     } else if (FLAGS_operation == "print_lake_metadata") {
         std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
