@@ -25,7 +25,6 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/sstable/table_builder.h"
-
 #include "storage_primitive/storage_stats.h"
 
 namespace starrocks::lake {

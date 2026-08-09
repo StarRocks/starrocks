@@ -68,12 +68,12 @@ struct CompactionTaskStats {
     int64_t writer_close_ns = 0;
     // writer_finish_ns breakdown: a lake writer only materializes files in finish(), so this is
     // where a compaction spends most of its wall clock. The three legs are disjoint.
-    int64_t writer_finish_sst_ns = 0;          // PK-index SST flush (includes the merge below)
-    int64_t writer_finish_rows_mapper_ns = 0;  // rows-mapper finalize
-    int64_t writer_finish_segment_ns = 0;      // segment footer + upload
-    int64_t unsort_sst_spill_ns = 0;                  // spilling the in-memory PK map to intermediate SSTs
-    int64_t unsort_sst_spill_count = 0;               // number of intermediates the merge must K-way merge
-    int64_t unsort_sst_merge_ns = 0;                  // merging intermediates into the final SST
+    int64_t writer_finish_sst_ns = 0;         // PK-index SST flush (includes the merge below)
+    int64_t writer_finish_rows_mapper_ns = 0; // rows-mapper finalize
+    int64_t writer_finish_segment_ns = 0;     // segment footer + upload
+    int64_t unsort_sst_spill_ns = 0;          // spilling the in-memory PK map to intermediate SSTs
+    int64_t unsort_sst_spill_count = 0;       // number of intermediates the merge must K-way merge
+    int64_t unsort_sst_merge_ns = 0;          // merging intermediates into the final SST
     int64_t mask_io_ns = 0;
     int64_t txn_log_build_ns = 0;
     int64_t txn_log_write_ns = 0;
