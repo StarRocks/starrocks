@@ -59,25 +59,23 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 }
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
+    ONCE_DETECT(_set_finishing_once);
+    // Finish the channel only after this returns: execute() runs its inline branches while holding
+    // the channel mutex, which is not reentrant, so a task must never finish the channel itself.
+    auto defer_set_finishing = DeferOp([this]() { _spill_channel->set_finishing(); });
     const auto& spiller = _spiller;
 
-    // On cancellation, do not run spiller->flush() during teardown. The not-spilled branch below
-    // already delegates to NLJoinBuildOperator::set_finishing, which early-returns when cancelled;
-    // guard the spilled branch the same way to avoid touching spill state while the query is being
-    // torn down.
+    // On cancellation, do not run spiller->flush() during teardown: the query is being torn down.
     if (state->is_cancelled()) {
         if (spiller != nullptr) {
             spiller->cancel();
         }
-        _spill_channel->set_finishing();
         return NLJoinBuildOperator::set_finishing(state);
     }
 
     auto& input_channel = _cross_join_context->input_channel(_driver_sequence);
     if (!spiller->spilled() && (_spill_strategy == spill::SpillStrategy::NO_SPILL || input_channel.num_rows() == 0)) {
-        _spill_channel->set_finishing();
-        RETURN_IF_ERROR(NLJoinBuildOperator::set_finishing(state));
-        return Status::OK();
+        return NLJoinBuildOperator::set_finishing(state);
     }
     if (_should_spill_buffered_chunks) {
         RETURN_IF_ERROR(_spill_buffered_chunks(state, true));
@@ -103,7 +101,6 @@ Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
                     auto defer = DeferOp([&]() { _cross_join_context->unref(state); });
                     RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
                     _is_finished = true;
-                    _spill_channel->set_finishing();
                     return Status::OK();
                 },
                 state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
@@ -153,7 +150,7 @@ Status SpillableNLJoinBuildOperator::_spill_buffered_chunks(RuntimeState* state,
         }
     }
 
-    auto ignore = _spill_channel->add_spill_task({iter});
+    _spill_channel->add_spill_task({iter});
     _should_spill_buffered_chunks = false;
     return Status::OK();
 }

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
@@ -51,6 +52,7 @@ private:
     std::shared_ptr<spill::Spiller> _spiller;
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
     bool _should_spill_buffered_chunks = true;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class SpillableNLJoinBuildOperatorFactory final : public OperatorFactory {
