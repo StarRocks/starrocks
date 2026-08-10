@@ -287,6 +287,106 @@ void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<R
     DCHECK_EQ(bytes_assigned, segment.data_size);
 }
 
+// Projects a boundary tuple derived from a rowset written under a narrower (historical) sort key up
+// onto the tablet's CURRENT sort key, by appending one NULL sentinel per missing trailing column.
+//
+// A metadata-only trailing sort-key key-column ADD (FE SchemaChangeHandler's
+// tryCreateMetadataOnlyTrailingKeyAddJob -- e.g. `ALTER TABLE agg_range ADD COLUMN c INT`, which an
+// AGG table promotes to a key column) widens the sort key and reprojects every EXISTING tablet range
+// bound with a trailing NULL sentinel, but deliberately does not rewrite the data: the rowsets keep
+// their historical, narrower schema. Every boundary tuple derived from those segments --
+// sort_key_min/sort_key_max in the segment metadata, and short-key-index samples decoded with the
+// rowset's own schema -- therefore carries the OLD arity. Emitting such a tuple as a new tablet's
+// range bound persists a bound narrower than that tablet's own sort key, which breaks the tablet
+// permanently: RangeRouter::_validate_range then rejects every load ("upper_bound value size is not
+// equal to column size") and TabletRangeHelper::create_seek_range_from rejects every read of a rowset
+// written at the new arity ("Unexpected number of values in TabletRangePB bound value, expected at
+// least: N, actual: M").
+//
+// NULL sorts as the minimum (TypeInfo::cmp), so (prefix) and (prefix, MIN, ...) denote the same point
+// under the half-open range semantics -- this is exactly the FE-side
+// TrailingSortKeyRangeReprojection.appendTrailing projection, applied here to the split input.
+// Projecting the segment tuples (rather than only the emitted bounds) also keeps every comparison
+// inside calculate_range_split_boundaries arity-consistent: VariantTuple::compare orders a shorter
+// prefix-equal tuple BELOW its padded form, so an unprojected segment bound would spuriously sort
+// below the parent tablet's own (already projected) lower bound.
+class SortKeyProjection {
+public:
+    // Resolves the current sort key from |schema_pb|. TabletSchema is materialized locally instead of
+    // through GlobalTabletSchemaMap::emplace so a schema with an unset id (synthetic reshard/test
+    // metadata) cannot DCHECK-abort, while still applying the "empty sort_key_idxes => sort key is the
+    // key columns" convention that the FE mirrors in MetaUtils.getRangeDistributionColumns.
+    static StatusOr<SortKeyProjection> create(const TabletSchemaPB& schema_pb) {
+        auto schema = TabletSchema::create(schema_pb);
+        SortKeyProjection projection;
+        projection._null_by_position.reserve(schema->sort_key_idxes().size());
+        for (const ColumnId cid : schema->sort_key_idxes()) {
+            if (cid >= schema->num_columns()) {
+                return Status::Corruption(
+                        fmt::format("Sort key index {} out of range, num_columns {}", cid, schema->num_columns()));
+            }
+            auto type_info = get_type_info(schema->column(cid));
+            if (type_info == nullptr) {
+                return Status::InternalError(fmt::format("Unsupported sort key column type: {}",
+                                                         logical_type_to_string(schema->column(cid).type())));
+            }
+            projection._null_by_position.emplace_back(std::move(type_info), Datum());
+        }
+        return projection;
+    }
+
+    size_t arity() const { return _null_by_position.size(); }
+
+    // Appends the sentinels for positions [tuple->size(), arity()) to |tuple|.
+    //
+    // An EMPTY tuple is left untouched: empty means "unknown"/unbounded to every consumer (see the
+    // !min_key.empty() guards in load_samples_from_short_key_index and TabletRange::is_minimum), and
+    // padding it would turn that into a concrete minimum tuple. A tuple already at or beyond arity()
+    // is left untouched too -- a bound WIDER than the segments it seeks into is the pre-existing case
+    // create_seek_range_from projects down, and truncating here would change its semantics.
+    void project(VariantTuple* tuple) const {
+        if (tuple->empty()) {
+            return;
+        }
+        for (size_t i = tuple->size(); i < _null_by_position.size(); ++i) {
+            tuple->append(_null_by_position[i]);
+        }
+    }
+
+private:
+    std::vector<DatumVariant> _null_by_position;
+};
+
+// Rejects a split result that would persist a tablet range bound whose value count does not match the
+// tablet's current sort-key arity. Such a bound is unrecoverable once written: RangeRouter rejects
+// every subsequent load and TabletRangeHelper::create_seek_range_from rejects every read of a rowset
+// at the sort key's own arity, so the tablet becomes permanently unreadable AND unwritable. Failing
+// the split leaves the tablet untouched instead, which the reshard job surfaces as an aborted job.
+Status validate_split_range_arity(const std::vector<TabletRangeInfo>& split_ranges, const TabletSchemaPB& schema_pb,
+                                  int64_t tablet_id) {
+    ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(schema_pb));
+    const size_t arity = projection.arity();
+    auto check = [&](size_t index, const char* side, const TuplePB& bound) -> Status {
+        if (static_cast<size_t>(bound.values_size()) != arity) {
+            return Status::Corruption(
+                    fmt::format("Split range[{}] of tablet {} has a {} bound with {} values, but the sort key "
+                                "has {} columns",
+                                index, tablet_id, side, bound.values_size(), arity));
+        }
+        return Status::OK();
+    };
+    for (size_t i = 0; i < split_ranges.size(); ++i) {
+        const auto& range = split_ranges[i].range;
+        if (range.has_lower_bound()) {
+            RETURN_IF_ERROR(check(i, "lower", range.lower_bound()));
+        }
+        if (range.has_upper_bound()) {
+            RETURN_IF_ERROR(check(i, "upper", range.upper_bound()));
+        }
+    }
+    return Status::OK();
+}
+
 } // anonymous namespace
 
 // ================================================================================
@@ -784,6 +884,13 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
         return Status::InvalidArgument(
                 fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
     }
+
+    // Last line of defense before these ranges become the new tablets' persisted boundaries: a bound
+    // whose arity does not match the current sort key permanently breaks the tablet (both the load
+    // router and the read-side range decoder reject it), so fail the split instead. SortKeyProjection
+    // above already lifts every segment-derived tuple onto the current sort key; this converts any
+    // remaining arity skew into an aborted reshard rather than corrupt metadata.
+    RETURN_IF_ERROR(validate_split_range_arity(*split_ranges, tablet_metadata->schema(), tablet_metadata->id()));
 
     // Anchor per-split per-rowset stats to the old tablet's recorded totals so
     // that Σ new tablets stat == old tablet stat exactly for num_rows / data_size /
@@ -1438,6 +1545,11 @@ static bool rowset_schema_resolves_to_valid_id(const TabletMetadataPB& tablet_me
 // semantics on empty (one errors, the other treats it as a no-op fast path) and
 // own that check.
 //
+// Every emitted key tuple (min_key, max_key and each sort-key sample) is projected onto the tablet's
+// current sort key via SortKeyProjection, so a rowset written before a metadata-only trailing
+// sort-key key-column ADD cannot contribute a narrower-than-sort-key boundary. The projection runs
+// AFTER the loaders, whose own bound validation compares samples against the segment's raw min/max.
+//
 // When |tablet_manager| is non-null, opportunistically opens each rowset's segments
 // (via Rowset::load_segments, using that rowset's own historical schema -- a rowset
 // written under an older schema must decode with its own) to read a
@@ -1458,6 +1570,7 @@ static bool rowset_schema_resolves_to_valid_id(const TabletMetadataPB& tablet_me
 // loader is skipped entirely.
 Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
                                    std::vector<SegmentSplitInfo>* segments) {
+    ASSIGN_OR_RETURN(const auto projection, SortKeyProjection::create(tablet_metadata->schema()));
     for (int rowset_index = 0; rowset_index < tablet_metadata->rowsets_size(); ++rowset_index) {
         const auto& rowset_meta = tablet_metadata->rowsets(rowset_index);
 
@@ -1525,6 +1638,14 @@ Status build_segments_from_rowsets(TabletManager* tablet_manager, const TabletMe
                 }
             } else if (segment_meta.deprecated_sort_key_samples_size() > 0) {
                 RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            }
+            // Lift every tuple this segment contributes onto the tablet's current sort key. Runs after
+            // the loaders above so their sample-vs-[min_key, max_key] validation still compares tuples
+            // of one arity (the segment's own).
+            projection.project(&segment.min_key);
+            projection.project(&segment.max_key);
+            for (auto& sample : segment.sort_key_samples) {
+                projection.project(&sample);
             }
             segments->push_back(std::move(segment));
         }
