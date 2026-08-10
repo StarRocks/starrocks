@@ -123,11 +123,9 @@ public class ColumnStatisticDump {
 
         public static HistogramDump from(Histogram histogram) {
             HistogramDump dump = new HistogramDump();
-            if (histogram.getBuckets() != null) {
-                dump.buckets = new ArrayList<>();
-                for (Bucket bucket : histogram.getBuckets()) {
-                    dump.buckets.add(BucketDump.from(bucket));
-                }
+            dump.buckets = new ArrayList<>();
+            for (Bucket bucket : histogram.getBuckets()) {
+                dump.buckets.add(BucketDump.from(bucket));
             }
             dump.mcv = histogram.getMCV();
             return dump;
@@ -170,16 +168,12 @@ public class ColumnStatisticDump {
             dump.upper = Double.toString(bucket.getUpper());
             dump.count = bucket.getCount();
             dump.upperRepeats = bucket.getUpperRepeats();
-            bucket.getDistinctCount().ifPresent(value -> dump.distinctCount = value);
             return dump;
         }
 
         public Bucket toBucket() {
             double lowerValue = parseDouble(lower, 0);
             double upperValue = parseDouble(upper, 0);
-            if (distinctCount != null) {
-                return new Bucket(lowerValue, upperValue, count, upperRepeats, distinctCount);
-            }
             return new Bucket(lowerValue, upperValue, count, upperRepeats);
         }
     }

@@ -186,7 +186,7 @@ public class QueryDumpSerializationReplayTest extends PlanTestBase {
         mostCommonValues.put("refund", 120L);
         return new Histogram(List.of(
                 new Bucket(1, 10, 100L, 5L),
-                new Bucket(10, 20, 200L, 3L, 7L)), mostCommonValues);
+                new Bucket(10, 20, 200L, 3L)), mostCommonValues);
     }
 
     private static ColumnStatistic statistic(double min, double max, double nullFraction,
@@ -247,17 +247,11 @@ public class QueryDumpSerializationReplayTest extends PlanTestBase {
             assertThat(actualBucket.getUpper()).isEqualTo(expectedBucket.getUpper());
             assertThat(actualBucket.getCount()).isEqualTo(expectedBucket.getCount());
             assertThat(actualBucket.getUpperRepeats()).isEqualTo(expectedBucket.getUpperRepeats());
-            assertThat(actualBucket.getDistinctCount()).isEqualTo(expectedBucket.getDistinctCount());
         }
     }
 
     private static class FullStatisticStorage extends InMemoryStatisticStorage {
         private final Map<Long, Map<String, Histogram>> histograms = new HashMap<>();
-
-        @Override
-        public void addHistogramStatistics(Table table, String column, Histogram histogram) {
-            histograms.computeIfAbsent(table.getId(), ignored -> new HashMap<>()).put(column, histogram);
-        }
 
         @Override
         public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {

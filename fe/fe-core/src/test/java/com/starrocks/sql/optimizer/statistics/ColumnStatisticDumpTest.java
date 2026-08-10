@@ -118,7 +118,7 @@ public class ColumnStatisticDumpTest {
     public void testHistogramRoundTrip() {
         List<Bucket> buckets = List.of(
                 new Bucket(1.0, 10.0, 100L, 5L),
-                new Bucket(10.0, 20.0, 200L, 3L, 7L));
+                new Bucket(10.0, 20.0, 200L, 3L));
         Map<String, Long> mcv = new LinkedHashMap<>();
         mcv.put("a", 50L);
         mcv.put("b", 30L);
@@ -147,9 +147,6 @@ public class ColumnStatisticDumpTest {
         assertThat(resultBuckets.get(0).getUpper()).isEqualTo(10.0);
         assertThat(resultBuckets.get(0).getCount()).isEqualTo(100L);
         assertThat(resultBuckets.get(0).getUpperRepeats()).isEqualTo(5L);
-        assertThat(resultBuckets.get(0).getDistinctCount()).isEmpty();
-
-        assertThat(resultBuckets.get(1).getDistinctCount()).contains(7L);
     }
 
     @Test
