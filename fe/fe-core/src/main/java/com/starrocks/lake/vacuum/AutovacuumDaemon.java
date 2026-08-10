@@ -86,7 +86,8 @@ public class AutovacuumDaemon extends LeaderDaemon {
     // is not walked every round. Rounds with a non-empty queue are unaffected.
     private static final long EMPTY_COLLECT_BACKOFF_MS = 30 * 1000L;
 
-    private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
+    // Package-private so AutovacuumDaemonTest can assert onStopped() clears it, without reflection.
+    final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
 
     // LRU-ordered candidates from the last collection, drained across subsequent rounds. A round collects
     // again only once this queue is empty, so most rounds skip the expensive full scan (see
@@ -95,9 +96,10 @@ public class AutovacuumDaemon extends LeaderDaemon {
     // Set after a collection that found no candidates; suppresses re-scanning until this time.
     private long nextCollectTimeMs = 0;
 
-    // Lazily created on the leader (see getExecutorService()). It is resized in place when
-    // lake_autovacuum_parallel_partitions changes, never rebuilt.
-    private ThreadPoolExecutor executorService = null;
+    // Lazily created on the leader (see getExecutorService()) and resized in place when
+    // lake_autovacuum_parallel_partitions changes; onStopped() drains it to termination and nulls it on
+    // demotion, so getExecutorService() rebuilds a fresh pool on re-election. Package-private for tests.
+    ThreadPoolExecutor executorService = null;
     private boolean executorListenerRegistered = false;
 
     public AutovacuumDaemon() {
@@ -138,26 +140,21 @@ public class AutovacuumDaemon extends LeaderDaemon {
 
     @Override
     protected void onStopped() {
-        // Leader demotion: release leader-session-only state so a follower does not retain it.
-        // executorListenerRegistered stays set so the ConfigRefreshDaemon listener is registered
-        // exactly once per instance across demote/re-elect cycles (mirrors PublishVersionDaemon).
+        // Leader demotion: drain the vacuum pool to termination before releasing leader-session state, so
+        // this worker does not clear isRunning until the pool is quiescent - the re-activation cleanliness
+        // gate reads isRunning as the single quiescence signal (consistent with the other LeaderDaemons).
+        // executorListenerRegistered stays set so the ConfigRefreshDaemon listener is registered exactly
+        // once per instance across demote/re-elect cycles (mirrors PublishVersionDaemon); the executor is
+        // nulled so getExecutorService() lazily rebuilds a fresh pool on re-election.
         ThreadPoolExecutor executor = executorService;
         if (executor != null) {
             executorService = null;
-            // shutdownNow() interrupts running tasks but does not wait for them: a task stuck in a
-            // non-interruptible section can outlive demotion and even re-election. Its entry in
-            // vacuumingPartitions must survive so the next leader session keeps skipping the
-            // partition until the task's finally releases it; clearing the set wholesale would
-            // permit two concurrent vacuums of the same partition (and the straggler's late
-            // finally would then drop the new session's live entry, permitting a third). Only
-            // reservations of drained tasks that never ran are released here, so every entry is
-            // released exactly once: either by its task's finally or by this loop.
-            for (Runnable task : executor.shutdownNow()) {
-                if (task instanceof VacuumTask) {
-                    vacuumingPartitions.remove(((VacuumTask) task).partitionId);
-                }
-            }
+            shutdownNowAndAwaitTermination("AutovacuumDaemon.executorService", executor);
         }
+        // Every task has terminated (each removes its own vacuumingPartitions entry in a finally), so it is
+        // now safe to clear any residue left by queued-but-never-run tasks, along with the transient
+        // scheduling state, letting a re-elected leader re-derive everything from a clean slate.
+        vacuumingPartitions.clear();
         pendingCandidates.clear();
         nextCollectTimeMs = 0;
     }
@@ -224,8 +221,8 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
             if (vacuumingPartitions.add(partitionId)) {
                 try {
-                    getExecutorService().execute(new VacuumTask(partitionId,
-                            () -> vacuumPartition(candidate.db, candidate.table, partition)));
+                    getExecutorService().execute(
+                            () -> vacuumPartition(candidate.db, candidate.table, partition));
                 } catch (RuntimeException e) {
                     // Submission failed (e.g. RejectedExecutionException when the pool queue is saturated).
                     // The task never runs, so vacuumPartition's finally never removes the id; roll it back
@@ -318,21 +315,6 @@ public class AutovacuumDaemon extends LeaderDaemon {
 
     // Carries the partition id so onStopped() can identify queued-but-never-run tasks returned by
     // shutdownNow() and release exactly their vacuumingPartitions reservations.
-    private static class VacuumTask implements Runnable {
-        private final long partitionId;
-        private final Runnable work;
-
-        VacuumTask(long partitionId, Runnable work) {
-            this.partitionId = partitionId;
-            this.work = work;
-        }
-
-        @Override
-        public void run() {
-            work.run();
-        }
-    }
-
     // A snapshot of a partition that needs vacuuming, captured under the table lock. lastVacuumTime is
     // sampled here so this round's ordering stays stable even if the partition is updated concurrently.
     private static class VacuumCandidate {

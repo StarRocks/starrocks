@@ -17,10 +17,12 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <map>
 #include <random>
 #include <tuple>
 
+#include "base/string/string_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
@@ -996,6 +998,91 @@ static Chunk make_kv_chunk(const std::shared_ptr<Schema>& schema,
         c1->append(v);
     }
     return Chunk({std::move(c0), std::move(c1)}, schema);
+}
+
+class TestPkTabletUnsortSSTWriter : public PkTabletUnsortSSTWriter {
+public:
+    using PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter;
+    using PkTabletUnsortSSTWriter::memory_usage;
+
+    StatusOr<std::vector<std::string>> encode_keys_for_test(const Chunk& data) {
+        Buffer<Slice> keys;
+        MutableColumnPtr owned_column;
+        ASSIGN_OR_RETURN(const Slice* encoded_keys, encode_pk_keys(data, &keys, &owned_column));
+        std::vector<std::string> result;
+        result.reserve(data.num_rows());
+        for (size_t i = 0; i < data.num_rows(); ++i) {
+            result.emplace_back(encoded_keys[i].data, encoded_keys[i].size);
+        }
+        return result;
+    }
+};
+
+TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    ConfigResetGuard<int64_t> max_mem_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    ASSERT_OK(w->reset_sst_writer(lp, _fs));
+
+    std::vector<std::pair<std::string, int>> rows;
+    for (int i = 0; i < 6; ++i) {
+        rows.emplace_back(std::string(20, static_cast<char>('a' + i)), i);
+    }
+    auto chunk = make_kv_chunk(_schema, rows);
+    ASSIGN_OR_ABORT(auto encoded_keys, w->encode_keys_for_test(chunk));
+    std::vector<uint64_t> order(chunk.num_rows());
+    for (uint32_t i = 0; i < chunk.num_rows(); ++i) {
+        order[i] = (static_cast<uint64_t>(1) << 32) | i;
+    }
+
+    struct ExpectedEntry {
+        uint64_t order;
+        uint32_t rowid;
+    };
+    using ExpectedMapValue = std::pair<const std::string, ExpectedEntry>;
+    using ExpectedMapAllocator = STLCountingAllocator<ExpectedMapValue>;
+    using ExpectedMap = phmap::btree_map<std::string, ExpectedEntry, std::less<>, ExpectedMapAllocator>;
+    int64_t expected_map_node_bytes = 0;
+    ExpectedMap expected_map{std::less<>(), ExpectedMapAllocator(&expected_map_node_bytes)};
+    size_t expected_keys_heap_size = 0;
+    for (uint32_t i = 0; i < encoded_keys.size(); ++i) {
+        auto [it, inserted] = expected_map.emplace(encoded_keys[i], ExpectedEntry{order[i], i});
+        ASSERT_TRUE(inserted);
+        expected_keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
+    }
+    EXPECT_EQ(expected_map.bytes_used(), sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes));
+    const size_t expected_map_usage =
+            sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes) + expected_keys_heap_size;
+
+    ASSERT_OK(w->append_sst_record(chunk, &order));
+    EXPECT_EQ(expected_map_usage, w->memory_usage());
+
+    // Duplicate keys do not grow the map. Verify that the separately-owned loser vector is charged
+    // by allocated capacity rather than logical size.
+    std::vector<std::pair<std::string, int>> duplicate_rows(9, rows.front());
+    auto duplicate_chunk = make_kv_chunk(_schema, duplicate_rows);
+    std::vector<uint64_t> duplicate_order(duplicate_chunk.num_rows());
+    for (uint32_t i = 0; i < duplicate_chunk.num_rows(); ++i) {
+        duplicate_order[i] = (static_cast<uint64_t>(2 + i) << 32) | i;
+    }
+    ASSERT_OK(w->append_sst_record(duplicate_chunk, &duplicate_order));
+    const size_t usage_with_deleted_rowids = w->memory_usage();
+    auto deleted_rowids = w->take_deleted_rowids();
+    ASSERT_EQ(duplicate_chunk.num_rows(), deleted_rowids.size());
+    ASSERT_GT(deleted_rowids.capacity(), deleted_rowids.size());
+    EXPECT_EQ(expected_map_usage + deleted_rowids.capacity() * sizeof(uint32_t), usage_with_deleted_rowids);
+    ASSIGN_OR_ABORT(auto first_flush_result, w->flush_sst_writer());
+    EXPECT_FALSE(first_flush_result.first.path.empty());
+
+    // The exact map footprint is also the spill boundary: reaching it must clear the in-memory map.
+    config::l0_max_mem_usage = static_cast<int64_t>(expected_map_usage);
+    auto spill_writer = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    ASSERT_OK(spill_writer->reset_sst_writer(lp, _fs));
+    ASSERT_OK(spill_writer->append_sst_record(chunk, &order));
+    EXPECT_LT(spill_writer->memory_usage(), expected_map_usage);
+    ASSIGN_OR_ABORT(auto spill_flush_result, spill_writer->flush_sst_writer());
+    EXPECT_FALSE(spill_flush_result.first.path.empty());
 }
 
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {

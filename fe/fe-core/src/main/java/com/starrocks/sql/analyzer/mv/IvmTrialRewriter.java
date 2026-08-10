@@ -14,21 +14,20 @@
 
 package com.starrocks.sql.analyzer.mv;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
@@ -43,14 +42,16 @@ import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.Type;
+import com.starrocks.thrift.TStorageType;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * CREATE-time trial compilation of the IVM refresh plan. Runs the same {@code IvmRewriter}
@@ -90,7 +91,7 @@ public final class IvmTrialRewriter {
             // introduced; the optimizer below needs a fully-typed AST.
             Analyzer.analyze(rewrittenQuery, ctx);
 
-            MaterializedView mockMv = buildMockMv(stmt, rewrittenQuery);
+            MaterializedView mockMv = buildMockMv(stmt);
             applySyntheticTvrDelta(rewrittenQuery);
 
             ctx.getSessionVariable().setEnableIVMRefresh(true);
@@ -107,7 +108,8 @@ public final class IvmTrialRewriter {
             optimizerContext.getQueryMaterializationContext().setOverrideTargetMv(mockMv);
             // The trial bypasses InsertPlanner, so stash the ordered outputs here as it would
             // (position i writes mock schema[i]) for IvmRewriter.bindStateColumnsForAggregate.
-            optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(logicalPlan.getOutputColumn());
+            optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(
+                    alignInsertOutputColumns(stmt, logicalPlan.getOutputColumn(), columnRefFactory));
             // RULE_BASED skips Memo / cost-based; the mock MV has no statistics or partitions.
             optimizerContext.setOptimizerOptions(OptimizerOptions.newRuleBaseOpt());
 
@@ -128,55 +130,17 @@ public final class IvmTrialRewriter {
         }
     }
 
-    // Mirrors MaterializedViewAnalyzer.genMaterializedViewColumns: column types come from
-    // the analyzed query's RelationFields; __ROW_ID__ is key/non-null/hidden; __AGG_STATE_*
-    // are hidden; AUTO_INCREMENT path appends an explicit __ROW_ID__ since it isn't in the
-    // query output.
-    private static MaterializedView buildMockMv(CreateMaterializedViewStatement stmt,
-                                                 QueryStatement rewrittenQuery) {
-        List<Field> relationFields = rewrittenQuery.getQueryRelation().getScope()
-                .getRelationFields().getAllFields();
-        List<String> columnNames = rewrittenQuery.getQueryRelation()
-                .getRelationFields().getAllFields().stream()
-                .map(Field::getName)
-                .toList();
-
-        List<Column> columns = Lists.newArrayList();
-        boolean hasRowId = false;
-        for (int i = 0; i < relationFields.size(); i++) {
-            Field field = relationFields.get(i);
-            Type type = AnalyzerUtils.transformTableColumnType(field.getType(), false);
-            String colName = columnNames.get(i);
-            Column column = new Column(colName, type, field.isNullable());
-            if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
-                column.setIsKey(true);
-                column.setIsAllowNull(false);
-                column.setIsHidden(true);
-                hasRowId = true;
-            } else if (colName.startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX)) {
-                column.setIsHidden(true);
-            }
-            if (!column.isKey()) {
-                column.setAggregationType(AggregateType.REPLACE, true);
-            }
-            columns.add(column);
+    /** Build the trial target from the analyzer's final target schema and distribution. */
+    static MaterializedView buildMockMv(CreateMaterializedViewStatement stmt) {
+        List<Column> columns = stmt.getMvColumnItems().stream()
+                .map(Column::deepCopy)
+                .collect(Collectors.toList());
+        DistributionInfo distInfo;
+        try {
+            distInfo = DistributionInfoBuilder.build(stmt.getDistributionDesc(), columns);
+        } catch (DdlException e) {
+            throw new SemanticException("Failed to build IVM trial target distribution: " + e.getMessage(), e);
         }
-        // AUTO_INCREMENT path: __ROW_ID__ isn't in the query output, append it explicitly.
-        if (!hasRowId) {
-            Column rowIdCol = new Column(IvmOpUtils.COLUMN_ROW_ID, IntegerType.BIGINT, false);
-            rowIdCol.setIsKey(true);
-            rowIdCol.setIsAllowNull(false);
-            rowIdCol.setIsHidden(true);
-            rowIdCol.setIsAutoIncrement(true);
-            columns.add(rowIdCol);
-        }
-
-        Column rowIdColumn = columns.stream()
-                .filter(c -> IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(c.getName()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "rewrittenQuery must have __ROW_ID__ column after schema construction"));
-        HashDistributionInfo distInfo = new HashDistributionInfo(1, List.of(rowIdColumn));
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         MaterializedView.MvRefreshScheme refreshScheme =
                 new MaterializedView.MvRefreshScheme(MaterializedViewRefreshType.INCREMENTAL);
@@ -190,8 +154,54 @@ public final class IvmTrialRewriter {
                 partInfo,
                 distInfo,
                 refreshScheme);
+        // RANGE derives its routing columns from the base index's sort/key metadata. Mirror
+        // the catalog target far enough for optimizer property derivation without partitions.
+        mockMv.setBaseIndexMetaId(MOCK_MV_ID);
+        short shortKeyColumnCount = (short) columns.stream().filter(Column::isKey).count();
+        mockMv.setIndexMeta(MOCK_MV_ID, mockMv.getName(), columns, 0, 0,
+                shortKeyColumnCount, TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
         mockMv.setEncodeRowIdVersion(stmt.getEncodeRowIdVersion());
         return mockMv;
+    }
+
+    /**
+     * Align query-projection outputs to target-schema positions. Storage-filled positions receive
+     * typed placeholders so aggregate-state binding keeps the same positional contract as INSERT.
+     */
+    static List<ColumnRefOperator> alignInsertOutputColumns(CreateMaterializedViewStatement stmt,
+                                                            List<ColumnRefOperator> queryOutputs,
+                                                            ColumnRefFactory columnRefFactory) {
+        List<Column> targetColumns = stmt.getMvColumnItems();
+        List<Integer> queryOutputIndices = stmt.getQueryOutputIndices();
+        if (queryOutputIndices == null || queryOutputIndices.isEmpty()) {
+            queryOutputIndices = new ArrayList<>(queryOutputs.size());
+            for (int i = 0; i < queryOutputs.size(); i++) {
+                queryOutputIndices.add(i);
+            }
+        }
+        if (queryOutputIndices.size() != queryOutputs.size()) {
+            throw new SemanticException("IVM trial output mapping size does not match query outputs: %d != %d",
+                    queryOutputIndices.size(), queryOutputs.size());
+        }
+
+        List<ColumnRefOperator> aligned = new ArrayList<>(
+                Collections.nCopies(targetColumns.size(), null));
+        for (int queryIndex = 0; queryIndex < queryOutputs.size(); queryIndex++) {
+            int targetIndex = queryOutputIndices.get(queryIndex);
+            if (targetIndex < 0 || targetIndex >= aligned.size() || aligned.get(targetIndex) != null) {
+                throw new SemanticException("Invalid IVM trial output mapping at query position %d: %d",
+                        queryIndex, targetIndex);
+            }
+            aligned.set(targetIndex, queryOutputs.get(queryIndex));
+        }
+        for (int targetIndex = 0; targetIndex < aligned.size(); targetIndex++) {
+            if (aligned.get(targetIndex) == null) {
+                Column targetColumn = targetColumns.get(targetIndex);
+                aligned.set(targetIndex, columnRefFactory.create(
+                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull()));
+            }
+        }
+        return aligned;
     }
 
     private static InsertStmt buildSyntheticInsertStmt(MaterializedView mockMv,

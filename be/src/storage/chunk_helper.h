@@ -39,6 +39,10 @@ public:
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
 
+    // Get schema with format v2 type containing ALL sort key columns (the full,
+    // untruncated sort key), used to encode/decode a full-key short key index.
+    static Schema get_full_sort_key_schema(const TabletSchemaCSPtr& schema);
+
     // Get schema with format v2 type containing sort key columns from TabletSchema.
     static Schema get_sort_key_schema(const TabletSchemaCSPtr& schema);
 

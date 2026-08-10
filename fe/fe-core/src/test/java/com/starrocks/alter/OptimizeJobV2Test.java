@@ -44,6 +44,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class OptimizeJobV2Test extends DDLTestBase {
     private static final String TEST_FILE_NAME = OptimizeJobV2Test.class.getCanonicalName();
@@ -172,8 +173,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
         // runRunningJob
         List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        String rewriteColumns = olapTable.getBaseSchema().stream()
+                .filter(column -> !column.isGeneratedColumn())
+                .map(column -> "`" + column.getName() + "`")
+                .collect(Collectors.joining(", "));
         for (int i = 0; i < optimizeTasks.size(); ++i) {
             OptimizeTask optimizeTask = optimizeTasks.get(i);
+            Assertions.assertTrue(optimizeTask.getDefinition()
+                    .contains(") (" + rewriteColumns + ") select " + rewriteColumns + " from "));
             removeTaskFromScheduler(optimizeTask);
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setTaskName(optimizeTask.getName());

@@ -150,10 +150,53 @@ public class StmtExecutorTest {
                 ctx.getSerializer();
                 minTimes = 0;
                 result = serializer;
+                ctx.getExecTimeout();
+                minTimes = 0;
+                result = 10;
             }
         };
 
         Assertions.assertFalse(new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
+    }
+
+    @Test
+    public void testWaitCurrentFeTransferToLeaderTimeout(@Mocked ConnectContext ctx) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return true;
+            }
+        };
+
+        // The wait is bounded by the statement's own exec timeout; a zero budget clamps to 1 ms.
+        new Expectations(ctx) {
+            {
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+                ctx.getExecTimeout();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+
+        StarRocksPlannerException exception = Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
+        Assertions.assertTrue(exception.getMessage().contains(
+                "timed out after 1 ms waiting current FE node transferring to LEADER state"));
     }
 
     @Test

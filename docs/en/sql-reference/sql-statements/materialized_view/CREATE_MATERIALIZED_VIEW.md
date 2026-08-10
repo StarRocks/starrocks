@@ -200,7 +200,7 @@ Comment on the materialized view. Note that `COMMENT` must be placed after `mv_n
 
 **distribution_desc** (optional)
 
-The bucketing strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). If you do not specify this parameter, StarRocks uses the random bucketing strategy and automatically sets the number of buckets.
+The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` is enabled, omitting this parameter selects range distribution. Otherwise, a materialized view whose `refresh_mode` is not `INCREMENTAL` uses random bucketing, and StarRocks automatically sets the number of buckets. Materialized views whose `refresh_mode` is `INCREMENTAL` follow different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
 
 > **NOTE**
 >
@@ -474,6 +474,14 @@ StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh be
   - You cannot change legacy materialized views (for example, those of type `PCT`) to use `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
   - When modifying a materialized view from `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
 - Materialized views with `refresh_mode` set to `INCREMENTAL` do not support specifying partition refresh. An exception is thrown if you attempt a partition refresh.
+
+#### Distribution
+
+Materialized views whose `refresh_mode` is `INCREMENTAL` follow these distribution rules:
+
+- If you omit `distribution_desc`, StarRocks uses range distribution only in shared-data mode when `enable_range_distribution` is enabled. In all other cases, StarRocks falls back to hash distribution over all target key columns.
+- Range distribution has no user-facing `DISTRIBUTED BY RANGE` syntax and cannot be specified explicitly.
+- If you explicitly specify hash or random distribution, StarRocks normalizes it to hash distribution over all target key columns. An explicitly specified bucket count is preserved.
 
 #### Supported Incremental Operators
 

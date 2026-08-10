@@ -26,9 +26,17 @@
 
 namespace starrocks {
 
+struct LakeScanCacheOptions {
+    bool use_page_cache = false;
+    bool fill_data_cache = false;
+    bool fill_metadata_cache = false;
+    bool skip_disk_cache = false;
+};
+
 class LakeScanLazyMaterializationContext : public GlobalLateMaterilizationContext {
 public:
-    void capture_rowsets(int32_t tablet_id, int64_t version, const std::vector<BaseRowsetSharedPtr>& rowsets);
+    void capture_rowsets(int32_t tablet_id, int64_t version, const std::vector<BaseRowsetSharedPtr>& rowsets,
+                         LakeScanCacheOptions cache_options);
 
     lake::RowsetPtr get_rowset(int32_t tablet_id, int32_t dynamic_rssid, int32_t* segment_idx) const;
     lake::RowsetPtr get_rowset(const std::vector<lake::RowsetPtr>& rowsets, int32_t drssid, int32_t* segment_idx) const;
@@ -38,6 +46,11 @@ public:
         return _versions.at(tablet_id);
     }
 
+    LakeScanCacheOptions get_cache_options(int32_t tablet_id) const {
+        std::shared_lock lock(_mutex);
+        return _cache_options.at(tablet_id);
+    }
+
     const TLakeScanNode& scan_node() const { return *_thrift_lake_scan_node; }
     void set_scan_node(const TLakeScanNode& node);
 
@@ -45,6 +58,7 @@ private:
     mutable std::shared_mutex _mutex;
     std::unordered_map<int32_t, std::vector<lake::RowsetPtr>> _rowsets;
     std::unordered_map<int32_t, int64_t> _versions;
+    std::unordered_map<int32_t, LakeScanCacheOptions> _cache_options;
     std::optional<TLakeScanNode> _thrift_lake_scan_node;
 };
 
