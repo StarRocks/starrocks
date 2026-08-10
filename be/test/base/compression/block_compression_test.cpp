@@ -780,7 +780,11 @@ TEST_F(BlockCompressionTest, dict_overload_not_supported_on_non_zstd) {
 //      by dictionary identity, and a stale entry must never be treated as a hit);
 //   2. it does not disturb the shared pool -- interleaved no-dict decompression
 //      still matches a clean reference.
-TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+// `use_ctx_cache` is what the enable_zstd_compression_dict_ctx_cache config toggles.
+// It exists so an operator can turn the thread-local contexts off in production
+// without a rollback, which is only a safety valve if the OTHER path -- the shared
+// pool plus a per-call refDDict -- is itself correct. Both values are exercised.
+static void run_multi_dict_interleave(bool use_ctx_cache) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
@@ -825,7 +829,7 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
         for (int i = 0; i < 3; i++) {
             std::string got(arms[i].body.size(), '\0');
             Slice g(got);
-            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get()).ok())
+            ASSERT_TRUE(codec->decompress(Slice(arms[i].compressed), &g, arms[i].ddict.get(), use_ctx_cache).ok())
                     << "round " << round << " dict " << i;
             ASSERT_EQ(arms[i].body, std::string(g.data, g.size)) << "round " << round << " dict " << i;
         }
@@ -833,6 +837,64 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
         Slice pg(pgot);
         ASSERT_TRUE(codec->decompress(Slice(plain_c), &pg).ok());
         ASSERT_EQ(plain, std::string(pg.data, pg.size)) << "no-dict decode disturbed at round " << round;
+    }
+}
+
+TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave(/*use_ctx_cache=*/true);
+}
+
+// Same, with the context cache turned off: every page then goes through the shared
+// pool, which must load the dictionary per call and drop it again on return.
+TEST_F(BlockCompressionTest, dict_pooled_ctx_multi_dict_and_pool_isolation) {
+    run_multi_dict_interleave(/*use_ctx_cache=*/false);
+}
+
+// A page that fails to decompress leaves the context in an undefined state, so the
+// cached-context path throws that context away. What must survive is the thread:
+// the next page decoded on it has to be correct, and this has to hold however many
+// times it happens (a dropped context is recreated, never reused).
+TEST_F(BlockCompressionTest, dict_decompress_failure_does_not_poison_the_thread) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
+
+    std::string sample;
+    for (int k = 0; k < 300; k++) {
+        sample += "recurring phrase " + std::to_string(k % 40) + " ";
+    }
+    std::string body;
+    for (int k = 0; k < 600; k++) {
+        body += "recurring phrase " + std::to_string(k % 40) + " payload ";
+    }
+    auto cd = compression::ZstdCDict::create(Slice(sample), 3);
+    ASSERT_TRUE(cd.ok());
+    auto dd = compression::ZstdDDict::create(Slice(sample));
+    ASSERT_TRUE(dd.ok());
+
+    std::string compressed(codec->max_compressed_len(body.size()), '\0');
+    Slice out(compressed);
+    std::vector<Slice> in{Slice(body)};
+    ASSERT_TRUE(codec->compress(in, &out, false, body.size(), nullptr, nullptr, cd.value().get()).ok());
+    compressed.resize(out.size);
+
+    for (int round = 0; round < 5; round++) {
+        // Garbage in: must be reported, not crash, and must not be mistaken for data.
+        std::string garbage = "this is not a zstd frame at all";
+        std::string sink(body.size(), '\0');
+        Slice s1(sink);
+        ASSERT_FALSE(codec->decompress(Slice(garbage), &s1, dd.value().get()).ok()) << "round " << round;
+
+        // Truncating a real frame fails inside the decoder rather than at the header.
+        std::string truncated = compressed.substr(0, compressed.size() / 2);
+        std::string sink2(body.size(), '\0');
+        Slice s2(sink2);
+        ASSERT_FALSE(codec->decompress(Slice(truncated), &s2, dd.value().get()).ok()) << "round " << round;
+
+        // The thread must still decode correctly right after both failures.
+        std::string got(body.size(), '\0');
+        Slice g(got);
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &g, dd.value().get()).ok()) << "round " << round;
+        ASSERT_EQ(body, std::string(g.data, g.size)) << "round " << round;
     }
 }
 
