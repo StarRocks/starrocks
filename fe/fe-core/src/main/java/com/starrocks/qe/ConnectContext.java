@@ -292,15 +292,13 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
-<<<<<<< HEAD
     // Set during analysis iff the query uses the builtin score() (BM25). The optimizer reads it to skip the
     // BM25 rewrite pass for non-score queries; reset per query in StatementPlanner.plan.
     private boolean usesBm25Score = false;
-=======
+
     // An optimize rewrite copies logical rows into a temporary partition and must not
     // include unrelated schema-change shadow columns in its sink tuple.
     private boolean optimizeRewrite = false;
->>>>>>> c1d21807217... [BugFix] Fix DML with shadow generated columns during online optimize (#77252)
 
     // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
     // instead of physicalPartition.getVisibleVersion() for each entry in this map.
@@ -315,7 +313,6 @@ public class ConnectContext {
         return scanVersionOverride;
     }
 
-<<<<<<< HEAD
     // Base-table bookmark to read AS-OF during a pinned MV refresh, keyed by
     // Table#getUUID(). Carries the frozen snapshot from the refresh
     // planner to RelationTransformer without mutating the (immutable) query AST.
@@ -327,14 +324,14 @@ public class ConnectContext {
 
     public Map<String, Long> getMvPinnedBookmarkIds() {
         return mvPinnedBookmarkIds;
-=======
+    }
+
     public void setOptimizeRewrite(boolean optimizeRewrite) {
         this.optimizeRewrite = optimizeRewrite;
     }
 
     public boolean isOptimizeRewrite() {
         return optimizeRewrite;
->>>>>>> c1d21807217... [BugFix] Fix DML with shadow generated columns during online optimize (#77252)
     }
 
     public void setTxnId(long txnId) {
