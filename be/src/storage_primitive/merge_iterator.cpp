@@ -14,14 +14,21 @@
 
 #include "storage_primitive/merge_iterator.h"
 
+#include <climits>
+#include <future>
 #include <memory>
 #include <queue>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/sorting/sorting.h"
+#include "common/config_compaction_fwd.h"
+#include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -196,8 +203,20 @@ protected:
 
     virtual Status fill(size_t child) = 0;
 
+    // `fill()` split in two so the prologue can overlap the reads. `fill_read` only touches
+    // this child's own iterator and chunk, so different children may run it concurrently;
+    // `fill_commit` mutates shared merge state (heap / per-child slots) and must stay serial
+    // and in child order, otherwise the merge would consume a different order than the serial
+    // path. Both halves together are exactly `fill()`.
+    virtual Status fill_read(size_t child) = 0;
+    virtual Status fill_commit(size_t child) = 0;
+
+    Status parallel_prefill();
+
     std::vector<ChunkIteratorPtr> _children;
     std::vector<ChunkPtr> _chunk_pool;
+    // Status of each child's prologue read, produced by fill_read and consumed by fill_commit.
+    std::vector<Status> _prefill_st;
     size_t _merged_rows = 0;
     bool _inited = false;
 };
@@ -205,13 +224,108 @@ protected:
 inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
+    _prefill_st.assign(_children.size(), Status::OK());
     for (size_t i = 0; i < _children.size(); i++) {
         // No need to reserve, because it's already reserved in segment interators.
         // If we reserve here, for small segment files, it will consume large memory then need.
         _chunk_pool[i] = ChunkFactory::new_chunk(output_schema(), 0);
-        RETURN_IF_ERROR(fill(i));
+    }
+    if (config::enable_compaction_parallel_merge_init && _children.size() > 1) {
+        RETURN_IF_ERROR(parallel_prefill());
+    } else {
+        for (size_t i = 0; i < _children.size(); i++) {
+            RETURN_IF_ERROR(fill(i));
+        }
     }
     _inited = true;
+    return Status::OK();
+}
+
+namespace {
+
+// The prologue borrows no existing pool on purpose: the compaction workers are the callers here,
+// and the ingestion pools serve latency-sensitive writes, so either choice would make this
+// contend with unrelated work. Built once, lazily, so a BE that never enables the config never
+// pays for it.
+ThreadPool* merge_prefill_pool() {
+    static std::unique_ptr<ThreadPool> pool = []() -> std::unique_ptr<ThreadPool> {
+        std::unique_ptr<ThreadPool> p;
+        int max_threads = std::max(1, config::compaction_parallel_merge_init_threads);
+        Status st = ThreadPoolBuilder("merge_prefill")
+                            .set_min_threads(0)
+                            .set_max_threads(max_threads)
+                            .set_max_queue_size(INT_MAX)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&p);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to create merge prefill thread pool, fall back to serial merge init: " << st;
+            return nullptr;
+        }
+        return p;
+    }();
+    return pool.get();
+}
+
+// A prefill task may itself drive a nested merge iterator. Letting the nested level submit into
+// the same bounded pool and then block on it would deadlock once the pool is saturated, so a
+// nested prologue always runs serially.
+thread_local bool tls_in_merge_prefill = false;
+
+} // namespace
+
+// Reads every child concurrently, then commits them serially in child order. The commit order is
+// what makes this equivalent to the serial prologue: the heap and the per-child slots see the same
+// sequence of updates, and a child that fails still surfaces its error at the same point the
+// serial path would.
+inline Status MergeIterator::parallel_prefill() {
+    ThreadPool* pool = tls_in_merge_prefill ? nullptr : merge_prefill_pool();
+    if (pool == nullptr) {
+        for (size_t i = 0; i < _children.size(); i++) {
+            RETURN_IF_ERROR(fill(i));
+        }
+        return Status::OK();
+    }
+
+    const size_t n = _children.size();
+    std::vector<std::future<void>> futures;
+    futures.reserve(n);
+
+    // The tasks capture `this`, so every submitted task must finish before returning -- a task
+    // still running after the iterator is destroyed would touch freed memory.
+    DeferOp wait_all([&futures]() {
+        for (auto& f : futures) {
+            if (f.valid()) f.wait();
+        }
+    });
+
+    auto* mem_tracker = tls_thread_status.mem_tracker();
+    for (size_t i = 0; i < n; i++) {
+        auto task = std::make_shared<std::packaged_task<void()>>([this, i, mem_tracker]() {
+            // Memory tracking is thread local: without re-installing the caller's tracker the
+            // bytes read here would vanish from the task's account and escape its memory limit.
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            tls_in_merge_prefill = true;
+            DeferOp reset_flag([]() { tls_in_merge_prefill = false; });
+            (void)fill_read(i);
+        });
+        auto st = pool->submit_func([task]() { (*task)(); });
+        if (!st.ok()) {
+            // Pool refused the task: read this child inline. Still correct, just not overlapped.
+            (void)fill_read(i);
+            continue;
+        }
+        futures.push_back(task->get_future());
+    }
+    for (auto& f : futures) {
+        f.wait();
+    }
+    futures.clear();
+
+    // Commit in child order. End-of-file and read errors are interpreted here, by the same
+    // branching the serial path uses, so a caller cannot tell the two paths apart.
+    for (size_t i = 0; i < n; i++) {
+        RETURN_IF_ERROR(fill_commit(i));
+    }
     return Status::OK();
 }
 
@@ -236,7 +350,8 @@ inline void MergeIterator::close() {
 
 class HeapMergeIterator final : public MergeIterator {
 public:
-    explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children) : MergeIterator(std::move(children)) {}
+    explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children)
+            : MergeIterator(std::move(children)), _prefill_rssid_rowids(_children.size()) {}
 
     std::string merge_condition;
 
@@ -254,8 +369,13 @@ protected:
         return do_get_next(chunk, nullptr, rssid_rowids);
     }
     Status fill(size_t child) override;
+    Status fill_read(size_t child) override;
+    Status fill_commit(size_t child) override;
 
 private:
+    // Per-child rssid/rowid buffer produced by fill_read, handed to the heap in fill_commit.
+    std::vector<std::shared_ptr<vector<uint64_t>>> _prefill_rssid_rowids;
+
     template <typename T, typename Container = std::vector<T>>
     using MinPriorityQueue = std::priority_queue<T, Container, std::greater<T>>;
     using ChunkHeap = MinPriorityQueue<ComparableChunk>;
@@ -353,18 +473,21 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
     }
 }
 
-inline Status HeapMergeIterator::fill(size_t child) {
+inline Status HeapMergeIterator::fill_read(size_t child) {
     Chunk* chunk = _chunk_pool[child].get();
-
     chunk->reset();
-    std::shared_ptr<vector<uint64_t>> rssid_rowids = std::make_shared<vector<uint64_t>>();
-
-    Status st = Status::OK();
     if (need_rssid_rowids) {
-        st = _children[child]->get_next(chunk, rssid_rowids.get());
+        _prefill_rssid_rowids[child] = std::make_shared<vector<uint64_t>>();
+        _prefill_st[child] = _children[child]->get_next(chunk, _prefill_rssid_rowids[child].get());
     } else {
-        st = _children[child]->get_next(chunk);
+        _prefill_st[child] = _children[child]->get_next(chunk);
     }
+    return Status::OK();
+}
+
+inline Status HeapMergeIterator::fill_commit(size_t child) {
+    Chunk* chunk = _chunk_pool[child].get();
+    const Status& st = _prefill_st[child];
     if (st.ok()) {
         size_t num_rows = chunk->num_rows();
         DCHECK_GT(num_rows, 0u);
@@ -374,7 +497,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
         }
         if (need_rssid_rowids) {
             _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
-                          merge_condition, std::move(rssid_rowids));
+                          merge_condition, std::move(_prefill_rssid_rowids[child]));
         } else {
             _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
                           merge_condition);
@@ -387,6 +510,11 @@ inline Status HeapMergeIterator::fill(size_t child) {
         return st;
     }
     return Status::OK();
+}
+
+inline Status HeapMergeIterator::fill(size_t child) {
+    RETURN_IF_ERROR(fill_read(child));
+    return fill_commit(child);
 }
 
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children) {
@@ -476,6 +604,8 @@ protected:
     Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
     Status fill(size_t child) override;
+    Status fill_read(size_t child) override;
+    Status fill_commit(size_t child) override;
 
 private:
     std::vector<MergingChunk> _chunks;
@@ -571,12 +701,16 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
     }
 }
 
-inline Status MaskMergeIterator::fill(size_t child) {
+inline Status MaskMergeIterator::fill_read(size_t child) {
     Chunk* chunk = _chunk_pool[child].get();
-
     chunk->reset();
+    _prefill_st[child] = _children[child]->get_next(chunk);
+    return Status::OK();
+}
 
-    Status st = _children[child]->get_next(chunk);
+inline Status MaskMergeIterator::fill_commit(size_t child) {
+    Chunk* chunk = _chunk_pool[child].get();
+    const Status& st = _prefill_st[child];
     if (st.ok()) {
         size_t num_rows = chunk->num_rows();
         DCHECK_GT(num_rows, 0u);
@@ -595,6 +729,11 @@ inline Status MaskMergeIterator::fill(size_t child) {
         return st;
     }
     return Status::OK();
+}
+
+inline Status MaskMergeIterator::fill(size_t child) {
+    RETURN_IF_ERROR(fill_read(child));
+    return fill_commit(child);
 }
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
