@@ -1411,22 +1411,30 @@ public final class StarRocksRemoteScanService extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            // Expose only the user-visible base schema. getFullSchema() also returns internal
-            // columns (schema-change shadow columns and flat-JSON extended columns added by the
-            // local optimizer's JsonPathRewriteRule, e.g. "json_col.name"); projecting those to
-            // the catalog consumer makes SELECT * request columns the remote cannot produce.
-            List<String> partitionColumns = Lists.newArrayList(table.getPartitionColumnNames());
-            StarRocksRemoteScanWire.Table wireTable = new StarRocksRemoteScanWire.Table();
-            wireTable.db = dbName;
-            wireTable.table = tableName;
-            wireTable.schemaVersion = getSchemaVersionLocked(table);
-            wireTable.columns = toWireColumns(table.getBaseSchema(), partitionColumns);
-            wireTable.partitionColumns = partitionColumns;
-            wireTable.rowCount = table instanceof OlapTable ? ((OlapTable) table).getRowCount() : 0L;
-            return wireTable;
+            return toWireTableLocked(dbName, tableName, table);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
+    }
+
+    @VisibleForTesting
+    static StarRocksRemoteScanWire.Table toWireTableLocked(String dbName, String tableName, Table table) {
+        // Expose only the user-visible base schema. getFullSchema() also returns internal
+        // columns (schema-change shadow columns and flat-JSON extended columns added by the
+        // local optimizer's JsonPathRewriteRule, e.g. "json_col.name"); projecting those to
+        // the catalog consumer makes SELECT * request columns the remote cannot produce.
+        List<String> partitionColumns = Lists.newArrayList(table.getPartitionColumnNames());
+        StarRocksRemoteScanWire.Table wireTable = new StarRocksRemoteScanWire.Table();
+        wireTable.db = dbName;
+        wireTable.table = tableName;
+        wireTable.schemaVersion = getSchemaVersionLocked(table);
+        wireTable.columns = toWireColumns(table.getBaseSchema(), partitionColumns);
+        wireTable.partitionColumns = partitionColumns;
+        wireTable.rowCount = table instanceof OlapTable ? ((OlapTable) table).getRowCount() : 0L;
+        // Identity of the table for the consumer's StarRocksExternalTable.getUUID(); unlike the
+        // create time it is unique per incarnation, not per second.
+        wireTable.tableId = table.getId();
+        return wireTable;
     }
 
     private static long getSchemaVersionLocked(Table table) {

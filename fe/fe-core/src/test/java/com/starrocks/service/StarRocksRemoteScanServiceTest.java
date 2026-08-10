@@ -14,7 +14,9 @@
 
 package com.starrocks.service;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.starrocks.StarRocksRemoteScanWire;
 import com.starrocks.qe.ConnectContext;
@@ -745,5 +747,23 @@ public class StarRocksRemoteScanServiceTest {
                 prunedStructOutput("name", declared), 0, columnTypes("s", declared));
         Assertions.assertEquals("named_struct('name', `s`.`name`) AS `__sr_out_0`", projection);
         Assertions.assertEquals(1, SqlParser.parse(scanSql(projection), SESSION_VARIABLE).size());
+    }
+
+    // The get-table payload must carry the table id: the consumer builds
+    // StarRocksExternalTable.getUUID() out of it, and without it every connector-statistics
+    // lookup for this table throws instead of resolving.
+    @Test
+    public void testWireTableReportsTableId() {
+        Table table = new Table(10086L, "tbl1", Table.TableType.STARROCKS,
+                Collections.singletonList(new Column("k", IntegerType.INT, true)));
+
+        StarRocksRemoteScanWire.Table wireTable =
+                StarRocksRemoteScanService.toWireTableLocked("db1", "tbl1", table);
+
+        Assertions.assertEquals(10086L, wireTable.tableId);
+        Assertions.assertEquals("db1", wireTable.db);
+        Assertions.assertEquals("tbl1", wireTable.table);
+        Assertions.assertEquals(1, wireTable.columns.size());
+        Assertions.assertEquals("k", wireTable.columns.get(0).name);
     }
 }

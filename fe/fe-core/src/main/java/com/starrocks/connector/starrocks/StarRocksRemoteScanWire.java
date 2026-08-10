@@ -363,6 +363,10 @@ public final class StarRocksRemoteScanWire {
         public List<String> partitionColumns;
         @SerializedName("row_count")
         public long rowCount;
+        // Remote table id: unique within the remote cluster and never reused, which is what
+        // StarRocksExternalTable.getUUID() needs as an incarnation marker.
+        @SerializedName("table_id")
+        public long tableId;
     }
 
     public static final class GetTableResponse extends StatusEnvelope {

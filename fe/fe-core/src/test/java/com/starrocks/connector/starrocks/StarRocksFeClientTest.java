@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.starrocks;
 
+import com.google.gson.Gson;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.TAccessPathType;
@@ -201,5 +202,22 @@ public class StarRocksFeClientTest {
         TNetworkAddress restored = StarRocksRemoteScanWire.toThrift(dto);
         Assertions.assertEquals("be-1", restored.hostname);
         Assertions.assertEquals(8060, restored.port);
+    }
+
+    // get-table payload carries the remote table id, the incarnation marker behind
+    // StarRocksExternalTable.getUUID.
+    @Test
+    public void testGetTableResponseCarriesTableId() {
+        Gson gson = new Gson();
+
+        StarRocksRemoteScanWire.Table parsed = gson.fromJson(
+                "{\"db\":\"db1\",\"table\":\"tbl1\",\"schema_version\":3,\"row_count\":10,\"table_id\":10086}",
+                StarRocksRemoteScanWire.Table.class);
+        Assertions.assertEquals(10086L, parsed.tableId);
+        Assertions.assertEquals(3, parsed.schemaVersion);
+
+        StarRocksRemoteScanWire.Table emitted = new StarRocksRemoteScanWire.Table();
+        emitted.tableId = 10086L;
+        Assertions.assertTrue(gson.toJson(emitted).contains("\"table_id\":10086"));
     }
 }

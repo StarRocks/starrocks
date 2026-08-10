@@ -35,6 +35,8 @@ public class StarRocksExternalTable extends Table {
     private final String databaseName;
     private final String tableName;
     private final long schemaVersion;
+    // Remote table id; the incarnation marker in getUUID().
+    private final long remoteTableId;
     private final List<String> partitionColumnNames;
     // Whole-table physical row count from remote getTable metadata; 0 = unknown.
     private final long tableRowCount;
@@ -48,13 +50,7 @@ public class StarRocksExternalTable extends Table {
     private volatile StarRocksRemoteTableStats.Snapshot statsSnapshot;
 
     public StarRocksExternalTable(long id, String catalogName, String databaseName, String tableName,
-                                  List<Column> schema, long schemaVersion) {
-        this(id, catalogName, databaseName, tableName, schema, schemaVersion,
-                Collections.emptyList(), 0, null);
-    }
-
-    public StarRocksExternalTable(long id, String catalogName, String databaseName, String tableName,
-                                  List<Column> schema, long schemaVersion,
+                                  List<Column> schema, long schemaVersion, long remoteTableId,
                                   List<String> partitionColumnNames, long tableRowCount,
                                   Supplier<StarRocksRemoteTableStats.Snapshot> statsSnapshotSupplier) {
         super(id, tableName, TableType.STARROCKS, schema);
@@ -62,6 +58,7 @@ public class StarRocksExternalTable extends Table {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.schemaVersion = schemaVersion;
+        this.remoteTableId = remoteTableId;
         this.partitionColumnNames = partitionColumnNames == null ?
                 Collections.emptyList() : ImmutableList.copyOf(partitionColumnNames);
         this.tableRowCount = tableRowCount;
@@ -85,6 +82,48 @@ public class StarRocksExternalTable extends Table {
 
     public long getSchemaVersion() {
         return schemaVersion;
+    }
+
+    public long getRemoteTableId() {
+        return remoteTableId;
+    }
+
+    /**
+     * Identity of this table for the connector statistics framework, which is the only
+     * consumer of external-table UUIDs: {@code StatisticsUtils.getTableByUUID} splits the
+     * value on '.', requires exactly four segments, re-resolves catalog.db.table through
+     * MetadataMgr and then demands that the resolved table reports the same UUID.
+     * <p>
+     * The inherited {@link Table#getUUID()} (the local numeric id) satisfies none of that:
+     * this connector mints a fresh id from CONNECTOR_ID_GENERATOR on every getTable(), so
+     * the same remote table gets a different id per resolution and the value is not even
+     * parseable -- every lookup died on the four-segment precondition with a bare
+     * IllegalStateException, and the async connector-stats cache then retried each
+     * unresolvable key forever.
+     * <p>
+     * The remote table id is the incarnation marker: it is unique within the remote cluster
+     * and never reused, so it survives ALTER (schema evolution does not make it a different
+     * table) while a dropped-and-recreated table gets a fresh one and cannot inherit the
+     * previous incarnation's statistics. The remote create time would not do: it has
+     * second granularity, so a drop and recreate inside the same second repeats it.
+     */
+    @Override
+    public String getUUID() {
+        return String.join(".", escapeSegment(catalogName), escapeSegment(databaseName),
+                escapeSegment(tableName), Long.toString(remoteTableId));
+    }
+
+    /**
+     * Table and database names may legally contain '.' (FeNameFormat only rejects NUL), which
+     * would push the UUID past four segments and bring back the very IllegalStateException
+     * this identity exists to avoid. Replace it, the way {@code PaimonTable.getUUID()} does
+     * for its own segment. The mapping is deliberately lossy: nothing reads a name back out
+     * of a UUID, and an escaped name that happens to collide with a real table cannot be
+     * mistaken for it, because the trailing remote table id makes getTableByUUID's equality
+     * check fail. Such a table simply resolves to "no statistics" instead of throwing.
+     */
+    private static String escapeSegment(String segment) {
+        return segment.replace(".", "_");
     }
 
     public long getTableRowCount() {

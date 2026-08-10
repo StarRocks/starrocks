@@ -89,7 +89,7 @@ public class StarRocksMetadataStatisticsTest {
 
     private static StarRocksExternalTable table(StarRocksRemoteTableStats.Snapshot snapshot, long tableRowCount) {
         return new StarRocksExternalTable(1, "sr_catalog", "db1", "tbl1",
-                ImmutableList.of(K_COL, V_COL), 0,
+                ImmutableList.of(K_COL, V_COL), 0, 1700000000L,
                 snapshot == null ? ImmutableList.of() : snapshot.partitionColumns, tableRowCount,
                 () -> snapshot);
     }

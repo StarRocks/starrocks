@@ -120,9 +120,11 @@ public class StarRocksMetadata implements ConnectorMetadata {
         // supplier fetches the snapshot straight from the remote FE (no cached
         // epochs, so the remote ships all fields) — still once per query, the
         // memoization is what pins it.
+        // The id is a per-resolution local handle (a fresh one on every call), so it must not
+        // leak into anything that needs a stable identity — see StarRocksExternalTable.getUUID().
         return new StarRocksExternalTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalogName, dbName, tblName,
-                StarRocksFeClient.toColumns(tableInfo), tableInfo.schemaVersion, tableInfo.partitionColumns,
-                tableInfo.rowCount,
+                StarRocksFeClient.toColumns(tableInfo), tableInfo.schemaVersion, tableInfo.tableId,
+                tableInfo.partitionColumns, tableInfo.rowCount,
                 cacheEnabled() ? () -> metadataCache.getTableStatsSnapshot(dbName, tblName)
                         : () -> feClient.fetchTableStatsSnapshot(dbName, tblName, null));
     }

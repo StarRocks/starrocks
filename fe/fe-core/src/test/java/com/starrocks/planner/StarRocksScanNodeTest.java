@@ -35,7 +35,7 @@ public class StarRocksScanNodeTest {
     public void testUsesRemoteOutputSchemaOrderForThrift() {
         StarRocksExternalTable table = new StarRocksExternalTable(1, "remote", "db1", "tbl1",
                 Arrays.asList(new Column("k2", VarcharType.VARCHAR), new Column("v1", IntegerType.BIGINT)),
-                7);
+                7, 1700000000L, Collections.emptyList(), 0, null);
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         addSlot(desc, 2, new Column("k2", VarcharType.VARCHAR));
@@ -55,7 +55,7 @@ public class StarRocksScanNodeTest {
     public void testMaterializedNonOutputSlotIsIncludedForRemoteProjection() {
         StarRocksExternalTable table = new StarRocksExternalTable(1, "remote", "db1", "tbl1",
                 Arrays.asList(new Column("k2", VarcharType.VARCHAR), new Column("v1", IntegerType.BIGINT)),
-                7);
+                7, 1700000000L, Collections.emptyList(), 0, null);
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         addSlot(desc, 2, new Column("k2", VarcharType.VARCHAR), false);
@@ -74,7 +74,7 @@ public class StarRocksScanNodeTest {
     public void testRemoteScanDisablesRuntimeAdaptiveDop() {
         StarRocksExternalTable table = new StarRocksExternalTable(1, "remote", "db1", "tbl1",
                 Collections.singletonList(new Column("v1", IntegerType.BIGINT)),
-                7);
+                7, 1700000000L, Collections.emptyList(), 0, null);
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         addSlot(desc, 3, new Column("v1", IntegerType.BIGINT));
@@ -134,7 +134,7 @@ public class StarRocksScanNodeTest {
     private static StarRocksScanNode newScanNode() {
         StarRocksExternalTable table = new StarRocksExternalTable(1, "remote", "db1", "tbl1",
                 Collections.singletonList(new Column("k1", IntegerType.BIGINT)),
-                7);
+                7, 1700000000L, Collections.emptyList(), 0, null);
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         addSlot(desc, 3, new Column("k1", IntegerType.BIGINT));
