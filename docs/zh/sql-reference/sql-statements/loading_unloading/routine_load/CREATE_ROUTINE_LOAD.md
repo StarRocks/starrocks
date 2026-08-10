@@ -16,7 +16,7 @@ Routine Load 可以持续从 Apache Kafka® 消费消息并将数据导入到 St
 本主题介绍 CREATE ROUTINE LOAD 语句的语法、参数和示例。
 
 :::note
-- 有关 Routine Load 的应用场景、原理和基本操作的信息，请参见 [使用 Routine Load 导入数据](../../../../loading/loading_introduction/Loading_intro.md)。
+- 有关 Routine Load 的应用场景、原理和基本操作的信息，请参见 [使用 Routine Load 导入数据](../../../../loading/loading_introduction/loading_introduction.mdx)。
 - 只有具有 StarRocks 表 INSERT 权限的用户才能将数据导入到 StarRocks 表中。如果您没有 INSERT 权限，请按照 [GRANT](../../account-management/GRANT.md) 中提供的说明授予您用于连接 StarRocks 集群的用户 INSERT 权限。
 :::
 

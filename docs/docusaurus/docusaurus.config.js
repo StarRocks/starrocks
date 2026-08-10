@@ -143,7 +143,7 @@ const MOVED_DOCS = [
   { from: "/docs/project_help/", to: "/docs/introduction/slack/" },
   { from: "/docs/project_help/slack/", to: "/docs/introduction/slack/" },
   { from: "/docs/loading/Kafka-connector-starrocks/", to: "/docs/loading/kafka/Kafka-connector-starrocks/" },
-  { from: "/docs/loading/Loading_intro/", to: "/docs/loading/loading_introduction/Loading_intro/" },
+  { from: "/docs/loading/Loading_intro/", to: "/docs/loading/loading_introduction/" },
   { from: "/docs/loading/RoutineLoad/", to: "/docs/loading/kafka/RoutineLoad/" },
   { from: "/docs/loading/Spark-connector-starrocks/", to: "/docs/loading/spark/Spark-connector-starrocks/" },
   { from: "/docs/loading/SparkLoad/", to: "/docs/loading/spark/SparkLoad/" },

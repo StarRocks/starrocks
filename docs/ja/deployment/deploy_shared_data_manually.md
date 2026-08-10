@@ -647,7 +647,7 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 ### 共有データ StarRocks クラスターへのデータロード
 
-共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/loading_introduction/Loading_intro.md) を参照してください。
+共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 ### 共有データ StarRocks クラスターでのクエリ
 

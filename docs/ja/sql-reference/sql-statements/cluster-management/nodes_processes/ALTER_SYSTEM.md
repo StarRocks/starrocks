@@ -123,7 +123,7 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 
 ### Broker
 
-- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/loading_introduction/Loading_intro.md) を参照してください。
+- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]

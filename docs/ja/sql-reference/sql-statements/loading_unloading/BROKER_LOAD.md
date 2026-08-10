@@ -11,7 +11,7 @@ import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 説明
 
-StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/loading_introduction/Loading_intro.md) を参照してください。
+StarRocks は、MySQL ベースのロード方法である Broker Load を提供します。ロードジョブを送信すると、StarRocks は非同期でジョブを実行します。`SELECT * FROM information_schema.loads` を使用してジョブの結果をクエリすることができます。この機能は v3.1 以降でサポートされています。背景情報、原則、サポートされているデータファイル形式、単一テーブルロードと複数テーブルロードの実行方法、ジョブ結果の表示方法については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 <InsertPrivNote />
 
@@ -223,7 +223,7 @@ CSV 形式のデータファイルでフィールド値を [RFC4180](https://www
   >
   > データファイルの列が StarRocks テーブルの列に順番にマッピングされる場合、`column_list` を指定する必要はありません。
 
-  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/loading_introduction/Loading_intro.md) を参照してください。
+  データファイルの特定の列をスキップしたい場合、その列を一時的に StarRocks テーブルの列とは異なる名前にするだけで済みます。詳細については、[loading overview](../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 - `COLUMNS FROM PATH AS`
 

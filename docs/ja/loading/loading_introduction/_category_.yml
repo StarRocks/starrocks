@@ -2,6 +2,3 @@ position: 10
 label: 'Loading overview'
 collapsible: true
 collapsed: true
-link:
-  id: loading_introduction
-  type: doc
