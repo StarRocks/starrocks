@@ -614,6 +614,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         return Status::InternalError("tablet_metas cannot be empty");
     }
 
+    const int64_t trace_begin_us = butil::gettimeofday_us();
+
     RETURN_IF_ERROR(check_bundle_tablet_metadata_coverage(tablet_metas, expected_tablet_ids));
 
     std::vector<int64_t> candidate_tablet_ids;
@@ -621,12 +623,15 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     for (const auto& [tid, _meta] : tablet_metas) {
         candidate_tablet_ids.push_back(tid);
     }
+    const int64_t trace_after_cover_us = butil::gettimeofday_us();
     const int64_t anchor_tablet_id = pick_local_anchor_tablet_id(candidate_tablet_ids);
     const int64_t anchor_version = tablet_metas.at(anchor_tablet_id).version();
+    const int64_t trace_after_anchor_us = butil::gettimeofday_us();
 
     BundleTabletMetadataPB bundle_meta;
     ASSIGN_OR_RETURN(auto partition_location,
                      _location_provider->real_location(tablet_metadata_root_location(anchor_tablet_id)));
+    const int64_t trace_after_real_location_us = butil::gettimeofday_us();
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     for (auto& [tablet_id, meta] : tablet_metas) {
         (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
@@ -646,18 +651,23 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         pointer.set_size(size);
         return pointer;
     };
+    const int64_t trace_after_schema_us = butil::gettimeofday_us();
 
     const std::string meta_location = bundle_tablet_metadata_location(anchor_tablet_id, anchor_version);
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
+    const int64_t trace_after_open_us = butil::gettimeofday_us();
+    int64_t trace_serialize_us = 0;
+    int64_t trace_append_us = 0;
     std::string serialized_buf;
     int64_t current_offset = 0;
     // Snapshot the mutable config once so a single bundle file is internally consistent: every
     // tablet page and the footer use the same decision, even if the flag is flipped concurrently.
     const bool enable_checksum = config::lake_enable_protobuf_file_checksum;
     for (auto& [tablet_id, meta] : tablet_metas) {
+        const int64_t trace_tablet_begin_us = butil::gettimeofday_us();
         // Normalize RPC-received metadata on entry exactly like S3-loaded metadata: after-load
         // (extend + back-fill segment_metas from the legacy arrays) BEFORE before-save rebuilds those
         // arrays. During a mixed-version upgrade an old worker can send legacy-shaped metadata whose
@@ -681,15 +691,24 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
             (*bundle_meta.mutable_tablet_meta_page_checksum())[tablet_id] =
                     olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size());
         }
+        const int64_t trace_append_begin_us = butil::gettimeofday_us();
+        trace_serialize_us += trace_append_begin_us - trace_tablet_begin_us;
         RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
+        trace_append_us += butil::gettimeofday_us() - trace_append_begin_us;
         current_offset += serialized_buf.size();
     }
+    const int64_t trace_page_bytes = current_offset;
 
     serialized_buf.clear();
     if (!bundle_meta.SerializeToString(&serialized_buf)) {
         return Status::IOError("Failed to write shared metadata header");
     }
-    RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
+    const int64_t trace_header_bytes = static_cast<int64_t>(serialized_buf.size());
+    {
+        const int64_t trace_append_begin_us = butil::gettimeofday_us();
+        RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
+        trace_append_us += butil::gettimeofday_us() - trace_append_begin_us;
+    }
     std::string fixed_buf;
     uint64_t size_field_value = serialized_buf.size();
     if (enable_checksum) {
@@ -701,9 +720,27 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         size_field_value |= LAKE_BUNDLE_META_CHECKSUM_FLAG;
     }
     put_fixed64_le(&fixed_buf, size_field_value);
+    const int64_t trace_before_footer_us = butil::gettimeofday_us();
     RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
+    trace_append_us += butil::gettimeofday_us() - trace_before_footer_us;
+    const int64_t trace_before_close_us = butil::gettimeofday_us();
     RETURN_IF_ERROR(meta_file->close());
+    const int64_t trace_after_close_us = butil::gettimeofday_us();
     _metacache->cache_aggregation_partition(partition_location, true);
+    const int64_t trace_end_us = butil::gettimeofday_us();
+    LOG(INFO) << "put_bundle_tablet_metadata trace"
+              << " anchor_tablet=" << anchor_tablet_id << " version=" << anchor_version
+              << " tablets=" << tablet_metas.size() << " schemas=" << unique_schemas.size()
+              << " page_bytes=" << trace_page_bytes << " header_bytes=" << trace_header_bytes
+              << " total_us=" << (trace_end_us - trace_begin_us)
+              << " coverage_us=" << (trace_after_cover_us - trace_begin_us)
+              << " anchor_us=" << (trace_after_anchor_us - trace_after_cover_us)
+              << " real_location_us=" << (trace_after_real_location_us - trace_after_anchor_us)
+              << " schema_us=" << (trace_after_schema_us - trace_after_real_location_us)
+              << " open_us=" << (trace_after_open_us - trace_after_schema_us)
+              << " serialize_us=" << trace_serialize_us << " append_us=" << trace_append_us
+              << " close_us=" << (trace_after_close_us - trace_before_close_us)
+              << " metacache_us=" << (trace_end_us - trace_after_close_us);
     return Status::OK();
 }
 
