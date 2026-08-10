@@ -130,14 +130,12 @@ public class TransactionStmtExecutor {
         // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
         String stmtLabel = stmt.getLabel();
         String label;
+        // A user-specified label must be unique in the cluster, align with INSERT statement behavior. The check
+        // is deferred to the registration below so that checking and publishing happen atomically.
+        boolean checkLabelConflict = false;
         if (stmtLabel != null && !stmtLabel.isEmpty()) {
             FeNameFormat.checkLabel(stmtLabel);
-            // Check if label is already used in any database, align with INSERT statement behavior
-            try {
-                globalTransactionMgr.checkLabelUsedInAnyDatabase(stmtLabel);
-            } catch (LabelAlreadyUsedException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            checkLabelConflict = true;
             label = stmtLabel;
         } else if (labelOverride != null && !labelOverride.isEmpty()) {
             label = labelOverride;
@@ -160,7 +158,15 @@ public class TransactionStmtExecutor {
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
         explicitTxnState.setTransactionState(transactionState);
-        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        if (checkLabelConflict) {
+            try {
+                globalTransactionMgr.addTransactionStateWithLabelCheck(transactionId, explicitTxnState);
+            } catch (LabelAlreadyUsedException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else {
+            globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        }
 
         context.setTxnId(transactionId);
         context.getState().setOk(0, 0,
