@@ -132,6 +132,11 @@ ColumnReader::~ColumnReader() {
                                  _builtin_inverted_index_meta->SpaceUsedLong());
         _builtin_inverted_index_meta.reset(nullptr);
     }
+    if (_zstd_compression_ddict != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+                                 _zstd_compression_ddict->mem_usage());
+        _zstd_compression_ddict.reset();
+    }
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
@@ -538,7 +543,10 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                             // the segment stays in the metacache. Report it the way every other
                             // lazily loaded per-column structure here does, or the metacache
                             // sizes itself against a number that leaves these dictionaries out.
-                            _meta_mem_usage.fetch_add(_zstd_compression_ddict->mem_usage(), std::memory_order_relaxed);
+                            const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
+                            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+                                                     ddict_bytes);
+                            _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
                             _segment->update_cache_size();
                             return Status::OK();
                         })
