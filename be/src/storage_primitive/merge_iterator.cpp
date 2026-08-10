@@ -20,6 +20,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
@@ -230,13 +231,20 @@ inline Status MergeIterator::init() {
         // If we reserve here, for small segment files, it will consume large memory then need.
         _chunk_pool[i] = ChunkFactory::new_chunk(output_schema(), 0);
     }
-    if (config::enable_compaction_parallel_merge_init && _children.size() > 1) {
+    const bool parallel = config::enable_compaction_parallel_merge_init && _children.size() > 1;
+    const int64_t start_ns = MonotonicNanos();
+    if (parallel) {
         RETURN_IF_ERROR(parallel_prefill());
     } else {
         for (size_t i = 0; i < _children.size(); i++) {
             RETURN_IF_ERROR(fill(i));
         }
     }
+    // A prologue this slow is a real stall -- every child is read before the merge emits a row --
+    // so it is worth a line, and it is rare enough not to be noise.
+    int64_t cost_ms = (MonotonicNanos() - start_ns) / 1000000;
+    LOG_IF(INFO, cost_ms >= 1000) << "slow merge iterator prologue: children=" << _children.size()
+                                  << ", parallel=" << parallel << ", cost=" << cost_ms << "ms";
     _inited = true;
     return Status::OK();
 }
