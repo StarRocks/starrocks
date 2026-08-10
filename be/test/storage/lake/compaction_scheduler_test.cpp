@@ -535,8 +535,6 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
     EXPECT_TRUE(ran_off_caller_thread.load());
 }
 
-
-
 // Once the IO-heavy task creation is offloaded to `_threads`, an exception escaping it stops being a crash
 // and becomes a silent hang: ThreadPool::dispatch_thread only logs an escaping exception (it does not run
 // the runnable's cancel()), compact() has already released the ClosureGuard, and ~CompactionTaskCallback()
