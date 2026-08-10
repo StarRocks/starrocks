@@ -43,23 +43,10 @@ public:
     // degrades to "no compression dict for this column" and must never fail the
     // segment flush.
     //
-    // `trained` selects how the bytes are interpreted:
-    //   false -> ZSTD_dct_rawContent: `dict_bytes` is a verbatim data sample, so
-    //            it is never parsed as a structured dictionary (a sample is
-    //            user-controlled and could begin with ZSTD_MAGIC_DICTIONARY).
-    //   true  -> ZSTD_dct_auto: `dict_bytes` is a ZDICT-trained dictionary whose
-    //            header and entropy tables must be honored.
-    // The read side must use the SAME interpretation (persisted as
-    // ColumnMetaPB.zstd_compression_dict_trained).
-    static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& dict_bytes, int level, bool trained = false);
-
-    // Train a dictionary of at most `max_dict_size` bytes from `samples`
-    // (concatenated in `sample_buf`, with per-sample lengths in `sample_sizes`)
-    // via ZDICT_trainFromBuffer. On success returns the dictionary BYTES, which
-    // the caller persists in the compression-dict page and feeds back into create()
-    // with trained=true.
-    static StatusOr<std::string> train(const Slice& sample_buf, const std::vector<size_t>& sample_sizes,
-                                       size_t max_dict_size);
+    // The bytes are always interpreted as ZSTD_dct_rawContent: they are a verbatim
+    // data sample, so they must never be parsed as a structured dictionary (a
+    // sample is user-controlled and could begin with ZSTD_MAGIC_DICTIONARY).
+    static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& dict_bytes, int level);
 
     ~ZstdCDict();
     ZstdCDict(const ZstdCDict&) = delete;

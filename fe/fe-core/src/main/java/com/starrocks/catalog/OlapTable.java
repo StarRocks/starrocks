@@ -241,6 +241,11 @@ public class OlapTable extends Table {
     // columns that use a column-level compression dictionary (a ZSTD dictionary)
     @SerializedName(value = "zstdCompressionColumns")
     protected Set<ColumnId> zstdCompressionColumns;
+    // Per-column data page size for the columns above, in bytes. A column absent from
+    // this map (or mapped to 0) keeps the BE default. Kept strictly in step with
+    // zstdCompressionColumns: the key set is always a subset of it.
+    @SerializedName(value = "zstdCompressionPageSizes")
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
 
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
@@ -321,6 +326,7 @@ public class OlapTable extends Table {
         this.bfColumns = null;
         this.bfFpp = 0;
         this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -353,6 +359,7 @@ public class OlapTable extends Table {
         this.bfColumns = null;
         this.bfFpp = 0;
         this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -407,6 +414,8 @@ public class OlapTable extends Table {
         if (zstdCompressionColumns != null) {
             olapTable.zstdCompressionColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
             olapTable.zstdCompressionColumns.addAll(zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    zstdCompressionPageSizes == null ? null : Maps.newHashMap(zstdCompressionPageSizes);
         } else {
             olapTable.zstdCompressionColumns = null;
         }
@@ -454,6 +463,8 @@ public class OlapTable extends Table {
         }
         if (this.zstdCompressionColumns != null) {
             olapTable.zstdCompressionColumns = Sets.newHashSet(this.zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    this.zstdCompressionPageSizes == null ? null : Maps.newHashMap(this.zstdCompressionPageSizes);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -755,8 +766,15 @@ public class OlapTable extends Table {
         // place that can keep the set honest.
         if (zstdCompressionColumns != null) {
             zstdCompressionColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (zstdCompressionPageSizes != null) {
+                zstdCompressionPageSizes.keySet().removeIf(columnId -> idToColumn.get(columnId) == null);
+                if (zstdCompressionPageSizes.isEmpty()) {
+                    zstdCompressionPageSizes = null;
+                }
+            }
             if (zstdCompressionColumns.isEmpty()) {
                 zstdCompressionColumns = null;
+                zstdCompressionPageSizes = null;
             }
         }
         // update max column unique id
@@ -1640,7 +1658,17 @@ public class OlapTable extends Table {
         }
     }
 
+    public Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
     public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns) {
+        setZstdCompressionColumns(zstdCompressionColumns, null);
+    }
+
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns,
+                                          Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
         this.zstdCompressionColumns = zstdCompressionColumns;
     }
 
@@ -3071,8 +3099,13 @@ public class OlapTable extends Table {
         // columns using a compression dictionary
         Set<String> zstdCompressionColumnNames = getZstdCompressionColumnNames();
         if (zstdCompressionColumnNames != null && !zstdCompressionColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS,
-                    Joiner.on(", ").join(zstdCompressionColumnNames));
+            List<String> specs = Lists.newArrayListWithCapacity(zstdCompressionColumnNames.size());
+            for (String columnName : zstdCompressionColumnNames) {
+                Integer pageSize = zstdCompressionPageSizes == null
+                        ? null : zstdCompressionPageSizes.get(ColumnId.create(columnName));
+                specs.add(pageSize == null || pageSize <= 0 ? columnName : columnName + ":" + pageSize);
+            }
+            properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, Joiner.on(", ").join(specs));
         }
 
         // colocate group

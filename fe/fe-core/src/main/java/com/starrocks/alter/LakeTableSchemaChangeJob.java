@@ -146,6 +146,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private boolean hasZstdCompressionChange;
     @SerializedName(value = "zstdCompressionColumns")
     private Set<ColumnId> zstdCompressionColumns = null;
+    @SerializedName(value = "zstdCompressionPageSizes")
+    private Map<ColumnId, Integer> zstdCompressionPageSizes = null;
 
     // alter index info
     @SerializedName(value = "indexChange")
@@ -239,9 +241,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.bfFpp = bfFpp;
     }
 
-    void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns) {
+    void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns,
+                                Map<ColumnId, Integer> zstdCompressionPageSizes) {
         this.hasZstdCompressionChange = hasZstdCompressionChange;
         this.zstdCompressionColumns = zstdCompressionColumns;
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
     }
 
     void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -1231,7 +1235,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
         // update compression dict columns
         if (hasZstdCompressionChange) {
-            table.setZstdCompressionColumns(zstdCompressionColumns);
+            table.setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes);
         }
         // update index
         if (indexChange) {

@@ -277,6 +277,11 @@ struct TColumn {
     12: optional Types.TAggStateDesc agg_state_desc
     // column-level compression dictionary (a ZSTD dictionary) (per-column enable flag).
     13: optional bool use_zstd_compression = false
+    // Data page size for this column, in bytes. 0 / unset keeps the BE default
+    // (config::data_page_size). The page is the unit of decompression, so the size
+    // that pays off depends on the column's row length; see the
+    // zstd_compression_columns table property.
+    14: optional i32 zstd_compression_page_size = 0
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.

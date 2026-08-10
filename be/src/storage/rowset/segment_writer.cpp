@@ -188,6 +188,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             opts.use_zstd_compression = true;
         }
 
+        // Per-column data page size. Unset (0) keeps config::data_page_size, so a
+        // table that does not ask for one is written exactly as before.
+        if (column.zstd_compression_page_size() > 0) {
+            opts.data_page_size = column.zstd_compression_page_size();
+        }
+
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification

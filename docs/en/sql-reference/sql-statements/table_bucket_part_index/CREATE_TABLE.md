@@ -643,6 +643,23 @@ PROPERTIES (
 )
 ```
 
+A column may also carry its own data page size, written after the column name:
+
+```SQL
+PROPERTIES (
+    "zstd_compression_columns"="v1:4m, v2:256k, v3"
+)
+```
+
+The page is the unit of decompression, so what a larger page buys depends on how
+big the column's rows are relative to it. A column whose rows are larger than a
+page loses all cross-row redundancy at the default 64 KB and can compress several
+times better with a large page. A column holding hundreds of rows per page already
+has that redundancy inside the page and gains almost nothing, while every point
+lookup would decompress the whole larger page. That is why the size is set per
+column. Columns written without a size keep the BE default (`data_page_size`).
+Accepted sizes range from 4 KB to 16 MB.
+
 The property can also be changed later with
 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. The new setting
 governs data written from then on; segments that already exist are not rewritten

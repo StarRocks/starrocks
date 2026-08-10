@@ -723,38 +723,6 @@ CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
 // dictionary sample. Guards against building a garbage dict from a tiny/near
 // empty first page and permanently marking the column dict-ready.
 CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
-// compression dict compression-dictionary build mode:
-//   "sample" (default) -- take the first eligible page's bytes verbatim as a
-//       raw-content dictionary. No buffering, no training cost, page 0 is itself
-//       dict-compressed.
-//   "train" -- ZDICT-lite: buffer the first zstd_compression_dict_train_pages pages, cut
-//       them into fragments, and train a dictionary. Compresses better because
-//       the dictionary keeps only frequent substrings sampled across many rows,
-//       but it defers those pages' compression and costs training CPU.
-CONF_mString(zstd_compression_dict_build_mode, "sample");
-// "train" mode only: how many data pages to buffer before training. Bounds the
-// extra write memory at zstd_compression_dict_train_pages * data_page_size per column
-// (32 * 64KB = 2MB by default).
-// This -- not zstd_compression_dict_max_size -- is the parameter that actually decides how
-// good the trained dictionary is: zstd recommends a sample budget around 100x
-// the dictionary size, and measurements showed K=32 beating K=8 by ~10% on
-// replay-heavy data while raising zstd_compression_dict_max_size under a K=8 budget did
-// nothing (the trainer could not fill the requested size).
-CONF_mInt32(zstd_compression_dict_train_pages, "32");
-// "train" mode only: fragment size the buffered pages are cut into to form
-// training samples. Many small samples train a better dictionary than a few
-// large ones.
-CONF_mInt32(zstd_compression_dict_train_fragment_bytes, "4096");
-// "train" mode only: maximum dictionary size ("sample" mode is bounded by
-// zstd_compression_dict_sample_bytes instead). A non-positive value disables training.
-// 64KB, not the 110KiB zstd-CLI convention: measured on
-// a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
-// 112KB and 256KB on EVERY column, because the dictionary is a codebook of
-// frequent substrings whose returns diminish fast while its own bytes are stored
-// once per (column, segment) -- on a 41MB column a 256KB dictionary costs 0.6% of
-// the total, enough to flip the ranking. Larger values are only worth trying for
-// very large single-column segments.
-CONF_mInt32(zstd_compression_dict_max_size, "65536");
 // keep dictionary-loaded ZSTD decompression contexts warm in a small
 // thread-local set instead of borrowing from the shared pool (whose reset clears
 // the sticky refDDict, forcing the dictionary to be re-loaded into a cold context

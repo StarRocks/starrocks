@@ -108,6 +108,14 @@ public:
     bool use_zstd_compression() const { return _check_flag(kUseZstdCompressionShift); }
     void set_use_zstd_compression(bool value) { _set_flag(kUseZstdCompressionShift, value); }
 
+    // Data page size for this column, or 0 to keep the BE default. The page is the
+    // unit of decompression, so what pays off depends on the column's row length:
+    // rows larger than a page lose all cross-row redundancy at the default 64KB and
+    // compress several times better with a large page, while a column holding
+    // hundreds of rows per page gains nothing and only pays on point lookups.
+    uint32_t zstd_compression_page_size() const { return _zstd_compression_page_size; }
+    void set_zstd_compression_page_size(uint32_t value) { _zstd_compression_page_size = value; }
+
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
 
@@ -241,6 +249,7 @@ private:
     LogicalType _type = TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;
+    uint32_t _zstd_compression_page_size = 0;
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
 

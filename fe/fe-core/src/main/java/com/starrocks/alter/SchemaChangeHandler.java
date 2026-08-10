@@ -1819,9 +1819,12 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 2.5: compression dict columns (compression dict)
         // eg. "zstd_compression_columns" = "v1,v2"
         Set<String> zstdCompressionColumns = null;
+        Map<String, Integer> zstdCompressionPageSizeNames = null;
         try {
-            zstdCompressionColumns = PropertyAnalyzer.analyzeZstdCompressionColumns(propertyMap,
+            zstdCompressionPageSizeNames = PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(propertyMap,
                     indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
+            zstdCompressionColumns =
+                    zstdCompressionPageSizeNames == null ? null : zstdCompressionPageSizeNames.keySet();
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -1854,6 +1857,28 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        // Page sizes travel with the column set: when the property is restated they
+        // come from it, and when it is not restated the existing ones stay.
+        Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+        if (zstdCompressionColumnIds != null) {
+            if (zstdCompressionPageSizeNames != null) {
+                zstdCompressionPageSizeIds = Maps.newHashMap();
+                for (Map.Entry<String, Integer> entry : zstdCompressionPageSizeNames.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue() > 0) {
+                        Column column = olapTable.getColumn(entry.getKey());
+                        if (column != null) {
+                            zstdCompressionPageSizeIds.put(column.getColumnId(), entry.getValue());
+                        }
+                    }
+                }
+                if (zstdCompressionPageSizeIds.isEmpty()) {
+                    zstdCompressionPageSizeIds = null;
+                }
+            } else {
+                zstdCompressionPageSizeIds = olapTable.getZstdCompressionPageSizes();
+            }
+        }
+
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -1866,6 +1891,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
                 .withZstdCompressionColumns(zstdCompressionColumnIds)
+                .withZstdCompressionPageSizes(zstdCompressionPageSizeIds)
                 .withZstdCompressionColumnsChanged(hasZstdCompressionChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
@@ -4664,6 +4690,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
                     .setZstdCompressionColumnNames(schemaChangeData.getZstdCompressionColumns())
+                    .setZstdCompressionPageSizes(schemaChangeData.getZstdCompressionPageSizes())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
@@ -4763,6 +4790,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withBloomFilterColumns(schemaChangeData.getBloomFilterColumns(), schemaChangeData.getBloomFilterFpp())
                 .withBloomFilterColumnsChanged(schemaChangeData.isBloomFilterColumnsChanged())
                 .withZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns())
+                .withZstdCompressionPageSizes(schemaChangeData.getZstdCompressionPageSizes())
                 .withZstdCompressionColumnsChanged(schemaChangeData.isZstdCompressionColumnsChanged())
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())

@@ -40,6 +40,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
@@ -1054,20 +1055,80 @@ public class PropertyAnalyzer {
     //   - there is no fpp / compression companion property.
     // Returns the set of column names that should use a compression dictionary (a ZSTD dictionary), or null if the
     // property is not present.
+    // The page is also the unit of the page cache and of a point lookup, so the size
+    // is bounded on both ends: below 4KB a page holds too little to compress, and
+    // above 16MB one row lookup would decompress 16MB.
+    private static final int MIN_ZSTD_COMPRESSION_PAGE_SIZE = 4 * 1024;
+    private static final int MAX_ZSTD_COMPRESSION_PAGE_SIZE = 16 * 1024 * 1024;
+
+    private static List<String> zstdCompressionColumnSpecs(String[] specs) {
+        List<String> trimmed = Lists.newArrayListWithCapacity(specs.length);
+        for (String spec : specs) {
+            trimmed.add(spec.trim());
+        }
+        return trimmed;
+    }
+
+    private static int analyzeZstdCompressionPageSize(String columnName, String pageSizeStr)
+            throws AnalysisException {
+        if (Strings.isNullOrEmpty(pageSizeStr)) {
+            throw new AnalysisException(
+                    String.format("Invalid page size for column '%s': missing value after ':'", columnName));
+        }
+        long pageSize;
+        try {
+            pageSize = ParseUtil.analyzeDataVolume(pageSizeStr);
+        } catch (Exception e) {
+            throw new AnalysisException(
+                    String.format("Invalid page size '%s' for column '%s': %s", pageSizeStr, columnName,
+                            e.getMessage()));
+        }
+        if (pageSize < MIN_ZSTD_COMPRESSION_PAGE_SIZE || pageSize > MAX_ZSTD_COMPRESSION_PAGE_SIZE) {
+            throw new AnalysisException(String.format(
+                    "Invalid page size '%s' for column '%s': must be between %d and %d bytes", pageSizeStr,
+                    columnName, MIN_ZSTD_COMPRESSION_PAGE_SIZE, MAX_ZSTD_COMPRESSION_PAGE_SIZE));
+        }
+        return (int) pageSize;
+    }
+
     public static Set<String> analyzeZstdCompressionColumns(Map<String, String> properties, List<Column> columns)
             throws AnalysisException {
-        Set<String> zstdCompressionColumns = null;
+        Map<String, Integer> pageSizes = analyzeZstdCompressionColumnPageSizes(properties, columns);
+        return pageSizes == null ? null : pageSizes.keySet();
+    }
+
+    // A column may carry an optional per-column data page size, written after the
+    // column name: "v:4m, j:256k, k". The page is the unit of decompression, so the
+    // size that pays off depends on how large the column's rows are relative to it:
+    // a column whose rows are bigger than a page loses all cross-row redundancy at
+    // 64KB and compresses several times better with a large page, while a column
+    // holding hundreds of rows per page gains nothing from a larger one and only
+    // pays for it on point lookups. That is why the size is per column and not a
+    // table-wide or cluster-wide setting.
+    // Returns column name -> page size in bytes (0 = leave at the BE default), or
+    // null when the property is not present.
+    public static Map<String, Integer> analyzeZstdCompressionColumnPageSizes(Map<String, String> properties,
+                                                                             List<Column> columns)
+            throws AnalysisException {
+        Map<String, Integer> zstdCompressionPageSizes = null;
         if (properties != null && properties.containsKey(PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
-            zstdCompressionColumns = Sets.newHashSet();
+            zstdCompressionPageSizes = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             String zstdCompressionColumnsStr = properties.get(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
             if (Strings.isNullOrEmpty(zstdCompressionColumnsStr)) {
-                return zstdCompressionColumns;
+                return zstdCompressionPageSizes;
             }
 
             String[] zstdCompressionColumnArr = zstdCompressionColumnsStr.split(COMMA_SEPARATOR);
             Set<String> zstdCompressionColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            for (String zstdCompressionColumn : zstdCompressionColumnArr) {
-                zstdCompressionColumn = zstdCompressionColumn.trim();
+            for (String zstdCompressionColumnSpec : zstdCompressionColumnSpecs(zstdCompressionColumnArr)) {
+                String zstdCompressionColumn = zstdCompressionColumnSpec;
+                int pageSize = 0;
+                int colon = zstdCompressionColumnSpec.lastIndexOf(':');
+                if (colon >= 0) {
+                    zstdCompressionColumn = zstdCompressionColumnSpec.substring(0, colon).trim();
+                    pageSize = analyzeZstdCompressionPageSize(zstdCompressionColumn,
+                            zstdCompressionColumnSpec.substring(colon + 1).trim());
+                }
                 String finalZstdCompressionColumn = zstdCompressionColumn;
                 Column column = columns.stream().filter(col -> col.getName().equalsIgnoreCase(finalZstdCompressionColumn))
                         .findFirst()
@@ -1097,13 +1158,13 @@ public class PropertyAnalyzer {
                 }
 
                 zstdCompressionColumnSet.add(zstdCompressionColumn);
-                zstdCompressionColumns.add(column.getName());
+                zstdCompressionPageSizes.put(column.getName(), pageSize);
             }
 
             properties.remove(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
         }
 
-        return zstdCompressionColumns;
+        return zstdCompressionPageSizes;
     }
 
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {

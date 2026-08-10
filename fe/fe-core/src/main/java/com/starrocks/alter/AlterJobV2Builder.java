@@ -42,6 +42,7 @@ public abstract class AlterJobV2Builder {
     protected double bloomFilterFpp;
     protected boolean zstdCompressionColumnsChanged = false;
     protected Set<ColumnId> zstdCompressionColumns;
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
@@ -156,6 +157,11 @@ public abstract class AlterJobV2Builder {
 
     public AlterJobV2Builder withZstdCompressionColumnsChanged(boolean changed) {
         this.zstdCompressionColumnsChanged = changed;
+        return this;
+    }
+
+    public AlterJobV2Builder withZstdCompressionPageSizes(@Nullable Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
         return this;
     }
 

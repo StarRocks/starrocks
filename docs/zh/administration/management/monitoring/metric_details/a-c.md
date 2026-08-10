@@ -452,7 +452,7 @@ description: "Alphabetical a - c"
 ## `zstd_compression_dict_bytes`
 
 - 单位：字节
-- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `zstd_compression_dict_pages_written` 即可得到平均字典大小，该大小在 `train` 模式下受 `zstd_compression_dict_max_size` 限制，在 `sample` 模式下受 `zstd_compression_dict_sample_bytes` 限制。
+- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `zstd_compression_dict_pages_written` 即可得到平均字典大小，该大小受 `zstd_compression_dict_sample_bytes` 限制。
 
 ## `zstd_compression_dict_pages_written`
 

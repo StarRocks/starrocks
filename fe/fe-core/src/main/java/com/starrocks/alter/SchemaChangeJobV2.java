@@ -168,6 +168,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private boolean hasZstdCompressionChange;
     @SerializedName(value = "zstdCompressionColumns")
     private Set<ColumnId> zstdCompressionColumns = null;
+    @SerializedName(value = "zstdCompressionPageSizes")
+    private Map<ColumnId, Integer> zstdCompressionPageSizes = null;
 
     // alter index info
     @SerializedName(value = "indexChange")
@@ -303,9 +305,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.bfFpp = bfFpp;
     }
 
-    public void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns) {
+    public void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns,
+                                Map<ColumnId, Integer> zstdCompressionPageSizes) {
         this.hasZstdCompressionChange = hasZstdCompressionChange;
         this.zstdCompressionColumns = zstdCompressionColumns;
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
     }
 
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -1019,7 +1023,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         // update compression dict columns
         if (hasZstdCompressionChange) {
-            tbl.setZstdCompressionColumns(zstdCompressionColumns);
+            tbl.setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes);
         }
         // update index
         if (indexChange) {

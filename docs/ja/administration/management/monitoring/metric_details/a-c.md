@@ -452,7 +452,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 ## `zstd_compression_dict_bytes`
 
 - 単位: バイト
-- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`zstd_compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `train` モードでは `zstd_compression_dict_max_size`、`sample` モードでは `zstd_compression_dict_sample_bytes` によって制限されます。
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`zstd_compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `zstd_compression_dict_sample_bytes` によって制限されます。
 
 ## `zstd_compression_dict_pages_written`
 

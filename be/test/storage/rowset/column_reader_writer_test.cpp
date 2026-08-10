@@ -1164,7 +1164,7 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
         // Mimic segment_writer, which stamps the table compression_level (default
         // -1), so the writer resolves the codec the same way production does rather
         // than through the proto default 0. Same stamp as the sibling
-        // test_zstd_compression_dict_train_mode / testZstdCompressionOnFlatJson tests.
+        // testZstdCompressionOnFlatJson test.
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
         writer_opts.use_zstd_compression = true; // enable compression dict
@@ -1220,103 +1220,162 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
     }
 }
 
-// compression dict "train" mode (ZDICT-lite): the first pages are buffered uncompressed while a
-// dictionary is trained from fragments spread across them, then flushed in order.
-// Pins that (1) a TRAINED dictionary page is emitted and flagged as such, and
-// (2) every row still roundtrips -- i.e. the deferred pages really did get
-// compressed and the reader loads a structured dictionary rather than raw bytes.
-TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_train_mode) {
-    std::string saved_mode = config::zstd_compression_dict_build_mode.value();
-    auto saved_pages = config::zstd_compression_dict_train_pages;
-    config::zstd_compression_dict_build_mode = "train";
-    config::zstd_compression_dict_train_pages = 4; // keep the test small
-    DeferOp restore([&]() {
-        config::zstd_compression_dict_build_mode = saved_mode;
-        config::zstd_compression_dict_train_pages = saved_pages;
-    });
+// ---------------------------------------------------------------------------
+// Benchmark, not a correctness test: compares what the three per-column knobs
+// (ZSTD codec, shared dictionary, page size) actually buy on a real dataset.
+// Disabled by default because it needs an external corpus; run with
+//   ZSTD_BENCH_CORPUS=<file> ./starrocks_dw_test \
+//     --gtest_also_run_disabled_tests --gtest_filter='*zstd_options_benchmark*'
+// Corpus format: repeated [uint32 little-endian length][length bytes].
+// ---------------------------------------------------------------------------
+namespace {
 
-    const std::string fname = strings::Substitute("$0/test_e4_zstd_compression_dict_train.data", TEST_DIR);
-    const int N = 4000;
-    std::vector<std::string> strs(N);
+std::vector<std::string> load_bench_corpus(const std::string& path, size_t cap_bytes) {
+    std::vector<std::string> rows;
+    FILE* f = fopen(path.c_str(), "rb");
+    if (f == nullptr) return rows;
+    size_t total = 0;
+    uint32_t len = 0;
+    while (fread(&len, sizeof(len), 1, f) == 1) {
+        std::string v(len, '\0');
+        if (len > 0 && fread(v.data(), 1, len, f) != len) break;
+        total += len;
+        if (total > cap_bytes) break;
+        rows.emplace_back(std::move(v));
+    }
+    fclose(f);
+    return rows;
+}
+
+struct BenchArm {
+    const char* name;
+    CompressionTypePB compression;
+    bool use_dict;
+    uint32_t page_size; // 0 = leave at the default
+};
+
+} // namespace
+
+TEST_F(ColumnReaderWriterTest, DISABLED_zstd_options_benchmark) {
+    const char* corpus_env = getenv("ZSTD_BENCH_CORPUS");
+    if (corpus_env == nullptr) {
+        GTEST_SKIP() << "set ZSTD_BENCH_CORPUS to a corpus file";
+    }
+    auto rows = load_bench_corpus(corpus_env, 512UL * 1024 * 1024);
+    ASSERT_FALSE(rows.empty()) << "empty corpus: " << corpus_env;
+
+    size_t raw_bytes = 0;
     std::vector<Slice> slices;
-    slices.reserve(N);
-    // Every value must be DISTINCT, for the same reason as
-    // test_zstd_compression_dict_roundtrip: StringColumnWriter speculates the encoding
-    // from the data, and a repeating set makes it pick DICT_ENCODING. Under
-    // DICT_ENCODING the whole column collapses into a single ~800-byte page of
-    // dict codes, which is below config::zstd_compression_dict_min_sample_bytes (1024),
-    // so training is skipped and no dictionary page is ever emitted. Distinct
-    // values keep the column PLAIN and spread it over enough pages for the
-    // trainer to see many fragments (this test wants "the first pages", plural).
-    for (int i = 0; i < N; i++) {
-        strs[i] = strings::Substitute(
-                R"({"role":"assistant","parts":[{"type":"text","content":"shared scaffolding tokens repeated )"
-                R"(across rows so a dictionary can be trained, row $0"}]})",
-                i);
-        slices.emplace_back(strs[i]);
+    slices.reserve(rows.size());
+    for (const auto& r : rows) {
+        raw_bytes += r.size();
+        slices.emplace_back(r);
     }
     auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-    col->reserve(N);
+    col->reserve(rows.size());
     col->append_strings(slices);
 
-    ColumnMetaPB meta;
-    {
-        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
-        ColumnWriterOptions writer_opts;
-        writer_opts.page_format = 2;
-        writer_opts.meta = &meta;
-        writer_opts.meta->set_column_id(0);
-        writer_opts.meta->set_unique_id(0);
-        writer_opts.meta->set_type(TYPE_VARCHAR);
-        writer_opts.meta->set_length(1024 * 1024);
-        writer_opts.meta->set_encoding(PLAIN_ENCODING);
-        writer_opts.meta->set_compression(starrocks::ZSTD);
-        writer_opts.meta->set_compression_level(-1);
-        writer_opts.meta->set_is_nullable(true);
-        writer_opts.use_zstd_compression = true;
+    fprintf(stderr, "\ncorpus %s: %zu rows, %.1f MB, avg %.0f B/row\n\n", corpus_env, rows.size(),
+            raw_bytes / 1048576.0, static_cast<double>(raw_bytes) / rows.size());
+    fprintf(stderr, "  %-34s %10s %8s %10s %12s %10s\n", "配置", "列文件MB", "压缩率", "全扫ms", "点查us/行", "编码");
 
-        TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
-        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
-        ASSERT_OK(writer->init());
-        ASSERT_TRUE(writer->append(*col).ok());
-        ASSERT_TRUE(writer->finish().ok());
-        ASSERT_TRUE(writer->write_data().ok());
-        ASSERT_TRUE(writer->write_ordinal_index().ok());
-        ASSERT_TRUE(wfile->close().ok());
-    }
+    const std::vector<BenchArm> arms = {
+            {"LZ4 64KB (今天默认)", starrocks::LZ4_FRAME, false, 0},
+            {"按列 ZSTD, 64KB", starrocks::ZSTD, false, 0},
+            {"按列 ZSTD + 共享字典, 64KB", starrocks::ZSTD, true, 0},
+            {"按列 ZSTD, 256KB 页", starrocks::ZSTD, false, 256 * 1024},
+            {"按列 ZSTD + 字典, 256KB 页", starrocks::ZSTD, true, 256 * 1024},
+            {"按列 ZSTD, 1MB 页", starrocks::ZSTD, false, 1024 * 1024},
+            {"按列 ZSTD + 字典, 1MB 页", starrocks::ZSTD, true, 1024 * 1024},
+            {"按列 ZSTD, 4MB 页", starrocks::ZSTD, false, 4 * 1024 * 1024},
+    };
 
-    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
-    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
-    // Training must have produced a structured dictionary, and the writer must
-    // have recorded that so the reader loads it the same way.
-    ASSERT_TRUE(meta.zstd_compression_dict_trained());
+    for (const auto& arm : arms) {
+        const std::string fname =
+                strings::Substitute("$0/zstd_bench_$1.data", TEST_DIR, static_cast<int>(&arm - arms.data()));
+        ColumnMetaPB meta;
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = &meta;
+            writer_opts.meta->set_column_id(0);
+            writer_opts.meta->set_unique_id(0);
+            writer_opts.meta->set_type(TYPE_VARCHAR);
+            writer_opts.meta->set_length(1024 * 1024);
+            writer_opts.meta->set_encoding(PLAIN_ENCODING);
+            writer_opts.meta->set_compression(arm.compression);
+            writer_opts.meta->set_compression_level(-1);
+            writer_opts.meta->set_is_nullable(true);
+            writer_opts.use_zstd_compression = arm.use_dict;
+            if (arm.page_size > 0) {
+                writer_opts.data_page_size = arm.page_size;
+            }
+            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            ASSERT_OK(writer->append(*col));
+            ASSERT_OK(writer->finish());
+            ASSERT_OK(writer->write_data());
+            ASSERT_OK(writer->write_ordinal_index());
+            ASSERT_OK(wfile->close());
+        }
+        ASSIGN_OR_ABORT(const uint64_t file_size, _fs->get_file_size(fname));
 
-    {
         auto segment = create_dummy_segment(fname);
         ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
-        ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
         ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
-        ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
+        ColumnIteratorOptions iter_opts;
         iter_opts.stats = &stats;
         iter_opts.read_file = read_file.get();
-        iter_opts.use_page_cache = true;
-        ASSERT_OK(iter->init(iter_opts));
-        ASSERT_OK(iter->seek_to_first());
-        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
-        dst->reserve(N);
-        size_t total = 0;
-        while (total < static_cast<size_t>(N)) {
-            size_t rows = static_cast<size_t>(N) - total;
-            ASSERT_OK(iter->next_batch(&rows, dst.get()));
-            if (rows == 0) break;
-            total += rows;
+        iter_opts.use_page_cache = false; // measure decompression, not the cache
+
+        // full scan
+        double scan_ms = 0;
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSERT_OK(iter->init(iter_opts));
+            ASSERT_OK(iter->seek_to_first());
+            auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+            auto start = std::chrono::steady_clock::now();
+            size_t remaining = rows.size();
+            while (remaining > 0) {
+                size_t n = std::min<size_t>(4096, remaining);
+                dst->resize(0);
+                ASSERT_OK(iter->next_batch(&n, dst.get()));
+                if (n == 0) break;
+                remaining -= n;
+            }
+            scan_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         }
-        ASSERT_EQ(static_cast<size_t>(N), dst->size());
-        TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
-        for (int i = 0; i < N; i++) {
-            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " row " << i;
+
+        // point lookups: same rows for every arm
+        double point_us = 0;
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSERT_OK(iter->init(iter_opts));
+            auto dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+            const int kQueries = 2000;
+            uint64_t r = 0x9E3779B97F4A7C15ULL;
+            auto start = std::chrono::steady_clock::now();
+            for (int q = 0; q < kQueries; q++) {
+                r ^= r << 13;
+                r ^= r >> 7;
+                r ^= r << 17;
+                ASSERT_OK(iter->seek_to_ordinal(r % rows.size()));
+                size_t n = 1;
+                dst->resize(0);
+                ASSERT_OK(iter->next_batch(&n, dst.get()));
+            }
+            point_us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count() /
+                       kQueries;
         }
+
+        fprintf(stderr, "  %-34s %10.1f %7.2fx %10.0f %12.1f %10s\n", arm.name, file_size / 1048576.0,
+                static_cast<double>(raw_bytes) / file_size, scan_ms, point_us,
+                EncodingTypePB_Name(meta.encoding()).c_str());
+        (void)_fs->delete_file(fname);
     }
 }
 

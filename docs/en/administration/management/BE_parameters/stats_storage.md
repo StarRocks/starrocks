@@ -271,31 +271,13 @@ This topic introduces the following types of BE configurations:
 - Description: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 - Introduced in: -
 
-### zstd_compression_dict_build_mode
-
-- Default: sample
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The strategy used to build the per-column compression dictionary. Valid values are `sample` and `train`. `sample` takes the bytes of the first eligible data page verbatim as a raw-content dictionary: no buffering, no training cost, and the first data page is itself compressed with the dictionary. `train` buffers the first `zstd_compression_dict_train_pages` data pages, cuts them into fragments, and trains a dictionary from those fragments. `train` usually compresses better, because the dictionary keeps only the frequent substrings sampled across many rows, but it defers the compression of the buffered pages and costs extra CPU for training. Any value other than `train` is treated as `sample`. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
-- Introduced in: v4.2
-
-### zstd_compression_dict_max_size
-
-- Default: 65536
-- Type: Int
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The maximum size of the dictionary produced in `train` mode. The default is 64 KB instead of the 110 KB zstd CLI convention, because measurements on a real agent-log dataset (3 large columns, 372 MB raw) showed that a 64 KB request beat both 112 KB and 256 KB on every column: the dictionary is a codebook of frequent substrings whose returns diminish quickly, while its own bytes are stored once per column per segment (on a 41 MB column a 256 KB dictionary costs 0.6% of the total, enough to flip the ranking). Larger values are only worth trying for very large single-column segments. A value less than or equal to `0` disables dictionary training, and the column falls back to plain ZSTD compression. Note that `zstd_compression_dict_train_pages`, not this parameter, is what actually decides the quality of the trained dictionary. This parameter is used in `train` mode only; in `sample` mode the dictionary size is bounded by `zstd_compression_dict_sample_bytes`.
-- Introduced in: v4.2
-
 ### zstd_compression_dict_min_sample_bytes
 
 - Default: 1024
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of the encoded values that a data page must reach before it can be used as the dictionary sample. This guards against building a garbage dictionary from a tiny or nearly empty first page and permanently marking the column as dictionary-ready. In `sample` mode the value is compared against the encoded values of the first data page; in `train` mode it is compared against the total size of the buffered training samples, where negative values are clamped to `0`. Set it to `0` or a greater value. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Description: The minimum size of the encoded values that a data page must reach before it can be used as the dictionary sample. This guards against building a garbage dictionary from a tiny or nearly empty first page and permanently marking the column as dictionary-ready. The value is compared against the encoded values of the first data page. Set it to `0` or a greater value. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
 - Introduced in: v4.2
 
 ### zstd_compression_dict_sample_bytes
@@ -305,24 +287,6 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The number of bytes sampled from the first eligible data page to build the compression dictionary in `sample` mode (first-page sampling). The default corresponds to roughly one 64 KB data page. The actual sample is `min(size of the encoded values of the page, zstd_compression_dict_sample_bytes)`, so this parameter also bounds the dictionary size in `sample` mode. The value is read when a column writer is created, so a change takes effect for the segments written afterwards. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
-- Introduced in: v4.2
-
-### zstd_compression_dict_train_fragment_bytes
-
-- Default: 4096
-- Type: Int
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The size of the fragments that the buffered pages are cut into to form the training samples. Many small samples train a better dictionary than a few large ones. Values less than `256` are treated as `256`. This parameter takes effect only when `enable_zstd_compression_dict` is `true` and `zstd_compression_dict_build_mode` is `train`.
-- Introduced in: v4.2
-
-### zstd_compression_dict_train_pages
-
-- Default: 32
-- Type: Int
-- Unit: Pages
-- Is mutable: Yes
-- Description: The number of data pages buffered before the dictionary is trained. It bounds the extra write memory to `zstd_compression_dict_train_pages * data_page_size` per column, which is 32 * 64 KB = 2 MB with the default values. This parameter, not `zstd_compression_dict_max_size`, is what actually decides how good the trained dictionary is: zstd recommends a sample budget of around 100 times the dictionary size, and measurements showed that 32 pages beat 8 pages by about 10% on replay-heavy data, while raising `zstd_compression_dict_max_size` under an 8-page budget did nothing because the trainer could not fill the requested size. Values less than `1` are treated as `1`. This parameter takes effect only when `enable_zstd_compression_dict` is `true` and `zstd_compression_dict_build_mode` is `train`.
 - Introduced in: v4.2
 
 ### create_tablet_worker_count

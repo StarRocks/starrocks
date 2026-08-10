@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -59,7 +60,9 @@ public class SchemaInfo {
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
     @SerializedName("zstdCompressionColumns")
-    private final Set<ColumnId> zstdCompressionColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
+    private final Set<ColumnId> zstdCompressionColumnNames;
+    @SerializedName("zstdCompressionPageSizes")
+    private final Map<ColumnId, Integer> zstdCompressionPageSizes; // columns using a compression dictionary (a ZSTD dictionary)
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -80,6 +83,7 @@ public class SchemaInfo {
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.zstdCompressionColumnNames = builder.zstdCompressionColumnNames;
+        this.zstdCompressionPageSizes = builder.zstdCompressionPageSizes;
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
@@ -161,6 +165,11 @@ public class SchemaInfo {
             // use column-level compression dictionary (a ZSTD dictionary)
             if (zstdCompressionColumnNames != null && zstdCompressionColumnNames.contains(column.getColumnId())) {
                 tColumn.setUse_zstd_compression(true);
+                Integer pageSize = zstdCompressionPageSizes == null
+                        ? null : zstdCompressionPageSizes.get(column.getColumnId());
+                if (pageSize != null && pageSize > 0) {
+                    tColumn.setZstd_compression_page_size(pageSize);
+                }
             }
             tColumns.add(tColumn);
         }
@@ -315,6 +324,13 @@ public class SchemaInfo {
             return this;
         }
 
+        private Map<ColumnId, Integer> zstdCompressionPageSizes;
+
+        public Builder setZstdCompressionPageSizes(Map<ColumnId, Integer> zstdCompressionPageSizes) {
+            this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+            return this;
+        }
+
         public Builder setZstdCompressionColumnNames(Collection<ColumnId> zstdCompressionColumnNames) {
             Preconditions.checkState(this.zstdCompressionColumnNames == null);
             if (zstdCompressionColumnNames != null) {
@@ -370,6 +386,7 @@ public class SchemaInfo {
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
                 .setZstdCompressionColumnNames(table.getZstdCompressionColumnIds())
+                .setZstdCompressionPageSizes(table.getZstdCompressionPageSizes())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
