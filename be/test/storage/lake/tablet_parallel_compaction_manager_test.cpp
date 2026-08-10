@@ -7350,6 +7350,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
 
     auto old_enable = config::enable_lake_compaction_range_split;
     config::enable_lake_compaction_range_split = true;
+    DeferOp restore_range_split([&]() { config::enable_lake_compaction_range_split = old_enable; });
 
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
     metadata->set_id(tablet_id);
@@ -7399,15 +7400,55 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
     std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("rng_split_test").set_max_threads(4).build(&pool);
+    ThreadPoolBuilder("rng_split_test").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+    CancelableDefer unblock_pool([&]() { block_promise.set_value(); });
+    ASSERT_OK(pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    }));
+    start_promise.get_future().wait();
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
+    ASSERT_TRUE(st.ok());
+    ASSERT_GT(st.value(), 0);
 
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->running_subtasks.size());
+        for (auto& entry : state->running_subtasks) {
+            entry.second.enqueue_time_ns = MonotonicNanos() - 1'000'000;
+        }
+    }
+
+    block_promise.set_value();
+    unblock_pool.cancel();
     pool->wait();
-    _manager->cleanup_tablet(tablet_id, txn_id);
+    ASSERT_TRUE(closure.wait_finish());
 
-    config::enable_lake_compaction_range_split = old_enable;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_NE(nullptr, context->stats);
+            EXPECT_EQ(1, context->runs.load(std::memory_order_relaxed));
+            EXPECT_EQ(1, context->stats->task_attempt_count);
+            EXPECT_GT(context->stats->queue_wait_ns, 0);
+            EXPECT_GT(context->stats->task_prepare_ns, 0);
+            EXPECT_GT(context->stats->task_execute_ns, 0);
+            EXPECT_GE(context->stats->task_total_ns, context->stats->task_prepare_ns + context->stats->task_execute_ns);
+            EXPECT_EQ(0, context->task_attempt_start_ns.load(std::memory_order_acquire));
+            EXPECT_EQ(0, context->task_execute_start_ns.load(std::memory_order_acquire));
+        }
+    }
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
 
     // Also test execute_subtask_range_split when state not found (lines 2517-2525)
     {

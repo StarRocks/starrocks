@@ -576,9 +576,11 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
 
-    LOG(INFO) << "Compaction task attempt finished. tablet_id=" << tablet_id << " version=" << version
-              << " txn_id=" << txn_id << " status=" << status << " profile=" << context->stats->to_json_stats()
-              << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
+    if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+        LOG(INFO) << "Compaction task attempt finished. tablet_id=" << tablet_id << " version=" << version
+                  << " txn_id=" << txn_id << " status=" << status << " profile=" << context->stats->to_json_stats()
+                  << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
+    }
 
     // Task failure due to memory limitations allows for retries, more threads allow for more retries.
     // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
@@ -625,8 +627,7 @@ void CompactionScheduler::abort_compaction(std::unique_ptr<CompactionTaskContext
     }
     context->status = Status::Aborted("Compaction task aborted due to BE/CN shutdown!");
     LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id << " : "
-                 << context->status << " profile=" << context->stats->to_json_stats()
-                 << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
+                 << context->status << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
     // make sure every task can be finished no matter it is succeeded or failed.
     context->callback->finish_task(std::move(context));
 }

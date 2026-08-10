@@ -121,6 +121,10 @@ struct CompactionTaskStats {
     CompactionTaskStats operator-(const CompactionTaskStats& that) const;
     int64_t task_accounted_ns() const;
     int64_t task_unaccounted_ns() const;
+    bool is_slow(int64_t slow_log_ms) const {
+        static constexpr int64_t kNanosPerMillisecond = 1'000'000;
+        return task_total_ns / kNanosPerMillisecond >= slow_log_ms;
+    }
     std::string to_json_stats(bool profile_final = true) const;
 
     // Same JSON layout as to_json_stats(), with parallel-subtask metadata fields

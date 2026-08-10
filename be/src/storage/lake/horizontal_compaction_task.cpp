@@ -96,7 +96,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         SCOPED_RAW_TIMER(&_context->stats->reader_open_ns);
         RETURN_IF_ERROR(reader.open(reader_params));
     }
-    DeferOp reader_defer([&]() {
+    CancelableDefer reader_defer([&]() {
         SCOPED_RAW_TIMER(&_context->stats->reader_close_ns);
         reader.close();
         _context->stats->collect(reader.stats());
@@ -183,6 +183,12 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         SCOPED_RAW_TIMER(&_context->stats->writer_finish_ns);
         RETURN_IF_ERROR(writer->finish());
     }
+    {
+        SCOPED_RAW_TIMER(&_context->stats->reader_close_ns);
+        reader.close();
+        _context->stats->collect(reader.stats());
+    }
+    reader_defer.cancel();
     _context->stats->output_row_count = writer->num_rows();
 
     // Adjust the progress here for 2 reasons:

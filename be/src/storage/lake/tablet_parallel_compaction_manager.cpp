@@ -1494,9 +1494,11 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
         context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
         context->task_attempt_start_ns.store(0, std::memory_order_release);
         context->finish_time.store(std::max<int64_t>(::time(nullptr), start_time), std::memory_order_release);
-        LOG(INFO) << "Parallel compaction task finished. tablet_id=" << tablet_id << " version=" << version
-                  << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << context->status
-                  << " profile=" << context->stats->to_json_stats();
+        if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+            LOG(INFO) << "Parallel compaction task finished. tablet_id=" << tablet_id << " version=" << version
+                      << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << context->status
+                      << " profile=" << context->stats->to_json_stats();
+        }
         on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
         // Release limiter token on early return
         if (release_token) {
@@ -1550,9 +1552,11 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
 
     context->finish_time.store(finish_time, std::memory_order_release);
 
-    LOG(INFO) << "Parallel compaction task finished. tablet_id=" << tablet_id << " version=" << version
-              << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << exec_st
-              << " profile=" << context->stats->to_json_stats();
+    if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+        LOG(INFO) << "Parallel compaction task finished. tablet_id=" << tablet_id << " version=" << version
+                  << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << exec_st
+                  << " profile=" << context->stats->to_json_stats();
+    }
 
     // Check if memory limit was exceeded before moving context
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
@@ -2267,9 +2271,11 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
         context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
         context->task_attempt_start_ns.store(0, std::memory_order_release);
         context->finish_time.store(std::max<int64_t>(::time(nullptr), start_time), std::memory_order_release);
-        LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
-                  << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
-                  << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+            LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
+                      << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
+                      << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        }
         on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
         if (release_token) {
             release_token(false);
@@ -2296,9 +2302,11 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
         context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
         context->task_attempt_start_ns.store(0, std::memory_order_release);
         context->finish_time.store(std::max<int64_t>(::time(nullptr), start_time), std::memory_order_release);
-        LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
-                  << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
-                  << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+            LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
+                      << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
+                      << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        }
         on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
         if (release_token) {
             release_token(false);
@@ -2323,9 +2331,11 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
         context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
         context->task_attempt_start_ns.store(0, std::memory_order_release);
         context->finish_time.store(std::max<int64_t>(::time(nullptr), start_time), std::memory_order_release);
-        LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
-                  << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
-                  << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+            LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
+                      << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
+                      << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        }
         on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
         if (release_token) {
             release_token(compaction_task_or.status().is_mem_limit_exceeded());
@@ -2379,9 +2389,11 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
 
     context->finish_time.store(finish_time, std::memory_order_release);
 
-    LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id << " version=" << version
-              << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << exec_st
-              << " profile=" << context->stats->to_json_stats();
+    if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+        LOG(INFO) << "Parallel segment-range compaction task finished. tablet_id=" << tablet_id
+                  << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
+                  << " status=" << exec_st << " profile=" << context->stats->to_json_stats();
+    }
 
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
     on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
@@ -2675,7 +2687,11 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
                                                              true /* skip_write_txnlog */, state->callback, subtask_id);
 
     auto start_time = ::time(nullptr);
+    auto start_time_ns = MonotonicNanos();
+    context->task_attempt_start_ns.store(start_time_ns, std::memory_order_release);
     context->start_time.store(start_time, std::memory_order_relaxed);
+    context->stats->task_attempt_count++;
+    context->runs.fetch_add(1, std::memory_order_relaxed);
 
     {
         std::lock_guard<std::mutex> lock(state->mutex);
@@ -2684,10 +2700,15 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
             int64_t enqueue_time = it->second.start_time;
             int64_t in_queue_time_sec = start_time > enqueue_time ? (start_time - enqueue_time) : 0;
             context->stats->in_queue_time_sec += in_queue_time_sec;
+            if (it->second.enqueue_time_ns > 0 && start_time_ns > it->second.enqueue_time_ns) {
+                context->stats->queue_wait_ns += start_time_ns - it->second.enqueue_time_ns;
+            }
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
             it->second.context = context.get();
         }
     }
+
+    auto task_prepare_start_ns = MonotonicNanos();
 
     // Set range split info on context so compaction task applies range filtering.
     //
@@ -2711,10 +2732,19 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     context->range_upper_inclusive = context->has_upper_bound ? upper_inclusive : true;
 
     auto compaction_task_or = _tablet_mgr->compact(context.get(), std::move(all_rowsets));
+    context->stats->task_prepare_ns += MonotonicNanos() - task_prepare_start_ns;
     if (!compaction_task_or.ok()) {
         LOG(WARNING) << "Failed to create compaction task for range-split subtask " << subtask_id << ": "
                      << compaction_task_or.status();
         context->status = compaction_task_or.status();
+        context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
+        context->task_attempt_start_ns.store(0, std::memory_order_release);
+        context->finish_time.store(std::max<int64_t>(::time(nullptr), start_time), std::memory_order_release);
+        if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+            LOG(INFO) << "Parallel range-split compaction task finished. tablet_id=" << tablet_id
+                      << " version=" << version << " txn_id=" << txn_id << " subtask_id=" << subtask_id
+                      << " status=" << context->status << " profile=" << context->stats->to_json_stats();
+        }
         on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));
         if (release_token) {
             release_token(compaction_task_or.status().is_mem_limit_exceeded());
@@ -2723,7 +2753,6 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     }
 
     auto compaction_task = compaction_task_or.value();
-    context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto cancel_func = [this, tablet_id, txn_id, subtask_id, version]() {
         if (get_tablet_state(tablet_id, txn_id) == nullptr) {
@@ -2740,7 +2769,13 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
         flush_pool = StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool();
     }
 
+    auto task_execute_start_ns = MonotonicNanos();
+    context->task_execute_start_ns.store(task_execute_start_ns, std::memory_order_release);
     auto exec_st = compaction_task->execute(cancel_func, flush_pool);
+    context->stats->task_execute_ns += MonotonicNanos() - task_execute_start_ns;
+    context->task_execute_start_ns.store(0, std::memory_order_release);
+    context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
+    context->task_attempt_start_ns.store(0, std::memory_order_release);
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
@@ -2768,6 +2803,12 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     }
 
     context->finish_time.store(finish_time, std::memory_order_release);
+
+    if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
+        LOG(INFO) << "Parallel range-split compaction task finished. tablet_id=" << tablet_id << " version=" << version
+                  << " txn_id=" << txn_id << " subtask_id=" << subtask_id << " status=" << exec_st
+                  << " profile=" << context->stats->to_json_stats();
+    }
 
     bool mem_limit_exceeded = exec_st.is_mem_limit_exceeded();
     on_subtask_complete(tablet_id, txn_id, subtask_id, std::move(context));

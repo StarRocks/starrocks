@@ -192,6 +192,17 @@ TEST_F(CompactionTaskContextTest, test_task_timing_accounting) {
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_ns":1000)"));
 }
 
+TEST_F(CompactionTaskContextTest, test_slow_log_threshold) {
+    CompactionTaskStats stats;
+
+    stats.task_total_ns = 4'999'999'999;
+    EXPECT_FALSE(stats.is_slow(5000));
+
+    stats.task_total_ns = 5'000'000'000;
+    EXPECT_TRUE(stats.is_slow(5000));
+    EXPECT_TRUE(stats.is_slow(0));
+}
+
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 
