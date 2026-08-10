@@ -486,6 +486,8 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数がウェアハウスのコンピュートノード数を下回っており、かつその Tablet のサイズが `tablet_reshard_min_split_size` を**上回る**場合は、`tablet_reshard_target_size` に達するのを待たずに分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。`PROPERTIES` で `tablet_reshard_target_size` を指定すると、この動作は無効になり、指定したターゲットサイズが厳密に適用されます。クラスター全体で無効にするには、FE 設定 `tablet_reshard_enable_early_split` を `false` に設定します。
+
   - MERGE が実行される条件：
     - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
