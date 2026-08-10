@@ -2416,6 +2416,23 @@ Status SegmentIterator::_apply_tablet_range() {
         return Status::OK();
     }
 
+    // The tablet range is expressed in primary-key space; the segment's rows are ordered by the sort
+    // key. Turning the former into a contiguous rowid interval is only defined when the two agree.
+    // With a separate sort key the tablet's rows are scattered across the whole segment and NO rowid
+    // interval is the right answer -- the conversion is undefined, not merely imprecise. Attempting it
+    // compares a primary-key datum against a sort-key column type, which throws bad_variant_access out
+    // of the scan; on the publish path (primary index rebuild -> scan_one_rebuild_unit) nothing catches
+    // it and the BE aborts, so every restart re-runs the same publish and dies again.
+    //
+    // Leave the scan range untouched instead. This does not lose a restriction that anything relies on
+    // today: a split child inherits a full copy of the parent's metadata, sstable_meta included, so its
+    // primary index already carries the siblings' keys and is over-inclusive either way; and reads that
+    // do need the restriction are served from the parent layout until the UNSHARE compaction has
+    // rewritten each child's data privately.
+    if (_segment->tablet_schema().has_separate_sort_key()) {
+        return Status::OK();
+    }
+
     std::optional<Range<>> rowid_range_opt;
     if (_opts.read_state_cache.tablet_rowid_range != nullptr) {
         rowid_range_opt = *_opts.read_state_cache.tablet_rowid_range;
