@@ -632,6 +632,66 @@ TEST_F(VectorIndexCacheTest, AsyncLoad_TracksQueuedAndInflight) {
     EXPECT_EQ(0, metrics.vector_index_cache_async_load_queued.value());
 }
 
+TEST_F(VectorIndexCacheTest, AsyncLoad_OverCapacityEvictedAfterLoadingPinRelease) {
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/512, tracker_.get());
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref(/*bytes=*/1024);
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/async-over-capacity.vi"), std::move(loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    release_loader.set_value();
+    cache->shutdown_async_load_pool();
+    EXPECT_EQ(0, cache->memory_usage());
+    EXPECT_EQ(0, cache->entry_count());
+    EXPECT_EQ(VectorIndexCacheProbeState::kMiss,
+              cache->ProbeForQuery(tenann::CacheKey("/async-over-capacity.vi")).state);
+}
+
+TEST_F(VectorIndexCacheTest, AsyncLoad_OverCapacityEvictedAfterWaitingHandleRelease) {
+    auto cache = std::make_unique<VectorIndexCache>(/*capacity=*/512, tracker_.get());
+    ASSERT_OK(cache->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    std::promise<void> loader_started;
+    std::promise<void> release_loader;
+    auto release_future = release_loader.get_future().share();
+    auto loader = [&]() -> StatusOr<tenann::IndexRef> {
+        loader_started.set_value();
+        release_future.wait();
+        return make_dummy_ref(/*bytes=*/1024);
+    };
+    EXPECT_EQ(VectorIndexCacheProbeState::kLoading,
+              cache->TryGetOrSchedule(tenann::CacheKey("/async-over-capacity-waiter.vi"), std::move(loader)).state);
+    ASSERT_EQ(std::future_status::ready, loader_started.get_future().wait_for(std::chrono::seconds(5)));
+
+    auto waiter = std::async(std::launch::async, [&] {
+        tenann::IndexCacheHandle handle;
+        const bool found = cache->Lookup(tenann::CacheKey("/async-over-capacity-waiter.vi"), &handle);
+        return std::make_pair(found, std::move(handle));
+    });
+    EXPECT_EQ(std::future_status::timeout, waiter.wait_for(std::chrono::milliseconds(100)));
+
+    release_loader.set_value();
+    auto [found, handle] = waiter.get();
+    ASSERT_TRUE(found);
+    ASSERT_TRUE(handle.valid());
+    cache->shutdown_async_load_pool();
+
+    EXPECT_EQ(1024, cache->memory_usage());
+    EXPECT_EQ(1, cache->entry_count());
+    handle = tenann::IndexCacheHandle{};
+    EXPECT_EQ(0, cache->memory_usage());
+    EXPECT_EQ(0, cache->entry_count());
+}
+
 TEST_F(VectorIndexCacheTest, AsyncLoad_LoaderExceptionReturnsToMiss) {
     ASSERT_OK(cache_->init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
 

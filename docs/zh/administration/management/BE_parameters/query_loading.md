@@ -742,6 +742,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：未使用的向量索引缓存条目在过期前可保持空闲的时间。最后一个缓存 handle 释放时开始计时；缓存命中后，在对应 handle 再次释放时刷新计时。正在被查询 pin 住的条目不会被删除。IVF-PQ 的 list block 随其所属的索引条目一起释放，不维护独立 TTL。小于或等于 `0` 时关闭过期淘汰。运行时修改仅作用于之后释放的 handle，不会重写现有条目的过期时间。
 - 引入版本：v4.2.0
 
+### enable_vector_index_cache_async_load_on_miss
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：顶层向量索引缓存未命中时，是否让当前查询回退到暴力检索，同时在后台将索引加载到缓存中。同一索引的并发 miss 共享一个后台加载任务，并在索引就绪前继续使用暴力检索。设置为 `false` 时，缓存未命中会同步加载索引。仅当预期冷加载延迟高于暴力检索成本，并且缓存容量足以容纳查询工作集时，才建议开启。运行时修改对之后初始化的向量索引 reader 生效。
+- 引入版本：v4.2.0
+
+### vector_index_cache_async_load_threads
+
+- 默认值：8
+- 类型：Int
+- 单位：线程
+- 是否动态：否
+- 描述：向量索引缓存后台加载线程池的最大 worker 数。worker 按需创建，并在空闲 60 秒后退出。小于或等于 `0` 的值会被调整为 `1`。该配置在 StorageEnv 初始化时读取，修改后需要重启 BE/CN 才能生效。
+- 引入版本：v4.2.0
+
 ### vector_index_cache_loading_wait_timeout_ms
 
 - 默认值：5000

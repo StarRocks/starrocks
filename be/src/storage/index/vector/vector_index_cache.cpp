@@ -557,7 +557,9 @@ void VectorIndexCache::_release_entry(Entry* entry, bool is_ivfpq_list_block) no
         return;
     }
 
-    _cache.release_with_expire_time(entry, expire_time_ms());
+    if (_cache.release_with_expire_time_evict_if_over_capacity(entry, expire_time_ms())) {
+        _update_metrics();
+    }
 }
 
 // Deleter captures this as a raw pointer; handles MUST be released before
