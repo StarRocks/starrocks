@@ -827,4 +827,32 @@ public class SplitTabletJobTest {
             table.setState(OlapTable.OlapTableState.NORMAL);
         }
     }
+
+    // A publish failure is always retried, never terminal, so it must be reported WITHOUT being
+    // written into the journaled errorMessage: a job whose retry later succeeds would otherwise
+    // reach FINISHED still advertising an error, and the next state transition would persist it.
+    // getInfo() therefore renders publishFailureReason only when there is no terminal errorMessage.
+    @Test
+    public void testGetInfoReportsRetriedPublishFailureWithoutJournalingIt() {
+        SplitTabletJob job = new SplitTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), new HashMap<>());
+
+        // healthy: nothing to report
+        Assertions.assertEquals("", job.getInfo().getError_message());
+
+        // retrying a failed publish: surfaced, but errorMessage (the journaled field) stays null
+        job.publishFailureReason = "link rpc channel failed";
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                job.getInfo().getError_message());
+        Assertions.assertNull(job.errorMessage);
+
+        // the retry succeeded: recomputed to null every pass, so nothing is reported
+        job.publishFailureReason = null;
+        Assertions.assertEquals("", job.getInfo().getError_message());
+
+        // a terminal error always wins over a transient publish failure
+        job.errorMessage = "Table not found";
+        job.publishFailureReason = "link rpc channel failed";
+        Assertions.assertEquals("Table not found", job.getInfo().getError_message());
+    }
 }
