@@ -1,5 +1,4 @@
 ---
-sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "BE configuration parameters for statistics collection and storage engine settings."

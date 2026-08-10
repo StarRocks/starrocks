@@ -1,5 +1,4 @@
 ---
-sidebar_position: 10
 displayed_sidebar: docs
 sidebar_label: "Logging, Server, and Metadata"
 description: "BE configuration parameters for logging, server settings, and metadata management."
