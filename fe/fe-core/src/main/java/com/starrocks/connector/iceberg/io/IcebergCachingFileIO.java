@@ -85,10 +85,12 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -120,6 +122,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private ResolvingFileIO wrappedIO;
     private Map<String, String> properties;
     private SerializableSupplier<Configuration> conf;
+    private final Map<String, FileIO> delegateFileIOs = new ConcurrentHashMap<>();
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
 
@@ -128,6 +131,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         this.properties = properties;
         wrappedIO = new ResolvingFileIO();
         wrappedIO.initialize(properties);
+        delegateFileIOs.clear();
 
         if (conf != null) {
             wrappedIO.setConf(conf.get());
@@ -162,6 +166,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void setConf(Configuration conf) {
         this.conf = new SerializableConfiguration(conf)::get;
+        delegateFileIOs.clear();
         if (wrappedIO != null) {
             wrappedIO.setConf(conf);
         }
@@ -176,35 +181,17 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public InputFile newInputFile(String path) {
-        try {
-            return new CachingInputFile(fileContentCache, delegateFileIO(path).newInputFile(path));
-        } catch (StarRocksException e) {
-            String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
-            LOG.error(errorMessage, e);
-            throw new StarRocksConnectorException(errorMessage, e);
-        }
+        return new CachingInputFile(fileContentCache, delegateFileIO(path).newInputFile(path));
     }
 
     @Override
     public OutputFile newOutputFile(String path) {
-        try {
-            return delegateFileIO(path).newOutputFile(path);
-        } catch (StarRocksException e) {
-            String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
-            LOG.error(errorMessage, e);
-            throw new StarRocksConnectorException(errorMessage, e);
-        }
+        return delegateFileIO(path).newOutputFile(path);
     }
 
     @Override
     public void deleteFile(String path) {
-        try {
-            delegateFileIO(path).deleteFile(path);
-        } catch (StarRocksException e) {
-            String errorMessage = String.format("Failed to delete file for path: %s, properties: %s", path, properties);
-            LOG.error(errorMessage, e);
-            throw new StarRocksConnectorException(errorMessage, e);
-        }
+        delegateFileIO(path).deleteFile(path);
         // remove from cache.
         fileContentCache.invalidate(path);
     }
@@ -213,19 +200,31 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     // HadoopFileIO. ResolvingFileIO would hand them to the cloud SDK FileIO when its class is
     // loadable (e.g. GCSFileIO once iceberg-gcp is on the classpath), which ignores the Hadoop
     // configuration entirely.
-    private FileIO delegateFileIO(String path) throws StarRocksException {
-        Configuration pathConf = buildConfFromProperties(properties, path);
-        // keep the wrapped IO's conf in sync even when it is not the delegate performing the read:
-        // getWrappedIO() is serialized for BE/JNI metadata-table scans and must carry the fs.*
-        // credential keys (e.g. the vended GCS token)
-        wrappedIO.setConf(pathConf);
-        String scheme = schemeOf(pathConf, path);
-        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
-            HadoopFileIO hadoopFileIO = new HadoopFileIO(pathConf);
-            hadoopFileIO.initialize(properties);
-            return hadoopFileIO;
-        }
-        return wrappedIO;
+    private FileIO delegateFileIO(String path) {
+        // the delegate is memoized per (scheme, authority): conf and properties are fixed between
+        // setConf()/initialize() calls (which clear the map), and buildConfFromProperties derives
+        // everything else from those two path components
+        URI uri = new Path(path).toUri();
+        String scheme = schemeOf(conf.get(), uri);
+        return delegateFileIOs.computeIfAbsent(scheme + "://" + uri.getAuthority(), key -> {
+            try {
+                Configuration pathConf = buildConfFromProperties(properties, path);
+                // keep the wrapped IO's conf in sync even when it is not the delegate performing the
+                // read: getWrappedIO() is serialized for BE/JNI metadata-table scans and must carry
+                // the fs.* credential keys (e.g. the vended GCS token)
+                wrappedIO.setConf(pathConf);
+                if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
+                    HadoopFileIO hadoopFileIO = new HadoopFileIO(pathConf);
+                    hadoopFileIO.initialize(properties);
+                    return hadoopFileIO;
+                }
+                return wrappedIO;
+            } catch (StarRocksException e) {
+                String errorMessage = String.format("Failed to build file IO for path: %s, properties: %s", path, properties);
+                LOG.error(errorMessage, e);
+                throw new StarRocksConnectorException(errorMessage, e);
+            }
+        });
     }
 
     public FileIO getWrappedIO() {
@@ -286,8 +285,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
             Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
 
-    private static String schemeOf(Configuration conf, String path) {
-        String scheme = new Path(path).toUri().getScheme();
+    private static String schemeOf(Configuration conf, URI uri) {
+        String scheme = uri.getScheme();
         if (scheme == null) {
             // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
             // the flag, so the flag has to be keyed on the default scheme rather than skipped.
@@ -297,7 +296,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     }
 
     private static void disableSharedFileSystemCache(Configuration conf, String path) {
-        String scheme = schemeOf(conf, path);
+        String scheme = schemeOf(conf, new Path(path).toUri());
         if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
             conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
         }
