@@ -19,7 +19,9 @@
 #include <bthread/condition_variable.h>
 #include <butil/time.h> // NOLINT
 
+#include <atomic>
 #include <chrono>
+#include <memory>
 #include <thread>
 
 #include "base/testutil/sync_point.h"
@@ -502,8 +504,30 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
         return false;
     }
 
-    AcquireTokenFunc acquire_token = [this]() { return _limiter.acquire(); };
-    ReleaseTokenFunc release_token = [this](bool mem_limit_exceeded) {
+    // This worker already holds one of the limiter's tokens for as long as do_compaction() runs, and
+    // thread_task() credits it back when we return. Lend that token to the subtasks so planning needs
+    // max_parallel_per_tablet tokens instead of one more than that: the subtasks are acquired
+    // all-or-nothing, so needing an extra one means a single other compaction running anywhere on the CN
+    // is enough to fail the acquisition and quietly downgrade every tablet to serial compaction --
+    // with the defaults (3 subtasks, compact_threads=4) that is almost always.
+    //
+    // Both flags only ever go false->true, so the lent token is handed out at most once and repaid at
+    // most once; it can never be lent again after being repaid.
+    auto lent_out = std::make_shared<std::atomic<bool>>(false);
+    auto repaid = std::make_shared<std::atomic<bool>>(false);
+    AcquireTokenFunc acquire_token = [this, lent_out]() {
+        if (!lent_out->exchange(true)) {
+            return true; // hand out the token this worker is already holding
+        }
+        return _limiter.acquire();
+    };
+    ReleaseTokenFunc release_token = [this, lent_out, repaid](bool mem_limit_exceeded) {
+        if (lent_out->load() && !repaid->exchange(true)) {
+            // Repays the lent token. Record this task's concurrency feedback, but leave the token itself
+            // to thread_task(), which credits it back after do_compaction() returns.
+            _limiter.release_borrowed_token(mem_limit_exceeded);
+            return;
+        }
         if (mem_limit_exceeded) {
             _limiter.memory_limit_exceeded();
         } else {
@@ -541,9 +565,9 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             // is a silent downgrade to serial compaction, so say it once per occurrence class.
             LOG_IF(WARNING, result.status().is_resource_busy())
                     << "Not enough compaction limiter tokens to run tablet " << tablet_id
-                    << " in parallel (holding one of " << _limiter.concurrency()
-                    << "); compacting it serially. Parallel compaction wants compact_threads to exceed "
-                       "max_parallel_per_tablet.";
+                    << " in parallel out of a concurrency of " << _limiter.concurrency()
+                    << "; compacting it serially. Other compactions are holding tokens -- parallel "
+                       "compaction wants compact_threads to be at least max_parallel_per_tablet.";
             VLOG(1) << "Parallel compaction planning failed for tablet " << tablet_id << ": " << result.status()
                     << ", compacting serially";
         } else {

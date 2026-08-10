@@ -149,6 +149,16 @@ class CompactionScheduler {
         // Compaction task finished with Status::MemoryLimitExceeded error.
         void memory_limit_exceeded();
 
+        // A compaction task that ran on a BORROWED token finished: applies the same concurrency feedback as
+        // the two methods above, but does not credit a token back to the pool because the lender returns
+        // the one it is holding itself. Crediting here as well would inflate the pool by one token.
+        //
+        // Note this is not simply "the same minus one _free++": on the memory-limit path the token is
+        // normally converted into a reserved slot rather than returned, and only the floor case hands it
+        // back -- that hand-back is what has to be skipped. On the success path the restore branch's
+        // increment un-reserves a slot rather than returning the borrowed token, so it is kept.
+        void release_borrowed_token(bool mem_limit_exceeded);
+
         int16_t concurrency() const;
 
         void adapt_to_task_queue_size(int16_t new_val);
@@ -304,6 +314,27 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
         LOG(INFO) << "Decreased maximum compaction concurrency to " << (_total - _reserved);
     } else {
         _free++;
+    }
+}
+
+inline void CompactionScheduler::Limiter::release_borrowed_token(bool mem_limit_exceeded) {
+    std::lock_guard l(_mtx);
+    if (mem_limit_exceeded) {
+        _success = 0;
+        if (_reserved + 1 < _total) { // Cannot reduce the concurrency to zero.
+            _reserved++;
+            LOG(INFO) << "Decreased maximum compaction concurrency to " << (_total - _reserved);
+        }
+        // At the floor memory_limit_exceeded() would hand the token back instead of reserving it; the
+        // lender hands this one back, so there is nothing left to do.
+    } else {
+        if (_reserved > 0 && ++_success == kConcurrencyRestoreTimes) {
+            --_reserved;
+            // Un-reserves a slot. This is not the borrowed token being returned.
+            ++_free;
+            _success = 0;
+            LOG(INFO) << "Increased maximum compaction concurrency to " << (_total - _reserved);
+        }
     }
 }
 
