@@ -227,6 +227,12 @@ public class MergeTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
+                    // Surface why the publish failed. A failed publish is only retried, so without
+                    // this the job stays in RUNNING with an empty ERROR_MESSAGE in
+                    // information_schema.tablet_reshard_jobs and the cause lives only in fe.log.
+                    if (publishResult.publishState() == PublishState.FAILED) {
+                        errorMessage = "publish version failed (retrying): " + publishResult.failureReason();
+                    }
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {

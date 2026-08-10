@@ -16,8 +16,10 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -191,5 +193,36 @@ public class TabletReshardUtils {
             min = Math.min(min, v);
         }
         return min == Long.MAX_VALUE ? 0L : min;
+    }
+
+    /**
+     * Rejects a reshard whose source tablet lives in a materialized index that a previous reshard has
+     * already superseded.
+     *
+     * <p>Every other admission check passes for such a tablet: the superseded index is still reachable
+     * through {@link PhysicalPartition#getIndex}, its state is still {@code NORMAL}, the tablet is
+     * still one of its tablets, and {@code TabletInvertedIndex} still maps the tablet id. Only the
+     * partition's index-meta -> index-id chain records that the index has been replaced. Admitting the
+     * job anyway is unrecoverable in practice: the publish resolves no live tablet
+     * ("Fail to publish version for tablets:[]"), and because a publish failure is only retried, the
+     * job stays in {@code RUNNING} forever with an empty error message.
+     *
+     * <p>This is easy to hit by accident because {@code SHOW TABLET FROM <table>} keeps listing the
+     * superseded tablets alongside the live ones -- after a split the old parent is still the first
+     * row -- so a script that takes a tablet id from that output can feed a stale one straight back
+     * into {@code ALTER TABLE ... SPLIT/MERGE TABLET}.
+     */
+    public static void checkIndexNotSuperseded(PhysicalPartition physicalPartition, MaterializedIndex index,
+                                               long tabletId, String dbName, String tableName)
+            throws StarRocksException {
+        MaterializedIndex latest = physicalPartition.getLatestIndex(index.getMetaId());
+        if (latest != null && latest.getId() != index.getId()) {
+            throw new StarRocksException("Tablet " + tabletId + " belongs to materialized index "
+                    + index.getId() + ", which has already been superseded by index " + latest.getId()
+                    + " in physical partition " + physicalPartition.getId() + " in table "
+                    + dbName + '.' + tableName + ". It is no longer part of the table; list the current"
+                    + " tablets with SHOW PROC '/dbs/" + dbName + '/' + tableName + "/partitions/"
+                    + physicalPartition.getId() + '/' + latest.getId() + "'");
+        }
     }
 }

@@ -72,9 +72,18 @@ public class ReshardingPhysicalPartition {
         FAILED, // Publish failed
     }
 
+    /**
+     * {@code failureReason} is set only for {@link PublishState#FAILED} and carries the publish
+     * error text, so a job that keeps retrying can surface why in its errorMessage instead of
+     * sitting in RUNNING with nothing but a log line.
+     */
     public static record PublishResult(
             PublishState publishState,
-            Map<Long, TabletRange> tabletRanges) {
+            Map<Long, TabletRange> tabletRanges,
+            String failureReason) {
+        public PublishResult(PublishState publishState, Map<Long, TabletRange> tabletRanges) {
+            this(publishState, tabletRanges, null);
+        }
     }
 
     public PublishResult getPublishResult() {
@@ -95,7 +104,8 @@ public class ReshardingPhysicalPartition {
             return new PublishResult(PublishState.IN_PROGRESS, null);
         } catch (Exception e) {
             LOG.warn("Failed to publish future get. ", e);
-            return new PublishResult(PublishState.FAILED, null);
+            Throwable cause = (e.getCause() != null) ? e.getCause() : e;
+            return new PublishResult(PublishState.FAILED, null, cause.getMessage());
         }
     }
 
