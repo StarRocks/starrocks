@@ -31,6 +31,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.ColumnStatisticDump;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -85,9 +87,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         return dumpJson;
     }
 
+    private boolean shouldDesensitizeDump(QueryDumpInfo dumpInfo) {
+        return Config.enable_desensitize_query_dump || dumpInfo.isDesensitizedInfo();
+    }
+
     private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
         JsonObject dumpJson = new JsonObject();
-        if (dumpInfo.isDesensitizedInfo()) {
+        if (shouldDesensitizeDump(dumpInfo)) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;
@@ -166,11 +172,51 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                columnStatistics.addProperty(columnEntry.getKey(), columnEntry.getValue().toString());
+                columnStatistics.add(columnEntry.getKey(),
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(columnEntry.getValue())));
             }
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
+        // low-cardinality global dictionary: captured so replay reproduces the dict-encoding (Decode-node)
+        // optimization, which is otherwise lost offline (production CacheDictManager has no BE -> no dict).
+        // Keyed like column_statistics (db.table -> column). Value is ColumnDict.toJson(). Only emitted when a
+        // column actually has a captured dict, and intentionally not on the desensitized path -- dictionary
+        // strings are raw column data, just like the embedded histogram values.
+        JsonObject tableGlobalDict = new JsonObject();
+        for (Map.Entry<String, Map<String, ColumnDict>> entry : dumpInfo.getTableGlobalDictMap().entrySet()) {
+            JsonObject columnDicts = new JsonObject();
+            for (Map.Entry<String, ColumnDict> columnEntry : entry.getValue().entrySet()) {
+                columnDicts.addProperty(columnEntry.getKey(), columnEntry.getValue().toJson());
+            }
+            if (columnDicts.size() > 0) {
+                tableGlobalDict.add(entry.getKey(), columnDicts);
+            }
+        }
+        if (tableGlobalDict.size() > 0) {
+            dumpJson.add("global_dict", tableGlobalDict);
+        }
+        // column min/max: captured so replay reproduces the meta-scan / group-by-compressed-key rewrites, which
+        // are otherwise lost offline (production ColumnMinMaxMgr has no BE -> no min/max). Keyed like
+        // column_statistics (db.table -> column). Not emitted on the desensitized path -- min/max are raw
+        // column data, like global dictionaries and embedded histograms.
+        JsonObject tableColumnMinMax = new JsonObject();
+        for (Map.Entry<String, Map<String, IMinMaxStatsMgr.ColumnMinMax>> entry :
+                dumpInfo.getTableColumnMinMaxMap().entrySet()) {
+            JsonObject columnMinMaxes = new JsonObject();
+            for (Map.Entry<String, IMinMaxStatsMgr.ColumnMinMax> columnEntry : entry.getValue().entrySet()) {
+                JsonObject minMax = new JsonObject();
+                minMax.addProperty("min", columnEntry.getValue().minValue());
+                minMax.addProperty("max", columnEntry.getValue().maxValue());
+                columnMinMaxes.add(columnEntry.getKey(), minMax);
+            }
+            if (columnMinMaxes.size() > 0) {
+                tableColumnMinMax.add(entry.getKey(), columnMinMaxes);
+            }
+        }
+        if (tableColumnMinMax.size() > 0) {
+            dumpJson.add("column_min_max", tableColumnMinMax);
+        }
         if (StringUtils.isNotEmpty(dumpInfo.getExplainInfo())) {
             dumpJson.addProperty("explain_info", dumpInfo.getExplainInfo());
         }
@@ -266,9 +312,10 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                columnStatistics.addProperty(
+                columnStatistics.add(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        columnEntry.getValue().toString()
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(
+                                stripSensitiveStatisticValues(columnEntry.getValue())))
                 );
             }
             String[] splits = entry.getKey().split("\\.");
@@ -282,6 +329,14 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             dumpJson.addProperty("explain_info", desensitizeExplainInfo(dumpInfo.getExplainInfo(), dict));
         }
 
+    }
+
+    private static ColumnStatistic stripSensitiveStatisticValues(ColumnStatistic columnStatistic) {
+        return ColumnStatistic.buildFrom(columnStatistic)
+                .setHistogram(null)
+                .setMinString(null)
+                .setMaxString(null)
+                .build();
     }
 
     private HiveMetaStoreTableDumpInfo desensitizeHiveMeta(HiveMetaStoreTableDumpInfo hiveMeta, Map<String, String> dict) {
