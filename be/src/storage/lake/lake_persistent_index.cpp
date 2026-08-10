@@ -637,23 +637,44 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
         std::vector<bool> filter(pkc->size(), false);
+        // A del file logically follows segment index `op_offset`, so its rssid is
+        // `origin_rowset_id + op_offset`. A key whose current index entry is NEWER than that rssid was
+        // re-inserted after this delete and must NOT be erased here.
+        //
+        // Historically the filter ran only for non-origin (compaction-inherited) del files, because an
+        // origin del file was always stamped with the max segment id -- "delete after all segments" -- so
+        // no key of that rowset could be newer and the filter was a guaranteed no-op. A writer that
+        // preserves the in-transaction upsert/delete order instead persists a real `op_offset` BELOW the
+        // max, and then a key re-UPSERTed by a LATER segment of the SAME rowset legitimately survives the
+        // delete: the row stays live in the segment and its delvec bit is never set. Erasing such a key
+        // here would drop it from the index while the delvec keeps the row live -- the read stays correct,
+        // so the damage is latent, but the next upsert of that key then misses in the index, skips the
+        // tombstone for the live row and leaves a DUPLICATE primary key. That is strictly worse than the
+        // self-consistent "missing row" this version produces on its own. So an origin del file needs the
+        // filter too, as soon as it carries `op_offset < max_segment_idx`.
+        //
+        // Data written by a BE that does not preserve the order always has `op_offset == max_segment_idx`,
+        // so `need_filter` stays false for it and the behavior here is unchanged.
+        const uint32_t max_segment_idx = static_cast<uint32_t>(std::max(rowset->num_segments(), (int64_t)1) - 1);
+        const uint32_t op_offset = del.has_op_offset() ? del.op_offset() : max_segment_idx;
+        const bool need_filter = rowset->id() != del.origin_rowset_id() || op_offset < max_segment_idx;
         auto generate_filter_fn = [&]() {
-            if (rowset->id() != del.origin_rowset_id()) {
-                // del file in origin rowset doesn't need to skip.
-                for (int i = 0; i < pkc->size(); i++) {
-                    if (found_values[i] != IndexValue(NullIndexValue) &&
-                        found_values[i].get_rssid() > del.origin_rowset_id() + del.op_offset()) {
-                        // Use `rowset_id + op_offset` as delete file's rssid.
-                        // delete operation is too old for this key.
-                        filter[i] = true;
-                    }
+            if (!need_filter) {
+                return;
+            }
+            for (int i = 0; i < pkc->size(); i++) {
+                if (found_values[i] != IndexValue(NullIndexValue) &&
+                    found_values[i].get_rssid() > del.origin_rowset_id() + op_offset) {
+                    // delete operation is too old for this key.
+                    filter[i] = true;
                 }
             }
         };
-        // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
-        // so we use max segment id as `op_offset`.
+        // The erase entries are still stamped with the max segment id: this version does not interleave
+        // upserts and deletes at apply time, and the filter above has already removed the keys that a later
+        // segment re-inserted, so the remaining erases are all correctly "after all segments".
         // TODO : support real order of mix upsert and delete in one transaction.
-        const uint32_t del_rebuild_rssid = rowset->id() + std::max(rowset->num_segments(), (int64_t)1) - 1;
+        const uint32_t del_rebuild_rssid = rowset->id() + max_segment_idx;
         if (pkc->is_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
