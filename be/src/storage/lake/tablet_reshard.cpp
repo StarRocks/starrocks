@@ -420,8 +420,12 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
+    // Pass this sibling's range so the stat apportionment can tell a sibling that provably owns
+    // none of the rowset's keys (a true 0) from one that may own them (never 0 -- the appliers
+    // drop a 0-row rowset outright, which would silently discard those rows).
     tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
-                                                     publish_tablet_info.get_split_index());
+                                                     publish_tablet_info.get_split_index(),
+                                                     &base_tablet_metadata->range());
     return Status::OK();
 }
 

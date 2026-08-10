@@ -466,6 +466,143 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
     EXPECT_EQ(1, child.num_dels());
 }
 
+// classify_rowset_range_overlap: the envelope is [min over sort_key_min, max over sort_key_max]
+// across the rowset's segments, and it is compared against the sibling's range. Because the envelope
+// is a superset of the rowset's real keys, kNo is a sound "owns nothing" proof; anything we cannot
+// decide must degrade to kUnknown so the caller keeps the legacy apportionment.
+namespace {
+
+// One segment covering the closed key span [lo, hi] (int sort key), matching co_range()'s type.
+void add_segment_span(RowsetMetadataPB* rowset, int lo, int hi) {
+    auto write_int = [](TuplePB* tuple_pb, int v) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(v));
+        VariantTuple t;
+        t.append(variant);
+        t.to_proto(tuple_pb);
+    };
+    auto* sm = rowset->add_segment_metas();
+    write_int(sm->mutable_sort_key_min(), lo);
+    write_int(sm->mutable_sort_key_max(), hi);
+}
+
+} // namespace
+
+TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
+    // A single-key rowset (min == max) lands in exactly one of a set of disjoint ranges.
+    RowsetMetadataPB one_key;
+    add_segment_span(&one_key, 42, 42);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(one_key, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(std::nullopt, 40)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(50, std::nullopt)));
+
+    // Boundary cases: lower bound is inclusive, upper bound is exclusive.
+    RowsetMetadataPB at_lower;
+    add_segment_span(&at_lower, 40, 40);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(at_lower, co_range(40, 50)));
+    RowsetMetadataPB at_upper;
+    add_segment_span(&at_upper, 50, 50);
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(at_upper, co_range(40, 50)));
+
+    // A span straddling the range overlaps it.
+    RowsetMetadataPB straddling;
+    add_segment_span(&straddling, 10, 90);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(straddling, co_range(40, 50)));
+
+    // The envelope spans every segment, so a rowset with keys on both sides overlaps the middle.
+    RowsetMetadataPB two_segments;
+    add_segment_span(&two_segments, 1, 2);
+    add_segment_span(&two_segments, 98, 99);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(two_segments, co_range(40, 50)));
+
+    // (-inf, +inf) contains everything.
+    RowsetMetadataPB any;
+    add_segment_span(&any, 7, 7);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(any, co_range(std::nullopt, std::nullopt)));
+
+    // Undecidable inputs -> kUnknown (legacy apportionment).
+    RowsetMetadataPB no_segments;
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(no_segments, co_range(40, 50)));
+
+    RowsetMetadataPB bounds_missing;
+    bounds_missing.add_segment_metas()->set_filename("no_bounds.dat");
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(bounds_missing, co_range(40, 50)));
+
+    // One segment without bounds poisons the whole envelope.
+    RowsetMetadataPB partial_bounds;
+    add_segment_span(&partial_bounds, 42, 42);
+    partial_bounds.add_segment_metas()->set_filename("no_bounds.dat");
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
+}
+
+// A sibling that MAY own the rowset's rows must never be apportioned an empty rowset: both txn log
+// appliers drop a rowset whose num_rows is 0 (NonPrimaryKeyTxnLogApplier::apply_write_log requires
+// num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::apply_write_log returns early on
+// the same condition), so the rows of a cross-published write would vanish while the transaction
+// still reported VISIBLE.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_never_zeroes_an_overlapping_rowset) {
+    // 1 row split 4 ways: the plain apportionment gives index 0 one row and indexes 1..3 zero.
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1);
+    rowset.set_data_size(512);
+
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
+        EXPECT_GE(child.num_rows(), 1) << "split_index " << i << " may own rows and must not be emptied";
+        EXPECT_GE(child.data_size(), 1) << "split_index " << i;
+    }
+}
+
+// A sibling PROVEN to own none of the keys gets a true zero, so the appliers drop the rowset for it
+// and the siblings' stats still sum to the source instead of spreading phantom rows over everyone.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_zeroes_a_non_overlapping_rowset) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+    rowset.set_num_dels(3);
+
+    RowsetMetadataPB child = rowset;
+    update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/0, RangeOverlap::kNo);
+    EXPECT_EQ(0, child.num_rows());
+    EXPECT_EQ(0, child.data_size());
+    EXPECT_EQ(0, child.num_dels());
+}
+
+// kUnknown (no sort-key bounds to classify with) keeps the pre-existing apportionment byte for byte,
+// including the zeros -- there is nothing better to do without reading the data.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_unknown_overlap_keeps_legacy) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1);
+    rowset.set_data_size(4);
+
+    std::vector<int64_t> rows;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kUnknown);
+        rows.push_back(child.num_rows());
+    }
+    EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
+}
+
+// With num_rows >= split_count every sibling is already non-zero, so the never-empty rule is a no-op
+// and the totals still conserve exactly.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_rows_exceed_split_count) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
+        total_rows += child.num_rows();
+        total_size += child.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(1000, total_size);
+}
+
 // Verify update_txn_log_data_stats scales num_dels across every op_* branch that already
 // scales num_rows / data_size (op_write / op_compaction / op_schema_change / op_replication /
 // op_parallel_compaction). Parallel tests pin down the set of branches that produce output

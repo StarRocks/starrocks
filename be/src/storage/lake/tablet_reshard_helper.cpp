@@ -623,16 +623,91 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
     return Status::OK();
 }
 
-void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
+RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const TabletRangePB& range_pb) {
+    if (rowset.segment_metas_size() == 0) {
+        return RangeOverlap::kUnknown;
+    }
+    TabletRange range;
+    if (!range.from_proto(range_pb).ok()) {
+        return RangeOverlap::kUnknown;
+    }
+    if (range.is_all()) {
+        // (-inf, +inf) contains every key.
+        return RangeOverlap::kYes;
+    }
+
+    VariantTuple envelope_min;
+    VariantTuple envelope_max;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+            return RangeOverlap::kUnknown;
+        }
+        VariantTuple segment_min;
+        VariantTuple segment_max;
+        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
+            !segment_max.from_proto(segment_meta.sort_key_max()).ok()) {
+            return RangeOverlap::kUnknown;
+        }
+        if (segment_min.empty() || segment_max.empty()) {
+            return RangeOverlap::kUnknown;
+        }
+        if (envelope_min.empty() || segment_min.compare(envelope_min) < 0) {
+            envelope_min = segment_min;
+        }
+        if (envelope_max.empty() || segment_max.compare(envelope_max) > 0) {
+            envelope_max = segment_max;
+        }
+    }
+
+    // Only trust an exact arity match. VariantTuple::compare orders a shorter prefix-equal tuple
+    // BELOW its longer form, so comparing a bound written at one sort-key arity against a range at
+    // another can flip the boundary case -- e.g. envelope (100) vs lower bound (100, MIN) would
+    // read as "range entirely above the envelope" even though key 100 is exactly the range's first
+    // key. Degrading to kUnknown keeps that case on the legacy path instead of proving a false kNo.
+    const size_t range_arity =
+            !range.is_minimum() ? range.lower_bound().size() : (!range.is_maximum() ? range.upper_bound().size() : 0);
+    if (range_arity == 0 || envelope_min.size() != range_arity || envelope_max.size() != range_arity) {
+        return RangeOverlap::kUnknown;
+    }
+
+    // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
+    // outside the envelope" proves the sibling owns none of them.
+    if (range.less_than(envelope_min) || range.greater_than(envelope_max)) {
+        return RangeOverlap::kNo;
+    }
+    return RangeOverlap::kYes;
+}
+
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
+                              RangeOverlap overlap) {
     if (split_count <= 1) return;
 
+    if (overlap == RangeOverlap::kNo) {
+        // Proven to own none of the rowset's keys: a true zero, not an apportionment artifact. The
+        // appliers drop the rowset for this sibling, which is exactly right -- and it keeps the
+        // siblings' stats summing to the source instead of spreading phantom rows over everyone.
+        if (rowset->has_num_rows()) rowset->set_num_rows(0);
+        if (rowset->has_data_size()) rowset->set_data_size(0);
+        if (rowset->has_num_dels()) rowset->set_num_dels(0);
+        return;
+    }
+
+    // kYes: this sibling may own rows, so never hand it an empty rowset -- the appliers would drop
+    // it and those rows would vanish while the transaction still reported success. Rounding up to 1
+    // can over-count by at most (split_count - 1) rows per rowset, and only for a rowset with fewer
+    // rows than the split count; an over-counted stat merely skews compaction scoring, whereas
+    // under-counting to zero destroys data. kUnknown keeps the pre-existing behavior exactly.
+    const bool never_empty = (overlap == RangeOverlap::kYes);
+    auto apportion = [split_count, split_index, never_empty](int64_t value) {
+        const int64_t scaled = value / split_count + (split_index < value % split_count ? 1 : 0);
+        return (never_empty && value > 0) ? std::max<int64_t>(1, scaled) : scaled;
+    };
+
     if (rowset->has_num_rows()) {
-        int64_t num_rows = rowset->num_rows();
-        rowset->set_num_rows(num_rows / split_count + (split_index < num_rows % split_count ? 1 : 0));
+        rowset->set_num_rows(apportion(rowset->num_rows()));
     }
     if (rowset->has_data_size()) {
-        int64_t data_size = rowset->data_size();
-        rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
+        rowset->set_data_size(apportion(rowset->data_size()));
     }
     if (rowset->has_num_dels()) {
         int64_t num_dels = rowset->num_dels();
@@ -752,29 +827,39 @@ std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log
     return output_paths;
 }
 
-void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index,
+                               const TabletRangePB* sibling_range) {
+    // Classify each rowset against the sibling's range; nullptr keeps the legacy apportionment.
+    auto overlap_of = [sibling_range](const RowsetMetadataPB& rowset) {
+        return sibling_range == nullptr ? RangeOverlap::kUnknown
+                                        : classify_rowset_range_overlap(rowset, *sibling_range);
+    };
     if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index);
+        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index,
+                                 overlap_of(txn_log->op_write().rowset()));
     }
     if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index);
+        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index,
+                                 overlap_of(txn_log->op_compaction().output_rowset()));
     }
     if (txn_log->has_op_schema_change()) {
         for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
-            update_rowset_data_stats(&rowset, split_count, split_index);
+            update_rowset_data_stats(&rowset, split_count, split_index, overlap_of(rowset));
         }
     }
     if (txn_log->has_op_replication()) {
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             if (op_write.has_rowset()) {
-                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index);
+                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index,
+                                         overlap_of(op_write.rowset()));
             }
         }
     }
     if (txn_log->has_op_parallel_compaction()) {
         for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
             if (subtask.has_output_rowset()) {
-                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index);
+                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index,
+                                         overlap_of(subtask.output_rowset()));
             }
         }
     }
