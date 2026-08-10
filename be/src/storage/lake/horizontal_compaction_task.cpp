@@ -41,6 +41,7 @@ namespace starrocks::lake {
 Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
     _context->stats->compaction_type = "horizontal";
+    _context->publish_stats_snapshot();
 
     int64_t total_num_rows = 0;
     int64_t input_bytes = 0;

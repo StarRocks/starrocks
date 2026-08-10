@@ -223,6 +223,7 @@ TEST_F(CompactionTaskContextTest, test_per_attempt_stats_reset_for_retry) {
     context.stats->raw_rows_read = 50;
     context.stats->write_segment_bytes = 75;
     EXPECT_FALSE(context.stats->is_slow(5000));
+    context.publish_stats_snapshot();
 
     auto latest_attempt = context.stats_snapshot(false);
     EXPECT_EQ(2, latest_attempt.task_attempt_count);
@@ -300,6 +301,7 @@ TEST_F(CompactionTaskContextTest, test_live_stats_snapshot) {
     const int64_t now_ns = MonotonicNanos();
     context.task_attempt_start_ns.store(now_ns - 5'000'000, std::memory_order_release);
     context.task_execute_start_ns.store(now_ns - 3'000'000, std::memory_order_release);
+    context.publish_stats_snapshot();
 
     auto live_stats = context.stats_snapshot(true);
     EXPECT_GE(live_stats.task_total_ns, 5'000'200);
@@ -309,5 +311,28 @@ TEST_F(CompactionTaskContextTest, test_live_stats_snapshot) {
     auto final_stats = context.stats_snapshot(false);
     EXPECT_EQ(final_stats.task_total_ns, 200);
     EXPECT_EQ(final_stats.task_execute_ns, 100);
+}
+
+TEST_F(CompactionTaskContextTest, test_running_stats_use_latest_published_attempt) {
+    context.stats->compaction_type = "horizontal";
+    context.stats->task_attempt_count = 1;
+    context.stats->raw_rows_read = 100;
+    context.publish_stats_snapshot();
+
+    context.reset_attempt_stats();
+    auto previous_attempt = context.stats_snapshot(true);
+    EXPECT_EQ("horizontal", previous_attempt.compaction_type);
+    EXPECT_EQ(1, previous_attempt.task_attempt_count);
+    EXPECT_EQ(100, previous_attempt.raw_rows_read);
+
+    context.stats->compaction_type = "vertical";
+    context.stats->task_attempt_count = 2;
+    context.stats->raw_rows_read = 50;
+    context.publish_stats_snapshot();
+
+    auto latest_attempt = context.stats_snapshot(true);
+    EXPECT_EQ("vertical", latest_attempt.compaction_type);
+    EXPECT_EQ(2, latest_attempt.task_attempt_count);
+    EXPECT_EQ(50, latest_attempt.raw_rows_read);
 }
 } // namespace starrocks::lake

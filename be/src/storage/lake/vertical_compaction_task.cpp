@@ -48,6 +48,7 @@ namespace starrocks::lake {
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
     _context->stats->compaction_type = "vertical";
+    _context->publish_stats_snapshot();
 
     int64_t input_bytes = 0;
     {

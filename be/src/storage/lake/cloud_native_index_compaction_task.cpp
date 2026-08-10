@@ -22,6 +22,7 @@ namespace starrocks::lake {
 
 Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     _context->stats->compaction_type = "cloud_native_index";
+    _context->publish_stats_snapshot();
     std::shared_ptr<TxnLog> txn_log;
     {
         SCOPED_RAW_TIMER(&_context->stats->txn_log_build_ns);

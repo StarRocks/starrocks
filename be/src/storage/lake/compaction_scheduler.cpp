@@ -549,11 +549,13 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     context->start_time.store(start_time, std::memory_order_relaxed);
     const int attempt = context->runs.fetch_add(1, std::memory_order_relaxed) + 1;
     context->stats->task_attempt_count = attempt;
+    context->publish_stats_snapshot();
 
     auto status = Status::OK();
     auto task_prepare_start_ns = MonotonicNanos();
     auto task_or = _tablet_mgr->compact(context.get());
     context->stats->task_prepare_ns += MonotonicNanos() - task_prepare_start_ns;
+    context->publish_stats_snapshot();
     if (task_or.ok()) {
         auto should_cancel = [&]() { return compaction_should_cancel(context.get()); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
@@ -577,6 +579,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     }
     context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
     context->task_attempt_start_ns.store(0, std::memory_order_release);
+    context->publish_stats_snapshot();
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;

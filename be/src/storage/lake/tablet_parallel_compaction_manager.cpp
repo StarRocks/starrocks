@@ -1478,6 +1478,7 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
             // Snapshot the subtask input footprint onto the context so list_tasks() can
             // surface it consistently for both running and completed subtasks.
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
+            context->publish_stats_snapshot();
             // Store context pointer for real-time progress/status tracking
             it->second.context = context.get();
         }
@@ -1537,6 +1538,7 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     context->task_execute_start_ns.store(0, std::memory_order_release);
     context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
     context->task_attempt_start_ns.store(0, std::memory_order_release);
+    context->publish_stats_snapshot();
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
@@ -2257,6 +2259,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
                 context->stats->queue_wait_ns += start_time_ns - it->second.enqueue_time_ns;
             }
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
+            context->publish_stats_snapshot();
             it->second.context = context.get();
         }
     }
@@ -2367,6 +2370,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
     context->task_execute_start_ns.store(0, std::memory_order_release);
     context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
     context->task_attempt_start_ns.store(0, std::memory_order_release);
+    context->publish_stats_snapshot();
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;
@@ -2704,6 +2708,7 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
                 context->stats->queue_wait_ns += start_time_ns - it->second.enqueue_time_ns;
             }
             context->subtask_input_rowsets = static_cast<int64_t>(it->second.input_rowset_ids.size());
+            context->publish_stats_snapshot();
             it->second.context = context.get();
         }
     }
@@ -2776,6 +2781,7 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     context->task_execute_start_ns.store(0, std::memory_order_release);
     context->stats->task_total_ns += MonotonicNanos() - start_time_ns;
     context->task_attempt_start_ns.store(0, std::memory_order_release);
+    context->publish_stats_snapshot();
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
     auto cost = finish_time - start_time;

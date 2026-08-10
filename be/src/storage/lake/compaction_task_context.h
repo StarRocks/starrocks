@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "common/status.h"
@@ -220,7 +221,17 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool is_last_range = false;
 
     void reset_attempt_stats();
+    void publish_stats_snapshot();
     CompactionTaskStats stats_snapshot(bool include_live_timers) const;
+
+private:
+    // Running task queries read this published copy instead of racing with the
+    // worker's in-place updates to stats. The worker refreshes it only at safe
+    // phase boundaries, while the atomic timestamps keep live timers moving.
+    mutable std::mutex _stats_snapshot_mutex;
+    CompactionTaskStats _published_stats;
+    int64_t _published_task_attempt_start_ns = 0;
+    int64_t _published_task_execute_start_ns = 0;
 };
 
 } // namespace starrocks::lake

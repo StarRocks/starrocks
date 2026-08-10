@@ -313,18 +313,31 @@ void CompactionTaskContext::reset_attempt_stats() {
     *stats = CompactionTaskStats();
 }
 
+void CompactionTaskContext::publish_stats_snapshot() {
+    std::lock_guard lock(_stats_snapshot_mutex);
+    _published_stats = *stats;
+    _published_task_attempt_start_ns = task_attempt_start_ns.load(std::memory_order_relaxed);
+    _published_task_execute_start_ns = task_execute_start_ns.load(std::memory_order_relaxed);
+}
+
 CompactionTaskStats CompactionTaskContext::stats_snapshot(bool include_live_timers) const {
-    CompactionTaskStats snapshot = *stats;
+    CompactionTaskStats snapshot;
+    int64_t attempt_start_ns;
+    int64_t execute_start_ns;
+    {
+        std::lock_guard lock(_stats_snapshot_mutex);
+        snapshot = _published_stats;
+        attempt_start_ns = _published_task_attempt_start_ns;
+        execute_start_ns = _published_task_execute_start_ns;
+    }
     if (!include_live_timers) {
         return snapshot;
     }
 
     const int64_t now_ns = MonotonicNanos();
-    const int64_t attempt_start_ns = task_attempt_start_ns.load(std::memory_order_acquire);
     if (attempt_start_ns > 0 && now_ns > attempt_start_ns) {
         snapshot.task_total_ns += now_ns - attempt_start_ns;
     }
-    const int64_t execute_start_ns = task_execute_start_ns.load(std::memory_order_acquire);
     if (execute_start_ns > 0 && now_ns > execute_start_ns) {
         snapshot.task_execute_ns += now_ns - execute_start_ns;
     }
