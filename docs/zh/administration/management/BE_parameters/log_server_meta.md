@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：输出 Lake Compaction 详细 Profile 慢日志的耗时阈值。普通 Compaction Attempt 或并行 Compaction Subtask 完成后，仅当任务耗时大于等于该值时，StarRocks 才会输出一条包含任务标识、状态和完整 JSON Profile 的 INFO 日志。设置为 `0` 表示记录每个已完成的 Attempt 或 Subtask；调大该值可减少 INFO 日志量。
+- 描述：输出 Lake Compaction 详细 Profile 慢日志的耗时阈值。普通 Compaction Attempt 或并行 Compaction Subtask 完成后，仅当本次 Attempt 或 Subtask 的耗时大于等于该值时，StarRocks 才会输出一条包含任务标识、状态和完整 JSON Profile 的 INFO 日志。设置为 `0` 表示记录每个已完成的 Attempt 或 Subtask；调大该值可减少 INFO 日志量。
 - 引入版本：-
 
 ### load_rpc_slow_log_frequency_threshold_seconds

@@ -56,7 +56,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: Milliseconds
 - 変更可能: はい
-- 説明: Lake Compaction の詳細な Profile スローログを出力するための実行時間しきい値です。通常の Compaction Attempt または並列 Compaction Subtask の完了後、タスクの実行時間がこの値以上の場合にのみ、StarRocks はタスク識別子、ステータス、完全な JSON Profile を含む INFO ログを出力します。`0` に設定すると、完了したすべての Attempt または Subtask が記録されます。INFO ログの量を減らすには、この値を大きくします。
+- 説明: Lake Compaction の詳細な Profile スローログを出力するための実行時間しきい値です。通常の Compaction Attempt または並列 Compaction Subtask の完了後、その Attempt または Subtask の実行時間がこの値以上の場合にのみ、StarRocks はタスク識別子、ステータス、完全な JSON Profile を含む INFO ログを出力します。`0` に設定すると、完了したすべての Attempt または Subtask が記録されます。INFO ログの量を減らすには、この値を大きくします。
 - 導入バージョン: -
 
 ### log_buffer_level

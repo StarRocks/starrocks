@@ -203,6 +203,34 @@ TEST_F(CompactionTaskContextTest, test_slow_log_threshold) {
     EXPECT_TRUE(stats.is_slow(0));
 }
 
+TEST_F(CompactionTaskContextTest, test_per_attempt_stats_reset_for_retry) {
+    context.stats->compaction_type = "horizontal";
+    context.stats->task_attempt_count = 1;
+    context.stats->task_total_ns = 6'000'000'000;
+    context.stats->raw_rows_read = 100;
+    context.stats->write_segment_bytes = 200;
+    EXPECT_TRUE(context.stats->is_slow(5000));
+
+    context.reset_attempt_stats();
+    EXPECT_EQ(0, context.stats->task_attempt_count);
+    EXPECT_EQ(0, context.stats->task_total_ns);
+    EXPECT_EQ(0, context.stats->raw_rows_read);
+    EXPECT_EQ(0, context.stats->write_segment_bytes);
+
+    context.stats->compaction_type = "horizontal";
+    context.stats->task_attempt_count = 2;
+    context.stats->task_total_ns = 3'000'000'000;
+    context.stats->raw_rows_read = 50;
+    context.stats->write_segment_bytes = 75;
+    EXPECT_FALSE(context.stats->is_slow(5000));
+
+    auto latest_attempt = context.stats_snapshot(false);
+    EXPECT_EQ(2, latest_attempt.task_attempt_count);
+    EXPECT_EQ(3'000'000'000, latest_attempt.task_total_ns);
+    EXPECT_EQ(50, latest_attempt.raw_rows_read);
+    EXPECT_EQ(75, latest_attempt.write_segment_bytes);
+}
+
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
 

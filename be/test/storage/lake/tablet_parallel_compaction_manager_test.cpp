@@ -202,11 +202,11 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
     }
 
-    // Writes a real segment (key column c0 = 0..num_rows-1, value column c1 constant 0)
+    // Writes a real segment (key column c0 = start_key..start_key+num_rows-1, value column c1 constant 0)
     // for |tablet_id| at |segment_name|, under |schema_pb| and the writer-time value of
     // config::enable_full_sort_key_index. Returns the file size.
     uint64_t write_int_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb, const std::string& segment_name,
-                                   int64_t num_rows) {
+                                   int64_t num_rows, int32_t start_key = 0) {
         auto tablet_schema = TabletSchema::create(schema_pb);
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -225,7 +225,7 @@ protected:
         auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
         auto cols = chunk->columns();
         for (int64_t i = 0; i < num_rows; ++i) {
-            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(start_key + static_cast<int32_t>(i)));
             cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
         }
         CHECK_OK(writer.append_chunk(*chunk));
@@ -7347,6 +7347,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
 
 TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split) {
     int64_t tablet_id = 10256;
+    constexpr int kNumRowsets = 5;
+    constexpr int32_t kRowsPerRowset = 250;
+    constexpr int64_t kLogicalRowsetSize = 50 * 1024 * 1024;
 
     auto old_enable = config::enable_lake_compaction_range_split;
     config::enable_lake_compaction_range_split = true;
@@ -7354,39 +7357,34 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
 
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
     metadata->set_id(tablet_id);
-    metadata->set_version(5);
+    metadata->set_version(kNumRowsets + 1);
+    metadata->set_next_rowset_id(kNumRowsets);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < kNumRowsets; i++) {
+        const int32_t start_key = static_cast<int32_t>(i * kRowsPerRowset);
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(i);
         rowset->set_overlapped(true);
-        rowset->set_num_rows(10000);
-        rowset->set_data_size(50 * 1024 * 1024);
+        rowset->set_num_rows(kRowsPerRowset);
+        // Keep the logical size large enough to create multiple range-split subtasks;
+        // the physical segment stays small so the UT remains fast.
+        rowset->set_data_size(kLogicalRowsetSize);
 
         std::string segment_name = fmt::format("rs_seg_{}.dat", i);
+        const uint64_t segment_size =
+                write_int_key_segment(tablet_id, metadata->schema(), segment_name, kRowsPerRowset, start_key);
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename(segment_name);
-        segment_meta->set_size(50 * 1024 * 1024);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        segment_meta->set_num_rows(10000);
-
-        std::string path = _lp->segment_location(tablet_id, segment_name);
-        std::string dir = std::filesystem::path(path).parent_path().string();
-        CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystemFactory::CreateSharedFromString(path);
-        WritableFileOptions opts;
-        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        auto st = fs.value()->new_writable_file(opts, path);
-        CHECK_OK(st.status());
-        CHECK_OK(st.value()->append("dummy_segment_data"));
-        CHECK_OK(st.value()->close());
+        segment_meta->set_size(segment_size);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->set_num_rows(kRowsPerRowset);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
     int64_t txn_id = 20256;
-    int64_t version = 5;
+    int64_t version = kNumRowsets + 1;
 
     TabletParallelConfig pconfig;
     pconfig.set_max_parallel_per_tablet(3);
@@ -7414,7 +7412,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(st.status());
     ASSERT_GT(st.value(), 0);
 
     auto state = _manager->get_tablet_state(tablet_id, txn_id);

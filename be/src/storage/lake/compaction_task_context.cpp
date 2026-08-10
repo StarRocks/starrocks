@@ -309,6 +309,10 @@ std::string CompactionTaskStats::to_json_stats_with_subtask_metadata(int32_t sub
     return serialize(root);
 }
 
+void CompactionTaskContext::reset_attempt_stats() {
+    *stats = CompactionTaskStats();
+}
+
 CompactionTaskStats CompactionTaskContext::stats_snapshot(bool include_live_timers) const {
     CompactionTaskStats snapshot = *stats;
     if (!include_live_timers) {

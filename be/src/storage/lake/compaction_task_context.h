@@ -219,6 +219,7 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool is_first_range = false;
     bool is_last_range = false;
 
+    void reset_attempt_stats();
     CompactionTaskStats stats_snapshot(bool include_live_timers) const;
 };
 

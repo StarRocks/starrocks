@@ -56,7 +56,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Threshold for emitting detailed lake compaction profile logs. After a regular compaction attempt or parallel compaction subtask finishes, StarRocks writes an INFO log containing the task identifiers, status, and full JSON profile only when the elapsed task time is greater than or equal to this value. Set this parameter to `0` to log every completed attempt or subtask. Increase it to reduce INFO log volume.
+- Description: Threshold for emitting detailed lake compaction profile logs. After a regular compaction attempt or parallel compaction subtask finishes, StarRocks writes an INFO log containing the task identifiers, status, and full JSON profile only when the elapsed time of that attempt or subtask is greater than or equal to this value. Set this parameter to `0` to log every completed attempt or subtask. Increase it to reduce INFO log volume.
 - Introduced in: -
 
 ### lake_replication_slow_log_ms

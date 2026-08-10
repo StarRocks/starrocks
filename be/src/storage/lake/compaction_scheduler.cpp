@@ -534,6 +534,11 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     const auto txn_id = context->txn_id;
     const auto version = context->version;
 
+    // Each retry is a new execution attempt. The previous attempt has already been
+    // emitted to the slow log, so the context only keeps stats for the latest attempt.
+    if (context->runs.load(std::memory_order_relaxed) > 0) {
+        context->reset_attempt_stats();
+    }
     context->task_attempt_start_ns.store(start_time_ns, std::memory_order_release);
 
     int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
@@ -541,9 +546,9 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     if (context->enqueue_time_ns > 0 && start_time_ns > context->enqueue_time_ns) {
         context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
     }
-    context->stats->task_attempt_count++;
     context->start_time.store(start_time, std::memory_order_relaxed);
-    context->runs.fetch_add(1, std::memory_order_relaxed);
+    const int attempt = context->runs.fetch_add(1, std::memory_order_relaxed) + 1;
+    context->stats->task_attempt_count = attempt;
 
     auto status = Status::OK();
     auto task_prepare_start_ns = MonotonicNanos();
@@ -578,14 +583,16 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
     if (context->stats->is_slow(config::lake_compact_slow_log_ms)) {
         LOG(INFO) << "Compaction task attempt finished. tablet_id=" << tablet_id << " version=" << version
-                  << " txn_id=" << txn_id << " status=" << status << " profile=" << context->stats->to_json_stats()
-                  << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
+                  << " txn_id=" << txn_id << " attempt=" << attempt << " status=" << status
+                  << " profile=" << context->stats->to_json_stats() << " table_id=" << context->table_id
+                  << " partition_id=" << context->partition_id;
     }
 
     // Task failure due to memory limitations allows for retries, more threads allow for more retries.
     // If allow partial success, do not retry, task result should be reported to FE as soon as possible.
-    if (!context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
-        context->runs.load(std::memory_order_relaxed) < _task_queues.task_queue_size() + 1) {
+    const bool should_retry = !context->callback->allow_partial_success() && status.is_mem_limit_exceeded() &&
+                              attempt < _task_queues.task_queue_size() + 1;
+    if (should_retry) {
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
