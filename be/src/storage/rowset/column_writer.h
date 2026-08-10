@@ -339,7 +339,7 @@ private:
     std::unique_ptr<compression::ZstdCDict> _compression_cdict;
     std::string _zstd_compression_dict_sample;   // dict bytes, persisted as the dict page
     bool _zstd_compression_dict_ready = false;   // _compression_cdict has been built
-    bool _cdict_used = false;               // at least one data page was actually dict-compressed
+    bool _cdict_used = false;                    // at least one data page was actually dict-compressed
     bool _zstd_compression_dict_trained = false; // dict bytes are ZDICT-trained (vs a raw sample)
 
     // "train" mode (ZDICT-lite) only. The first config::zstd_compression_dict_train_pages
