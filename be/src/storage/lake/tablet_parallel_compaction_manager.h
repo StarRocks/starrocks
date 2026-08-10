@@ -253,9 +253,16 @@ public:
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 
     // Test-only: Register a pre-created tablet state for unit testing
-    // This allows tests to bypass the normal create_parallel_tasks flow
+    // This allows tests to bypass the normal create_parallel_tasks flow.
+    // The handed-over state already lists every subtask the test intends to run, which is exactly what
+    // submit_subtasks_from_groups() would have sealed on its way out, so seal it here too -- otherwise
+    // is_complete() stays false forever and the subtasks could never complete the tablet.
     void register_tablet_state_for_test(int64_t tablet_id, int64_t txn_id,
                                         std::shared_ptr<TabletParallelCompactionState> state) {
+        if (state != nullptr) {
+            std::lock_guard<std::mutex> state_lock(state->mutex);
+            state->submission_done = true;
+        }
         std::lock_guard<std::mutex> lock(_states_mutex);
         std::string key = make_state_key(tablet_id, txn_id);
         _tablet_states[key] = std::move(state);

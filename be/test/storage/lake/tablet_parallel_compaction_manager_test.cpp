@@ -128,9 +128,20 @@ TEST_F(TabletParallelCompactionStateTest, test_is_complete) {
     _state->running_subtasks.erase(0);
     EXPECT_FALSE(_state->is_complete());
 
-    // Complete all
+    // Complete all -- still NOT complete, because submission has not been sealed. While
+    // submit_subtasks_from_groups() registers groups one at a time, an empty running_subtasks only means
+    // "the next group has not been registered yet"; treating that as completion is what allowed two
+    // subtasks to each drive the completion transition for one tablet.
     _state->running_subtasks.erase(1);
+    EXPECT_FALSE(_state->is_complete());
+
+    // Sealing submission is what makes the predicate meaningful.
+    _state->submission_done = true;
     EXPECT_TRUE(_state->is_complete());
+
+    // And the transition can be claimed exactly once, however many callers race for it.
+    EXPECT_TRUE(_state->claim_completion());
+    EXPECT_FALSE(_state->claim_completion());
 }
 
 class TabletParallelCompactionManagerTest : public TestBase {
