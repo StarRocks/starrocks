@@ -52,6 +52,9 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
+    prefetch_hit_count = reader_stats.prefetch_hit_count;
+    prefetch_wait_finish_ns = reader_stats.prefetch_wait_finish_ns;
+    prefetch_pending_ns = reader_stats.prefetch_pending_ns;
     // Note: read_segment_count is managed explicitly in compaction task code
     // by summing rowset->num_segments(), not from reader_stats.
 }
@@ -122,6 +125,9 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.column_group_count += that.column_group_count;
     diff.vertical_key_group_ns += that.vertical_key_group_ns;
     diff.vertical_value_group_ns += that.vertical_value_group_ns;
+    diff.prefetch_hit_count += that.prefetch_hit_count;
+    diff.prefetch_wait_finish_ns += that.prefetch_wait_finish_ns;
+    diff.prefetch_pending_ns += that.prefetch_pending_ns;
     diff.read_segment_count += that.read_segment_count;
     diff.write_segment_count += that.write_segment_count;
     diff.write_segment_bytes += that.write_segment_bytes;
@@ -187,6 +193,9 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.column_group_count -= that.column_group_count;
     diff.vertical_key_group_ns -= that.vertical_key_group_ns;
     diff.vertical_value_group_ns -= that.vertical_value_group_ns;
+    diff.prefetch_hit_count -= that.prefetch_hit_count;
+    diff.prefetch_wait_finish_ns -= that.prefetch_wait_finish_ns;
+    diff.prefetch_pending_ns -= that.prefetch_pending_ns;
     diff.read_segment_count -= that.read_segment_count;
     diff.write_segment_count -= that.write_segment_count;
     diff.write_segment_bytes -= that.write_segment_bytes;
@@ -281,6 +290,9 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("in_queue_sec", rapidjson::Value(s.in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(s.pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("input_file_size", rapidjson::Value(s.input_file_size), allocator);
+    root.AddMember("prefetch_hit_count", rapidjson::Value(s.prefetch_hit_count), allocator);
+    root.AddMember("prefetch_wait_finish_ms", rapidjson::Value(s.prefetch_wait_finish_ns / 1000000), allocator);
+    root.AddMember("prefetch_pending_ms", rapidjson::Value(s.prefetch_pending_ns / 1000000), allocator);
 }
 
 static std::string serialize(const rapidjson::Document& root) {
