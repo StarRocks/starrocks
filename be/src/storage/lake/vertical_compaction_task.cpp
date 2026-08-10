@@ -229,8 +229,16 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
+    // `fill_metadata_cache` is named explicitly: assigning the whole struct replaces the
+    // TabletReaderParams default (`{.fill_data_cache = true, .fill_metadata_cache = true}`) with
+    // LakeIOOptions' in-class defaults for every field not listed, which silently turned metadata
+    // caching off. Vertical compaction walks the same segments once per column group, so whenever
+    // the entry cached by calculate_chunk_size_for_column_group() has been evicted in between, an
+    // uncached read pass rebuilds the whole Segment (footer parse plus one ColumnReader per column,
+    // regardless of the group's width) only to throw it away again, once per segment per group.
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .fill_metadata_cache = true};
 
     // Apply range filter for range-split parallel compaction.
     // Must apply to ALL column groups (key and non-key) so that segment iterators
