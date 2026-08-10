@@ -18,14 +18,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TStatisticData;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.velocity.VelocityContext;
@@ -48,7 +47,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         table.setId(2);
         table.setName("t0");
         ExternalHistogramStatisticsCollectJob job = new ExternalHistogramStatisticsCollectJob(
-                "hive0", db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
+                "hive0", db, table, Lists.newArrayList(columnName), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
@@ -263,7 +262,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
             properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
             job = new ExternalHistogramStatisticsCollectJob(
                     "hive0", db, table, Lists.newArrayList("v2", "v7"),
-                    Lists.newArrayList(IntegerType.BIGINT, VarcharType.VARCHAR),
+                    Lists.newArrayList(Type.BIGINT, Type.VARCHAR),
                     StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, properties);
 
             new MockUp<StatisticExecutor>() {
@@ -342,7 +341,7 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         }
 
         private String tableUuidHash() {
-            return StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
+            return table.getUUID();
         }
 
         private List<String> batchInsertSql() {

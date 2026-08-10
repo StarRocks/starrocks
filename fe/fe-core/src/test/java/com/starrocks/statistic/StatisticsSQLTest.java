@@ -238,7 +238,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                     "  |  output: histogram");
 
             String querySql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildQueryHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, IntegerType.INT, false);
+                    db, t0, 0.1, 10L, ImmutableMap.of("d.c.a", "100"), col, Type.INT, false);
             plan = getFragmentPlan(querySql);
             assertCContains(plan, "AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");
@@ -275,7 +275,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                     "  |  output: histogram");
 
             String querySql = Deencapsulation.invoke(hiveHistogramStatisticsCollectJob, "buildQueryHistogram",
-                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, IntegerType.INT);
+                    db, t0, 0.1, 10L, ImmutableMap.of("col_struct.c1.c11", "100"), col, Type.INT);
             plan = getFragmentPlan(querySql);
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
                     "  |  output: histogram");

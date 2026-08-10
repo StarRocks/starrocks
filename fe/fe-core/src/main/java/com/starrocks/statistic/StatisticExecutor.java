@@ -289,23 +289,10 @@ public class StatisticExecutor {
         }
     }
 
-    // Best-effort cleanup of the stale raw-keyed rows superseded by a fresh hashed-key write.
-    // Failure just means the raw row lingers a bit longer (until this partition/column is
-    // collected again); it must never fail the collection job that just succeeded.
-    public boolean dropExternalStatRawPartitions(ConnectContext statsConnectCtx, String rawTableUUID,
-                                                 List<String> partitionNames, List<String> columnNames) {
-        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
-        LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
-        return executeDML(statsConnectCtx, sql);
-    }
-
-    public boolean dropExternalHistogramRawColumn(ConnectContext statsConnectCtx, String rawTableUUID, String columnName) {
-        return dropExternalHistogramRawColumns(statsConnectCtx, rawTableUUID, Lists.newArrayList(columnName));
-    }
 
     public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
                                                    List<String> columnNames) {
-        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, columnNames);
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(rawTableUUID, columnNames);
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
     }

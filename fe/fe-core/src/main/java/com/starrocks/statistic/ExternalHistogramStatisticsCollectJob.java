@@ -26,7 +26,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

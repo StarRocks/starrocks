@@ -68,7 +68,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as INT)," +
                     " cast($dbId as BIGINT), cast($tableId as BIGINT), '$columnNameStr'," +
-                    " $histogramFunction" +
+                    " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double))" +
                     " FROM (" +
                     "   SELECT $columnName as column_key " +
                     "   FROM `$dbName`.`$tableName` $sampleClause " +
@@ -366,6 +366,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         addMcvExcludeToContext(context, mostCommonValues, columnName, columnType);
 
         context.put("totalRows", Config.histogram_max_sample_row_count);
+        context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRatio);
 
         if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
             String sampleClause = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));

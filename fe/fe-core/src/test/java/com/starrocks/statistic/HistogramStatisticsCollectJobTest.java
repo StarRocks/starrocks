@@ -18,14 +18,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TStatisticData;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.velocity.VelocityContext;
@@ -48,7 +47,7 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         table.setId(2);
         table.setName("t0");
         HistogramStatisticsCollectJob job = new HistogramStatisticsCollectJob(
-                db, table, Lists.newArrayList(columnName), Lists.newArrayList(IntegerType.BIGINT),
+                db, table, Lists.newArrayList(columnName), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         VelocityContext context = Deencapsulation.invoke(job, "buildBaseContext", db, table, columnName);
@@ -254,10 +253,9 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
             properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
             properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
-            properties.put(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, "none");
             job = new HistogramStatisticsCollectJob(
                     db, table, Lists.newArrayList("v2", "v7"),
-                    Lists.newArrayList(IntegerType.BIGINT, VarcharType.VARCHAR),
+                    Lists.newArrayList(Type.BIGINT, Type.VARCHAR),
                     StatsConstants.ScheduleType.ONCE, properties);
 
             new MockUp<StatisticExecutor>() {

@@ -14,23 +14,19 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.SqlUtils;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.OriginStatement;
-import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringUtils;
 
@@ -105,14 +101,12 @@ public final class HistogramStatisticsUtils {
     static StatementBase createInsertStmt(String tableName, List<List<Expr>> rowsBuffer, String sql) {
         List<List<Expr>> rows = new ArrayList<>();
         for (List<Expr> row : rowsBuffer) {
-            rows.add(ExprUtils.cloneList(row));
+            rows.add(Expr.cloneList(row));
         }
 
         List<String> targetColumnNames = buildStatsTargetColumnNames(tableName);
         QueryStatement queryStatement = new QueryStatement(new ValuesRelation(rows, targetColumnNames));
-        TableRef tableRef = new TableRef(
-                QualifiedName.of(Lists.newArrayList(StatsConstants.STATISTICS_DB_NAME, tableName)),
-                null, NodePosition.ZERO);
+        TableName tableRef = new TableName(StatsConstants.STATISTICS_DB_NAME, tableName);
         InsertStmt insertStmt = new InsertStmt(tableRef, queryStatement);
         insertStmt.setTargetColumnNames(targetColumnNames);
         insertStmt.setOrigStmt(new OriginStatement(sql, 0));

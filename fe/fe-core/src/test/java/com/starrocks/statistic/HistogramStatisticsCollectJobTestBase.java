@@ -14,11 +14,11 @@
 
 package com.starrocks.statistic;
 
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import org.junit.jupiter.api.Assertions;
