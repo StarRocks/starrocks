@@ -243,7 +243,10 @@ public:
     public:
         Filter selection;
         Filter merged_selection;
-        bool use_merged_selection;
+        // false = read/write `selection`; the callers that want `merged_selection` set it
+        // themselves. Defaulted so a context that never assigns it is deterministic --
+        // every other member here already has an initializer.
+        bool use_merged_selection = false;
         bool compatibility = true;
         std::vector<uint32_t> hash_values;
         std::vector<uint32_t> round_hashes;
@@ -1429,6 +1432,14 @@ private:
         }
         // module has been done outside, so actually here is bucket idx.
         const uint32_t bucket_idx = shuffle_hash;
+        // Every branch that produces bucket_idx is supposed to have reduced it into range,
+        // but the bucket-aware specialization of WithModuloArg has DCHECK(false) arms for
+        // the PIPELINE_BUCKET / GLOBAL_BUCKET_2L layouts, and in a release build those
+        // leave hash_value as a raw 32-bit hash.  Fail open rather than read out of
+        // bounds: a runtime filter may return false positives, never false negatives.
+        if (UNLIKELY(bucket_idx >= _hash_partition_bf.size())) {
+            return true;
+        }
         DCHECK(_hash_partition_bf[bucket_idx].can_use());
         size_t hash = compute_hash(value);
         return _hash_partition_bf[bucket_idx].test_hash(hash);
