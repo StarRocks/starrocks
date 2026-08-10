@@ -34,12 +34,19 @@ namespace starrocks {
 
 namespace {
 
+constexpr int kAsyncLoadThreadIdleTimeoutSeconds = 60;
+
 int64_t expire_time_ms() {
     const int32_t expire_seconds = config::vector_index_cache_expire_sec;
     if (expire_seconds <= 0) {
         return std::numeric_limits<int64_t>::max();
     }
     return MonotonicMillis() + static_cast<int64_t>(expire_seconds) * 1000;
+}
+
+std::chrono::steady_clock::time_point loading_wait_deadline() {
+    const int32_t timeout_ms = std::max<int32_t>(0, config::vector_index_cache_loading_wait_timeout_ms);
+    return std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
 }
 
 } // namespace
@@ -100,9 +107,21 @@ class VectorIndexLoadTask final : public Runnable {
 public:
     VectorIndexLoadTask(VectorIndexCache* cache, VectorIndexCache::LoadingToken token,
                         VectorIndexCache::AsyncIndexLoader loader, std::string key)
-            : _cache(cache), _token(std::move(token)), _loader(std::move(loader)), _key(std::move(key)) {}
+            : _cache(cache), _token(std::move(token)), _loader(std::move(loader)), _key(std::move(key)) {
+        _cache->_metrics.vector_index_cache_async_load_queued.increment(1);
+    }
 
     void run() noexcept override {
+        if (!_queued.exchange(false, std::memory_order_relaxed)) {
+            return;
+        }
+        _cache->_metrics.vector_index_cache_async_load_queued.increment(-1);
+        _cache->_metrics.vector_index_cache_async_load_inflight.increment(1);
+        DeferOp finish_load([&] {
+            _cache->_metrics.vector_index_cache_async_load_inflight.increment(-1);
+            _cache->_update_metrics();
+        });
+
         const int64_t start_ns = MonotonicNanos();
         DeferOp record_load_time([&] {
             _cache->_metrics.vector_index_cache_async_load_ns.increment(
@@ -126,11 +145,25 @@ public:
         }
     }
 
-    void cancel() noexcept override { _token.abort(); }
+    void cancel() noexcept override {
+        _leave_queue();
+        _token.abort();
+        _cache->_update_metrics();
+    }
 
-    void abort() noexcept { _token.abort(); }
+    void abort() noexcept {
+        _leave_queue();
+        _token.abort();
+        _cache->_update_metrics();
+    }
 
 private:
+    void _leave_queue() noexcept {
+        if (_queued.exchange(false, std::memory_order_relaxed)) {
+            _cache->_metrics.vector_index_cache_async_load_queued.increment(-1);
+        }
+    }
+
     Status run_impl() {
         auto loaded_or = _loader();
         if (!loaded_or.ok()) {
@@ -154,6 +187,7 @@ private:
     VectorIndexCache::LoadingToken _token;
     VectorIndexCache::AsyncIndexLoader _loader;
     std::string _key;
+    std::atomic<bool> _queued{true};
 };
 
 VectorIndexCache::VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics)
@@ -204,9 +238,10 @@ Status VectorIndexCache::init_async_load_pool(int num_threads, int max_queue_siz
 
     std::unique_ptr<ThreadPool> pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("vi_cache_load")
-                            .set_min_threads(num_threads)
+                            .set_min_threads(0)
                             .set_max_threads(num_threads)
                             .set_max_queue_size(max_queue_size)
+                            .set_idle_timeout(MonoDelta::FromSeconds(kAsyncLoadThreadIdleTimeoutSeconds))
                             .build(&pool));
     _async_load_pool = std::move(pool);
     _accepting_async_loads.store(true, std::memory_order_release);
@@ -238,7 +273,12 @@ bool VectorIndexCache::Lookup(const tenann::CacheKey& key, tenann::IndexCacheHan
         // Lookup preserves the synchronous cache contract. Async queries use
         // the non-waiting ProbeForQuery path instead.
         if (entry->value().state(std::memory_order_relaxed) == VectorIndexCacheEntryState::kLoading) {
-            entry->value().wait_until_not_loading(lock);
+            if (!entry->value().wait_until_not_loading_until(lock, loading_wait_deadline())) {
+                lock.unlock();
+                _metrics.vector_index_cache_loading_wait_timeout.increment(1);
+                _release_entry(entry);
+                return false;
+            }
         }
         if (entry->value().state(std::memory_order_relaxed) != VectorIndexCacheEntryState::kReady ||
             !entry->value().has_ref()) {
@@ -262,16 +302,26 @@ VectorIndexCacheProbeResult VectorIndexCache::ProbeForQuery(const tenann::CacheK
 
     tenann::IndexRef ref;
     VectorIndexCacheEntryState state;
+    bool wait_timed_out = false;
     {
         auto lock = entry->value().guard();
         state = entry->value().state(std::memory_order_relaxed);
         if (state == VectorIndexCacheEntryState::kLoading && wait_for_loading) {
-            entry->value().wait_until_not_loading(lock);
-            state = entry->value().state(std::memory_order_relaxed);
+            wait_timed_out = !entry->value().wait_until_not_loading_until(lock, loading_wait_deadline());
+            if (!wait_timed_out) {
+                state = entry->value().state(std::memory_order_relaxed);
+            }
         }
         if (state == VectorIndexCacheEntryState::kReady) {
             ref = entry->value().ref();
         }
+    }
+
+    if (wait_timed_out) {
+        _metrics.vector_index_cache_loading_wait_timeout.increment(1);
+        _release_entry(entry);
+        _update_metrics();
+        return {VectorIndexCacheProbeState::kWaitTimeout, {}};
     }
     if (ref != nullptr) {
         _hit_count.fetch_add(1, std::memory_order_relaxed);
@@ -287,6 +337,7 @@ VectorIndexCacheProbeResult VectorIndexCache::ProbeForQuery(const tenann::CacheK
 }
 
 VectorIndexCacheProbeResult VectorIndexCache::TryGetOrSchedule(const tenann::CacheKey& key, AsyncIndexLoader loader) {
+    DeferOp update_metrics([this] { _update_metrics(); });
     if (!_accepting_async_loads.load(std::memory_order_acquire) || capacity() == 0) {
         _metrics.vector_index_cache_async_load_rejected.increment(1);
         return {VectorIndexCacheProbeState::kMiss, {}};
@@ -407,7 +458,7 @@ VectorIndexCacheProbeResult VectorIndexCache::_get_or_create(const tenann::Cache
     }
     Entry* entry = _cache.get_or_create(key.to_string());
 
-    bool ran_loader = false;
+    const auto wait_deadline = loading_wait_deadline();
     for (;;) {
         auto lock = entry->value().guard();
         const auto state = entry->value().state(std::memory_order_relaxed);
@@ -418,9 +469,7 @@ VectorIndexCacheProbeResult VectorIndexCache::_get_or_create(const tenann::Cache
                 continue;
             }
             lock.unlock();
-            if (!ran_loader) {
-                _hit_count.fetch_add(1, std::memory_order_relaxed);
-            }
+            _hit_count.fetch_add(1, std::memory_order_relaxed);
             _update_metrics();
             return {VectorIndexCacheProbeState::kReady, _wrap(entry, std::move(ref))};
         }
@@ -431,14 +480,19 @@ VectorIndexCacheProbeResult VectorIndexCache::_get_or_create(const tenann::Cache
                 _update_metrics();
                 return {VectorIndexCacheProbeState::kLoading, {}};
             }
-            entry->value().wait_until_not_loading(lock);
+            if (!entry->value().wait_until_not_loading_until(lock, wait_deadline)) {
+                lock.unlock();
+                _metrics.vector_index_cache_loading_wait_timeout.increment(1);
+                _release_entry(entry);
+                _update_metrics();
+                return {VectorIndexCacheProbeState::kWaitTimeout, {}};
+            }
             continue;
         }
 
         LoadingToken token(this, entry);
         entry->value().set_state(VectorIndexCacheEntryState::kLoading);
         lock.unlock();
-        ran_loader = true;
         try {
             auto loaded = loader();
             if (loaded == nullptr) {
@@ -489,10 +543,14 @@ tenann::IndexRef VectorIndexCache::_publish_loaded(LoadingToken* token, tenann::
         }
     }
     entry->value().notify_all();
+    _update_metrics();
     return result;
 }
 
 void VectorIndexCache::_release_entry(Entry* entry, bool is_ivfpq_list_block) noexcept {
+    // This relaxed read is only an eager cleanup hint. A concurrent transition
+    // out of EMPTY stays safe because DynamicCache::remove() drops this pin under
+    // its own lock and deletes only when no other external pin remains.
     if (is_ivfpq_list_block || entry->value().state(std::memory_order_relaxed) == VectorIndexCacheEntryState::kEmpty) {
         _cache.remove(entry);
         _update_metrics();

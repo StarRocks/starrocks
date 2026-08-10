@@ -745,6 +745,15 @@ This topic introduces the following types of BE configurations:
 - Description: Idle time before an unused vector index cache entry expires. The timer starts when the last cache handle is released, and a cache hit refreshes it when that handle is later released. Entries pinned by running queries are not removed. IVF-PQ list blocks are released together with their owning index entry and do not have independent TTLs. Values less than or equal to `0` disable expiration. A runtime change applies to subsequent handle releases and does not rewrite existing entry deadlines.
 - Introduced in: v4.2.0
 
+### vector_index_cache_loading_wait_timeout_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time that each synchronous cache caller waits for an in-progress vector index load. When the wait times out, the caller receives a cache miss so the query path can fall back to brute-force search. The existing loader is not canceled and continues loading the index in the background. Each later caller starts its own wait with the configured timeout. Values less than or equal to `0` disable waiting. A runtime change applies to subsequent waits.
+- Introduced in: v4.2.0
+
 ### vector_adaptive_ef_alpha
 
 - Default: 1.0

@@ -29,6 +29,7 @@ class VectorIndexCacheMetrics;
 #ifdef WITH_TENANN
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -47,20 +48,20 @@ enum class VectorIndexCacheEntryState : uint8_t {
     kReady,
 };
 
-// Per-entry holder. The atomic state lets async queries immediately identify a
-// real in-progress load without waiting for the entry mutex. READY/EMPTY paths
-// still take the mutex and recheck before accessing _ref.
+// Per-entry state transitions and _ref access are protected by _mu. The atomic
+// state only supports the best-effort cleanup read in _release_entry().
 class VectorIndexCacheEntry {
 public:
     using State = VectorIndexCacheEntryState;
 
     std::unique_lock<std::mutex> guard() { return std::unique_lock<std::mutex>(_mu); }
-    void wait_until_not_loading(std::unique_lock<std::mutex>& lock) {
-        _cv.wait(lock, [this] { return state(std::memory_order_relaxed) != State::kLoading; });
+    bool wait_until_not_loading_until(std::unique_lock<std::mutex>& lock,
+                                      std::chrono::steady_clock::time_point deadline) {
+        return _cv.wait_until(lock, deadline, [this] { return state(std::memory_order_relaxed) != State::kLoading; });
     }
     void notify_all() noexcept { _cv.notify_all(); }
 
-    State state(std::memory_order order = std::memory_order_acquire) const { return _state.load(order); }
+    State state(std::memory_order order) const { return _state.load(order); }
     void set_state(State state, std::memory_order order = std::memory_order_release) { _state.store(state, order); }
     bool has_ref() const { return _ref != nullptr; }
     tenann::IndexRef ref() const { return _ref; }
@@ -81,6 +82,7 @@ inline std::ostream& operator<<(std::ostream& os, const VectorIndexCacheEntry&) 
 enum class VectorIndexCacheProbeState : uint8_t {
     kReady,
     kLoading,
+    kWaitTimeout,
     kMiss,
 };
 

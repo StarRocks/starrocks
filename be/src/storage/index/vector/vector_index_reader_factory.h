@@ -52,7 +52,7 @@ public:
     StatusOr<VectorIndexReaderCreateResult> create_and_init(FileInfo vi_file,
                                                             const std::shared_ptr<TabletIndex>& tablet_index,
                                                             const std::map<std::string, std::string>& query_params,
-                                                            const VectorIndexReaderInitOptions& options);
+                                                            VectorIndexReaderInitOptions options);
 
 private:
     VectorIndexCache& _vector_index_cache;

@@ -190,12 +190,19 @@ StatusOr<VectorIndexReaderInitResult> TenANNReader::init_searcher(tenann::IndexM
 
             int64_t get_or_create_ns = 0;
             bool cache_ok = false;
+            bool wait_timed_out = false;
             {
                 SCOPED_RAW_TIMER(&get_or_create_ns);
                 auto result = _vector_index_cache.GetOrCreateForQuery(tenann::CacheKey(index_path), loader,
                                                                       /*wait_for_loading=*/true);
+                wait_timed_out = result.state == VectorIndexCacheProbeState::kWaitTimeout;
                 cache_ok = result.state == VectorIndexCacheProbeState::kReady;
                 _cache_handle = std::move(result.handle);
+            }
+            if (wait_timed_out) {
+                stats.vector_index_cache_lookup_ns += get_or_create_ns;
+                ++stats.vector_index_cache_miss_count;
+                return VectorIndexReaderInitResult::kFallback;
             }
             // Exclude this caller's loader time so a cold leader reports cache bookkeeping,
             // while a concurrent follower reports its singleflight wait.

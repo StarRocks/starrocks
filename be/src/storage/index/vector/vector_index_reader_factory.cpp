@@ -32,7 +32,7 @@ namespace starrocks {
 
 StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_init(
         FileInfo vi_file, const std::shared_ptr<TabletIndex>& tablet_index,
-        const std::map<std::string, std::string>& query_params, const VectorIndexReaderInitOptions& options) {
+        const std::map<std::string, std::string>& query_params, VectorIndexReaderInitOptions options) {
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index, query_params));
 
     const std::string& index_path = vi_file.path;
@@ -44,7 +44,8 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
         SCOPED_RAW_TIMER(&options.stats.vector_index_cache_lookup_ns);
         probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path), !async_load_on_miss);
     }
-    if (probe.state == VectorIndexCacheProbeState::kLoading) {
+    if (probe.state == VectorIndexCacheProbeState::kLoading ||
+        probe.state == VectorIndexCacheProbeState::kWaitTimeout) {
         ++options.stats.vector_index_cache_miss_count;
         return VectorIndexReaderCreateResult{};
     }
