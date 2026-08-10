@@ -282,6 +282,24 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
 }
 
 void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction) {
+    // Orphaning the input sstables and dropping them from `sstable_meta` must stay ONE decision.
+    // LakePersistentIndex::apply_opcompaction() bails out early when there is no output sstable, so the
+    // inputs are then left in `_sstables` and LakePersistentIndex::commit() writes them straight back into
+    // `sstable_meta`. Orphaning them here regardless would schedule files for deletion that the tablet
+    // metadata still references: once lake vacuum removes them, the next PK index load fails with a
+    // missing .sst and the tablet needs a full index rebuild to recover.
+    //
+    // A compaction that records input sstables but no output is reachable in two ways:
+    //   - major_compact() records the inputs in prepare_merging_iterator() and can still return early
+    //     (an empty merging iterator with an OK status), leaving the output unset;
+    //   - a newer BE may report its outputs in a field this version does not know, so has_output_sstable()
+    //     is false even though the compaction did produce output.
+    // In both cases the correct behavior is the same: keep the inputs alive. The compaction then makes no
+    // progress (and any output file it did produce leaks), which is recoverable, unlike a dangling
+    // reference in `sstable_meta`.
+    if (!op_compaction.has_output_sstable()) {
+        return;
+    }
     // remove compacted sst
     for (auto& input_sstable : op_compaction.input_sstables()) {
         FileMetaPB file_meta;

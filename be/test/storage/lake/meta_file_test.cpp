@@ -991,4 +991,41 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
 
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
 }
+
+// A compaction that records input sstables but no output must NOT orphan those inputs.
+// LakePersistentIndex::apply_opcompaction() skips its whole apply when there is no output sstable, so the
+// inputs stay in `_sstables` and are written straight back into `sstable_meta` by commit(). Orphaning them
+// here would leave the tablet metadata referencing files that lake vacuum is free to delete, and the next
+// PK index load would then fail on a missing .sst.
+TEST_F(MetaFileTest, test_remove_compacted_sst_keeps_inputs_without_output) {
+    const int64_t tablet_id = 10021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(12);
+
+    TxnLogPB_OpCompaction op_compaction;
+    for (int i = 0; i < 3; i++) {
+        auto* input_sstable = op_compaction.add_input_sstables();
+        input_sstable->set_filename(std::string("input_") + std::to_string(i) + ".sst");
+        input_sstable->set_filesize(1024);
+    }
+
+    // No output sstable: the index apply is skipped, so the inputs must be kept alive.
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        builder.remove_compacted_sst(op_compaction);
+        EXPECT_EQ(0, metadata->orphan_files_size());
+    }
+
+    // With an output sstable the inputs are genuinely superseded and are orphaned as before.
+    {
+        op_compaction.mutable_output_sstable()->set_filename("output.sst");
+        MetaFileBuilder builder(*tablet, metadata);
+        builder.remove_compacted_sst(op_compaction);
+        ASSERT_EQ(3, metadata->orphan_files_size());
+        EXPECT_EQ("input_0.sst", metadata->orphan_files(0).name());
+        EXPECT_EQ(1024, metadata->orphan_files(0).size());
+    }
+}
 } // namespace starrocks::lake
