@@ -35,11 +35,8 @@
 #include "common/logging.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
-<<<<<<< HEAD
 #include "storage/del_vector.h"
-=======
 #include "storage/lake/column_mode_partial_update_handler.h"
->>>>>>> 2f91b5ef0f7... [Enhancement] Stream source segments for lake column updates (#77275)
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
@@ -782,6 +779,132 @@ TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_records_only_w
     for (int i = 1; i < kChunkSize; i += 2) {
         EXPECT_FALSE(winners.roaring()->contains(static_cast<uint32_t>(i)))
                 << "loser rowid " << i << " unexpectedly present in bitmap";
+    }
+}
+
+// The source segment is now read in bounded ranges, and split_rowid_pairs rebases each range's
+// source rowids to that range's base. column_overlay_vecs is consumed as segment-absolute rowids,
+// so the overlay capture must undo that rebase. Without it every range contributes 0..n-1 and the
+// bitmap collapses onto the first range. The sibling test above cannot catch this: with the default
+// vector_chunk_size the whole segment fits one range whose base is 0.
+TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_is_segment_absolute_across_ranges) {
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    // Baseline written with c0 ascending, so physical source rowid i corresponds to c0 == i.
+    std::vector<int> full_c0(kChunkSize), full_c1(kChunkSize), full_c2(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        full_c0[i] = i;
+        full_c1[i] = i * 3;
+        full_c2[i] = i * 4;
+    }
+    auto fc0 = Int32Column::create();
+    auto fc1 = Int32Column::create();
+    auto fc2 = Int32Column::create();
+    fc0->append_numbers(full_c0.data(), full_c0.size() * sizeof(int));
+    fc1->append_numbers(full_c1.data(), full_c1.size() * sizeof(int));
+    fc2->append_numbers(full_c2.data(), full_c2.size() * sizeof(int));
+    Chunk full_chunk({std::move(fc0), std::move(fc1), std::move(fc2)}, _slot_cid_map);
+
+    // Update c1 on every key, so every source rowid 0..kChunkSize-1 must land in the overlay.
+    std::vector<int> upt_c0(kChunkSize), upt_c1(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        upt_c0[i] = i;
+        upt_c1[i] = i * 3 + 100;
+    }
+    auto pc0 = Int32Column::create();
+    auto pc1 = Int32Column::create();
+    pc0->append_numbers(upt_c0.data(), upt_c0.size() * sizeof(int));
+    pc1->append_numbers(upt_c1.data(), upt_c1.size() * sizeof(int));
+    Chunk partial_chunk({std::move(pc0), std::move(pc1)}, _slot_cid_map);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Baseline full write.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(full_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column partial update, published with a small chunk size so the source segment streams in
+    // several ranges with non-zero bases.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(partial_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+        ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
+        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+        std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
+        SyncPoint::GetInstance()->SetCallBack(
+                "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit", [&](void* arg) {
+                    const auto* container = static_cast<StreamChunkContainer*>(arg);
+                    emitted_ranges.emplace_back(container->start_rowid, container->end_rowid);
+                });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp sync_point_guard([&]() {
+            SyncPoint::GetInstance()->ClearCallBack(
+                    "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        // Guard the premise: a single range would make the assertion below pass even unrebased.
+        ASSERT_GT(emitted_ranges.size(), 1) << "source segment did not stream in multiple ranges";
+        ASSERT_GT(emitted_ranges.back().first, 0u) << "last range must have a non-zero base";
+    }
+
+    ASSERT_EQ(kChunkSize,
+              check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 3 + 100) && (c2 == c0 * 4); }));
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    const auto& row_vecs = metadata->cdc_metadata().pk_change_locator().column_overlay_vecs();
+    ASSERT_EQ(row_vecs.size(), 1) << "exactly one source segment was column-updated";
+
+    const auto& seg_page = *row_vecs.begin();
+    DelVector updated;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    ASSERT_OK(get_del_vec(_tablet_mgr.get(), *metadata, seg_page.second, true, lake_io_opts, &updated));
+    ASSERT_NE(updated.roaring(), nullptr);
+    EXPECT_EQ(updated.cardinality(), kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        EXPECT_TRUE(updated.roaring()->contains(static_cast<uint32_t>(i)))
+                << "updated rowid " << i << " missing from bitmap";
     }
 }
 

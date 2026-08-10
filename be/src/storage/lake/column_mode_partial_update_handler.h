@@ -48,17 +48,11 @@ private:
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
-<<<<<<< HEAD
-                                       ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema,
+                                       StreamChunkContainer container, int32_t condition_idx_in_partial_schema,
                                        Roaring* updated_rowids = nullptr);
-    StatusOr<ChunkPtr> _read_from_source_segment(const RowsetUpdateStateParams& params, const Schema& schema,
-                                                 uint32_t rssid);
-=======
-                                       StreamChunkContainer container, int32_t condition_idx_in_partial_schema);
     Status _read_from_source_segment_and_update(const RowsetUpdateStateParams& params, const Schema& schema,
                                                 uint32_t rssid,
                                                 const std::function<Status(StreamChunkContainer)>& update_func);
->>>>>>> 2f91b5ef0f7... [Enhancement] Stream source segments for lake column updates (#77275)
     // Resolve txn_meta.merge_condition() to a column id in `tschema`.
     // Returns -1 when no condition is set, or an error when the named column is missing from the schema.
     static StatusOr<int32_t> _resolve_condition_cid(const RowsetTxnMetaPB& txn_meta, const TabletSchema& tschema);

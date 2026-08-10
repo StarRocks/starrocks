@@ -317,15 +317,10 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // win, matching the existing upsert/row-mode condition-update semantics (see
 // UpdateManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
-<<<<<<< HEAD
-                                                                   const Schema& partial_schema, ChunkPtr* source_chunk,
-                                                                   int32_t condition_idx_in_partial_schema,
-                                                                   Roaring* updated_rowids) {
-=======
                                                                    const Schema& partial_schema,
                                                                    StreamChunkContainer container,
-                                                                   int32_t condition_idx_in_partial_schema) {
->>>>>>> 2f91b5ef0f7... [Enhancement] Stream source segments for lake column updates (#77275)
+                                                                   int32_t condition_idx_in_partial_schema,
+                                                                   Roaring* updated_rowids) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
@@ -394,7 +389,12 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
             continue;
         }
         if (updated_rowids != nullptr) {
-            updated_rowids->addMany(sorted_source_rowids.size(), sorted_source_rowids.data());
+            // `sorted_source_rowids` was aligned to this streamed range by split_rowid_pairs, but
+            // `updated_rowids` is consumed as segment-absolute rowids (the CDC column overlay vector),
+            // so shift the range base back before recording them.
+            for (const uint32_t source_rowid : sorted_source_rowids) {
+                updated_rowids->add(source_rowid + container.start_rowid);
+            }
         }
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
@@ -581,29 +581,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                          upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids, &updated_rowids_per_segment,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
                          &shared_status]() {
-<<<<<<< HEAD
-                // 3.3 read from source segment
-                auto source_chunk_or = _read_from_source_segment(params, partial_schema, rssid);
-                if (!source_chunk_or.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(source_chunk_or.status());
-                    return;
-                }
-                auto source_chunk_ptr = std::move(source_chunk_or.value());
-                const size_t source_chunk_size = source_chunk_ptr->memory_usage();
-                _tracker->consume(source_chunk_size);
-                DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
-
-                // 3.4 read from update segment and apply updates
-                Roaring updated_rowids;
-                auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr,
-                                                      condition_idx_in_partial_schema, &updated_rowids);
-                if (!st.ok()) {
-=======
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
+                // `updated_rowids` accumulates segment-absolute rowids across every streamed range.
+                Roaring updated_rowids;
                 auto writer_or = _prepare_delta_column_group_writer(params, partial_tschema);
                 if (!writer_or.ok()) {
->>>>>>> 2f91b5ef0f7... [Enhancement] Stream source segments for lake column updates (#77275)
                     std::lock_guard<std::mutex> l(result_mutex);
                     shared_status.update(writer_or.status());
                     return;
@@ -617,7 +599,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
                             // 3.4 read from update segments and apply rows in this source range.
                             RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
-                                                                        condition_idx_in_partial_schema));
+                                                                        condition_idx_in_partial_schema,
+                                                                        &updated_rowids));
                             padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
                             RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
                                     *container.chunk_ptr, "column mode partial update padded source chunk",
