@@ -293,14 +293,14 @@ public class ColumnTest {
 
         Set<ColumnId> bfColumns = new HashSet<>();
         bfColumns.add(ColumnId.create("f0"));
-        Set<ColumnId> compressionDictColumns = new HashSet<>();
-        compressionDictColumns.add(ColumnId.create("f0"));
+        Set<ColumnId> zstdCompressionColumns = new HashSet<>();
+        zstdCompressionColumns.add(ColumnId.create("f0"));
         TColumn t0 = f0.toThrift();
-        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns, compressionDictColumns);
+        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns, zstdCompressionColumns);
 
         Assertions.assertEquals(t0.has_bitmap_index, true);
         Assertions.assertEquals(t0.is_bloom_filter_column, true);
-        Assertions.assertEquals(t0.use_compression_dict, true);
+        Assertions.assertEquals(t0.use_zstd_compression, true);
 
         Assertions.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);

@@ -1817,40 +1817,40 @@ public class SchemaChangeHandler extends AlterHandler {
         IndexAnalyzer.analyseBfWithNgramBf(olapTable, newSet, bfColumnIds);
 
         // property 2.5: compression dict columns (compression dict)
-        // eg. "compression_dict_columns" = "v1,v2"
-        Set<String> compressionDictColumns = null;
+        // eg. "zstd_compression_columns" = "v1,v2"
+        Set<String> zstdCompressionColumns = null;
         try {
-            compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(propertyMap,
+            zstdCompressionColumns = PropertyAnalyzer.analyzeZstdCompressionColumns(propertyMap,
                     indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
 
-        boolean hasCompressionDictChange = false;
-        Set<String> oriCompressionDictColumns = olapTable.getCompressionDictColumnNames();
-        if (compressionDictColumns != null) {
+        boolean hasZstdCompressionChange = false;
+        Set<String> oriZstdCompressionColumns = olapTable.getZstdCompressionColumnNames();
+        if (zstdCompressionColumns != null) {
             // the property is specified in this ALTER statement
-            if (!compressionDictColumns.equals(oriCompressionDictColumns)) {
-                hasCompressionDictChange = true;
+            if (!zstdCompressionColumns.equals(oriZstdCompressionColumns)) {
+                hasZstdCompressionChange = true;
             }
         } else {
             // not specified, keep the existing set unchanged
-            compressionDictColumns = oriCompressionDictColumns;
+            zstdCompressionColumns = oriZstdCompressionColumns;
         }
 
-        if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
-            compressionDictColumns = null;
+        if (zstdCompressionColumns != null && zstdCompressionColumns.isEmpty()) {
+            zstdCompressionColumns = null;
         }
 
-        Set<ColumnId> compressionDictColumnIds = null;
-        if (compressionDictColumns != null) {
-            compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-            for (String columnName : compressionDictColumns) {
+        Set<ColumnId> zstdCompressionColumnIds = null;
+        if (zstdCompressionColumns != null) {
+            zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String columnName : zstdCompressionColumns) {
                 Column column = olapTable.getColumn(columnName);
                 if (column == null) {
                     throw new DdlException("can not find column by name: " + columnName);
                 }
-                compressionDictColumnIds.add(column.getColumnId());
+                zstdCompressionColumnIds.add(column.getColumnId());
             }
         }
 
@@ -1865,8 +1865,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumnIds, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange)
-                .withCompressionDictColumns(compressionDictColumnIds)
-                .withCompressionDictColumnsChanged(hasCompressionDictChange)
+                .withZstdCompressionColumns(zstdCompressionColumnIds)
+                .withZstdCompressionColumnsChanged(hasZstdCompressionChange)
                 .withDisableReplicatedStorageForGIN(disableReplicatedStorageForGIN);
 
         if (RunMode.isSharedDataMode()) {
@@ -1922,14 +1922,14 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // compression dict columns change should also trigger a schema change on this index
-            if (!needAlter && hasCompressionDictChange) {
+            if (!needAlter && hasZstdCompressionChange) {
                 for (Column alterColumn : alterSchema) {
                     String columnName = alterColumn.getName();
-                    boolean isOldCompressionDictColumn = oriCompressionDictColumns != null
-                            && oriCompressionDictColumns.contains(columnName);
-                    boolean isNewCompressionDictColumn = compressionDictColumns != null
-                            && compressionDictColumns.contains(columnName);
-                    if (isOldCompressionDictColumn != isNewCompressionDictColumn) {
+                    boolean isOldZstdCompressionColumn = oriZstdCompressionColumns != null
+                            && oriZstdCompressionColumns.contains(columnName);
+                    boolean isNewZstdCompressionColumn = zstdCompressionColumns != null
+                            && zstdCompressionColumns.contains(columnName);
+                    if (isOldZstdCompressionColumn != isNewZstdCompressionColumn) {
                         needAlter = true;
                         break;
                     }
@@ -4663,7 +4663,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     .addColumns(entry.getValue())
                     .setBloomFilterColumnNames(schemaChangeData.getBloomFilterColumns())
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
-                    .setCompressionDictColumnNames(schemaChangeData.getCompressionDictColumns())
+                    .setZstdCompressionColumnNames(schemaChangeData.getZstdCompressionColumns())
                     .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
                     .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                     .setIndexes(schemaChangeData.getIndexes())
@@ -4762,8 +4762,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withStartTime(ConnectContext.get().getStartTime())
                 .withBloomFilterColumns(schemaChangeData.getBloomFilterColumns(), schemaChangeData.getBloomFilterFpp())
                 .withBloomFilterColumnsChanged(schemaChangeData.isBloomFilterColumnsChanged())
-                .withCompressionDictColumns(schemaChangeData.getCompressionDictColumns())
-                .withCompressionDictColumnsChanged(schemaChangeData.isCompressionDictColumnsChanged())
+                .withZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns())
+                .withZstdCompressionColumnsChanged(schemaChangeData.isZstdCompressionColumnsChanged())
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())

@@ -280,7 +280,7 @@ public class TabletTaskExecutor {
                 .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
-                .setCompressionDictColumnNames(table.getCompressionDictColumnIds())
+                .setZstdCompressionColumnNames(table.getZstdCompressionColumnIds())
                 .addColumns(indexMeta.getSchema())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build().toTabletSchema();

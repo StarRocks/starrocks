@@ -79,7 +79,7 @@ namespace starrocks {
 
 ColumnWriterOptions::ColumnWriterOptions()
         : data_page_size(config::data_page_size),
-          compression_dict_sample_bytes(config::compression_dict_sample_bytes) {}
+          zstd_compression_dict_sample_bytes(config::zstd_compression_dict_sample_bytes) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -398,7 +398,7 @@ Status ScalarColumnWriter::init() {
     // resolve the compression-dictionary build mode once. "train" (ZDICT-lite)
     // buffers the first pages to train a dictionary from spread samples;
     // "sample" (default) takes the first eligible page verbatim.
-    _compression_dict_train_mode = _opts.use_compression_dict && config::compression_dict_build_mode.value() == "train";
+    _zstd_compression_dict_train_mode = _opts.use_zstd_compression && config::zstd_compression_dict_build_mode.value() == "train";
 
     if (!_opts.need_speculate_encoding) {
         auto st = set_encoding(_opts.meta->encoding());
@@ -518,8 +518,8 @@ Status ScalarColumnWriter::write_data() {
     // compression dict "train" mode: the column may have ended before enough pages accumulated;
     // train with what we have (or give up) and flush the buffered pages, so the
     // dict page below and the data pages are consistent.
-    if (_compression_dict_train_mode && !_compression_dict_train_done) {
-        RETURN_IF_ERROR(_finalize_compression_dict_training());
+    if (_zstd_compression_dict_train_mode && !_zstd_compression_dict_train_done) {
+        RETURN_IF_ERROR(_finalize_zstd_compression_dict_training());
     }
     // dict will be load before data,
     // so write column dict first
@@ -554,25 +554,25 @@ Status ScalarColumnWriter::write_data() {
     // A PLAIN compression dict column never enters the DICT_ENCODING branch above, so the two
     // dict pages never coexist.
     if (_cdict_used) {
-        DCHECK(!_compression_dict_sample.empty());
-        PageFooterPB compression_dict_footer;
-        compression_dict_footer.set_type(DICTIONARY_PAGE);
-        compression_dict_footer.set_uncompressed_size(_compression_dict_sample.size());
-        compression_dict_footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+        DCHECK(!_zstd_compression_dict_sample.empty());
+        PageFooterPB zstd_compression_dict_footer;
+        zstd_compression_dict_footer.set_type(DICTIONARY_PAGE);
+        zstd_compression_dict_footer.set_uncompressed_size(_zstd_compression_dict_sample.size());
+        zstd_compression_dict_footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
 
-        PagePointer compression_dict_pp;
-        std::vector<Slice> compression_dict_body{Slice(_compression_dict_sample)};
+        PagePointer zstd_compression_dict_pp;
+        std::vector<Slice> zstd_compression_dict_body{Slice(_zstd_compression_dict_sample)};
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wfile,
-                                                        compression_dict_body, compression_dict_footer,
-                                                        &compression_dict_pp));
-        compression_dict_pp.to_proto(_opts.meta->mutable_compression_dict_page());
-        if (_compression_dict_trained) {
+                                                        zstd_compression_dict_body, zstd_compression_dict_footer,
+                                                        &zstd_compression_dict_pp));
+        zstd_compression_dict_pp.to_proto(_opts.meta->mutable_zstd_compression_dict_page());
+        if (_zstd_compression_dict_trained) {
             // Tell the reader to load these bytes as a full dictionary. Only set
             // when true so sample-mode columns stay byte-identical.
-            _opts.meta->set_compression_dict_trained(true);
+            _opts.meta->set_zstd_compression_dict_trained(true);
         }
-        StorageMetrics::instance()->compression_dict_pages_written.increment(1);
-        StorageMetrics::instance()->compression_dict_bytes.increment(compression_dict_pp.size);
+        StorageMetrics::instance()->zstd_compression_dict_pages_written.increment(1);
+        StorageMetrics::instance()->zstd_compression_dict_bytes.increment(zstd_compression_dict_pp.size);
     }
 
     Page* page = _pages.head;
@@ -672,7 +672,7 @@ Status ScalarColumnWriter::_compress_and_push_page(std::vector<OwnedSlice> body,
             slices.emplace_back(part.slice());
         }
     }
-    const compression::ZstdCDict* cdict = _compression_dict_ready ? _compression_cdict.get() : nullptr;
+    const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
     faststring compressed_body;
     RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, slices,
                                                &compressed_body, cdict));
@@ -691,13 +691,13 @@ Status ScalarColumnWriter::_compress_and_push_page(std::vector<OwnedSlice> body,
     return Status::OK();
 }
 
-Status ScalarColumnWriter::_finalize_compression_dict_training() {
-    if (_compression_dict_train_done) {
+Status ScalarColumnWriter::_finalize_zstd_compression_dict_training() {
+    if (_zstd_compression_dict_train_done) {
         return Status::OK();
     }
     // Set first: this must run exactly once, and _compress_and_push_page below
     // must not re-enter the deferring branch.
-    _compression_dict_train_done = true;
+    _zstd_compression_dict_train_done = true;
 
     // Build the training samples from the buffered pages: cut each page body's
     // encoded values into fragments so the trainer sees many small samples
@@ -705,7 +705,7 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
     // frequent substrings rather than one contiguous chunk of data).
     if (!_deferred_pages.empty()) {
         const size_t fragment =
-                std::max<size_t>(256, static_cast<size_t>(config::compression_dict_train_fragment_bytes));
+                std::max<size_t>(256, static_cast<size_t>(config::zstd_compression_dict_train_fragment_bytes));
         std::string sample_buf;
         std::vector<size_t> sample_sizes;
         for (const auto& deferred : _deferred_pages) {
@@ -719,8 +719,8 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
         }
         // Both are mutable and operator-supplied: a negative value would widen into
         // a huge size_t, and the dict size drives an allocation on this flush path.
-        const int32_t min_sample_bytes = std::max(0, config::compression_dict_min_sample_bytes);
-        const int32_t max_dict_size = config::compression_dict_max_size;
+        const int32_t min_sample_bytes = std::max(0, config::zstd_compression_dict_min_sample_bytes);
+        const int32_t max_dict_size = config::zstd_compression_dict_max_size;
         if (max_dict_size > 0 && sample_buf.size() >= static_cast<size_t>(min_sample_bytes) && !sample_sizes.empty()) {
             auto dict_or =
                     compression::ZstdCDict::train(Slice(sample_buf), sample_sizes, static_cast<size_t>(max_dict_size));
@@ -728,10 +728,10 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
                 auto cdict_or = compression::ZstdCDict::create(Slice(dict_or.value()), _effective_compression_level(),
                                                                /*trained=*/true);
                 if (cdict_or.ok()) {
-                    _compression_dict_sample = std::move(dict_or.value());
+                    _zstd_compression_dict_sample = std::move(dict_or.value());
                     _compression_cdict = std::move(cdict_or.value());
-                    _compression_dict_ready = true;
-                    _compression_dict_trained = true;
+                    _zstd_compression_dict_ready = true;
+                    _zstd_compression_dict_trained = true;
                 } else {
                     VLOG(2) << "compression dict: CDict build failed: " << cdict_or.status();
                 }
@@ -741,8 +741,8 @@ Status ScalarColumnWriter::_finalize_compression_dict_training() {
                 VLOG(2) << "compression dict: training failed: " << dict_or.status();
             }
         }
-        if (!_compression_dict_ready) {
-            StorageMetrics::instance()->compression_dict_build_fallback.increment(1);
+        if (!_zstd_compression_dict_ready) {
+            StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
         }
     }
 
@@ -808,7 +808,7 @@ Status ScalarColumnWriter::finish_current_page() {
     // dictionary can be trained from fragments spread across all of them, then
     // compress them in order. This is why the mode costs buffering: page bytes
     // must survive until the dictionary exists.
-    if (_compression_dict_train_mode && !_compression_dict_train_done) {
+    if (_zstd_compression_dict_train_mode && !_zstd_compression_dict_train_done) {
         DeferredPage deferred;
         deferred.footer = page->footer;
         deferred.body.emplace_back(encoded_values->build());
@@ -819,40 +819,40 @@ Status ScalarColumnWriter::finish_current_page() {
             _deferred_pages_bytes += slice.slice().size;
         }
         _deferred_pages.emplace_back(std::move(deferred));
-        if (_deferred_pages.size() >= static_cast<size_t>(std::max(1, config::compression_dict_train_pages))) {
-            RETURN_IF_ERROR(_finalize_compression_dict_training());
+        if (_deferred_pages.size() >= static_cast<size_t>(std::max(1, config::zstd_compression_dict_train_pages))) {
+            RETURN_IF_ERROR(_finalize_zstd_compression_dict_training());
         }
     } else {
         // lazily build the per-column compression dictionary from the first eligible
         // page's encoded values, BEFORE compressing this page, so page 0 itself is
         // dict-compressed. Best-effort: any failure just leaves the column without a
         // compression dict; it never fails the flush.
-        if (_opts.use_compression_dict && !_compression_dict_ready && _compress_codec != nullptr &&
+        if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && _compress_codec != nullptr &&
             _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
             _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
-            encoded_values->size() >= static_cast<size_t>(config::compression_dict_min_sample_bytes)) {
+            encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
             // The first data page of a compression-dict column must be format v2 so that even an
             // all-null first page has non-empty encoded_values (null rows go into
             // the page builder), guaranteeing no no-dict frame precedes the dict
             // page (format v2 puts null rows into the page builder, so even an
             // all-null first page has non-empty encoded values).
             DCHECK(_first_rowid != 0 || _curr_page_format == 2);
-            size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.compression_dict_sample_bytes);
-            _compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
+            size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.zstd_compression_dict_sample_bytes);
+            _zstd_compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
             int level = (_opts.meta != nullptr && _opts.meta->has_compression_level() &&
                          _opts.meta->compression_level() > 0)
                                 ? _opts.meta->compression_level()
                                 : -1;
-            auto cdict_or = compression::ZstdCDict::create(Slice(_compression_dict_sample), level);
+            auto cdict_or = compression::ZstdCDict::create(Slice(_zstd_compression_dict_sample), level);
             if (cdict_or.ok()) {
                 _compression_cdict = std::move(cdict_or.value());
-                _compression_dict_ready = true;
+                _zstd_compression_dict_ready = true;
             } else {
-                _compression_dict_sample.clear(); // degrade: this column gets no compression dict
-                StorageMetrics::instance()->compression_dict_build_fallback.increment(1);
+                _zstd_compression_dict_sample.clear(); // degrade: this column gets no compression dict
+                StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
             }
         }
-        const compression::ZstdCDict* cdict = _compression_dict_ready ? _compression_cdict.get() : nullptr;
+        const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
 
         // trying to compress page body
         faststring compressed_body;

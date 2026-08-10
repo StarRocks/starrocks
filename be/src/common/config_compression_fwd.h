@@ -36,6 +36,6 @@ CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 // from +20-25% down to +5.6-8.6%, i.e. roughly 55-60% of it removed. Exposed as a
 // switch so the optimization can be turned off in
 // production without a rollback, and so its effect can be A/B'd on one cluster.
-CONF_mBool(enable_compression_dict_ctx_cache, "true");
+CONF_mBool(enable_zstd_compression_dict_ctx_cache, "true");
 
 } // namespace starrocks::config

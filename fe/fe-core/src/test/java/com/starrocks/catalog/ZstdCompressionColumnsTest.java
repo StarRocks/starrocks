@@ -38,11 +38,11 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * Tests for the "compression_dict_columns" table property: the CREATE TABLE path, SHOW CREATE TABLE
+ * Tests for the "zstd_compression_columns" table property: the CREATE TABLE path, SHOW CREATE TABLE
  * echo, the OlapTable copy/accessor helpers, the SchemaInfo -> BE plumbing and the ALTER TABLE path.
  */
-public class CompressionDictColumnsTest {
-    private static final String DB_NAME = "test_compression_dict";
+public class ZstdCompressionColumnsTest {
+    private static final String DB_NAME = "test_zstd_compression_dict";
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -56,11 +56,11 @@ public class CompressionDictColumnsTest {
     }
 
     @Test
-    public void testDropColumnRemovesItFromCompressionDictColumns() throws Exception {
+    public void testDropColumnRemovesItFromZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_drop_col",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""));
         OlapTable table = getTable("t_cdict_drop_col");
-        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getZstdCompressionColumnNames());
 
         // Drop one of them WITHOUT restating the property. A ColumnId is only a name, so
         // if the drop left v1 behind, re-creating a column called v1 later would silently
@@ -68,14 +68,14 @@ public class CompressionDictColumnsTest {
         starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_drop_col DROP COLUMN v1");
         waitForSchemaChangeJob(table);
 
-        Assertions.assertEquals(Sets.newHashSet("v2"), table.getCompressionDictColumnNames());
-        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v2")), table.getCompressionDictColumnIds());
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v2")), table.getZstdCompressionColumnIds());
         Assertions.assertFalse(showCreateTable("t_cdict_drop_col").contains("v1"));
 
         // Re-adding a column with the dropped name must NOT resurrect the dictionary flag.
         starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_drop_col ADD COLUMN v1 string");
         waitForSchemaChangeJob(table);
-        Assertions.assertEquals(Sets.newHashSet("v2"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getZstdCompressionColumnNames());
     }
 
     private static String createTableSql(String tableName, String extraProperties) {
@@ -128,14 +128,14 @@ public class CompressionDictColumnsTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void testCreateTableWithCompressionDictColumns() throws Exception {
+    public void testCreateTableWithZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_create",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""));
 
         OlapTable table = getTable("t_cdict_create");
-        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getZstdCompressionColumnNames());
 
-        Set<ColumnId> columnIds = table.getCompressionDictColumnIds();
+        Set<ColumnId> columnIds = table.getZstdCompressionColumnIds();
         Assertions.assertNotNull(columnIds);
         Assertions.assertEquals(2, columnIds.size());
         Assertions.assertTrue(columnIds.contains(ColumnId.create("v1")));
@@ -143,26 +143,26 @@ public class CompressionDictColumnsTest {
     }
 
     @Test
-    public void testShowCreateTableEchoesCompressionDictColumns() throws Exception {
+    public void testShowCreateTableEchoesZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_show",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""));
 
         String createTableSql = showCreateTable("t_cdict_show");
         Assertions.assertTrue(
-                createTableSql.contains("\"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""),
+                createTableSql.contains("\"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""),
                 createTableSql);
     }
 
     @Test
-    public void testCreateTableWithoutCompressionDictColumns() throws Exception {
+    public void testCreateTableWithoutZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_absent", ""));
 
         OlapTable table = getTable("t_cdict_absent");
-        Assertions.assertNull(table.getCompressionDictColumnIds());
-        Assertions.assertNull(table.getCompressionDictColumnNames());
+        Assertions.assertNull(table.getZstdCompressionColumnIds());
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
 
         String createTableSql = showCreateTable("t_cdict_absent");
-        Assertions.assertFalse(createTableSql.contains(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS),
+        Assertions.assertFalse(createTableSql.contains(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS),
                 createTableSql);
     }
 
@@ -171,46 +171,46 @@ public class CompressionDictColumnsTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void testCopyOnlyForQueryCopiesCompressionDictColumns() throws Exception {
+    public void testCopyOnlyForQueryCopiesZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_copy",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""));
 
         OlapTable table = getTable("t_cdict_copy");
         OlapTable copied = new OlapTable();
         table.copyOnlyForQuery(copied);
 
-        Set<ColumnId> original = table.getCompressionDictColumnIds();
-        Set<ColumnId> copy = copied.getCompressionDictColumnIds();
+        Set<ColumnId> original = table.getZstdCompressionColumnIds();
+        Set<ColumnId> copy = copied.getZstdCompressionColumnIds();
         Assertions.assertNotNull(copy);
         Assertions.assertNotSame(original, copy);
         Assertions.assertEquals(original, copy);
-        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), copied.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), copied.getZstdCompressionColumnNames());
 
         // the copy is deep enough that mutating it does not affect the source table
         copy.add(ColumnId.create("v3"));
-        Assertions.assertEquals(2, table.getCompressionDictColumnIds().size());
+        Assertions.assertEquals(2, table.getZstdCompressionColumnIds().size());
     }
 
     @Test
-    public void testCopyOnlyForQueryClearsCompressionDictColumnsWhenSourceHasNone() {
+    public void testCopyOnlyForQueryClearsZstdCompressionColumnsWhenSourceHasNone() {
         OlapTable source = new OlapTable();
-        Assertions.assertNull(source.getCompressionDictColumnIds());
+        Assertions.assertNull(source.getZstdCompressionColumnIds());
 
         OlapTable target = new OlapTable();
-        target.setCompressionDictColumns(Sets.newHashSet(ColumnId.create("stale")));
+        target.setZstdCompressionColumns(Sets.newHashSet(ColumnId.create("stale")));
 
         source.copyOnlyForQuery(target);
-        Assertions.assertNull(target.getCompressionDictColumnIds());
+        Assertions.assertNull(target.getZstdCompressionColumnIds());
     }
 
     // ------------------------------------------------------------------
-    // OlapTable#getCompressionDictColumnNames edge cases
+    // OlapTable#getZstdCompressionColumnNames edge cases
     // ------------------------------------------------------------------
 
     @Test
-    public void testGetCompressionDictColumnNamesSkipsDroppedColumn() throws Exception {
+    public void testGetZstdCompressionColumnNamesSkipsDroppedColumn() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_dropped",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1\""));
 
         // work on a query copy so the catalog table itself is not corrupted
         OlapTable copied = new OlapTable();
@@ -219,20 +219,20 @@ public class CompressionDictColumnsTest {
         Set<ColumnId> columnIds = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
         columnIds.add(ColumnId.create("v1"));
         columnIds.add(ColumnId.create("already_dropped"));
-        copied.setCompressionDictColumns(columnIds);
+        copied.setZstdCompressionColumns(columnIds);
 
         // the id that no longer resolves to a column is skipped, the remaining one is returned
-        Assertions.assertEquals(Sets.newHashSet("v1"), copied.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1"), copied.getZstdCompressionColumnNames());
     }
 
     @Test
-    public void testGetCompressionDictColumnNamesReturnsNullWhenAllColumnsDropped() {
+    public void testGetZstdCompressionColumnNamesReturnsNullWhenAllColumnsDropped() {
         OlapTable table = new OlapTable();
-        Assertions.assertNull(table.getCompressionDictColumnNames());
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
 
-        table.setCompressionDictColumns(Sets.newHashSet(ColumnId.create("already_dropped")));
+        table.setZstdCompressionColumns(Sets.newHashSet(ColumnId.create("already_dropped")));
         // every id was dropped -> the resolved name set is empty -> null
-        Assertions.assertNull(table.getCompressionDictColumnNames());
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
     }
 
     // ------------------------------------------------------------------
@@ -240,21 +240,21 @@ public class CompressionDictColumnsTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void testSchemaInfoCarriesCompressionDictColumns() throws Exception {
+    public void testSchemaInfoCarriesZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_schema",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1, v2\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1, v2\""));
 
         OlapTable table = getTable("t_cdict_schema");
         long baseIndexMetaId = table.getBaseIndexMetaId();
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId,
                 table.getIndexMetaByMetaId(baseIndexMetaId));
 
-        Assertions.assertEquals(table.getCompressionDictColumnIds(), schemaInfo.getCompressionDictColumnNames());
+        Assertions.assertEquals(table.getZstdCompressionColumnIds(), schemaInfo.getZstdCompressionColumnNames());
 
         TTabletSchema tabletSchema = schemaInfo.toTabletSchema();
         Set<String> flagged = Sets.newHashSet();
         for (TColumn tColumn : tabletSchema.getColumns()) {
-            if (tColumn.isUse_compression_dict()) {
+            if (tColumn.isUse_zstd_compression()) {
                 flagged.add(tColumn.getColumn_name());
             }
         }
@@ -262,7 +262,7 @@ public class CompressionDictColumnsTest {
     }
 
     @Test
-    public void testSchemaInfoWithoutCompressionDictColumns() throws Exception {
+    public void testSchemaInfoWithoutZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_schema_absent", ""));
 
         OlapTable table = getTable("t_cdict_schema_absent");
@@ -270,9 +270,9 @@ public class CompressionDictColumnsTest {
         SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId,
                 table.getIndexMetaByMetaId(baseIndexMetaId));
 
-        Assertions.assertNull(schemaInfo.getCompressionDictColumnNames());
+        Assertions.assertNull(schemaInfo.getZstdCompressionColumnNames());
         for (TColumn tColumn : schemaInfo.toTabletSchema().getColumns()) {
-            Assertions.assertFalse(tColumn.isUse_compression_dict(), tColumn.getColumn_name());
+            Assertions.assertFalse(tColumn.isUse_zstd_compression(), tColumn.getColumn_name());
         }
     }
 
@@ -281,9 +281,9 @@ public class CompressionDictColumnsTest {
     // ------------------------------------------------------------------
 
     @Test
-    public void testCompressionDictPropertyIsAnIndexClause() {
+    public void testZstdCompressionPropertyIsAnIndexClause() {
         ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(
-                ImmutableMap.of(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS, "v1"));
+                ImmutableMap.of(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, "v1"));
         Assertions.assertTrue(AlterTableStatementAnalyzer.indexClause(clause));
 
         ModifyTablePropertiesClause other = new ModifyTablePropertiesClause(
@@ -292,44 +292,44 @@ public class CompressionDictColumnsTest {
     }
 
     @Test
-    public void testAlterTableSetCompressionDictColumns() throws Exception {
+    public void testAlterTableSetZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_alter", ""));
         OlapTable table = getTable("t_cdict_alter");
-        Assertions.assertNull(table.getCompressionDictColumnNames());
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
 
         starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_alter SET (\""
-                + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v2\")");
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v2\")");
         waitForSchemaChangeJob(table);
 
-        Assertions.assertEquals(Sets.newHashSet("v2"), table.getCompressionDictColumnNames());
-        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v2")), table.getCompressionDictColumnIds());
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(Sets.newHashSet(ColumnId.create("v2")), table.getZstdCompressionColumnIds());
         Assertions.assertTrue(showCreateTable("t_cdict_alter")
-                .contains("\"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v2\""));
+                .contains("\"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v2\""));
     }
 
     @Test
-    public void testAlterTableClearCompressionDictColumns() throws Exception {
+    public void testAlterTableClearZstdCompressionColumns() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_clear",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1\""));
         OlapTable table = getTable("t_cdict_clear");
-        Assertions.assertEquals(Sets.newHashSet("v1"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
 
         starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_clear SET (\""
-                + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"\")");
+                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"\")");
         waitForSchemaChangeJob(table);
 
-        Assertions.assertNull(table.getCompressionDictColumnIds());
-        Assertions.assertNull(table.getCompressionDictColumnNames());
+        Assertions.assertNull(table.getZstdCompressionColumnIds());
+        Assertions.assertNull(table.getZstdCompressionColumnNames());
         Assertions.assertFalse(showCreateTable("t_cdict_clear")
-                .contains(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS));
+                .contains(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
     }
 
     @Test
-    public void testAlterTableWithoutCompressionDictPropertyKeepsIt() throws Exception {
+    public void testAlterTableWithoutZstdCompressionDictPropertyKeepsIt() throws Exception {
         starRocksAssert.withTable(createTableSql("t_cdict_keep",
-                ", \"" + PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS + "\" = \"v1\""));
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1\""));
         OlapTable table = getTable("t_cdict_keep");
-        Assertions.assertEquals(Sets.newHashSet("v1"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
 
         // an unrelated schema change (bloom filter) must not disturb the compression dict set
         starRocksAssert.alterTableProperties("ALTER TABLE " + DB_NAME + ".t_cdict_keep SET (\""
@@ -337,6 +337,6 @@ public class CompressionDictColumnsTest {
         waitForSchemaChangeJob(table);
 
         Assertions.assertEquals(Sets.newHashSet("k1"), table.getBfColumnNames());
-        Assertions.assertEquals(Sets.newHashSet("v1"), table.getCompressionDictColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1"), table.getZstdCompressionColumnNames());
     }
 }

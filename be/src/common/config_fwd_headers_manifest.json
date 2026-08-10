@@ -830,13 +830,13 @@
         "enable_binary_plain_delta_offset",
         "dictionary_page_size",
         "small_dictionary_page_size",
-        "enable_compression_dict",
-        "compression_dict_sample_bytes",
-        "compression_dict_min_sample_bytes",
-        "compression_dict_build_mode",
-        "compression_dict_train_pages",
-        "compression_dict_train_fragment_bytes",
-        "compression_dict_max_size",
+        "enable_zstd_compression_dict",
+        "zstd_compression_dict_sample_bytes",
+        "zstd_compression_dict_min_sample_bytes",
+        "zstd_compression_dict_build_mode",
+        "zstd_compression_dict_train_pages",
+        "zstd_compression_dict_train_fragment_bytes",
+        "zstd_compression_dict_max_size",
         "dictionary_encoding_ratio_for_non_string_column",
         "dictionary_speculate_min_chunk_size",
         "metadata_cache_memory_limit_percent",
@@ -992,7 +992,7 @@
         "lz4_acceleration",
         "lz4_expected_compression_ratio",
         "lz4_expected_compression_speed_mbps",
-        "enable_compression_dict_ctx_cache"
+        "enable_zstd_compression_dict_ctx_cache"
       ]
     }
   ]

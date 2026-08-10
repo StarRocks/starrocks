@@ -216,8 +216,8 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     }
     // single throat for both classic and lake schema conversion. Guarded by
     // __isset and only set when true so non-compression dict columns stay byte-identical.
-    if (t_column.__isset.use_compression_dict && t_column.use_compression_dict) {
-        column_pb->set_use_compression_dict(true);
+    if (t_column.__isset.use_zstd_compression && t_column.use_zstd_compression) {
+        column_pb->set_use_zstd_compression(true);
     }
     // agg state type desc
     if (t_column.__isset.agg_state_desc) {

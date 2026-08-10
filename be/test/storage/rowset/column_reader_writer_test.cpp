@@ -1120,11 +1120,11 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
 }
 
 // compression dict column-level compression dictionary: write a PLAIN ZSTD varchar column with
-// use_compression_dict, then verify (1) the compression-dict page was persisted and
+// use_zstd_compression, then verify (1) the compression-dict page was persisted and
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
 // frame, subsequent dict pages, and any no-dict frames under I5).
-TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
-    const std::string fname = strings::Substitute("$0/test_compression_dict_roundtrip.data", TEST_DIR);
+TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
+    const std::string fname = strings::Substitute("$0/test_zstd_compression_dict_roundtrip.data", TEST_DIR);
 
     const int N = 3000;
     // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
@@ -1164,10 +1164,10 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
         // Mimic segment_writer, which stamps the table compression_level (default
         // -1), so the writer resolves the codec the same way production does rather
         // than through the proto default 0. Same stamp as the sibling
-        // test_compression_dict_train_mode / testCompressionDictOnFlatJson tests.
+        // test_zstd_compression_dict_train_mode / testZstdCompressionOnFlatJson tests.
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
-        writer_opts.use_compression_dict = true; // enable compression dict
+        writer_opts.use_zstd_compression = true; // enable compression dict
 
         TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -1185,8 +1185,8 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
     ASSERT_EQ(PLAIN_ENCODING, meta.encoding());
 
     // (1) the compression-dict page must have been persisted.
-    ASSERT_TRUE(meta.has_compression_dict_page());
-    ASSERT_GT(meta.compression_dict_page().size(), 0u);
+    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
+    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
 
     // (2) read back and verify every value roundtrips.
     {
@@ -1225,26 +1225,26 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_roundtrip) {
 // Pins that (1) a TRAINED dictionary page is emitted and flagged as such, and
 // (2) every row still roundtrips -- i.e. the deferred pages really did get
 // compressed and the reader loads a structured dictionary rather than raw bytes.
-TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
-    std::string saved_mode = config::compression_dict_build_mode.value();
-    auto saved_pages = config::compression_dict_train_pages;
-    config::compression_dict_build_mode = "train";
-    config::compression_dict_train_pages = 4; // keep the test small
+TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_train_mode) {
+    std::string saved_mode = config::zstd_compression_dict_build_mode.value();
+    auto saved_pages = config::zstd_compression_dict_train_pages;
+    config::zstd_compression_dict_build_mode = "train";
+    config::zstd_compression_dict_train_pages = 4; // keep the test small
     DeferOp restore([&]() {
-        config::compression_dict_build_mode = saved_mode;
-        config::compression_dict_train_pages = saved_pages;
+        config::zstd_compression_dict_build_mode = saved_mode;
+        config::zstd_compression_dict_train_pages = saved_pages;
     });
 
-    const std::string fname = strings::Substitute("$0/test_e4_compression_dict_train.data", TEST_DIR);
+    const std::string fname = strings::Substitute("$0/test_e4_zstd_compression_dict_train.data", TEST_DIR);
     const int N = 4000;
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
     slices.reserve(N);
     // Every value must be DISTINCT, for the same reason as
-    // test_compression_dict_roundtrip: StringColumnWriter speculates the encoding
+    // test_zstd_compression_dict_roundtrip: StringColumnWriter speculates the encoding
     // from the data, and a repeating set makes it pick DICT_ENCODING. Under
     // DICT_ENCODING the whole column collapses into a single ~800-byte page of
-    // dict codes, which is below config::compression_dict_min_sample_bytes (1024),
+    // dict codes, which is below config::zstd_compression_dict_min_sample_bytes (1024),
     // so training is skipped and no dictionary page is ever emitted. Distinct
     // values keep the column PLAIN and spread it over enough pages for the
     // trainer to see many fragments (this test wants "the first pages", plural).
@@ -1273,7 +1273,7 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
         writer_opts.meta->set_compression(starrocks::ZSTD);
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
-        writer_opts.use_compression_dict = true;
+        writer_opts.use_zstd_compression = true;
 
         TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -1285,11 +1285,11 @@ TEST_F(ColumnReaderWriterTest, test_compression_dict_train_mode) {
         ASSERT_TRUE(wfile->close().ok());
     }
 
-    ASSERT_TRUE(meta.has_compression_dict_page());
-    ASSERT_GT(meta.compression_dict_page().size(), 0u);
+    ASSERT_TRUE(meta.has_zstd_compression_dict_page());
+    ASSERT_GT(meta.zstd_compression_dict_page().size(), 0u);
     // Training must have produced a structured dictionary, and the writer must
     // have recorded that so the reader loads it the same way.
-    ASSERT_TRUE(meta.compression_dict_trained());
+    ASSERT_TRUE(meta.zstd_compression_dict_trained());
 
     {
         auto segment = create_dummy_segment(fname);

@@ -206,16 +206,16 @@ message ColumnMetaPB {
     optional int32 compression_level = 34;
     // pointer to the per-column per-segment sampled compression-dictionary page
     // (a DICTIONARY_PAGE holding the raw sample bytes). Present only for columns
-    // written with use_compression_dict; left unset (zero bytes) for every other
+    // written with use_zstd_compression; left unset (zero bytes) for every other
     // column, so non-compression dict segments serialize byte-identically.
-    optional PagePointerPB compression_dict_page = 35;
-    // how to interpret the bytes in compression_dict_page.
+    optional PagePointerPB zstd_compression_dict_page = 35;
+    // how to interpret the bytes in zstd_compression_dict_page.
     //   unset/false -> raw content (a verbatim data sample); must be loaded with
     //                  ZSTD_dct_rawContent so a sample that happens to begin with
     //                  ZSTD_MAGIC_DICTIONARY is never misparsed.
     //   true        -> a ZDICT-trained dictionary (has its own magic + entropy
     //                  tables); must be loaded as a full dictionary.
-    optional bool compression_dict_trained = 36;
+    optional bool zstd_compression_dict_trained = 36;
 }
 
 enum VectorIndexStorageTypePB {

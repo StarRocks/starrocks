@@ -983,7 +983,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .addColumns(indexMeta.getSchema())
                     .setBloomFilterColumnNames(olapTable.getBfColumnIds())
                     .setBloomFilterFpp(olapTable.getBfFpp())
-                    .setCompressionDictColumnNames(olapTable.getCompressionDictColumnIds())
+                    .setZstdCompressionColumnNames(olapTable.getZstdCompressionColumnIds())
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())

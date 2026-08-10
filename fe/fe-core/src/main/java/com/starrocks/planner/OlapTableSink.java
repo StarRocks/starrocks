@@ -556,7 +556,7 @@ public class OlapTableSink extends DataSink {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
                 column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds(),
-                        table.getCompressionDictColumnIds());
+                        table.getZstdCompressionColumnIds());
                 columnsDesc.add(tColumn);
                 if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
                     columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());

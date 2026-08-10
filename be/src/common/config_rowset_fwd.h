@@ -82,58 +82,58 @@ CONF_Int32(dictionary_page_size, "1048576");
 CONF_Int32(small_dictionary_page_size, "4096");
 
 // compression dict column-level compression dictionary (a ZSTD dictionary). Master switch checked at the write
-// gate (segment_writer); when false, columns flagged use_compression_dict fall back
+// gate (segment_writer); when false, columns flagged use_zstd_compression fall back
 // to plain per-column ZSTD with no compression dict. Independent of the per-column
 // flag so it can be flipped at runtime as an operational safety valve.
 //
 // DEFAULT IS false FOR ROLLING-UPGRADE SAFETY. An compression dict data page is a ZSTD frame
 // compressed against a raw-content dictionary (dictID=0), so its frame header
 // carries no signal that a dictionary is required; a BE that predates
-// ColumnMetaPB.compression_dict_page (field 35) would decompress it WITHOUT the
+// ColumnMetaPB.zstd_compression_dict_page (field 35) would decompress it WITHOUT the
 // dictionary and hit ZSTD corruption. So no compression dict page may be emitted until every
 // BE in the cluster understands field 35. Operators must flip this to true only
 // AFTER the whole cluster is upgraded. WARNING: once a cluster has written compression dict
 // segments it cannot be downgraded below the compression dict build (old BEs cannot read or
 // compact those segments). Same reasoning covers cross-replica clone/replication
 // during a mixed-version window.
-CONF_mBool(enable_compression_dict, "false");
+CONF_mBool(enable_zstd_compression_dict, "false");
 
 // Bytes sampled from the first eligible data page to build the compression dict
 // ("first-page sampling" mode). ~one 64KB data page by default.
-CONF_mInt32(compression_dict_sample_bytes, "65536");
+CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
 
 // Minimum encoded_values size (bytes) of a data page for it to be used as the
 // dictionary sample. Guards against building a garbage dict from a tiny/near
 // empty first page and permanently marking the column dict-ready.
-CONF_mInt32(compression_dict_min_sample_bytes, "1024");
+CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
 
 // compression dict compression-dictionary build mode:
 //   "sample" (default) -- take the first eligible page's bytes verbatim as a
 //       raw-content dictionary. No buffering, no training cost, page 0 is itself
 //       dict-compressed.
-//   "train" -- ZDICT-lite: buffer the first compression_dict_train_pages pages, cut
+//   "train" -- ZDICT-lite: buffer the first zstd_compression_dict_train_pages pages, cut
 //       them into fragments, and train a dictionary. Compresses better because
 //       the dictionary keeps only frequent substrings sampled across many rows,
 //       but it defers those pages' compression and costs training CPU.
-CONF_mString(compression_dict_build_mode, "sample");
+CONF_mString(zstd_compression_dict_build_mode, "sample");
 
 // "train" mode only: how many data pages to buffer before training. Bounds the
-// extra write memory at compression_dict_train_pages * data_page_size per column
+// extra write memory at zstd_compression_dict_train_pages * data_page_size per column
 // (32 * 64KB = 2MB by default).
-// This -- not compression_dict_max_size -- is the parameter that actually decides how
+// This -- not zstd_compression_dict_max_size -- is the parameter that actually decides how
 // good the trained dictionary is: zstd recommends a sample budget around 100x
 // the dictionary size, and measurements showed K=32 beating K=8 by ~10% on
-// replay-heavy data while raising compression_dict_max_size under a K=8 budget did
+// replay-heavy data while raising zstd_compression_dict_max_size under a K=8 budget did
 // nothing (the trainer could not fill the requested size).
-CONF_mInt32(compression_dict_train_pages, "32");
+CONF_mInt32(zstd_compression_dict_train_pages, "32");
 
 // "train" mode only: fragment size the buffered pages are cut into to form
 // training samples. Many small samples train a better dictionary than a few
 // large ones.
-CONF_mInt32(compression_dict_train_fragment_bytes, "4096");
+CONF_mInt32(zstd_compression_dict_train_fragment_bytes, "4096");
 
 // "train" mode only: maximum dictionary size ("sample" mode is bounded by
-// compression_dict_sample_bytes instead). A non-positive value disables training.
+// zstd_compression_dict_sample_bytes instead). A non-positive value disables training.
 // 64KB, not the 110KiB zstd-CLI convention: measured on
 // a real agent-log dataset (3 large columns, 372MB raw) a 64KB request beat both
 // 112KB and 256KB on EVERY column, because the dictionary is a codebook of
@@ -141,7 +141,7 @@ CONF_mInt32(compression_dict_train_fragment_bytes, "4096");
 // once per (column, segment) -- on a 41MB column a 256KB dictionary costs 0.6% of
 // the total, enough to flip the ranking. Larger values are only worth trying for
 // very large single-column segments.
-CONF_mInt32(compression_dict_max_size, "65536");
+CONF_mInt32(zstd_compression_dict_max_size, "65536");
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.

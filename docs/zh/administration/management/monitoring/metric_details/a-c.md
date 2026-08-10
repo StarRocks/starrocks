@@ -444,17 +444,17 @@ description: "Alphabetical a - c"
 - 单位：字节
 - 描述：合并操作使用的内存。
 
-## `compression_dict_build_fallback`
+## `zstd_compression_dict_build_fallback`
 
 - 单位：计数
-- 描述：符合压缩字典条件的列未能获得字典、回退为普通 ZSTD 压缩的累计次数。原因可能是采样门限拒绝了该数据页，也可能是字典构建或训练失败。按“列 + Segment”计数。该值相对于 `compression_dict_pages_written` 偏高，说明由表属性 `compression_dict_columns` 指定的列很少真正用上压缩字典。
+- 描述：符合压缩字典条件的列未能获得字典、回退为普通 ZSTD 压缩的累计次数。原因可能是采样门限拒绝了该数据页，也可能是字典构建或训练失败。按“列 + Segment”计数。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
 
-## `compression_dict_bytes`
+## `zstd_compression_dict_bytes`
 
 - 单位：字节
-- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `compression_dict_pages_written` 即可得到平均字典大小，该大小在 `train` 模式下受 `compression_dict_max_size` 限制，在 `sample` 模式下受 `compression_dict_sample_bytes` 限制。
+- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `zstd_compression_dict_pages_written` 即可得到平均字典大小，该大小在 `train` 模式下受 `zstd_compression_dict_max_size` 限制，在 `sample` 模式下受 `zstd_compression_dict_sample_bytes` 限制。
 
-## `compression_dict_pages_written`
+## `zstd_compression_dict_pages_written`
 
 - 单位：计数
 - 描述：写入 Segment 文件的压缩字典页的累计数量。每个 Segment 的每一列最多写入一个字典页，因此该指标统计的是实际用上压缩字典的列数，而非使用字典压缩的数据页数量。

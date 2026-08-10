@@ -80,7 +80,7 @@ message ColumnPB {
     optional AggStateDescPB agg_state_desc = 19;
     // column-level compression dictionary (a ZSTD dictionary). Unset (default false) for every
     // non-compression dict column so schemas serialize byte-identically.
-    optional bool use_compression_dict = 20 [default = false];
+    optional bool use_zstd_compression = 20 [default = false];
 }
 
 message TabletSchemaPB {

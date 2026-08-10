@@ -653,7 +653,7 @@ TEST_F(BlockCompressionTest, MultiThread_ZSTD_benchmark_decompression) {
 
 // Roundtrip: a body compressed referencing a CDict decodes correctly with the
 // matching DDict built from the same sample.
-TEST_F(BlockCompressionTest, compression_dict_roundtrip) {
+TEST_F(BlockCompressionTest, zstd_compression_dict_roundtrip) {
     const BlockCompressionCodec* codec = nullptr;
     ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::ZSTD, &codec).ok());
 
@@ -837,7 +837,7 @@ TEST_F(BlockCompressionTest, dict_ctx_cache_multi_dict_and_pool_isolation) {
 }
 
 // The dictionary builders reject bad input instead of trusting it. The two size
-// guards matter most: compression_dict_max_size is an operator-settable mutable
+// guards matter most: zstd_compression_dict_max_size is an operator-settable mutable
 // config, and a value that is non-positive (widening to a huge size_t) or simply
 // absurd would otherwise reach std::string::resize on a flush or compaction
 // thread -- an allocation failure where the documented behaviour is "give up and

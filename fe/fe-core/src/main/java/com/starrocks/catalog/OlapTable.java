@@ -239,8 +239,8 @@ public class OlapTable extends Table {
     protected double bfFpp;
 
     // columns that use a column-level compression dictionary (a ZSTD dictionary)
-    @SerializedName(value = "compressionDictColumns")
-    protected Set<ColumnId> compressionDictColumns;
+    @SerializedName(value = "zstdCompressionColumns")
+    protected Set<ColumnId> zstdCompressionColumns;
 
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
@@ -320,7 +320,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
-        this.compressionDictColumns = null;
+        this.zstdCompressionColumns = null;
 
         this.colocateGroup = null;
 
@@ -352,7 +352,7 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
-        this.compressionDictColumns = null;
+        this.zstdCompressionColumns = null;
 
         this.colocateGroup = null;
 
@@ -404,11 +404,11 @@ public class OlapTable extends Table {
         } else {
             olapTable.bfColumns = null;
         }
-        if (compressionDictColumns != null) {
-            olapTable.compressionDictColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-            olapTable.compressionDictColumns.addAll(compressionDictColumns);
+        if (zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.zstdCompressionColumns.addAll(zstdCompressionColumns);
         } else {
-            olapTable.compressionDictColumns = null;
+            olapTable.zstdCompressionColumns = null;
         }
 
         olapTable.keysType = this.keysType;
@@ -452,8 +452,8 @@ public class OlapTable extends Table {
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
         }
-        if (this.compressionDictColumns != null) {
-            olapTable.compressionDictColumns = Sets.newHashSet(this.compressionDictColumns);
+        if (this.zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newHashSet(this.zstdCompressionColumns);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -753,10 +753,10 @@ public class OlapTable extends Table {
         // just been rebuilt, and every schema mutation ends up here -- fast schema
         // evolution, the shadow-index jobs and edit-log replay alike -- so this is the one
         // place that can keep the set honest.
-        if (compressionDictColumns != null) {
-            compressionDictColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
-            if (compressionDictColumns.isEmpty()) {
-                compressionDictColumns = null;
+        if (zstdCompressionColumns != null) {
+            zstdCompressionColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (zstdCompressionColumns.isEmpty()) {
+                zstdCompressionColumns = null;
             }
         }
         // update max column unique id
@@ -1615,17 +1615,17 @@ public class OlapTable extends Table {
         }
     }
 
-    public Set<ColumnId> getCompressionDictColumnIds() {
-        return compressionDictColumns;
+    public Set<ColumnId> getZstdCompressionColumnIds() {
+        return zstdCompressionColumns;
     }
 
-    public Set<String> getCompressionDictColumnNames() {
-        if (compressionDictColumns == null) {
+    public Set<String> getZstdCompressionColumnNames() {
+        if (zstdCompressionColumns == null) {
             return null;
         }
 
         Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (ColumnId columnId : compressionDictColumns) {
+        for (ColumnId columnId : zstdCompressionColumns) {
             Column column = idToColumn.get(columnId);
             if (column == null) {
                 LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
@@ -1640,8 +1640,8 @@ public class OlapTable extends Table {
         }
     }
 
-    public void setCompressionDictColumns(Set<ColumnId> compressionDictColumns) {
-        this.compressionDictColumns = compressionDictColumns;
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns) {
+        this.zstdCompressionColumns = zstdCompressionColumns;
     }
 
     public List<Index> getCopiedIndexes() {
@@ -3069,10 +3069,10 @@ public class OlapTable extends Table {
         }
 
         // columns using a compression dictionary
-        Set<String> compressionDictColumnNames = getCompressionDictColumnNames();
-        if (compressionDictColumnNames != null && !compressionDictColumnNames.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION_DICT_COLUMNS,
-                    Joiner.on(", ").join(compressionDictColumnNames));
+        Set<String> zstdCompressionColumnNames = getZstdCompressionColumnNames();
+        if (zstdCompressionColumnNames != null && !zstdCompressionColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS,
+                    Joiner.on(", ").join(zstdCompressionColumnNames));
         }
 
         // colocate group

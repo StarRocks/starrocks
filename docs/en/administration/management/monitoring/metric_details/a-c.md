@@ -444,17 +444,17 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by compactions.
 
-## `compression_dict_build_fallback`
+## `zstd_compression_dict_build_fallback`
 
 - Unit: Count
-- Description: Cumulative number of times a column that was eligible for the compression dictionary failed to get one and fell back to plain ZSTD compression, either because the sampling gate rejected the data page or because the dictionary build or training failed. Counted once per column per segment. A high value relative to `compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `compression_dict_columns`.
+- Description: Cumulative number of times a column that was eligible for the compression dictionary failed to get one and fell back to plain ZSTD compression, either because the sampling gate rejected the data page or because the dictionary build or training failed. Counted once per column per segment. A high value relative to `zstd_compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `zstd_compression_columns`.
 
-## `compression_dict_bytes`
+## `zstd_compression_dict_bytes`
 
 - Unit: Bytes
-- Description: Cumulative on-disk size of the compression dictionary pages written to segment files. Divide it by `compression_dict_pages_written` to get the average dictionary size, which is bounded by `compression_dict_max_size` in `train` mode and by `compression_dict_sample_bytes` in `sample` mode.
+- Description: Cumulative on-disk size of the compression dictionary pages written to segment files. Divide it by `zstd_compression_dict_pages_written` to get the average dictionary size, which is bounded by `zstd_compression_dict_max_size` in `train` mode and by `zstd_compression_dict_sample_bytes` in `sample` mode.
 
-## `compression_dict_pages_written`
+## `zstd_compression_dict_pages_written`
 
 - Unit: Count
 - Description: Cumulative number of compression dictionary pages written to segment files. One dictionary page is written per column per segment, so this metric counts the columns that actually used a compression dictionary, not the number of dictionary-compressed data pages.

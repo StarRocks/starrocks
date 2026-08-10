@@ -246,11 +246,11 @@ private:
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
     // true when this column carries a compression-dictionary page.
-    bool has_compression_dict() const { return _compression_dict_page_pointer.size > 0; }
+    bool has_zstd_compression_dict() const { return _zstd_compression_dict_page_pointer.size > 0; }
     // build the shared DDict once (per segment, per column) by bootstrap
     // reading the compression-dict page directly through PageIO (NOT read_page, which
     // would re-enter the OnceFlag on the same thread and deadlock).
-    Status _ensure_compression_ddict(const ColumnIteratorOptions& iter_opts);
+    Status _ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts);
 
     // Build a fresh BitmapIndexReader backed by a standalone .idx file
     // (Index Delta Group payload). Used when IndexReadOptions carries an
@@ -297,16 +297,16 @@ private:
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     // compression dict column-level compression dictionary (a ZSTD dictionary) (read side). Copied from
-    // ColumnMetaPB.compression_dict_page in _init (size 0 when the column has none).
+    // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
     // The DDict is built once per (segment, column) and then referenced on every
     // data-page decompression.
-    PagePointer _compression_dict_page_pointer;
+    PagePointer _zstd_compression_dict_page_pointer;
     // how to interpret the compression-dict page bytes (ColumnMetaPB
-    // .compression_dict_trained). false = raw content sample, true = ZDICT-trained
+    // .zstd_compression_dict_trained). false = raw content sample, true = ZDICT-trained
     // dictionary. Must match what the writer used or decoding is wrong.
-    bool _compression_dict_trained = false;
-    std::shared_ptr<compression::ZstdDDict> _compression_ddict;
-    OnceFlag _compression_ddict_once;
+    bool _zstd_compression_dict_trained = false;
+    std::shared_ptr<compression::ZstdDDict> _zstd_compression_ddict;
+    OnceFlag _zstd_compression_ddict_once;
     uint64_t _total_mem_footprint = 0;
     uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
 

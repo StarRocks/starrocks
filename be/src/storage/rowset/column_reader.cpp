@@ -140,10 +140,10 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     // pick up the compression-dict page pointer if present (unset -> size 0 ->
-    // has_compression_dict() is false and the read path is unchanged).
-    if (meta->has_compression_dict_page()) {
-        _compression_dict_page_pointer = PagePointer(meta->compression_dict_page());
-        _compression_dict_trained = meta->compression_dict_trained();
+    // has_zstd_compression_dict() is false and the read path is unchanged).
+    if (meta->has_zstd_compression_dict_page()) {
+        _zstd_compression_dict_page_pointer = PagePointer(meta->zstd_compression_dict_page());
+        _zstd_compression_dict_trained = meta->zstd_compression_dict_trained();
     }
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -498,25 +498,25 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     // and reference it; a no-dict frame (raw page / value-dict page) decodes
     // identically under the referenced raw-content DDict (I5), so this is safe
     // for every page of a compression-dict column.
-    if (has_compression_dict()) {
-        RETURN_IF_ERROR(_ensure_compression_ddict(iter_opts));
-        opts.dict = _compression_ddict.get();
+    if (has_zstd_compression_dict()) {
+        RETURN_IF_ERROR(_ensure_zstd_compression_ddict(iter_opts));
+        opts.dict = _zstd_compression_ddict.get();
     }
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
 
-Status ColumnReader::_ensure_compression_ddict(const ColumnIteratorOptions& iter_opts) {
-    return success_once(_compression_ddict_once,
+Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts) {
+    return success_once(_zstd_compression_ddict_once,
                         [&]() -> Status {
                             // Bootstrap-read the compression-dict page directly through
                             // PageIO (NOT read_page: that would re-enter
-                            // _ensure_compression_ddict on this same thread and deadlock
+                            // _ensure_zstd_compression_ddict on this same thread and deadlock
                             // the OnceFlag). The dict page is a no-dict ZSTD frame,
                             // so codec is set but dict stays null (self-decoding).
                             PageReadOptions opts;
                             opts.read_file = iter_opts.read_file;
-                            opts.page_pointer = _compression_dict_page_pointer;
+                            opts.page_pointer = _zstd_compression_dict_page_pointer;
                             opts.codec = _compress_codec;
                             opts.stats = iter_opts.stats;
                             opts.verify_checksum = true;
@@ -530,9 +530,9 @@ Status ColumnReader::_ensure_compression_ddict(const ColumnIteratorOptions& iter
                             RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
                             // ZSTD copies the dictionary bytes internally, so the
                             // page handle may be released after create().
-                            auto ddict_or = compression::ZstdDDict::create(body, _compression_dict_trained);
+                            auto ddict_or = compression::ZstdDDict::create(body, _zstd_compression_dict_trained);
                             RETURN_IF_ERROR(ddict_or.status());
-                            _compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
+                            _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
                             return Status::OK();
                         })
             .status();

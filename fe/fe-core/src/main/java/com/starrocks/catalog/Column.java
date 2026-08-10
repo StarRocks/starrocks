@@ -1142,7 +1142,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns,
-                             Set<ColumnId> compressionDictColumns) {
+                             Set<ColumnId> zstdCompressionColumns) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
                 List<ColumnId> columns = index.getColumns();
@@ -1154,8 +1154,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (bfColumns != null && bfColumns.contains(this.columnId)) {
             tColumn.setIs_bloom_filter_column(true);
         }
-        if (compressionDictColumns != null && compressionDictColumns.contains(this.columnId)) {
-            tColumn.setUse_compression_dict(true);
+        if (zstdCompressionColumns != null && zstdCompressionColumns.contains(this.columnId)) {
+            tColumn.setUse_zstd_compression(true);
         }
     }
 

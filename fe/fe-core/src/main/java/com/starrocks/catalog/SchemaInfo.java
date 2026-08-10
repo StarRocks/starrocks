@@ -58,8 +58,8 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
-    @SerializedName("compressionDictColumns")
-    private final Set<ColumnId> compressionDictColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
+    @SerializedName("zstdCompressionColumns")
+    private final Set<ColumnId> zstdCompressionColumnNames; // columns using a compression dictionary (a ZSTD dictionary)
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -79,7 +79,7 @@ public class SchemaInfo {
         this.indexes = builder.indexes;
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
-        this.compressionDictColumnNames = builder.compressionDictColumnNames;
+        this.zstdCompressionColumnNames = builder.zstdCompressionColumnNames;
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
@@ -130,8 +130,8 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
-    public Set<ColumnId> getCompressionDictColumnNames() {
-        return compressionDictColumnNames;
+    public Set<ColumnId> getZstdCompressionColumnNames() {
+        return zstdCompressionColumnNames;
     }
 
     public TCompressionType getCompressionType() {
@@ -159,8 +159,8 @@ public class SchemaInfo {
                 tColumn.setIs_bloom_filter_column(true);
             }
             // use column-level compression dictionary (a ZSTD dictionary)
-            if (compressionDictColumnNames != null && compressionDictColumnNames.contains(column.getColumnId())) {
-                tColumn.setUse_compression_dict(true);
+            if (zstdCompressionColumnNames != null && zstdCompressionColumnNames.contains(column.getColumnId())) {
+                tColumn.setUse_zstd_compression(true);
             }
             tColumns.add(tColumn);
         }
@@ -204,7 +204,7 @@ public class SchemaInfo {
                 Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
                 Objects.equals(indexes, that.indexes) &&
                 Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
-                Objects.equals(compressionDictColumnNames, that.compressionDictColumnNames) &&
+                Objects.equals(zstdCompressionColumnNames, that.zstdCompressionColumnNames) &&
                 compressionType == that.compressionType &&
                 primaryKeyEncodingType == that.primaryKeyEncodingType;
     }
@@ -212,7 +212,7 @@ public class SchemaInfo {
     @Override
     public int hashCode() {
         return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
-                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionDictColumnNames, compressionType,
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, zstdCompressionColumnNames, compressionType,
                 compressionLevel, primaryKeyEncodingType);
     }
 
@@ -233,7 +233,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
-        private Set<ColumnId> compressionDictColumnNames; // compression dict
+        private Set<ColumnId> zstdCompressionColumnNames; // compression dict
         private TCompressionType compressionType;
         private int compressionLevel = -1;
         private TPrimaryKeyEncodingType primaryKeyEncodingType;
@@ -315,10 +315,10 @@ public class SchemaInfo {
             return this;
         }
 
-        public Builder setCompressionDictColumnNames(Collection<ColumnId> compressionDictColumnNames) {
-            Preconditions.checkState(this.compressionDictColumnNames == null);
-            if (compressionDictColumnNames != null) {
-                this.compressionDictColumnNames = new HashSet<>(compressionDictColumnNames);
+        public Builder setZstdCompressionColumnNames(Collection<ColumnId> zstdCompressionColumnNames) {
+            Preconditions.checkState(this.zstdCompressionColumnNames == null);
+            if (zstdCompressionColumnNames != null) {
+                this.zstdCompressionColumnNames = new HashSet<>(zstdCompressionColumnNames);
             }
             return this;
         }
@@ -369,7 +369,7 @@ public class SchemaInfo {
                 .setIndexes(indexes)
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
-                .setCompressionDictColumnNames(table.getCompressionDictColumnIds())
+                .setZstdCompressionColumnNames(table.getZstdCompressionColumnIds())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())

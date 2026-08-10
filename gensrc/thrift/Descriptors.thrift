@@ -276,7 +276,7 @@ struct TColumn {
     11: optional bool has_bitmap_index = false
     12: optional Types.TAggStateDesc agg_state_desc
     // column-level compression dictionary (a ZSTD dictionary) (per-column enable flag).
-    13: optional bool use_compression_dict = false
+    13: optional bool use_zstd_compression = false
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.

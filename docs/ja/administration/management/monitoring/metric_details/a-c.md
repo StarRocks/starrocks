@@ -444,17 +444,17 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: コンパクションが使用するメモリ。
 
-## `compression_dict_build_fallback`
+## `zstd_compression_dict_build_fallback`
 
 - 単位: カウント
-- 説明: 圧縮ディクショナリの対象となる列がディクショナリを取得できず、通常の ZSTD 圧縮にフォールバックした累計回数。サンプリングのゲートがデータページを却下した場合、またはディクショナリの構築や学習が失敗した場合に計上されます。列ごと Segment ごとに 1 回カウントされます。`compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `compression_dict_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
+- 説明: 圧縮ディクショナリの対象となる列がディクショナリを取得できず、通常の ZSTD 圧縮にフォールバックした累計回数。サンプリングのゲートがデータページを却下した場合、またはディクショナリの構築や学習が失敗した場合に計上されます。列ごと Segment ごとに 1 回カウントされます。`zstd_compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `zstd_compression_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
 
-## `compression_dict_bytes`
+## `zstd_compression_dict_bytes`
 
 - 単位: バイト
-- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `train` モードでは `compression_dict_max_size`、`sample` モードでは `compression_dict_sample_bytes` によって制限されます。
+- 説明: Segment ファイルに書き込まれた圧縮ディクショナリページのディスク上の累計サイズ。`zstd_compression_dict_pages_written` で割ると平均ディクショナリサイズが得られます。この値は `train` モードでは `zstd_compression_dict_max_size`、`sample` モードでは `zstd_compression_dict_sample_bytes` によって制限されます。
 
-## `compression_dict_pages_written`
+## `zstd_compression_dict_pages_written`
 
 - 単位: カウント
 - 説明: Segment ファイルに書き込まれた圧縮ディクショナリページの累計数。ディクショナリページは列ごと Segment ごとに 1 つ書き込まれるため、このメトリクスは実際に圧縮ディクショナリを使用した列の数を表し、ディクショナリで圧縮されたデータページの数ではありません。

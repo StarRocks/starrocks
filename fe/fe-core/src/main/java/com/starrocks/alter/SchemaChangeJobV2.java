@@ -164,10 +164,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private double bfFpp = 0;
 
     // compression dict info
-    @SerializedName(value = "hasCompressionDictChange")
-    private boolean hasCompressionDictChange;
-    @SerializedName(value = "compressionDictColumns")
-    private Set<ColumnId> compressionDictColumns = null;
+    @SerializedName(value = "hasZstdCompressionChange")
+    private boolean hasZstdCompressionChange;
+    @SerializedName(value = "zstdCompressionColumns")
+    private Set<ColumnId> zstdCompressionColumns = null;
 
     // alter index info
     @SerializedName(value = "indexChange")
@@ -303,9 +303,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.bfFpp = bfFpp;
     }
 
-    public void setCompressionDictInfo(boolean hasCompressionDictChange, Set<ColumnId> compressionDictColumns) {
-        this.hasCompressionDictChange = hasCompressionDictChange;
-        this.compressionDictColumns = compressionDictColumns;
+    public void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns) {
+        this.hasZstdCompressionChange = hasZstdCompressionChange;
+        this.zstdCompressionColumns = zstdCompressionColumns;
     }
 
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -448,7 +448,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
-                            .setCompressionDictColumnNames(compressionDictColumns)
+                            .setZstdCompressionColumnNames(zstdCompressionColumns)
                             .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
@@ -1018,8 +1018,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             tbl.setBloomFilterInfo(bfColumns, bfFpp);
         }
         // update compression dict columns
-        if (hasCompressionDictChange) {
-            tbl.setCompressionDictColumns(compressionDictColumns);
+        if (hasZstdCompressionChange) {
+            tbl.setZstdCompressionColumns(zstdCompressionColumns);
         }
         // update index
         if (indexChange) {

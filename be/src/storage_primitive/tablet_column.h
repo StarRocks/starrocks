@@ -105,8 +105,8 @@ public:
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
 
     // compression dict column-level compression dictionary (a ZSTD dictionary).
-    bool use_compression_dict() const { return _check_flag(kUseCompressionDictShift); }
-    void set_use_compression_dict(bool value) { _set_flag(kUseCompressionDictShift, value); }
+    bool use_zstd_compression() const { return _check_flag(kUseZstdCompressionShift); }
+    void set_use_zstd_compression(bool value) { _set_flag(kUseZstdCompressionShift, value); }
 
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
@@ -209,7 +209,7 @@ private:
     constexpr static uint8_t kIsSortKey = 7;
     // bit 8 -- the uint8_t bitset (bits 0..7) was full, so _flags is widened
     // to uint16_t below to make room.
-    constexpr static uint8_t kUseCompressionDictShift = 8;
+    constexpr static uint8_t kUseZstdCompressionShift = 8;
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {
@@ -247,7 +247,7 @@ private:
     // Extended access path column
     std::unique_ptr<ExtendedColumnInfo> _extended_info;
 
-    // 16 bits: bits 0..7 are the original flags, bit 8 is kUseCompressionDictShift (compression dict).
+    // 16 bits: bits 0..7 are the original flags, bit 8 is kUseZstdCompressionShift (compression dict).
     uint16_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;

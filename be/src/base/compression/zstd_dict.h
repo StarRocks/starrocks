@@ -50,7 +50,7 @@ public:
     //   true  -> ZSTD_dct_auto: `dict_bytes` is a ZDICT-trained dictionary whose
     //            header and entropy tables must be honored.
     // The read side must use the SAME interpretation (persisted as
-    // ColumnMetaPB.compression_dict_trained).
+    // ColumnMetaPB.zstd_compression_dict_trained).
     static StatusOr<std::unique_ptr<ZstdCDict>> create(const Slice& dict_bytes, int level, bool trained = false);
 
     // Train a dictionary of at most `max_dict_size` bytes from `samples`
@@ -78,7 +78,7 @@ private:
 class ZstdDDict {
 public:
     // Build a DDict from the bytes of the compression-dict page. `trained` must match
-    // what the writer used (ColumnMetaPB.compression_dict_trained); see ZstdCDict.
+    // what the writer used (ColumnMetaPB.zstd_compression_dict_trained); see ZstdCDict.
     // ZSTD copies the bytes internally, so the page handle may be released
     // afterward.
     static StatusOr<std::unique_ptr<ZstdDDict>> create(const Slice& dict_bytes, bool trained = false);

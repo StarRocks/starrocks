@@ -642,25 +642,24 @@ PROPERTIES (
 )
 ```
 
-### 压缩字典
+### 按列 ZSTD 压缩
 
-对于 Engine 类型为 `olap` 的表，可以指定大文本列或 JSON 列使用共享 ZSTD 字典压缩。StarRocks 会为每个数据文件（Segment）中的每个指定列构建一份小字典，并用它压缩该列的所有页，从而让重复出现的短片段（JSON 的键名、字段名、模板化的措辞等）在整个 Segment 内只编码一次，而不是每 64 KB 的页各编码一次。
+对于 Engine 类型为 `olap` 的表，可以指定部分大文本列或 JSON 列使用 ZSTD 压缩，表内其余列保持各自原有的压缩方式。它面向的是**行与行高度重复**的列（对话历史、模板化的负载等），这类列上 ZSTD 的收益远高于整表统一切换。
 
 使用时有以下限制：
 
 - 只能指定 CHAR、VARCHAR、STRING 和 JSON 类型的列。
 - 只能指定 Value 列，指定 Key 列会报错。
 - 同一个列不能在列表中重复出现。
-- 被指定的列会使用 ZSTD 压缩，覆盖表级的 `compression` 设置。
-- BE 配置项 `enable_compression_dict` 必须为 `true`。出于滚动升级安全考虑该项默认为 `false`；在其为 `false` 期间，被指定的列只是保留表本身配置的压缩算法，不会写入压缩字典。在已升级的集群上开启前，请先阅读 BE 配置文档。
+- 被指定的列使用 ZSTD 压缩，覆盖表级的 `compression` 设置；其余列完全不受影响。
 
 ```SQL
 PROPERTIES (
-    "compression_dict_columns"="v1,v2"
+    "zstd_compression_columns"="v1,v2"
 )
 ```
 
-该属性也可以在建表后通过 `ALTER TABLE ... SET ("compression_dict_columns" = "...")` 修改。新设置只对此后写入的数据生效，已存在的 Segment 不会被重写，仍保留写入时的编码。两种编码都能正常读取，因为某个 Segment 是否带字典是记录在 Segment 自身中的。存量数据只有在因其他原因（例如 Compaction）被重写时才会改用新的编码。
+该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。新设置只对此后写入的数据生效，已存在的 Segment 不会被重写，仍保留写入时的编码。两种编码都能正常读取，因为每个 Segment 都记录了自己是怎么写的。存量数据只有在因其他原因（例如 Compaction）被重写时才会改用新的编码。
 
 ### Colocate Join
 

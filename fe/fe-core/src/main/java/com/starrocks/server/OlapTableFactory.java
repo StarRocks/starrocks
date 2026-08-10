@@ -341,17 +341,17 @@ public class OlapTableFactory implements AbstractTableFactory {
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
 
                 // analyze compression dict columns
-                Set<String> compressionDictColumns = PropertyAnalyzer.analyzeCompressionDictColumns(properties, baseSchema);
-                if (compressionDictColumns != null && compressionDictColumns.isEmpty()) {
-                    compressionDictColumns = null;
+                Set<String> zstdCompressionColumns = PropertyAnalyzer.analyzeZstdCompressionColumns(properties, baseSchema);
+                if (zstdCompressionColumns != null && zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumns = null;
                 }
-                Set<ColumnId> compressionDictColumnIds = null;
-                if (compressionDictColumns != null && !compressionDictColumns.isEmpty()) {
-                    compressionDictColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
-                    compressionDictColumnIds.addAll(
-                            compressionDictColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                Set<ColumnId> zstdCompressionColumnIds = null;
+                if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    zstdCompressionColumnIds.addAll(
+                            zstdCompressionColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
                 }
-                table.setCompressionDictColumns(compressionDictColumnIds);
+                table.setZstdCompressionColumns(zstdCompressionColumnIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

@@ -623,25 +623,32 @@ PROPERTIES (
 )
 ```
 
-### Compression dictionary
+### Per-column ZSTD compression
 
-For a table whose Engine type is `olap`, you can nominate large text or JSON columns to be compressed against a shared ZSTD dictionary. StarRocks builds one small dictionary per column per segment file and compresses every page of that column against it, so short repeated fragments -- JSON keys, field names, boilerplate phrases -- are encoded once for the whole segment instead of once per 64 KB page.
+For a table whose Engine type is `olap`, you can compress selected large text or
+JSON columns with ZSTD while the rest of the table keeps its own codec. This is
+aimed at columns whose rows repeat each other heavily -- conversation history,
+templated payloads -- where ZSTD pays off far more than on the table as a whole.
 
 The following limits apply:
 
 - Only CHAR, VARCHAR, STRING and JSON columns can be nominated.
 - Only value columns can be nominated; key columns are rejected.
 - A column may appear only once in the list.
-- The nominated columns are compressed with ZSTD, overriding the table-level `compression` for those columns.
-- The BE configuration item `enable_compression_dict` must be `true`. It defaults to `false` as a rolling-upgrade gate; while it is `false` the nominated columns simply keep the table's configured codec and no dictionary is written. See the BE configuration reference before enabling it on an upgraded cluster.
+- The nominated columns are compressed with ZSTD, overriding the table-level `compression` for those columns. Every other column is untouched.
 
 ```SQL
 PROPERTIES (
-    "compression_dict_columns"="v1,v2"
+    "zstd_compression_columns"="v1,v2"
 )
 ```
 
-The property can also be changed later with `ALTER TABLE ... SET ("compression_dict_columns" = "...")`. The new setting governs data written from then on; segments that already exist are not rewritten and keep the encoding they were written with. Both encodings remain readable, because whether a segment carries a dictionary is recorded in the segment itself. Existing data is re-encoded only when it is rewritten for some other reason, such as compaction.
+The property can also be changed later with
+`ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. The new setting
+governs data written from then on; segments that already exist are not rewritten
+and keep the encoding they were written with. Both encodings remain readable,
+because each segment records how it was written. Existing data is re-encoded only
+when it is rewritten for some other reason, such as compaction.
 
 ### Colocate Join
 

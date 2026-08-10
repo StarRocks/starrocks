@@ -152,7 +152,7 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     _set_flag(kHasPrecisionShift, column.has_precision());
     _set_flag(kHasScaleShift, column.has_frac());
     _set_flag(kHasAutoIncrementShift, column.is_auto_increment());
-    _set_flag(kUseCompressionDictShift, column.use_compression_dict());
+    _set_flag(kUseZstdCompressionShift, column.use_zstd_compression());
 
     if (column.has_precision()) {
         DCHECK_LE(column.precision(), UINT8_MAX);
@@ -216,8 +216,8 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_is_bf_column(is_bf_column());
     // only set when true so non-compression dict columns serialize byte-identically
     // (proto2 optional default false).
-    if (use_compression_dict()) {
-        column->set_use_compression_dict(true);
+    if (use_zstd_compression()) {
+        column->set_use_zstd_compression(true);
     }
     column->set_aggregation(get_string_by_aggregation_type(_aggregation));
     column->set_has_bitmap_index(has_bitmap_index());

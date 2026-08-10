@@ -277,58 +277,58 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：单次 Compaction 打印 Trace 的时间阈值，如果单次 Compaction 时间超过该阈值就打印 Trace。
 - 引入版本：-
 
-### compression_dict_build_mode
+### zstd_compression_dict_build_mode
 
 - 默认值：sample
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：列级压缩字典的构建方式。有效值为 `sample` 和 `train`。`sample` 直接将第一个符合条件的数据页的字节原样作为原始内容字典，无需缓存数据、无训练开销，且第一个数据页本身也使用该字典压缩。`train` 会先缓存前 `compression_dict_train_pages` 个数据页，将其切分为若干片段后训练出一个字典。`train` 通常压缩率更高，因为字典只保留跨多行采样得到的高频子串，但它会推迟被缓存数据页的压缩，并额外消耗训练 CPU。除 `train` 以外的取值均按 `sample` 处理。该参数仅在 `enable_compression_dict` 为 `true` 时生效。
+- 描述：列级压缩字典的构建方式。有效值为 `sample` 和 `train`。`sample` 直接将第一个符合条件的数据页的字节原样作为原始内容字典，无需缓存数据、无训练开销，且第一个数据页本身也使用该字典压缩。`train` 会先缓存前 `zstd_compression_dict_train_pages` 个数据页，将其切分为若干片段后训练出一个字典。`train` 通常压缩率更高，因为字典只保留跨多行采样得到的高频子串，但它会推迟被缓存数据页的压缩，并额外消耗训练 CPU。除 `train` 以外的取值均按 `sample` 处理。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
 - 引入版本：v4.2
 
-### compression_dict_max_size
+### zstd_compression_dict_max_size
 
 - 默认值：65536
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：`train` 模式下训练出的字典的大小上限。默认值为 64 KB，而非 zstd 命令行工具惯用的 110 KB：在真实的 agent 日志数据集（3 个大列，原始数据 372 MB）上实测，64 KB 在每一列上都优于 112 KB 和 256 KB。原因是字典本质上是高频子串的码表，其收益衰减很快，而字典自身的字节需要按“列 + Segment”各存储一份（在一个 41 MB 的列上，256 KB 的字典就占总量的 0.6%，足以改变排名）。只有在单列 Segment 非常大的场景下才值得尝试更大的取值。取值小于等于 `0` 时禁用字典训练，该列保留表本身配置的压缩算法（除非建表时指定了 `compression`，否则为 LZ4），且不写入压缩字典。只有该开关为 `true` 时才会把该列的压缩算法覆盖为 ZSTD，因此关闭开关不会把列悄悄改成 ZSTD 编码。请注意，真正决定训练字典质量的是 `compression_dict_train_pages` 而非本参数。本参数仅在 `train` 模式下生效；`sample` 模式下字典大小由 `compression_dict_sample_bytes` 限定。
+- 描述：`train` 模式下训练出的字典的大小上限。默认值为 64 KB，而非 zstd 命令行工具惯用的 110 KB：在真实的 agent 日志数据集（3 个大列，原始数据 372 MB）上实测，64 KB 在每一列上都优于 112 KB 和 256 KB。原因是字典本质上是高频子串的码表，其收益衰减很快，而字典自身的字节需要按“列 + Segment”各存储一份（在一个 41 MB 的列上，256 KB 的字典就占总量的 0.6%，足以改变排名）。只有在单列 Segment 非常大的场景下才值得尝试更大的取值。取值小于等于 `0` 时禁用字典训练，该列保留表本身配置的压缩算法（除非建表时指定了 `compression`，否则为 LZ4），且不写入压缩字典。只有该开关为 `true` 时才会把该列的压缩算法覆盖为 ZSTD，因此关闭开关不会把列悄悄改成 ZSTD 编码。请注意，真正决定训练字典质量的是 `zstd_compression_dict_train_pages` 而非本参数。本参数仅在 `train` 模式下生效；`sample` 模式下字典大小由 `zstd_compression_dict_sample_bytes` 限定。
 - 引入版本：v4.2
 
-### compression_dict_min_sample_bytes
+### zstd_compression_dict_min_sample_bytes
 
 - 默认值：1024
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：数据页的 encoded values 至少需要达到的字节数，达到后该页才能被用作字典样本。该阈值用于避免依据一个过小或近乎为空的首个数据页构建出无效字典，并因此将该列永久标记为“字典就绪”。在 `sample` 模式下，该值与首个数据页的 encoded values 大小比较；在 `train` 模式下，该值与缓存训练样本的总大小比较，且负值会被截断为 `0`。请设置为大于等于 `0` 的值。该参数仅在 `enable_compression_dict` 为 `true` 时生效。
+- 描述：数据页的 encoded values 至少需要达到的字节数，达到后该页才能被用作字典样本。该阈值用于避免依据一个过小或近乎为空的首个数据页构建出无效字典，并因此将该列永久标记为“字典就绪”。在 `sample` 模式下，该值与首个数据页的 encoded values 大小比较；在 `train` 模式下，该值与缓存训练样本的总大小比较，且负值会被截断为 `0`。请设置为大于等于 `0` 的值。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
 - 引入版本：v4.2
 
-### compression_dict_sample_bytes
+### zstd_compression_dict_sample_bytes
 
 - 默认值：65536
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：`sample` 模式（首页采样）下，为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, compression_dict_sample_bytes)`，因此该参数同时限定了 `sample` 模式下的字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_compression_dict` 为 `true` 时生效。
+- 描述：`sample` 模式（首页采样）下，为构建压缩字典而从第一个符合条件的数据页采样的字节数。默认值大致相当于一个 64 KB 数据页。实际采样量为 `min(该页 encoded values 的大小, zstd_compression_dict_sample_bytes)`，因此该参数同时限定了 `sample` 模式下的字典大小。该值在创建 Column Writer 时读取，因此修改后对之后写入的 Segment 生效。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效。
 - 引入版本：v4.2
 
-### compression_dict_train_fragment_bytes
+### zstd_compression_dict_train_fragment_bytes
 
 - 默认值：4096
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
-- 描述：将缓存的数据页切分为训练样本时使用的片段大小。相比少量大样本，大量小样本能训练出更好的字典。取值小于 `256` 时按 `256` 处理。该参数仅在 `enable_compression_dict` 为 `true` 且 `compression_dict_build_mode` 为 `train` 时生效。
+- 描述：将缓存的数据页切分为训练样本时使用的片段大小。相比少量大样本，大量小样本能训练出更好的字典。取值小于 `256` 时按 `256` 处理。该参数仅在 `enable_zstd_compression_dict` 为 `true` 且 `zstd_compression_dict_build_mode` 为 `train` 时生效。
 - 引入版本：v4.2
 
-### compression_dict_train_pages
+### zstd_compression_dict_train_pages
 
 - 默认值：32
 - 类型：Int
 - 单位：Pages
 - 是否动态：是
-- 描述：训练字典前缓存的数据页数量。该值将每列额外的写入内存限制在 `compression_dict_train_pages * data_page_size` 以内，按默认值计算为 32 * 64 KB = 2 MB。真正决定训练字典质量的是本参数而非 `compression_dict_max_size`：zstd 建议样本总量约为字典大小的 100 倍，实测在重复性较强的数据上 32 页比 8 页的压缩效果好约 10%，而在 8 页的样本预算下调大 `compression_dict_max_size` 没有任何效果，因为训练器无法填满所请求的字典大小。取值小于 `1` 时按 `1` 处理。该参数仅在 `enable_compression_dict` 为 `true` 且 `compression_dict_build_mode` 为 `train` 时生效。
+- 描述：训练字典前缓存的数据页数量。该值将每列额外的写入内存限制在 `zstd_compression_dict_train_pages * data_page_size` 以内，按默认值计算为 32 * 64 KB = 2 MB。真正决定训练字典质量的是本参数而非 `zstd_compression_dict_max_size`：zstd 建议样本总量约为字典大小的 100 倍，实测在重复性较强的数据上 32 页比 8 页的压缩效果好约 10%，而在 8 页的样本预算下调大 `zstd_compression_dict_max_size` 没有任何效果，因为训练器无法填满所请求的字典大小。取值小于 `1` 时按 `1` 处理。该参数仅在 `enable_zstd_compression_dict` 为 `true` 且 `zstd_compression_dict_build_mode` 为 `train` 时生效。
 - 引入版本：v4.2
 
 ### cumulative_compaction_check_interval_seconds
@@ -502,20 +502,20 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
 - 引入版本：-
 
-### enable_compression_dict
+### enable_zstd_compression_dict
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `compression_dict_columns` 指定的列会回退为普通的按列 ZSTD 压缩，且不写入任何压缩字典。该开关与列级属性相互独立，因此可以在运行时作为运维安全阀随时切换。
+- 描述：列级压缩字典的集群级总开关。列级压缩字典是一个 ZSTD 字典，按列存储在每个 Segment 文件中。该开关在 Segment 写入入口处判定。当其为 `false` 时，由表属性 `zstd_compression_columns` 指定的列**仍然使用 ZSTD 压缩**——这是用户的显式要求，不受该开关影响——只是不再为它们构建共享字典。也就是说该开关只影响压缩率，不会改变压缩算法，因此可以在运行时作为运维安全阀随时切换。
 
-  出于滚动升级安全考虑，该参数默认值为 `false`。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识。因此，不认识 `ColumnMetaPB.compression_dict_page`（字段 35）的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。所以在集群中所有 BE 都能识别字段 35 之前，不允许写出任何压缩字典页。运维人员必须在整个集群升级完成之后，才能将该参数设置为 `true`。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
+  出于滚动升级安全考虑，该参数默认值为 `false`。压缩字典数据页是一个基于原始内容字典（`dictID=0`）压缩的 ZSTD 帧，其帧头不携带任何“需要字典”的标识。因此，不认识 `ColumnMetaPB.zstd_compression_dict_page`（字段 35）的旧版本 BE 会在不加载字典的情况下解压该页，从而遇到 ZSTD 数据损坏错误。所以在集群中所有 BE 都能识别字段 35 之前，不允许写出任何压缩字典页。运维人员必须在整个集群升级完成之后，才能将该参数设置为 `true`。混合版本窗口期内的跨副本 Clone 与 Replication 同理。
 
   警告：一旦集群写出了带压缩字典的 Segment，就无法再降级到引入该特性之前的版本，因为旧版本 BE 既无法读取也无法 Compaction 这些 Segment。
 - 引入版本：v4.2
 
-### enable_compression_dict_ctx_cache
+### enable_zstd_compression_dict_ctx_cache
 
 - 默认值：true
 - 类型：Boolean

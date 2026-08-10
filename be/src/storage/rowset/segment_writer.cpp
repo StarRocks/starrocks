@@ -96,11 +96,13 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
     meta->set_compression_level(_tablet_schema->compression_level());
-    // a compression-dict column must carry its own ZSTD codec (the compression dict is
-    // a ZSTD dictionary), overriding the table-level compression. Gated on the
-    // runtime master switch. The per-column enable flag lives only on the
-    // top-level column, so the subcolumn recursion below never re-triggers this.
-    if (config::enable_compression_dict && column.use_compression_dict()) {
+    // A column listed in zstd_compression_columns carries its own ZSTD codec,
+    // overriding the table-level compression. This is the user's request and does
+    // NOT depend on enable_zstd_compression_dict: that switch only governs whether
+    // the internal shared dictionary is built, never whether the column is ZSTD.
+    // The per-column flag lives only on the top-level column, so the subcolumn
+    // recursion below never re-triggers this.
+    if (column.use_zstd_compression()) {
         meta->set_compression(CompressionTypePB::ZSTD);
     }
     meta->set_is_nullable(column.is_nullable());
@@ -180,8 +182,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // is further propagated to the flat-json sub-columns by
         // FlatJsonColumnWriter. Gated on the master switch so it can be disabled
         // at runtime.
-        if (config::enable_compression_dict && column.use_compression_dict()) {
-            opts.use_compression_dict = true;
+        // The dictionary itself IS gated on the switch: with it off the column is
+        // still ZSTD, just without a shared dictionary.
+        if (config::enable_zstd_compression_dict && column.use_zstd_compression()) {
+            opts.use_zstd_compression = true;
         }
 
         // now we create zone map for key columns

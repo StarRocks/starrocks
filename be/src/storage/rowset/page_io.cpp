@@ -274,7 +274,7 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
     // (I5), so this is safe for raw pages and value-dict pages too.
     if (opts.dict != nullptr) {
         RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict,
-                                               config::enable_compression_dict_ctx_cache));
+                                               config::enable_zstd_compression_dict_ctx_cache));
     } else {
         RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
     }

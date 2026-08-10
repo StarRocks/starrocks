@@ -2809,15 +2809,15 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     ASSERT_OK(fs->delete_file(file_name + "_complex_types"));
 }
 
-// compression dict regression guard: a flat-JSON column written with ZSTD + use_compression_dict
+// compression dict regression guard: a flat-JSON column written with ZSTD + use_zstd_compression
 // must actually build a compression dictionary. This pins the fix for the bug where a
 // fresh child ColumnMetaPB carried compression_level=0, making
 // get_block_compression_codec(ZSTD, 0) == nullptr so the compression dict sampling gate (which
 // requires a non-null codec) never fired for JSON columns.
-TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
+TEST_F(FlatJsonColumnRWTest, testZstdCompressionOnFlatJson) {
     auto fs = std::make_shared<MemoryFileSystem>();
     ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
-    const std::string fname = TEST_DIR + "/test_e4_compression_dict_flat_json.data";
+    const std::string fname = TEST_DIR + "/test_e4_zstd_compression_dict_flat_json.data";
     auto segment = create_dummy_segment(fs, fname);
 
     // Rows with a stable extractable "role" and a large per-row "content" string
@@ -2839,7 +2839,7 @@ TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
 
     ColumnWriterOptions writer_opts;
     writer_opts.need_flat = true;
-    writer_opts.use_compression_dict = true; // enable compression dict
+    writer_opts.use_zstd_compression = true; // enable compression dict
 
     TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
     {
@@ -2868,10 +2868,10 @@ TEST_F(FlatJsonColumnRWTest, testCompressionDictOnFlatJson) {
 
     // compression dict built a compression dictionary somewhere for this JSON column -- either on the
     // top-level blob (non-flat fallback) or on a flat string/JSON sub-column.
-    bool has_dict = _meta->has_compression_dict_page() && _meta->compression_dict_page().size() > 0;
+    bool has_dict = _meta->has_zstd_compression_dict_page() && _meta->zstd_compression_dict_page().size() > 0;
     for (int i = 0; i < _meta->children_columns_size() && !has_dict; i++) {
         const auto& child = _meta->children_columns(i);
-        if (child.has_compression_dict_page() && child.compression_dict_page().size() > 0) {
+        if (child.has_zstd_compression_dict_page() && child.zstd_compression_dict_page().size() > 0) {
             has_dict = true;
         }
     }

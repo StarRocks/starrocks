@@ -64,8 +64,8 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _flat_json_config(opts.flat_json_config),
           _global_dict(opts.flat_json_dicts),
           _column_name(opts.field_name),
-          _use_compression_dict(opts.use_compression_dict),
-          _compression_dict_sample_bytes(opts.compression_dict_sample_bytes) {}
+          _use_zstd_compression(opts.use_zstd_compression),
+          _zstd_compression_dict_sample_bytes(opts.zstd_compression_dict_sample_bytes) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -245,9 +245,9 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         // The write-path sampling gate only fires on PLAIN columns whose first
         // page reaches the minimum sample size, so setting this on DICT-encoded or
         // tiny scalar leaves is a harmless no-op.
-        if (_use_compression_dict && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
-            opts.use_compression_dict = true;
-            opts.compression_dict_sample_bytes = _compression_dict_sample_bytes;
+        if (_use_zstd_compression && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
+            opts.use_zstd_compression = true;
+            opts.zstd_compression_dict_sample_bytes = _zstd_compression_dict_sample_bytes;
         }
 
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
