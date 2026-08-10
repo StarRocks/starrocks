@@ -1,5 +1,4 @@
 ---
-sidebar_position: 40
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "FE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
