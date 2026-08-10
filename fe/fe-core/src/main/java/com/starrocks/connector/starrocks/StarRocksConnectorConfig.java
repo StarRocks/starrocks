@@ -15,6 +15,7 @@
 package com.starrocks.connector.starrocks;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.connector.config.Config;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -35,10 +36,33 @@ public class StarRocksConnectorConfig extends ConnectorConfig {
     public static final String CACHE_TABLE_MAX_NUM = "starrocks.cache.table.max.num";
     public static final String CACHE_PARTITION_MAX_NUM = "starrocks.cache.partition.max.num";
     public static final String CACHE_REFRESH_THREAD_NUM = "starrocks.cache.refresh.thread.num";
-    // The catalog control plane (metadata + remote scan) now speaks HTTP/JSON to the
-    // remote FE http port; the legacy thrift-port keys are rejected so a stale config
-    // surfaces immediately instead of silently pointing at an unreachable port.
-    private static final String UNSUPPORTED_THRIFT_PROPERTY_PREFIX = "starrocks.fe.thrift.";
+    // Framework-level properties that are not declared as @Config fields here: "type" selects
+    // this connector, and "catalog.access.control" picks the catalog's authorization engine and
+    // is consumed generically by LazyConnector.
+    public static final String CATALOG_TYPE = "type";
+    public static final String CATALOG_ACCESS_CONTROL = "catalog.access.control";
+
+    /**
+     * Every property a StarRocks external catalog accepts: the @Config-backed ones below plus the
+     * two framework keys above. Anything else fails the DDL — see rejectUnknownProperties. Keep
+     * this in sync when adding a @Config field; StarRocksConnectorConfigTest asserts the two stay
+     * aligned so the omission cannot ship.
+     */
+    public static final ImmutableSet<String> SUPPORTED_PROPERTIES = ImmutableSet.of(
+            CATALOG_TYPE,
+            CATALOG_ACCESS_CONTROL,
+            FE_HTTP_URL,
+            USER,
+            PASSWORD,
+            SCAN_TRANSPORT,
+            HTTP_TIMEOUT_MS,
+            HTTP_RETRY_TIMES,
+            CACHE_ENABLE,
+            CACHE_REFRESH_SEC,
+            CACHE_TTL_SEC,
+            CACHE_TABLE_MAX_NUM,
+            CACHE_PARTITION_MAX_NUM,
+            CACHE_REFRESH_THREAD_NUM);
     // Suffix of internal markers the persistence layer appends when obfuscating
     // credentials for the checkpoint image (see CatalogMgr.encryptCatalogForImage).
     // A user-supplied marker would make the image writer skip the obfuscation and
@@ -99,8 +123,8 @@ public class StarRocksConnectorConfig extends ConnectorConfig {
 
     @Override
     public void loadConfig(Map<String, String> properties) {
-        rejectUnsupportedThriftProperties(properties);
         rejectInternalMarkerProperties(properties);
+        rejectUnknownProperties(properties);
         super.loadConfig(properties);
         // Validate eagerly at CREATE CATALOG time rather than deferring to first query.
         // ConnectorConfig.loadConfig swallows missing-required-field AnalysisExceptions and
@@ -119,14 +143,29 @@ public class StarRocksConnectorConfig extends ConnectorConfig {
         StarRocksFeClient.parseFeAddresses(feHttpUrl);
     }
 
-    private static void rejectUnsupportedThriftProperties(Map<String, String> properties) {
+    /**
+     * Rejects any property this catalog does not understand, so that a typo cannot be silently
+     * dropped. {@link com.starrocks.connector.config.ConnectorConfig#loadConfig} only reads the
+     * keys it recognizes and ignores the rest, which would leave a misspelled
+     * {@code starrocks.cache.ttl} quietly running on the default while SHOW CREATE CATALOG still
+     * echoes it back as if it took effect.
+     *
+     * <p>{@code ranger.plugin.hive.service.name} is deliberately absent from
+     * {@link #SUPPORTED_PROPERTIES}: it binds the catalog to a Ranger service of type hive, whose
+     * resource model only has database and table and therefore cannot express the catalog
+     * dimension. It also silently takes precedence over {@code catalog.access.control}. Use
+     * {@code catalog.access.control = ranger} instead, which goes through the StarRocks service
+     * definition.
+     */
+    private static void rejectUnknownProperties(Map<String, String> properties) {
         if (properties == null) {
             return;
         }
         for (String key : properties.keySet()) {
-            if (key != null && key.startsWith(UNSUPPORTED_THRIFT_PROPERTY_PREFIX)) {
+            if (key != null && !SUPPORTED_PROPERTIES.contains(key)) {
                 throw new StarRocksConnectorException(
-                        key + " is not supported; use " + FE_HTTP_URL + " for the remote FE http endpoint");
+                        "%s is not a supported property of a StarRocks external catalog. Supported properties: %s",
+                        key, String.join(", ", SUPPORTED_PROPERTIES));
             }
         }
     }
