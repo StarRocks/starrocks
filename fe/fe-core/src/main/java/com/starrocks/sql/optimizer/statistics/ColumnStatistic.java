@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+import com.starrocks.qe.ConnectContext;
+>>>>>>> 3eb6144a33 ([Refactor] Use explicit serialization models for stats in query dumps (#75950))
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -189,7 +193,16 @@ public class ColumnStatistic {
                 other.collectionSize, other.type);
     }
 
+    /**
+     * Parses the legacy text form produced by {@link #toString()}.
+     *
+     * @deprecated This method exists only to replay query dumps written by older
+     * versions. New persistence goes through {@link ColumnStatisticDump}. See {@link LegacyColumnStatisticParser} for
+     * details.
+     */
+    @Deprecated
     public static Builder buildFrom(String columnStatistic) {
+<<<<<<< HEAD
         int endIndex = columnStatistic.indexOf(']');
         String valueString = columnStatistic.substring(1, endIndex);
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
@@ -220,6 +233,9 @@ public class ColumnStatistic {
             builder.setType(StatisticType.UNKNOWN);
         }
         return builder;
+=======
+        return LegacyColumnStatisticParser.parse(columnStatistic);
+>>>>>>> 3eb6144a33 ([Refactor] Use explicit serialization models for stats in query dumps (#75950))
     }
 
     public static Builder builder() {
@@ -263,8 +279,8 @@ public class ColumnStatistic {
             this.collectionSize = collectionSize;
         }
 
-        private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
-                        double distinctValuesCount) {
+        Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
+                double distinctValuesCount) {
             this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount,
                     DEFAULT_COLLECTION_SIZE, null, StatisticType.ESTIMATE);
         }

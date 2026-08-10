@@ -81,7 +81,7 @@ public class InvalidPlanTest extends MVTestBase  {
                 "\"replication_num\" = \"1\"\n" +
                 ");");
         Config.max_scalar_operator_flat_children = 30000;
-        String sql = ReplayFromDumpTestBase.geContentFromFile("bugs/large_binary_predicate1.sql");
+        String sql = ReplayFromDumpTestBase.getContentFromFile("bugs/large_binary_predicate1.sql");
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
                 "     TABLE: test_table\n" +
