@@ -65,10 +65,17 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
@@ -517,6 +524,87 @@ public class StorageVolumeTest {
         StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
         Assertions.assertEquals("1", sv.getId());
         Assertions.assertEquals("test", sv.getName());
+    }
+
+    @Test
+    public void testAdls2RejectsWorkloadIdentityBecauseTheTokenFileIsNotStored() {
+        // A workload identity survives as an ADLS2 credential - the tenant and the client are
+        // stored - but its token file is not, so what is read back authenticates as a managed
+        // identity instead. Same kind of cloud, different identity: checking the cloud type alone
+        // would let this through.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/secrets/azure/token");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AZURE_ADLS2_OAUTH2_TOKEN_FILE), e.getMessage());
+    }
+
+    @Test
+    public void testAdls2ManagedIdentityAndSharedKeyRemainStorable() throws DdlException {
+        // The forms an ADLS2 file store does carry must keep working: a managed identity, and a
+        // shared key that spells out the managed identity flag it is not using.
+        Map<String, String> managedIdentity = new HashMap<>();
+        managedIdentity.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"), managedIdentity, true, "");
+
+        Map<String, String> sharedKey = new HashMap<>();
+        sharedKey.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        sharedKey.put(AZURE_ADLS2_SHARED_KEY, "shared_key");
+        sharedKey.put(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "false");
+        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"), sharedKey, true, "");
+    }
+
+    @Test
+    public void testRejectionDoesNotLeakOAuth2ClientSecret() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_SECRET, "should_never_be_echoed");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "azblob", Arrays.asList("azblob://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertFalse(e.getMessage().contains("should_never_be_echoed"), e.getMessage());
+    }
+
+    @Test
+    public void testAddMaskForCredentialMasksOAuth2ClientSecrets() {
+        Map<String, String> params = new HashMap<>();
+        params.put(AZURE_BLOB_OAUTH2_CLIENT_SECRET, "blob_secret");
+        params.put(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "adls2_secret");
+        StorageVolume.addMaskForCredential(params);
+        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, params.get(AZURE_BLOB_OAUTH2_CLIENT_SECRET));
+        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, params.get(AZURE_ADLS2_OAUTH2_CLIENT_SECRET));
+    }
+
+    @Test
+    public void testStorageVolumeWithUnusableCredentialIsNotUsable() throws DdlException {
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        // Readable, so it can be shown and dropped, but not something data may be stored through.
+        Assertions.assertFalse(StorageVolume.fromFileStoreInfo(fsInfo).isCredentialUsable());
+
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        StorageVolume usable = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+        Assertions.assertTrue(usable.isCredentialUsable());
     }
 
     @Test

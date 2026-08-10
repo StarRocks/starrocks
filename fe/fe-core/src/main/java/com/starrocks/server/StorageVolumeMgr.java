@@ -361,11 +361,26 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         setDefaultStorageVolume(stmt.getName());
     }
 
+    /**
+     * A volume whose stored credential can no longer be turned into a usable configuration is kept
+     * readable so it can be inspected and dropped, but nothing may be stored through it. Callers
+     * about to hand data to a volume have to reject it explicitly, otherwise the failure surfaces
+     * much later, once the volume is already recorded as the location of a database or a table.
+     */
+    protected static void checkCredentialUsable(StorageVolume sv) throws DdlException {
+        if (!sv.isCredentialUsable()) {
+            throw new DdlException(String.format("Storage volume %s has a credential that cannot be used, " +
+                    "it can only be described or dropped", sv.getName()));
+        }
+    }
+
     public void setDefaultStorageVolume(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(svName);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
+            Preconditions.checkState(sv.isCredentialUsable(),
+                    "Storage volume '%s' has a credential that cannot be used", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
             GlobalStateMgr.getCurrentState().getEditLog()
                     .logSetDefaultStorageVolume(log, wal -> this.defaultStorageVolumeId = sv.getId());

@@ -223,6 +223,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!sv.getEnabled()) {
                 throw new DdlException(String.format("Storage volume %s is disabled", svName));
             }
+            checkCredentialUsable(sv);
             return bindDbToStorageVolume(sv.getId(), dbId, false);
         }
     }
@@ -280,6 +281,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!sv.getEnabled()) {
                 throw new DdlException(String.format("Storage volume %s is disabled", sv.getName()));
             }
+            checkCredentialUsable(sv);
             return bindTableToStorageVolume(sv.getId(), tableId, false);
         }
     }
