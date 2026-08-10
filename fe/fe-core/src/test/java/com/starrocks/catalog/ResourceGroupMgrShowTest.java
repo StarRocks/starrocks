@@ -88,10 +88,10 @@ public class ResourceGroupMgrShowTest {
             throw new IllegalStateException("ResourceGroupSnapshot inner class not found");
         }
 
-        // Construct: ResourceGroupSnapshot(byName, byId, emptyMap).
-        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class);
+        // Construct: ResourceGroupSnapshot(byName, byId, emptyMap, null).
+        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
         ctor.setAccessible(true);
-        Object snap = ctor.newInstance(byName, byId, Collections.emptyMap());
+        Object snap = ctor.newInstance(byName, byId, Collections.emptyMap(), null);
 
         // Inject into mgr.snapshot.
         Field f = ResourceGroupMgr.class.getDeclaredField("snapshot");

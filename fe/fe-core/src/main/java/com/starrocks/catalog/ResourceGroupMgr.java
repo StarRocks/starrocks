@@ -85,7 +85,7 @@ public class ResourceGroupMgr implements Writable {
     // ---------------------------------------------------------------------------
     private static final class ResourceGroupSnapshot {
         static final ResourceGroupSnapshot EMPTY = new ResourceGroupSnapshot(
-                Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap());
+                Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), null);
 
         /** Groups keyed by name. */
         final Map<String, ResourceGroup>         byName;
@@ -93,13 +93,17 @@ public class ResourceGroupMgr implements Writable {
         final Map<Long, ResourceGroup>           byId;
         /** All classifiers keyed by classifier ID, across all groups. */
         final Map<Long, ResourceGroupClassifier> byClassifier;
+        /** The short_query resource group (if any). */
+        final ResourceGroup                      shortQueryResourceGroup;
 
         ResourceGroupSnapshot(Map<String, ResourceGroup> byName,
                               Map<Long, ResourceGroup> byId,
-                              Map<Long, ResourceGroupClassifier> byClassifier) {
-            this.byName       = Collections.unmodifiableMap(byName);
-            this.byId         = Collections.unmodifiableMap(byId);
-            this.byClassifier = Collections.unmodifiableMap(byClassifier);
+                              Map<Long, ResourceGroupClassifier> byClassifier,
+                              ResourceGroup shortQueryResourceGroup) {
+            this.byName                  = Collections.unmodifiableMap(byName);
+            this.byId                    = Collections.unmodifiableMap(byId);
+            this.byClassifier            = Collections.unmodifiableMap(byClassifier);
+            this.shortQueryResourceGroup = shortQueryResourceGroup;
         }
     }
 
@@ -775,11 +779,10 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             newByClassifier.remove(classifier.getId());
         }
-        // Single volatile write — readers always see all three maps updated atomically.
-        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier);
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
-            shortQueryResourceGroup = null;
-        }
+        ResourceGroup shortQuery = (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY)
+                ? null : old.shortQueryResourceGroup;
+        // Single volatile write — readers always see all indexes updated atomically.
+        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier, shortQuery);
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -793,15 +796,15 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             newByClassifier.put(classifier.getId(), classifier);
         }
-        // Single volatile write — readers always see all three maps updated atomically.
-        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier);
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
-            shortQueryResourceGroup = wg;
-        }
+        ResourceGroup shortQuery = (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY)
+                ? wg : old.shortQueryResourceGroup;
+        // Single volatile write — readers always see all indexes updated atomically.
+        this.snapshot = new ResourceGroupSnapshot(newByName, newById, newByClassifier, shortQuery);
         if (ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME.equals(wg.getName())) {
             hasCreatedDefaultResourceGroups = true;
         }
     }
+
 
     /**
      * If a resource group is bound to specific warehouses, and the warehouse that the current BE belongs to is not among those
