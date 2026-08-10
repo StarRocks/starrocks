@@ -843,8 +843,8 @@ void TabletParallelCompactionManager::seal_submission(int64_t tablet_id, int64_t
         callback = state->callback;
     }
     if (claimed && callback) {
-        VLOG(1) << "Parallel compaction: all subtasks already finished when submission was sealed, tablet="
-                << tablet_id << ", txn_id=" << txn_id;
+        VLOG(1) << "Parallel compaction: all subtasks already finished when submission was sealed, tablet=" << tablet_id
+                << ", txn_id=" << txn_id;
         finalize_tablet_completion(tablet_id, txn_id, state, callback);
     }
 }
