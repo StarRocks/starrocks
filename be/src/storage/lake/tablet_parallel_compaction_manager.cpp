@@ -2714,9 +2714,9 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     //
     // has_lower_bound / has_upper_bound explicitly indicate whether the range has a
     // finite bound on each side. For open-ended ranges (first range has no lower bound,
-    // last range has no upper bound), we set the corresponding flag to false and the
-    // compaction task skips setting that side of the range filter entirely, rather than
-    // relying on empty OlapTuple producing an unbounded SeekTuple in the iterator.
+    // last range has no upper bound), the corresponding OlapTuple remains empty. Both
+    // sides are still passed to TabletReader because it represents one logical range
+    // with paired start/end vectors; the empty tuple becomes an unbounded SeekTuple.
     context->has_range_split = true;
     context->is_first_range = is_first_range;
     context->is_last_range = is_last_range;

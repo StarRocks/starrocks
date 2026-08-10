@@ -212,8 +212,8 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     bool range_upper_inclusive = false;
     // Explicit bound presence flags. When has_lower_bound is false, the lower bound
     // is unbounded (scan from the beginning). When has_upper_bound is false, the upper
-    // bound is unbounded (scan to the end). This avoids relying on empty OlapTuple
-    // semantics in the segment iterator for open-ended ranges.
+    // bound is unbounded (scan to the end). The corresponding OlapTuple remains empty
+    // so both sides can still be passed to TabletReader as a paired range.
     bool has_lower_bound = false;
     bool has_upper_bound = false;
     bool is_first_range = false;
