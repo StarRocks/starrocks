@@ -42,11 +42,6 @@
 
 namespace starrocks::lake {
 
-PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr,
-                                                 int64_t tablet_id)
-        : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id),
-          _map(std::less<>(), MapAllocator(&_map_node_bytes)) {}
-
 Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                                                  const std::shared_ptr<FileSystem>& fs) {
     _location_provider = location_provider;
@@ -68,7 +63,7 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
     _deleted_rowids.clear();
     _delete_keys.reset();
     _intermediate_ssts.clear();
-    _keys_heap_size = 0;
+    _map_entry_bytes = 0;
     _next_rowid = 0;
     return Status::OK();
 }
@@ -100,12 +95,19 @@ void PkTabletUnsortSSTWriter::reconcile_entry(std::string_view key, uint64_t ord
     // not allocate; only a first-seen key materializes the owning std::string on the emplace branch.
     auto it = _map.find(key);
     if (it == _map.end()) {
-        // Pre-#77251 logical estimate. The counting-allocator accounting #77251 introduced makes
-        // is_map_full() fire roughly every chunk on a real UNSHARE run (measured: ~3500 spills for a
-        // 2 GB input, one per 3-8k rows, where the 100 MB bound implies ~20), which leaves flush with
-        // a K-way merge in the thousands. Revert the accounting to isolate that.
+        // Per-entry logical estimate: encoded key bytes + Entry + btree node overhead.
+        //
+        // Deliberately not the counting allocator (#77251). In a release build that allocator charges
+        // tls_delta_memory rather than the requested size, and on this write path it over-reports the
+        // map by ~300x -- ~29 KB per 24-byte primary key. is_map_full() then fires on roughly every
+        // chunk, so a 2 GB UNSHARE input spilled ~3500 intermediate SSTs instead of the ~20 the 100 MB
+        // bound implies, and flush was left with a K-way merge whose K was in the thousands.
+        // Measured on a 1 FE + 3 CN cluster, same input, only this accounting changed:
+        // spills 2953-3590 -> 8-10, merge 285-357s -> 10-15s, split 667s -> 215s.
+        // The estimate is coarse but monotonic in what the map actually holds, which is what a spill
+        // bound needs. BE_TEST builds never saw this: there the allocator uses n * sizeof(T).
         static constexpr size_t kBtreeEntryOverhead = 24;
-        _keys_heap_size += key.size() + sizeof(Entry) + kBtreeEntryOverhead;
+        _map_entry_bytes += key.size() + sizeof(Entry) + kBtreeEntryOverhead;
         _map.emplace(std::string(key), Entry{order, rowid});
     } else if (order > it->second.order) {
         if (it->second.rowid != kDeleteRowid) {
@@ -207,9 +209,7 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
-    // `_keys_heap_size` carries the whole per-entry estimate here (key + Entry + node overhead),
-    // so the counting allocator's `_map_node_bytes` is deliberately not added on top.
-    return _keys_heap_size;
+    return _map_entry_bytes;
 }
 
 size_t PkTabletUnsortSSTWriter::memory_usage() const {
@@ -256,7 +256,7 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
     RETURN_IF_ERROR(wf->close());
     _intermediate_ssts.push_back({location, size, std::move(encryption_meta)});
     _map.clear();
-    _keys_heap_size = 0;
+    _map_entry_bytes = 0;
     return Status::OK();
 }
 
@@ -404,7 +404,7 @@ StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletUnsortSSTWr
     _wf.reset();
     _map.clear();
     _intermediate_ssts.clear();
-    _keys_heap_size = 0;
+    _map_entry_bytes = 0;
     _next_rowid = 0;
     return std::make_pair(file_info, range_pb);
 }
