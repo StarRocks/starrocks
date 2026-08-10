@@ -117,9 +117,9 @@ public class ResourceGroupMgrConcurrencyTest {
         if (snapClass == null) {
             throw new IllegalStateException("ResourceGroupSnapshot not found");
         }
-        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class);
+        Constructor<?> ctor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
         ctor.setAccessible(true);
-        Object snap = ctor.newInstance(bName, bId, Collections.emptyMap());
+        Object snap = ctor.newInstance(bName, bId, Collections.emptyMap(), null);
         Field f = ResourceGroupMgr.class.getDeclaredField("snapshot");
         f.setAccessible(true);
         f.set(mgr, snap);
@@ -299,7 +299,7 @@ public class ResourceGroupMgrConcurrencyTest {
         Field snapField = ResourceGroupMgr.class.getDeclaredField("snapshot");
         snapField.setAccessible(true);
         Class<?> snapClass = snapField.get(mgr).getClass();
-        Constructor<?> snapCtor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class);
+        Constructor<?> snapCtor = snapClass.getDeclaredConstructor(Map.class, Map.class, Map.class, ResourceGroup.class);
         snapCtor.setAccessible(true);
 
         int readerCount = 8;
@@ -350,7 +350,7 @@ public class ResourceGroupMgrConcurrencyTest {
                             copy.put(key, current.values().iterator().next());
                         }
                         Object newSnap = snapCtor.newInstance(copy,
-                                Collections.emptyMap(), Collections.emptyMap());
+                                Collections.emptyMap(), Collections.emptyMap(), null);
                         snapField.set(mgr, newSnap);
                         counter++;
                     }
@@ -468,4 +468,57 @@ public class ResourceGroupMgrConcurrencyTest {
         Assertions.assertTrue(found.stream().anyMatch(r -> r.contains("rg_show_one")));
         Assertions.assertTrue(mgr.showOneResourceGroup("rg_does_not_exist", false).isEmpty());
     }
+
+    // -------------------------------------------------------------------------
+    // 17. Finding 3: Single-write ALTER snapshot replacement
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testSingleWriteAlterSnapshotReplacement() throws Exception {
+        mgr.createResourceGroup(mvStmt("rg_alter_single_write", "1"));
+        Object snapBefore = getSnapshot();
+
+        // Alter properties — calls updateResourceGroup -> replaceResourceGroupInternal.
+        mgr.alterResourceGroup(new com.starrocks.sql.ast.AlterResourceGroupStmt("rg_alter_single_write",
+                new com.starrocks.sql.ast.AlterResourceGroupStmt.AlterProperties(
+                        Collections.singletonMap("mem_limit", "0.6"))));
+
+        Object snapAfter = getSnapshot();
+
+        // Snapshot holder was replaced cleanly in a single assignment.
+        Assertions.assertNotSame(snapBefore, snapAfter);
+        Map<String, ResourceGroup> byNameAfter = snapField(snapAfter, "byName");
+        Assertions.assertTrue(byNameAfter.containsKey("rg_alter_single_write"),
+                "Group must remain continuously present in snapshot after alter");
+    }
+
+    // -------------------------------------------------------------------------
+    // 18. Finding 4: Atomic shortQueryResourceGroup snapshot bundling
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testAtomicShortQueryGroupSnapshotRead() throws Exception {
+        ResourceGroup sqGroup = new ResourceGroup();
+        sqGroup.setName("sq_rg");
+        sqGroup.setId(777L);
+        sqGroup.setResourceGroupType(TWorkGroupType.WG_SHORT_QUERY);
+        sqGroup.setMemLimit(0.5);
+        ResourceGroupClassifier classifier = new ResourceGroupClassifier();
+        classifier.setResourceGroupId(777L);
+        classifier.setUser("test_user");
+        sqGroup.setClassifiers(Collections.singletonList(classifier));
+
+        java.lang.reflect.Method addMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
+        addMethod.setAccessible(true);
+        addMethod.invoke(mgr, sqGroup);
+
+        Object snap = getSnapshot();
+        ResourceGroup sqFromSnap = snapField(snap, "shortQueryResourceGroup");
+        Assertions.assertNotNull(sqFromSnap, "shortQueryResourceGroup must be populated in snapshot");
+        Assertions.assertEquals("sq_rg", sqFromSnap.getName());
+    }
 }
+
+
+
