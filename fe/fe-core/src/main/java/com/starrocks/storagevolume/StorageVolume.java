@@ -115,6 +115,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws DdlException {
+        this(id, name, svt, locations, params, enabled, comment, true);
+    }
+
+    /**
+     * @param requireUsableCredential when false, a credential that can no longer be turned into
+     *                                a usable configuration is tolerated instead of rejected.
+     *                                Only the read-back path passes false: identity, locations
+     *                                and virtual-tablet bookkeeping are still intact there, and
+     *                                the operations that rely solely on those - listing, resolving
+     *                                the name for a privilege check, dropping - have to keep
+     *                                working, otherwise such a volume is stuck in the cluster
+     *                                with no way to remove it.
+     */
+    private StorageVolume(String id, String name, String svt, List<String> locations,
+                          Map<String, String> params, boolean enabled, String comment,
+                          boolean requireUsableCredential) throws DdlException {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -125,8 +141,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+        if (!isValidCloudConfiguration(this.svt, this.cloudConfiguration)) {
+            if (requireUsableCredential) {
+                throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+            }
+            LOG.warn("Storage volume '{}' has an unusable credential. It can still be listed and " +
+                    "dropped, but not used: {}", name, dumpMaskedParams(params));
         }
         validateStorageVolumeConstraints();
     }
@@ -166,10 +186,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
-        if (!isValidCloudConfiguration()) {
+        CloudConfiguration newConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
+        if (!isValidCloudConfiguration(svt, newConfiguration)) {
             throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
+        validateCredentialIsPersistable(svt, newConfiguration, newParams);
+        // Assigned only once both checks pass, so a rejected ALTER leaves the volume untouched.
+        this.cloudConfiguration = newConfiguration;
         this.params = newParams;
     }
 
@@ -255,19 +279,47 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     private boolean isValidCloudConfiguration() {
+        return isValidCloudConfiguration(svt, cloudConfiguration);
+    }
+
+    private static boolean isValidCloudConfiguration(StorageVolumeType svt, CloudConfiguration configuration) {
         switch (svt) {
             case S3:
-                return cloudConfiguration.getCloudType() == CloudType.AWS;
+                return configuration.getCloudType() == CloudType.AWS;
             case HDFS:
-                return cloudConfiguration.getCloudType() == CloudType.HDFS;
+                return configuration.getCloudType() == CloudType.HDFS;
             case AZBLOB:
-                return cloudConfiguration.getCloudType() == CloudType.AZURE;
+                return configuration.getCloudType() == CloudType.AZURE;
             case ADLS2:
-                return cloudConfiguration.getCloudType() == CloudType.AZURE;
+                return configuration.getCloudType() == CloudType.AZURE;
             case GS:
-                return cloudConfiguration.getCloudType() == CloudType.GCP;
+                return configuration.getCloudType() == CloudType.GCP;
             default:
                 return false;
+        }
+    }
+
+    /**
+     * Not every credential the factory accepts can be stored: a credential's {@code toFileStoreInfo}
+     * only carries the fields the file store models, and anything else is dropped silently. A volume
+     * created from such a credential is written successfully and can never be rebuilt into a usable
+     * one afterwards, so reject it while the statement can still fail cleanly.
+     *
+     * <p>The check is deliberately generic - it round-trips the configuration through
+     * {@link FileStoreInfo} and verifies the result is still the same kind of cloud - so it also
+     * covers credential forms added later.
+     */
+    private static void validateCredentialIsPersistable(StorageVolumeType svt, CloudConfiguration configuration,
+                                                        Map<String, String> params) {
+        Map<String, String> restored = getParamsFromFileStoreInfo(configuration.toFileStoreInfo());
+        CloudConfiguration restoredConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(restored, true);
+        if (!isValidCloudConfiguration(svt, restoredConfiguration)) {
+            Map<String, String> maskedParams = new HashMap<>(params);
+            addMaskForCredential(maskedParams);
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume: %s",
+                    svt, new Gson().toJson(maskedParams)));
         }
     }
 
@@ -299,6 +351,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                                                     List<String> locations, Map<String, String> params,
                                                     boolean enabled, String comment) throws DdlException {
         StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
+        validateCredentialIsPersistable(sv.svt, sv.cloudConfiguration, params);
         return sv.toFileStoreInfo();
     }
 
@@ -324,7 +377,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment(), false);
 
         Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
         if (propertiesMap.containsKey(V_SHARD_ID)) {

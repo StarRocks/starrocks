@@ -68,6 +68,8 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT;
@@ -460,6 +462,61 @@ public class StorageVolumeTest {
         azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
         Assertions.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
         Assertions.assertEquals("sas_token", azBlobFileStoreInfo.getCredential().getSasToken());
+    }
+
+    @Test
+    public void testAzureBlobRejectsCredentialThatCannotBePersisted() {
+        // Managed identity is accepted by the shared credential factory (FILES() supports it),
+        // but an AZBLOB file store can only carry a shared key or a SAS token. Creating such a
+        // volume used to succeed and leave behind something that could never be read or dropped.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "azblob", Arrays.asList("azblob://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains("cannot be stored"), e.getMessage());
+    }
+
+    @Test
+    public void testAzureBlobAlterRejectsCredentialThatCannotBePersistedAndKeepsVolumeIntact() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+
+        Map<String, String> badParams = new HashMap<>();
+        badParams.put(AZURE_BLOB_SHARED_KEY, "");
+        badParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        badParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+        Assertions.assertThrows(SemanticException.class, () -> sv.setCloudConfiguration(badParams));
+
+        // A rejected ALTER must not damage the volume it failed on.
+        Assertions.assertEquals(CloudType.AZURE, sv.getCloudConfiguration().getCloudType());
+        Assertions.assertEquals("shared_key",
+                sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
+    }
+
+    @Test
+    public void testStorageVolumeWithUnusableCredentialIsStillReadable() throws DdlException {
+        // A volume already stored with a credential that can no longer be rebuilt - the state this
+        // bug leaves behind. Reading it back must not throw, otherwise SHOW STORAGE VOLUMES fails
+        // for every volume and the broken one can never be dropped.
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertEquals("1", sv.getId());
+        Assertions.assertEquals("test", sv.getName());
     }
 
     @Test
