@@ -163,6 +163,19 @@ struct TabletParallelCompactionState {
     // Mutex for thread-safe access
     mutable std::mutex mutex;
 
+    // Set once submit_subtasks_from_groups() has stopped registering subtasks for this tablet.
+    // Subtasks are registered and submitted one group at a time, so without this the tablet can look
+    // "complete" in the middle of submission: a subtask that finishes before the next group is registered
+    // finds running_subtasks empty and drives the completion transition, and a later subtask drives it
+    // AGAIN -- two finish_task() calls for one tablet id, which pushes CompactionTaskCallback::_contexts
+    // past the request's tablet count, completes the RPC while other tablets are still running, and leaves
+    // the next real completion dereferencing an already-nulled _response.
+    bool submission_done = false;
+
+    // Guards the completion transition so it runs exactly once per tablet, taken by whoever gets there
+    // first: the last finishing subtask, or the end of submission if every subtask already finished.
+    bool completion_claimed = false;
+
     // Check if we can create a new subtask
     bool can_create_subtask() const { return running_subtasks.size() < static_cast<size_t>(max_parallel); }
 
@@ -172,8 +185,18 @@ struct TabletParallelCompactionState {
         return it != compacting_rowsets.end() && it->second > 0;
     }
 
-    // Check if all subtasks are completed
-    bool is_complete() const { return running_subtasks.empty() && total_subtasks_created > 0; }
+    // Check if all subtasks are completed. Requires submission to be sealed -- see submission_done.
+    bool is_complete() const { return submission_done && running_subtasks.empty() && total_subtasks_created > 0; }
+
+    // Take the right to run the completion transition, if it is due and nobody has taken it yet.
+    // Caller must hold `mutex`.
+    bool claim_completion() {
+        if (!is_complete() || completion_claimed) {
+            return false;
+        }
+        completion_claimed = true;
+        return true;
+    }
 };
 
 // Manager for per-tablet parallel compaction
@@ -199,6 +222,18 @@ public:
     // Subtask completion callback
     void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
                              std::unique_ptr<CompactionTaskContext> context);
+
+    // Declare that no further subtasks will be registered for |tablet_id|, and run the completion
+    // transition if they have all finished already. Must be called on every path that stops registering
+    // subtasks while leaving some running; see TabletParallelCompactionState::submission_done.
+    void seal_submission(int64_t tablet_id, int64_t txn_id,
+                         const std::shared_ptr<TabletParallelCompactionState>& state);
+
+    // Run the one-time completion transition for a tablet. The caller must already have won
+    // TabletParallelCompactionState::claim_completion().
+    void finalize_tablet_completion(int64_t tablet_id, int64_t txn_id,
+                                    const std::shared_ptr<TabletParallelCompactionState>& state,
+                                    const std::shared_ptr<CompactionTaskCallback>& callback);
 
     // Check if all subtasks for a tablet are complete
     bool is_tablet_complete(int64_t tablet_id, int64_t txn_id);

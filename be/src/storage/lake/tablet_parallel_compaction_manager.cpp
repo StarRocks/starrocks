@@ -725,6 +725,9 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
             LOG(WARNING) << "Exception after submitting " << submitted << " parallel compaction subtask(s); they own "
                          << "the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id << ": "
                          << e.what();
+            // submit_subtasks_from_groups() never reached its own seal, so do it here: those subtasks are
+            // the only ones that can complete this tablet, and they cannot do it while it is unsealed.
+            seal_submission(tablet_id, txn_id, state_ptr);
             return submitted;
         }
         cleanup_tablet(tablet_id, txn_id);
@@ -734,6 +737,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         if (submitted > 0) {
             LOG(WARNING) << "Unknown exception after submitting " << submitted << " parallel compaction subtask(s); "
                          << "they own the tablet's completion. tablet_id=" << tablet_id << ", txn_id=" << txn_id;
+            seal_submission(tablet_id, txn_id, state_ptr);
             return submitted;
         }
         cleanup_tablet(tablet_id, txn_id);
@@ -800,7 +804,7 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
         _running_subtasks--;
         _completed_subtasks++;
 
-        all_complete = state->is_complete();
+        all_complete = state->claim_completion();
         callback = state->callback;
 
         VLOG(1) << "Parallel compaction subtask completed, tablet=" << tablet_id << ", txn_id=" << txn_id
@@ -809,118 +813,159 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     }
 
     // If all subtasks are complete, notify the callback
+    // The completion transition is claimed exactly once (see claim_completion), so whoever gets
+    // here -- the last finishing subtask, or the end of submission -- is the only one who runs it.
     if (all_complete && callback) {
-        // Build merged context.
-        // Honor the ORIGINATING request's skip_write_txnlog intent for the merged log:
-        //  - aggregate/file-bundling path (skip=true): keep skip=true so the merged log is returned
-        //    inline via CompactResponse.txn_logs for the aggregator to combine and persist once;
-        //  - regular path (skip=false): the individual subtasks were forced to skip_write_txnlog=true
-        //    only so their partial logs could be merged into one (a single tablet+txn has exactly one
-        //    txn log location). There is NO aggregator on this path, so the merged context must carry
-        //    skip=false and we persist the merged log below, exactly as a serial compaction would.
-        const bool req_skip_write_txnlog = callback->skip_write_txnlog();
-        auto merged_context = std::make_unique<CompactionTaskContext>(
-                txn_id, tablet_id, state->version, false /* force_base_compaction */, req_skip_write_txnlog, callback);
-
-        // Copy table_id and partition_id from one of the completed subtask contexts.
-        // These values are populated in TabletManager::compact() from shard info,
-        // and are needed for downstream processes (e.g., metrics, catalog operations).
-        {
-            std::lock_guard<std::mutex> lock(state->mutex);
-            for (const auto& subtask_ctx : state->completed_subtasks) {
-                if (subtask_ctx->table_id != 0) {
-                    merged_context->table_id = subtask_ctx->table_id;
-                }
-                if (subtask_ctx->partition_id != 0) {
-                    merged_context->partition_id = subtask_ctx->partition_id;
-                }
-                // All subtasks belong to the same tablet, so table_id and partition_id
-                // should be the same. Break once we've found valid values.
-                if (merged_context->table_id != 0 && merged_context->partition_id != 0) {
-                    break;
-                }
-            }
-        }
-
-        // Merge TxnLogs
-        auto merged_txn_log_or = get_merged_txn_log(tablet_id, txn_id);
-        if (merged_txn_log_or.ok()) {
-            merged_context->txn_log = std::make_unique<TxnLogPB>(std::move(merged_txn_log_or.value()));
-        } else {
-            merged_context->status = merged_txn_log_or.status();
-        }
-
-        // Set status based on subtask statuses
-        // Support partial success: only fail if ALL subtasks failed
-        {
-            std::lock_guard<std::mutex> lock(state->mutex);
-            int successful_count = 0;
-            int failed_count = 0;
-            Status first_failure;
-
-            for (const auto& subtask_ctx : state->completed_subtasks) {
-                if (subtask_ctx->status.ok()) {
-                    successful_count++;
-                } else {
-                    failed_count++;
-                    if (first_failure.ok()) {
-                        first_failure = subtask_ctx->status;
-                    }
-                }
-                // Merge stats from all subtasks (including failed ones for diagnostic purposes)
-                if (subtask_ctx->stats) {
-                    *(merged_context->stats) = *(merged_context->stats) + *(subtask_ctx->stats);
-                }
-            }
-
-            // Only mark as failed if ALL subtasks failed
-            // If at least one subtask succeeded, the compaction is considered (partially) successful
-            if (successful_count == 0 && failed_count > 0) {
-                merged_context->status = first_failure;
-                LOG(WARNING) << "Parallel compaction failed: all " << failed_count
-                             << " subtasks failed for tablet=" << tablet_id << ", txn_id=" << txn_id
-                             << ", first_error=" << first_failure;
-            } else if (failed_count > 0) {
-                // Partial success: some subtasks failed but at least one succeeded
-                VLOG(1) << "Parallel compaction partial success: tablet=" << tablet_id << ", txn_id=" << txn_id
-                        << ", successful=" << successful_count << ", failed=" << failed_count;
-            }
-        }
-
-        // Persist the merged txn log on the regular (non-aggregate) path.
-        // On this path FE never sets skip_write_txnlog and there is no aggregator to consume
-        // CompactResponse.txn_logs, so if the merged log is not written to object storage here it is
-        // silently dropped: FE still sees an empty failed_tablets and commits the compaction txn, but
-        // the publish daemon later 404s on a txn log that was never written and the txn is stuck in
-        // COMMITTED forever, blocking every subsequent txn on the partition. Writing it here mirrors
-        // what a serial (non-parallel) compaction does in CompactionTask::execute(). put_txn_log()
-        // normalizes the log before saving. On the aggregate/file-bundling path
-        // (req_skip_write_txnlog == true) the log is instead returned via the RPC response and
-        // persisted as a single combined txn log by the aggregator, so we must NOT write it here.
-        if (!req_skip_write_txnlog && merged_context->status.ok() && merged_context->txn_log != nullptr) {
-            if (auto st = _tablet_mgr->put_txn_log(merged_context->txn_log); !st.ok()) {
-                LOG(WARNING) << "Failed to write merged parallel-compaction txn log, tablet=" << tablet_id
-                             << ", txn_id=" << txn_id << ": " << st;
-                merged_context->status.update(st);
-            }
-        }
-
-        // Mark as parallel merged context so that cleanup_tablet will be called
-        // by CompactionScheduler::remove_states after RPC response is sent.
-        // This ensures parallel compaction tasks remain visible in list_tasks
-        // until all tablets complete, consistent with normal compaction behavior.
-        merged_context->is_parallel_merged = true;
-
-        // Set subtask_count to the actual number of subtasks
-        {
-            std::lock_guard<std::mutex> lock(state->mutex);
-            merged_context->subtask_count = static_cast<int32_t>(state->completed_subtasks.size());
-        }
-
-        callback->finish_task(std::move(merged_context));
-        // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
-        // CompactionScheduler::remove_states when RPC response is sent.
+        finalize_tablet_completion(tablet_id, txn_id, state, callback);
     }
+}
+
+// Declares that no further subtasks will be registered for this tablet, then runs the completion
+// transition if every subtask has already finished in the meantime.
+//
+// Sealing is what makes is_complete() trustworthy: while submission is in progress running_subtasks can
+// be empty simply because the next group has not been registered yet. It must therefore happen on EVERY
+// path that stops registering subtasks while leaving some of them running -- the normal end of
+// submission and an exception unwinding out of it -- or the last subtask's completion (which found the
+// tablet unsealed and skipped the transition) would be the last chance anyone had, and the compact RPC
+// would hang forever.
+void TabletParallelCompactionManager::seal_submission(int64_t tablet_id, int64_t txn_id,
+                                                      const std::shared_ptr<TabletParallelCompactionState>& state) {
+    if (state == nullptr) {
+        return;
+    }
+    bool claimed = false;
+    std::shared_ptr<CompactionTaskCallback> callback;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = true;
+        claimed = state->claim_completion();
+        callback = state->callback;
+    }
+    if (claimed && callback) {
+        VLOG(1) << "Parallel compaction: all subtasks already finished when submission was sealed, tablet="
+                << tablet_id << ", txn_id=" << txn_id;
+        finalize_tablet_completion(tablet_id, txn_id, state, callback);
+    }
+}
+
+// Runs the one-time completion transition for a tablet whose parallel subtasks have all finished:
+// merges their txn logs into a single merged context and hands it to the request callback. The caller
+// must already have won TabletParallelCompactionState::claim_completion(), which is what makes this
+// exactly-once; this function itself does not re-check completeness.
+void TabletParallelCompactionManager::finalize_tablet_completion(
+        int64_t tablet_id, int64_t txn_id, const std::shared_ptr<TabletParallelCompactionState>& state,
+        const std::shared_ptr<CompactionTaskCallback>& callback) {
+    // Build merged context.
+    // Honor the ORIGINATING request's skip_write_txnlog intent for the merged log:
+    //  - aggregate/file-bundling path (skip=true): keep skip=true so the merged log is returned
+    //    inline via CompactResponse.txn_logs for the aggregator to combine and persist once;
+    //  - regular path (skip=false): the individual subtasks were forced to skip_write_txnlog=true
+    //    only so their partial logs could be merged into one (a single tablet+txn has exactly one
+    //    txn log location). There is NO aggregator on this path, so the merged context must carry
+    //    skip=false and we persist the merged log below, exactly as a serial compaction would.
+    const bool req_skip_write_txnlog = callback->skip_write_txnlog();
+    auto merged_context = std::make_unique<CompactionTaskContext>(
+            txn_id, tablet_id, state->version, false /* force_base_compaction */, req_skip_write_txnlog, callback);
+
+    // Copy table_id and partition_id from one of the completed subtask contexts.
+    // These values are populated in TabletManager::compact() from shard info,
+    // and are needed for downstream processes (e.g., metrics, catalog operations).
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        for (const auto& subtask_ctx : state->completed_subtasks) {
+            if (subtask_ctx->table_id != 0) {
+                merged_context->table_id = subtask_ctx->table_id;
+            }
+            if (subtask_ctx->partition_id != 0) {
+                merged_context->partition_id = subtask_ctx->partition_id;
+            }
+            // All subtasks belong to the same tablet, so table_id and partition_id
+            // should be the same. Break once we've found valid values.
+            if (merged_context->table_id != 0 && merged_context->partition_id != 0) {
+                break;
+            }
+        }
+    }
+
+    // Merge TxnLogs
+    auto merged_txn_log_or = get_merged_txn_log(tablet_id, txn_id);
+    if (merged_txn_log_or.ok()) {
+        merged_context->txn_log = std::make_unique<TxnLogPB>(std::move(merged_txn_log_or.value()));
+    } else {
+        merged_context->status = merged_txn_log_or.status();
+    }
+
+    // Set status based on subtask statuses
+    // Support partial success: only fail if ALL subtasks failed
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        int successful_count = 0;
+        int failed_count = 0;
+        Status first_failure;
+
+        for (const auto& subtask_ctx : state->completed_subtasks) {
+            if (subtask_ctx->status.ok()) {
+                successful_count++;
+            } else {
+                failed_count++;
+                if (first_failure.ok()) {
+                    first_failure = subtask_ctx->status;
+                }
+            }
+            // Merge stats from all subtasks (including failed ones for diagnostic purposes)
+            if (subtask_ctx->stats) {
+                *(merged_context->stats) = *(merged_context->stats) + *(subtask_ctx->stats);
+            }
+        }
+
+        // Only mark as failed if ALL subtasks failed
+        // If at least one subtask succeeded, the compaction is considered (partially) successful
+        if (successful_count == 0 && failed_count > 0) {
+            merged_context->status = first_failure;
+            LOG(WARNING) << "Parallel compaction failed: all " << failed_count
+                         << " subtasks failed for tablet=" << tablet_id << ", txn_id=" << txn_id
+                         << ", first_error=" << first_failure;
+        } else if (failed_count > 0) {
+            // Partial success: some subtasks failed but at least one succeeded
+            VLOG(1) << "Parallel compaction partial success: tablet=" << tablet_id << ", txn_id=" << txn_id
+                    << ", successful=" << successful_count << ", failed=" << failed_count;
+        }
+    }
+
+    // Persist the merged txn log on the regular (non-aggregate) path.
+    // On this path FE never sets skip_write_txnlog and there is no aggregator to consume
+    // CompactResponse.txn_logs, so if the merged log is not written to object storage here it is
+    // silently dropped: FE still sees an empty failed_tablets and commits the compaction txn, but
+    // the publish daemon later 404s on a txn log that was never written and the txn is stuck in
+    // COMMITTED forever, blocking every subsequent txn on the partition. Writing it here mirrors
+    // what a serial (non-parallel) compaction does in CompactionTask::execute(). put_txn_log()
+    // normalizes the log before saving. On the aggregate/file-bundling path
+    // (req_skip_write_txnlog == true) the log is instead returned via the RPC response and
+    // persisted as a single combined txn log by the aggregator, so we must NOT write it here.
+    if (!req_skip_write_txnlog && merged_context->status.ok() && merged_context->txn_log != nullptr) {
+        if (auto st = _tablet_mgr->put_txn_log(merged_context->txn_log); !st.ok()) {
+            LOG(WARNING) << "Failed to write merged parallel-compaction txn log, tablet=" << tablet_id
+                         << ", txn_id=" << txn_id << ": " << st;
+            merged_context->status.update(st);
+        }
+    }
+
+    // Mark as parallel merged context so that cleanup_tablet will be called
+    // by CompactionScheduler::remove_states after RPC response is sent.
+    // This ensures parallel compaction tasks remain visible in list_tasks
+    // until all tablets complete, consistent with normal compaction behavior.
+    merged_context->is_parallel_merged = true;
+
+    // Set subtask_count to the actual number of subtasks
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        merged_context->subtask_count = static_cast<int32_t>(state->completed_subtasks.size());
+    }
+
+    callback->finish_task(std::move(merged_context));
+    // Note: Do NOT call cleanup_tablet here. The cleanup will be done by
+    // CompactionScheduler::remove_states when RPC response is sent.
 }
 
 bool TabletParallelCompactionManager::is_tablet_complete(int64_t tablet_id, int64_t txn_id) {
@@ -2323,6 +2368,11 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
 
     VLOG(1) << "Parallel compaction: successfully created " << subtasks_created << " subtasks for tablet " << tablet_id
             << ", txn_id=" << txn_id << ", total_bytes=" << submitted_bytes;
+
+    // No more subtasks will be registered for this tablet. Any subtask that finished while the remaining
+    // groups were still being registered deliberately skipped the completion transition, so this is where
+    // it gets run if they have all finished already.
+    seal_submission(tablet_id, txn_id, state_ptr);
 
     return subtasks_created;
 }
