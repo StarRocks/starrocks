@@ -245,7 +245,7 @@ let
       sha256 = "12zlqlp7j3fri1bvwfpz7637cvf6iv7mq18j54imxcs48y814xak";
     };
     "lzo-2.10.tar.gz" = {
-      url = "http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
+      url = "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
       md5 = "39d3f3f9c55c87b1e5d6888e1420f4b5";
       sha256 = "0wm04519pd3g8hqpjqhfr72q8qmbiwqaxcs3cndny9h86aa95y60";
     };
