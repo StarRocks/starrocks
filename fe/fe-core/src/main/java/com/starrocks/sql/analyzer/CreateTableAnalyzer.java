@@ -416,6 +416,11 @@ public class CreateTableAnalyzer {
         for (int i = keysColumnNames.size(); i < columnDefs.size(); ++i) {
             if (keysType == KeysType.AGG_KEYS) {
                 if (columnDefs.get(i).getAggregateType() == null) {
+                    if (columnDefs.get(i).isGeneratedColumn()) {
+                        // let analyzeGeneratedColumnForOlap report the real reason instead of asking
+                        // the user to put an aggregate type on a column they did not declare
+                        continue;
+                    }
                     throw new SemanticException(keysType.name() + " table should specify aggregate type for "
                             + "non-key column[" + columnDefs.get(i).getName() + "]");
                 }
@@ -653,9 +658,19 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
                 }
+                // An AGG_KEYS table requires an aggregate type on every non-key column. The generated
+                // partition column is always functionally determined by the key columns, because
+                // PartitionDescAnalyzer#analyzeListPartitionExprs rejects partition expressions that
+                // reference an aggregated column. All rows merged into one aggregate group therefore
+                // carry the same value here, which makes REPLACE an identity operation. This mirrors
+                // what MaterializedViewAnalyzer#genGeneratedPartitionColumn does for non-DUP views.
+                AggregateType generatedAggregateType = null;
+                if (stmt.getKeysDesc() != null && stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS) {
+                    generatedAggregateType = AggregateType.REPLACE;
+                }
                 // generated column expression should be saved in unanalyzed way in meta
                 ColumnDef generatedPartitionColumn = new ColumnDef(
-                        columnName, typeDef, null, false, null, null, true,
+                        columnName, typeDef, null, false, generatedAggregateType, null, true,
                         ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
                 columnDefs.add(generatedPartitionColumn);
                 partitionExprs.add((FunctionCallExpr) partitionExpr);
@@ -682,20 +697,15 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof RangePartitionDesc ||
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
+                    // Expression partitioning based on a generated column is allowed for every keys
+                    // type: analyzeListPartitionExprs below rejects a partition expression that
+                    // references an aggregated column, so the generated column stays functionally
+                    // determined by the aggregate group it belongs to.
                     try {
                         PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
                                 stmt.getKeysDesc().getKeysType());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
-                    }
-                    if (partitionDesc instanceof ListPartitionDesc) {
-                        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
-                        if (listPartitionDesc.getPartitionExprs() != null && !listPartitionDesc.getPartitionExprs().isEmpty()
-                                && (stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS
-                                || stmt.getKeysDesc().getKeysType() == KeysType.UNIQUE_KEYS)) {
-                            throw new SemanticException("expression partition base on generated column"
-                                    + " doest not support AGG_KEYS or UNIQUE_KEYS", partitionDesc.getPos());
-                        }
                     }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
@@ -852,7 +862,15 @@ public class CreateTableAnalyzer {
     private static void analyzeGeneratedColumnForOlap(CreateTableStmt stmt, ConnectContext context) {
         KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
         if (keysDesc.getKeysType() == KeysType.AGG_KEYS) {
-            throw new SemanticException("Generated Column does not support AGG table");
+            // A user defined generated column may reference value columns, whose value is only decided
+            // after aggregation, so it stays unsupported on AGG tables. The internal partition column
+            // may only reference key columns, so it is well defined and allowed.
+            boolean allGeneratedColumnsArePartitionColumns = stmt.getColumns().stream()
+                    .filter(Column::isGeneratedColumn)
+                    .allMatch(Column::isGeneratedPartitionColumn);
+            if (!allGeneratedColumnsArePartitionColumns) {
+                throw new SemanticException("Generated Column does not support AGG table");
+            }
         }
 
         final com.starrocks.catalog.TableName tableNameObject = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
