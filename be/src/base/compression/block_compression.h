@@ -45,8 +45,8 @@
 
 namespace starrocks {
 
-// compression dict column-level compression dictionary (a ZSTD dictionary) handles. Forward-declared (defined in
-// zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
+// Handles for the per-column ZSTD compression dictionary. Forward-declared (defined
+// in zstd_dict.h) so this widely-included header does not pull in <zstd.h>.
 namespace compression {
 class ZstdCDict;
 class ZstdDDict;

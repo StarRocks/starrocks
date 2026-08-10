@@ -296,7 +296,7 @@ private:
     [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
-    // compression dict column-level compression dictionary (a ZSTD dictionary) (read side). Copied from
+    // Read side of the per-column ZSTD compression dictionary. Copied from
     // ColumnMetaPB.zstd_compression_dict_page in _init (size 0 when the column has none).
     // The DDict is built once per (segment, column) and then referenced on every
     // data-page decompression.

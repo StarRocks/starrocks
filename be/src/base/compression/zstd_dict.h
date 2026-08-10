@@ -32,8 +32,8 @@ typedef struct ZSTD_DDict_s ZSTD_DDict;
 
 namespace starrocks::compression {
 
-// RAII wrapper around a ZSTD compression dictionary (compression dict column-level shared
-// dictionary). Built from a raw-content sample with a baked-in compression
+// RAII wrapper around the compression side of a per-column ZSTD dictionary.
+// Built from a raw-content sample with a baked-in compression
 // level. Held by the writer and passed per-page into the codec via
 // ZSTD_CCtx_refCDict; never enters the shared context pool.
 class ZstdCDict {

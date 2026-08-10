@@ -49,7 +49,7 @@ static constexpr size_t kMaxTrainedDictSize = 16 * 1024 * 1024;
 
 StatusOr<std::unique_ptr<ZstdCDict>> ZstdCDict::create(const Slice& dict_bytes, int level, bool trained) {
     if (dict_bytes.size == 0) {
-        return Status::InvalidArgument("cannot build shared ZSTD dict from empty bytes");
+        return Status::InvalidArgument("cannot build a ZSTD compression dictionary from empty bytes");
     }
     // level == -1 means "unset"; a CDict must bake a concrete level because the
     // per-page compress path skips ZSTD_c_compressionLevel once a CDict is
@@ -71,7 +71,7 @@ StatusOr<std::unique_ptr<ZstdCDict>> ZstdCDict::create(const Slice& dict_bytes, 
 StatusOr<std::string> ZstdCDict::train(const Slice& sample_buf, const std::vector<size_t>& sample_sizes,
                                        size_t max_dict_size) {
     if (sample_buf.size == 0 || sample_sizes.empty()) {
-        return Status::InvalidArgument("no samples to train a shared ZSTD dict from");
+        return Status::InvalidArgument("no samples to train a ZSTD compression dictionary from");
     }
     // ZDICT needs a meaningful amount of material; below this it reliably fails
     // (and a tiny dictionary would not pay for itself anyway).
@@ -122,7 +122,7 @@ ZstdCDict::~ZstdCDict() {
 
 StatusOr<std::unique_ptr<ZstdDDict>> ZstdDDict::create(const Slice& dict_bytes, bool trained) {
     if (dict_bytes.size == 0) {
-        return Status::InvalidArgument("cannot build shared ZSTD ddict from empty bytes");
+        return Status::InvalidArgument("cannot build a ZSTD decompression dictionary from empty bytes");
     }
     const ZSTD_dictContentType_e content_type = trained ? ZSTD_dct_auto : ZSTD_dct_rawContent;
     ZSTD_DDict* d = ZSTD_createDDict_advanced(dict_bytes.data, dict_bytes.size, ZSTD_dlm_byCopy, content_type,
