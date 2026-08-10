@@ -194,12 +194,20 @@ CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
 PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
 -- !result
-shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:Column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:colunm" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
 -- result:
 0
 {
     "Status": "Fail",
-    "Message": "Unknown partial_update_mode: Column (expected one of: row, column, auto, flexible, flexible_row)"
+    "Message": "Unknown partial_update_mode: colunm (expected one of: row, column, auto, flexible, flexible_row)"
+}
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:Column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
 }
 -- !result
 drop database test_sdcg_badmode force;
