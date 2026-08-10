@@ -150,13 +150,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 // cannot leave them describing different layouts.
                 int computeNodeCount = reshardEligible
                         ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
+                // One sample of the split cap too, for the same reason as the node count: reading it
+                // separately for the floor and the ceiling lets a config change land between the two
+                // and yield a floor above the ceiling, which is exactly the overlap that lets one scan
+                // emit both a merge and an early-split signal for the same index.
+                int maxSplitCount = Config.tablet_reshard_max_split_count;
                 int parallelismFloor = computeNodeCount == 0 ? 0
-                        : TabletReshardUtils.parallelismFloor(computeNodeCount,
-                                Config.tablet_reshard_max_split_count);
+                        : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
                 // No zero guard here, unlike the floor above: the ceiling is bounded by the node count,
                 // so an unresolved count already yields 0 and leaves no index under-provisioned.
-                int earlySplitCeiling = TabletReshardUtils.earlySplitCeiling(computeNodeCount,
-                        Config.tablet_reshard_max_split_count);
+                int earlySplitCeiling = TabletReshardUtils.earlySplitCeiling(computeNodeCount, maxSplitCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {

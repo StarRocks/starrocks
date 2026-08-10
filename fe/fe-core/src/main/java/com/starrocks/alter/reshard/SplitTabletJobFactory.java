@@ -553,8 +553,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                                 : EarlySplitPolicy.disabled();
 
                 // Pass 1: every index's baseline (today's plan) and its early plan. No id is allocated.
-                Map<MaterializedIndex, Map<Long, Integer>> baselines = new LinkedHashMap<>();
-                Map<MaterializedIndex, Map<Long, Integer>> earlyPlans = new LinkedHashMap<>();
+                // Held in a list rather than keyed by MaterializedIndex: that class hashes on its tablet
+                // map and compares mutable row counts, so as a key it works only because tablet hashes
+                // are id-based and both loops see the same object references. A list needs neither
+                // accident, and costs nothing here.
+                record IndexPlans(MaterializedIndex index, Map<Long, Integer> baseline,
+                                  Map<Long, Integer> withEarly) {
+                }
+                List<IndexPlans> plans = new ArrayList<>();
                 long baselineTopology = 0L;
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     for (MaterializedIndex oldIndex :
@@ -565,8 +571,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                                 "Invalid tablet_reshard_target_size: " + clauseTargetSize);
                         Map<Long, Integer> baseline =
                                 planIndexSplits(oldIndex, clauseTargetSize, EarlySplitPolicy.disabled());
-                        baselines.put(oldIndex, baseline);
-                        earlyPlans.put(oldIndex, planIndexSplits(oldIndex, clauseTargetSize, policy));
+                        plans.add(new IndexPlans(oldIndex, baseline,
+                                planIndexSplits(oldIndex, clauseTargetSize, policy)));
                         baselineTopology += replacementTabletCount(oldIndex, baseline);
                     }
                 }
@@ -574,25 +580,27 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 // Pass 2: spend only what the complete baseline leaves. The baseline itself is never
                 // trimmed — a purely size-driven plan may exceed the cap, exactly as today.
                 long earlyBudget = Config.tablet_reshard_max_parallel_tablets - baselineTopology;
-                Map<MaterializedIndex, Map<Long, Integer>> chosen = new LinkedHashMap<>();
-                for (Map.Entry<MaterializedIndex, Map<Long, Integer>> entry : baselines.entrySet()) {
-                    MaterializedIndex oldIndex = entry.getKey();
-                    Map<Long, Integer> baseline = entry.getValue();
-                    Map<Long, Integer> withEarly = earlyPlans.get(oldIndex);
-                    long delta = replacementTabletCount(oldIndex, withEarly)
-                            - replacementTabletCount(oldIndex, baseline);
+                Map<Long, Map<Long, Integer>> chosen = new LinkedHashMap<>();
+                for (IndexPlans plan : plans) {
+                    MaterializedIndex oldIndex = plan.index();
+                    long delta = replacementTabletCount(oldIndex, plan.withEarly())
+                            - replacementTabletCount(oldIndex, plan.baseline());
                     if (delta > 0 && delta <= earlyBudget) {
-                        chosen.put(oldIndex, withEarly);
+                        chosen.put(oldIndex.getId(), plan.withEarly());
                         earlyBudget -= delta;
                     } else {
                         if (delta > 0) {
+                            // "Replacement tablets" counts split children plus the untouched siblings
+                            // they ship alongside, so this budget is stricter than the admission check,
+                            // which counts split children only.
                             LOG.info("Deferred early split for index {} of table {}.{}: it needs {} more "
-                                            + "replacement tablets than the baseline, and only {} remain "
-                                            + "within tablet_reshard_max_parallel_tablets {}",
+                                            + "replacement tablets (siblings included) than the baseline, "
+                                            + "and only {} remain within "
+                                            + "tablet_reshard_max_parallel_tablets {}",
                                     oldIndex.getId(), db.getFullName(), table.getName(), delta, earlyBudget,
                                     Config.tablet_reshard_max_parallel_tablets);
                         }
-                        chosen.put(oldIndex, baseline);
+                        chosen.put(oldIndex.getId(), plan.baseline());
                     }
                 }
 
@@ -601,7 +609,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex :
                             physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        Map<Long, Integer> splitCounts = chosen.getOrDefault(oldIndex, Map.of());
+                        Map<Long, Integer> splitCounts = chosen.getOrDefault(oldIndex.getId(), Map.of());
                         if (splitCounts.isEmpty()) {
                             continue;
                         }
