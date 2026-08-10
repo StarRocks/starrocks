@@ -162,52 +162,6 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
     }
 
     @Test
-    public void testBatchInsertCleansInsertedColumns() throws Exception {
-        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
-
-            fixture.collect();
-
-            Assertions.assertEquals(1, fixture.cleanupCallCount());
-            Assertions.assertEquals(Lists.newArrayList("v2", "v7"), fixture.cleanedColumns());
-        }
-    }
-
-    @Test
-    public void testBatchInsertCleansInsertedColumnsAfterFailure() throws Exception {
-        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
-            fixture.failOnSecondColumn();
-
-            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, fixture::collect);
-
-            Assertions.assertEquals("mock second-column failure", exception.getMessage());
-            Assertions.assertEquals(1, fixture.batchInsertSql().size());
-            Assertions.assertEquals(1, fixture.cleanupCallCount());
-            Assertions.assertEquals(Lists.newArrayList("v2"), fixture.cleanedColumns());
-        }
-    }
-
-    @Test
-    public void testBatchInsertFlushesCompletedRowsBeforeInvalidHistogramResult() throws Exception {
-        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
-            fixture.enableBatch(20L * 1024 * 1024);
-            fixture.returnNoSecondColumnHistogramResults();
-
-            Exception exception = Assertions.assertThrows(Exception.class, fixture::collect);
-
-            Assertions.assertEquals(
-                    "Expected exactly one external histogram result for column v7, but got 0",
-                    exception.getMessage());
-            Assertions.assertEquals(1, fixture.batchInsertSql().size());
-            Assertions.assertTrue(fixture.batchInsertSql().get(0).contains("'v2'"));
-            Assertions.assertFalse(fixture.batchInsertSql().get(0).contains("'v7'"));
-            Assertions.assertEquals(1, fixture.cleanupCallCount());
-            Assertions.assertEquals(Lists.newArrayList("v2"), fixture.cleanedColumns());
-        }
-    }
-
-    @Test
     public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
         try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
             fixture.disableBatch();

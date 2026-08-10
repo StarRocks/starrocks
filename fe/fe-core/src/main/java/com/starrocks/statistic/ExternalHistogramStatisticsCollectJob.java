@@ -163,60 +163,55 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         long bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         long bufferLimit = Math.max(1, Config.histogram_batch_insert_buffer_size);
 
-        try {
-            for (int i = 0; i < columnNames.size(); i++) {
-                String columnName = columnNames.get(i);
-                Type columnType = columnTypes.get(i);
-                List<Expr> row;
-                String rowSql;
-                long rowSize;
-                try {
-                    List<TStatisticData> mcv = queryStatisticSync(
-                            buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
-                    Map<String, String> mostCommonValues = new HashMap<>();
-                    for (TStatisticData tStatisticData : mcv) {
-                        mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
-                    }
-
-                    String histogramQuery = buildQueryHistogram(
-                            db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
-                    String buckets = getSingleHistogramResult(
-                            queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
-                    String mcvJson = buildMcvJson(mostCommonValues);
-                    row = buildBatchInsertRow(columnName, buckets, mcvJson);
-                    rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
-                    rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
-                } catch (Exception collectionFailure) {
-                    flushBatchInsertOnCollectionFailure(
-                            rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns,
-                            context, analyzeStatus, columnName, collectionFailure);
-                    throw collectionFailure;
+        for (int i = 0; i < columnNames.size(); i++) {
+            String columnName = columnNames.get(i);
+            Type columnType = columnTypes.get(i);
+            List<Expr> row;
+            String rowSql;
+            long rowSize;
+            try {
+                List<TStatisticData> mcv = queryStatisticSync(
+                        buildCollectMCV(db, table, mcvSize, columnName), context, analyzeStatus);
+                Map<String, String> mostCommonValues = new HashMap<>();
+                for (TStatisticData tStatisticData : mcv) {
+                    mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
                 }
 
-                if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
-                    flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-                    bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-                    rowSize = utf8Length(rowSql);
-                }
-
-                rowsBuffer.add(row);
-                sqlBuffer.add(rowSql);
-                columnsBuffer.add(columnName);
-                bufferSize += rowSize;
-                if (bufferSize >= bufferLimit) {
-                    flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-                    bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
-                }
-
-                analyzeStatus.setProgress((i + 1) * 99L / columnNames.size());
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+                String histogramQuery = buildQueryHistogram(
+                        db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
+                String buckets = getSingleHistogramResult(
+                        queryStatisticSync(histogramQuery, context, analyzeStatus), columnName).histogram;
+                String mcvJson = buildMcvJson(mostCommonValues);
+                row = buildBatchInsertRow(columnName, buckets, mcvJson);
+                rowSql = buildBatchInsertRowSql(columnName, buckets, mcvJson);
+                rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
+            } catch (Exception collectionFailure) {
+                flushBatchInsertOnCollectionFailure(
+                        rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns,
+                        context, analyzeStatus, columnName, collectionFailure);
+                throw collectionFailure;
             }
 
-            flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
-        } finally {
-            cleanupInsertedRawHistogramRows(context, insertedColumns);
+            if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
+                flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
+                bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+                rowSize = utf8Length(rowSql);
+            }
+
+            rowsBuffer.add(row);
+            sqlBuffer.add(rowSql);
+            columnsBuffer.add(columnName);
+            bufferSize += rowSize;
+            if (bufferSize >= bufferLimit) {
+                flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
+                bufferSize = batchInsertPrefixSize(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+            }
+
+            analyzeStatus.setProgress((i + 1) * 99L / columnNames.size());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
+        flushBatchInsert(rowsBuffer, sqlBuffer, columnsBuffer, insertedColumns, context, analyzeStatus);
         analyzeStatus.setProgress(100);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
     }
