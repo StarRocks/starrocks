@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -186,9 +187,41 @@ static std::optional<std::string> encode_full_sort_key_search_key(Segment* segme
     for (size_t i = 0; i < key.columns(); i++) {
         values.push_back(key.get(i));
     }
+    // Captured before segment_schema is moved into the tuple, so the diagnostic below can name both
+    // shapes.
+    auto type_list = [](const Schema& schema, size_t upto) {
+        std::string out;
+        for (size_t i = 0; i < upto && i < schema.num_fields(); i++) {
+            out.append(out.empty() ? "" : ",")
+                    .append(std::to_string(static_cast<int>(schema.field(i)->type()->type())));
+        }
+        return out;
+    };
+    const std::string key_types = type_list(key.schema(), key.columns());
+    const std::string segment_types = type_list(segment_schema, segment->num_sort_key_columns());
+
     SeekTuple segment_key(std::move(segment_schema), std::move(values));
-    return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
-                                            lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    // full_sort_key_types_compatible() above only compares the two schemas' declared logical types.
+    // That is not sufficient: a datum carried by |key| can hold a different variant alternative than
+    // the schema declares, and the encoder dispatches std::get on the segment schema's type. The
+    // mismatch throws std::bad_variant_access, and on the publish path (primary index rebuild ->
+    // scan_one_rebuild_unit -> _apply_tablet_range) nothing catches it, so the BE aborts. Observed on
+    // a range-bucket primary-key table whose ORDER BY differs from the primary key: three CNs died in
+    // a loop, each restart re-running the same publish.
+    //
+    // std::nullopt is this function's documented "cannot produce compatible bytes" answer -- the
+    // caller then skips the coarse short-key prune and lets the typed fine search decide -- so it is
+    // both the safe and the correct outcome here.
+    try {
+        return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
+                                                lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    } catch (const std::exception& e) {
+        LOG_EVERY_N(WARNING, 100) << "Skipping coarse short-key prune: full sort key encode failed: " << e.what()
+                                  << ", key_columns=" << key.columns()
+                                  << ", segment_sort_key_columns=" << segment->num_sort_key_columns() << ", key_types=["
+                                  << key_types << "], segment_types=[" << segment_types << "]";
+        return std::nullopt;
+    }
 }
 
 class SegmentIterator final : public ChunkIterator {
