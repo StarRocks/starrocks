@@ -2314,4 +2314,25 @@ TEST(TabletSplitterTest, DataDrivenSplit_RejectsInheritedBoundWithWrongArity) {
     EXPECT_NE(std::string_view::npos, st.message().find("sort key has 2 columns")) << st;
 }
 
+// Corrupt metadata whose sort_key_idxes points past the column list must come back as a recoverable
+// Status, not an abort. The bounds check therefore has to run on the raw protobuf: TabletSchema's
+// _init_from_pb consumes sort_key_idxes first and indexes both schema.column(cid) and _cols[cid]
+// without checking, so validating after materialization would be too late.
+TEST(TabletSplitterTest, SortKeyProjection_RejectsOutOfRangeSortKeyIdxWithoutAborting) {
+    auto m = make_trailing_key_added_metadata({
+            std::make_tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>(1, 0, 400, 500, 5000),
+    });
+    ASSERT_EQ(2, m->schema().column_size());
+    m->mutable_schema()->clear_sort_key_idxes();
+    m->mutable_schema()->add_sort_key_idxes(0);
+    m->mutable_schema()->add_sort_key_idxes(5); // out of range
+    ASSERT_TRUE(m->schema().sort_key_unique_ids().empty());
+
+    std::vector<SegmentSplitInfo> segments;
+    auto st = build_segments_from_rowsets(/*tablet_manager=*/nullptr, m, &segments);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_NE(std::string_view::npos, st.message().find("out of range")) << st;
+}
+
 } // namespace starrocks::lake

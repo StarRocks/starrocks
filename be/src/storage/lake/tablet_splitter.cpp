@@ -317,14 +317,25 @@ public:
     // metadata) cannot DCHECK-abort, while still applying the "empty sort_key_idxes => sort key is the
     // key columns" convention that the FE mirrors in MetaUtils.getRangeDistributionColumns.
     static StatusOr<SortKeyProjection> create(const TabletSchemaPB& schema_pb) {
+        // Bounds-check the raw sort_key_idxes BEFORE materializing TabletSchema: _init_from_pb consumes
+        // them first, indexing both schema.column(cid) and _cols[cid] with no bounds check of its own,
+        // so an out-of-range entry would abort (or write out of bounds in a release build) before we
+        // could report it. Only the branch _init_from_pb actually takes is validated -- a non-empty
+        // sort_key_unique_ids makes it resolve the sort key by unique id and ignore sort_key_idxes
+        // entirely, and those resolved indexes are in range by construction, as is the
+        // "both empty => key columns" fallback.
+        if (schema_pb.sort_key_unique_ids().empty()) {
+            for (const int32_t cid : schema_pb.sort_key_idxes()) {
+                if (cid < 0 || cid >= schema_pb.column_size()) {
+                    return Status::Corruption(fmt::format("Sort key index {} out of range, column size {}", cid,
+                                                          schema_pb.column_size()));
+                }
+            }
+        }
         auto schema = TabletSchema::create(schema_pb);
         SortKeyProjection projection;
         projection._null_by_position.reserve(schema->sort_key_idxes().size());
         for (const ColumnId cid : schema->sort_key_idxes()) {
-            if (cid >= schema->num_columns()) {
-                return Status::Corruption(
-                        fmt::format("Sort key index {} out of range, num_columns {}", cid, schema->num_columns()));
-            }
             auto type_info = get_type_info(schema->column(cid));
             if (type_info == nullptr) {
                 return Status::InternalError(fmt::format("Unsupported sort key column type: {}",
