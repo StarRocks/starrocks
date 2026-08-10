@@ -140,13 +140,24 @@ public class IVMAnalyzerPrimaryKeyBaseTest extends BookmarkTestBase {
                     + "| row id that cannot be forwarded",
             "SELECT id, val FROM D.base_pk_cdc UNION ALL SELECT k, v FROM D.base_dup "
                     + "| mixes a retractable cloud-native PRIMARY KEY branch with an append-only branch",
-            "SELECT a.id, sum(a.val) AS s FROM D.base_pk_cdc a INNER JOIN D.base_dup b ON a.id = b.k GROUP BY a.id "
-                    + "| retractable aggregate requires every base to be a cloud-native PRIMARY KEY table",
     })
     public void testOtherRowIdlessShapesKeepTheirOwnReason(String query, String expectedReason) {
         Exception ex = assertThrows(Exception.class, () -> runIvmAnalyzer(createMvDdl("mv_other", query)));
         assertTrue(ex.getMessage().contains(expectedReason),
                 "expected reason <" + expectedReason + "> but got: " + ex.getMessage());
+    }
+
+    /** CREATE-time trial validation runs after target schema and distribution normalization. */
+    @Test
+    public void testRetractableAggregateWithNonPrimaryKeyBaseKeepsTrialReason() {
+        String query = "SELECT a.id, sum(a.val) AS s FROM D.base_pk_cdc a "
+                + "INNER JOIN D.base_dup b ON a.id = b.k GROUP BY a.id";
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> analyzeMvDdl(createMvDdl("mv_other", query)));
+        assertTrue(ex.getMessage().contains(
+                        "retractable aggregate requires every base to be a cloud-native PRIMARY KEY table"),
+                "expected the CREATE-time trial reason but got: " + ex.getMessage());
     }
 
     private static String createMvDdl(String mvName, String query) {
@@ -217,15 +228,23 @@ public class IVMAnalyzerPrimaryKeyBaseTest extends BookmarkTestBase {
      * for incremental maintenance (throwing the SemanticException the production code throws).
      */
     private static void runIvmAnalyzer(String ddl) throws Exception {
-        StatementBase parsed = SqlParser.parse(ddl,
-                connectContext.getSessionVariable().getSqlMode()).get(0);
-        assertTrue(parsed instanceof CreateMaterializedViewStatement,
-                "expected CreateMaterializedViewStatement but got " + parsed.getClass().getSimpleName());
-        CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) parsed;
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
         QueryStatement qs = stmt.getQueryStatement();
         Analyzer.analyze(qs, connectContext);
 
         IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
         analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+    }
+
+    private static void analyzeMvDdl(String ddl) {
+        Analyzer.analyze(parseMvDdl(ddl), connectContext);
+    }
+
+    private static CreateMaterializedViewStatement parseMvDdl(String ddl) {
+        StatementBase parsed = SqlParser.parse(ddl,
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        assertTrue(parsed instanceof CreateMaterializedViewStatement,
+                "expected CreateMaterializedViewStatement but got " + parsed.getClass().getSimpleName());
+        return (CreateMaterializedViewStatement) parsed;
     }
 }
