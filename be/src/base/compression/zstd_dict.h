@@ -96,6 +96,11 @@ public:
     // hit and decode against the wrong -- possibly freed -- dictionary.
     uint64_t id() const { return _id; }
 
+    // Bytes this dictionary actually occupies (ZSTD_sizeof_DDict). A DDict copies
+    // the dictionary content, and it is held for as long as the ColumnReader that
+    // built it, so the segment's memory accounting has to know about it.
+    size_t mem_usage() const;
+
 private:
     explicit ZstdDDict(ZSTD_DDict* d);
     ZSTD_DDict* _dict = nullptr;

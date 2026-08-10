@@ -904,6 +904,23 @@ TEST_F(BlockCompressionTest, dict_decompress_failure_does_not_poison_the_thread)
 // absurd would otherwise reach std::string::resize on a flush or compaction
 // thread -- an allocation failure where the documented behaviour is "give up and
 // write without a dictionary".
+// The segment metacache sizes itself from what the readers report, and a DDict is
+// held for as long as the reader that built it. So its reported size has to be
+// real: roughly the dictionary it copied, and it has to grow with it.
+TEST_F(BlockCompressionTest, ddict_reports_its_memory) {
+    size_t last = 0;
+    for (size_t dict_size : {4096UL, 64UL * 1024, 256UL * 1024}) {
+        std::string sample = generate_str(dict_size);
+        auto dd = compression::ZstdDDict::create(Slice(sample));
+        ASSERT_TRUE(dd.ok());
+        const size_t reported = dd.value()->mem_usage();
+        EXPECT_GE(reported, dict_size) << "dict_size " << dict_size;
+        EXPECT_LT(reported, dict_size * 2 + 128 * 1024) << "dict_size " << dict_size;
+        EXPECT_GT(reported, last) << "dict_size " << dict_size;
+        last = reported;
+    }
+}
+
 TEST_F(BlockCompressionTest, dict_builders_reject_bad_input) {
     // empty dictionary bytes
     ASSERT_FALSE(compression::ZstdCDict::create(Slice(), /*level=*/3).ok());

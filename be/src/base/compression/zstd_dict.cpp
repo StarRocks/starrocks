@@ -139,6 +139,10 @@ std::atomic<uint64_t> g_ddict_id_seq{1};
 
 ZstdDDict::ZstdDDict(ZSTD_DDict* d) : _dict(d), _id(g_ddict_id_seq.fetch_add(1, std::memory_order_relaxed)) {}
 
+size_t ZstdDDict::mem_usage() const {
+    return _dict != nullptr ? ZSTD_sizeof_DDict(_dict) : 0;
+}
+
 ZstdDDict::~ZstdDDict() {
     if (_dict != nullptr) {
         ZSTD_freeDDict(_dict);

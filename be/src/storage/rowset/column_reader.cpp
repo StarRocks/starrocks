@@ -533,6 +533,13 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                             auto ddict_or = compression::ZstdDDict::create(body, _zstd_compression_dict_trained);
                             RETURN_IF_ERROR(ddict_or.status());
                             _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
+                            // The DDict holds its own copy of the dictionary and lives as long
+                            // as this reader does, which for a cached segment means as long as
+                            // the segment stays in the metacache. Report it the way every other
+                            // lazily loaded per-column structure here does, or the metacache
+                            // sizes itself against a number that leaves these dictionaries out.
+                            _meta_mem_usage.fetch_add(_zstd_compression_ddict->mem_usage(), std::memory_order_relaxed);
+                            _segment->update_cache_size();
                             return Status::OK();
                         })
             .status();
