@@ -348,9 +348,9 @@ The following Stream Load properties are used to control the Merge Commit behavi
 | DATE                              | DATE                  |
 | TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME              |
 | TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME              |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;        |
-| MAP&lt;KT,VT&gt;                  | JSON STRING           |
-| ROW&lt;arg T...&gt;               | JSON STRING           |
+| ARRAY`<`T`>`                    | ARRAY`<`T`>`        |
+| MAP`<`KT,VT`>`                  | JSON STRING           |
+| ROW`<`arg T...`>`               | JSON STRING           |
 
 ## Usage notes
 
