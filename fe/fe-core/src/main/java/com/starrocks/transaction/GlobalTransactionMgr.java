@@ -101,6 +101,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     // ExplicitTxnStateItem, and the transaction state is recorded in TransactionState.
     private final Map<Long, ExplicitTxnState> explicitTxnStateMap = Maps.newConcurrentMap();
 
+    // Serializes the registration of explicit transaction states. `explicitTxnStateMap` itself is concurrent, but
+    // `BEGIN WITH LABEL` has to verify that the label is unused and publish the new state as a single atomic step:
+    // without this lock two concurrent sessions can both pass the uniqueness check before either of them publishes,
+    // and both `BEGIN` succeed with the same label.
+    private final Object explicitTxnStateLock = new Object();
+
     private final GlobalStateMgr globalStateMgr;
 
     public GlobalTransactionMgr(GlobalStateMgr globalStateMgr) {
@@ -137,17 +143,39 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     public void addTransactionState(long txnId, ExplicitTxnState explicitTxnState) {
-        explicitTxnStateMap.put(txnId, explicitTxnState);
+        synchronized (explicitTxnStateLock) {
+            explicitTxnStateMap.put(txnId, explicitTxnState);
+        }
+    }
+
+    /**
+     * Register an explicit transaction state, after checking that its label is not already used by another
+     * transaction in the cluster. The check and the registration are done atomically, so that concurrent
+     * `BEGIN WITH LABEL <same label>` from different sessions can not both succeed.
+     *
+     * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction. In that
+     *                                   case the state is not registered.
+     */
+    public void addTransactionStateWithLabelCheck(long txnId, ExplicitTxnState explicitTxnState)
+            throws LabelAlreadyUsedException {
+        synchronized (explicitTxnStateLock) {
+            checkLabelUsedInAnyDatabase(explicitTxnState.getTransactionState().getLabel());
+            explicitTxnStateMap.put(txnId, explicitTxnState);
+        }
     }
 
     /**
      * Check if a label is already used in any database's transaction.
      * This method is used to validate label uniqueness before starting an explicit transaction.
+     * <p>
+     * NOTE: the result is only meaningful while `explicitTxnStateLock` is held, otherwise another session may
+     * register a transaction with the same label right after the check returns. Callers that register a
+     * transaction afterwards must go through {@link #addTransactionStateWithLabelCheck}.
      *
      * @param label the label to check
      * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction
      */
-    public void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
+    private void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             TransactionState txnState = dbTransactionMgr.getLabelTransactionState(label);
             if (txnState != null && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {

@@ -59,10 +59,19 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyShort;
@@ -686,4 +695,256 @@ public class ExplicitTxnTest {
                 "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
                         + "as milliseconds, got " + capturedTimeoutMs[0]);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCommitWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // commitStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99999);
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testRollbackWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // rollbackStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99998);
+
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testBeginWithLostTransactionState() {
+        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
+        // beginStmt should reset and create a new transaction instead of NPE.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(900, 901);
+        context.setExecutionId(queryId);
+
+        // Simulate stale txnId without matching explicitTxnState
+        context.setTxnId(88888);
+
+        // BEGIN should recover by creating a new transaction
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertNotEquals(88888, context.getTxnId());
+        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testCleanupClearsExplicitTxnState() {
+        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(950, 951);
+        context.setExecutionId(queryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
+        long txnId = context.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+        Assertions.assertNotNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+
+        // Simulate connection disconnect
+        context.cleanup();
+
+        // Verify explicitTxnState was cleaned up
+        Assertions.assertNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupExplicitTxnState() {
+        // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // Create a transaction state with a very short timeout (already expired)
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout_test_label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+                1L); // 1ms timeout
+        transactionState.setPrepareTime(System.currentTimeMillis() - 10000); // Started 10 seconds ago
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the timed-out state was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupOrphanedNullState() {
+        // Test that abortTimeoutTxns() also cleans up entries where transactionState is null
+        // (orphaned entries from lost state, e.g., after FE leader switch)
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        long orphanTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState orphanState = new ExplicitTxnState();
+        // transactionState is null by default - simulates orphaned entry
+        globalTransactionMgr.addTransactionState(orphanTxnId, orphanState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the orphaned null-state entry was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+    }
+
+    @Test
+    public void testBeginWithStaleExplicitTxnStateClearsEntry() {
+        // Test that beginStmt clears the stale map entry when explicitTxnState exists
+        // but transactionState is null
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(960, 961);
+        context.setExecutionId(queryId);
+
+        // Add a stale entry with null transactionState
+        long staleTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState staleState = new ExplicitTxnState();
+        globalTransactionMgr.addTransactionState(staleTxnId, staleState);
+        context.setTxnId(staleTxnId);
+
+        // beginStmt should detect the lost state, clean up stale entry, and start fresh
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "stale_cleanup_label"));
+
+        // Stale entry should be removed from the map
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(staleTxnId));
+        // A new transaction should have been started
+        Assertions.assertNotEquals(0, context.getTxnId());
+        Assertions.assertNotEquals(staleTxnId, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithLabelAlreadyUsedByAnotherSession() {
+        // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
+        // with the same label
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        ConnectContext first = new ConnectContext();
+        first.setThreadLocalInfo();
+        first.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        first.setExecutionId(new TUniqueId(970, 971));
+        TransactionStmtExecutor.beginStmt(first, new BeginStmt(NodePosition.ZERO, "duplicated_label"));
+        Assertions.assertFalse(first.getState().isError());
+        Assertions.assertNotEquals(0, first.getTxnId());
+
+        ConnectContext second = new ConnectContext();
+        second.setThreadLocalInfo();
+        second.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        second.setExecutionId(new TUniqueId(972, 973));
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> TransactionStmtExecutor.beginStmt(second, new BeginStmt(NodePosition.ZERO, "duplicated_label")));
+        Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+        // The rejected session must not be left inside a transaction
+        Assertions.assertEquals(0, second.getTxnId());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(first.getTxnId());
+        first.setTxnId(0);
+    }
+
+    @Test
+    public void testConcurrentBeginWithSameLabel() throws Exception {
+        // Regression test for the label uniqueness race: several sessions running
+        // `BEGIN WITH LABEL <same label>` at the same time must not all succeed. The uniqueness check and the
+        // registration of the explicit transaction state have to happen atomically, otherwise every session
+        // passes the check before any of them publishes its state.
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        final int concurrency = 8;
+        final int rounds = 5;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        try {
+            for (int round = 0; round < rounds; round++) {
+                final String label = "concurrent_label_" + round;
+                CyclicBarrier barrier = new CyclicBarrier(concurrency);
+                AtomicInteger succeeded = new AtomicInteger();
+                AtomicInteger rejected = new AtomicInteger();
+                Queue<Long> succeededTxnIds = new ConcurrentLinkedQueue<>();
+
+                List<Future<?>> futures = new ArrayList<>(concurrency);
+                for (int i = 0; i < concurrency; i++) {
+                    final int seq = i;
+                    futures.add(executor.submit(() -> {
+                        ConnectContext context = new ConnectContext();
+                        context.setThreadLocalInfo();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setExecutionId(new TUniqueId(1000 + seq, 2000 + seq));
+
+                        // Line up all sessions so that they hit the label check together
+                        barrier.await(30, TimeUnit.SECONDS);
+                        try {
+                            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, label));
+                            succeeded.incrementAndGet();
+                            succeededTxnIds.add(context.getTxnId());
+                        } catch (SemanticException e) {
+                            Assertions.assertTrue(e.getMessage().contains("has already been used"), e.getMessage());
+                            rejected.incrementAndGet();
+                        }
+                        return null;
+                    }));
+                }
+                for (Future<?> future : futures) {
+                    future.get(60, TimeUnit.SECONDS);
+                }
+
+                Assertions.assertEquals(1, succeeded.get(),
+                        "exactly one BEGIN WITH LABEL " + label + " should succeed");
+                Assertions.assertEquals(concurrency - 1, rejected.get());
+
+                for (Long txnId : succeededTxnIds) {
+                    globalTransactionMgr.clearExplicitTxnState(txnId);
+                }
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+>>>>>>> 6157be3c2d ([BugFix] Fix label uniqueness race between concurrent BEGIN WITH LABEL (#77401))
 }
