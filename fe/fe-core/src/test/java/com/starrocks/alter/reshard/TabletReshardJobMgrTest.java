@@ -789,8 +789,12 @@ public class TabletReshardJobMgrTest {
         // candidate out from under the assertions below.
         TabletReshardJobMgr mgr = new TabletReshardJobMgr();
         long small = TabletReshardUtils.splitThreshold(Config.tablet_reshard_min_split_size);
+        // Three marks with the largest neither first nor last: with only an ascending pair, a remap
+        // mutated to keep the incoming value would return the same answer as Math.max and the
+        // assertion could not tell the two apart.
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small);
         mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 4);
+        mgr.addReshardCandidate(reshardDb.getId(), reshardTable.getId(), 0L, Long.MAX_VALUE, small * 2);
         Assertions.assertEquals(1, mgr.getReshardCandidateCount());
         // The coalesced candidate must carry the larger early signal.
         Assertions.assertEquals(small * 4, mgr.peekMaxUnderProvisionedTabletSize(reshardTable.getId()));

@@ -194,6 +194,30 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     }
 
     @Test
+    public void resolvingTheNodeCountNeverReachesTheProbedAccessor() {
+        // applyVisibleLog runs under the table WRITE lock. The probed accessor's availability check
+        // reaches StarMgr (isResourceAvailable -> getAliveComputeNodes), so a network round trip here
+        // would stall every writer on the table. Nothing else asserts this: swapping the accessor in
+        // production happens to redden another test today, but only incidentally, because the probe
+        // errors in this harness and the catch zeroes the signal.
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                Assertions.fail("applyVisibleLog must not use the probed accessor under the table write lock");
+                return WarehouseComputeResource.DEFAULT;
+            }
+
+            @Mock
+            public ComputeResource getBackgroundComputeResourceWithoutProbe(long tableId) {
+                return WarehouseComputeResource.DEFAULT;
+            }
+        };
+        registerComputeNodes(16);
+        PublishFixture f = newPublishFixture(EARLY_SPLIT_THRESHOLD);
+        f.applier().applyVisibleLog(f.state(), f.tableCommitInfo(), f.db());
+    }
+
+    @Test
     public void fastPathSkipsResolutionWhenNoIndexCanBeUnderProvisioned() {
         boolean[] resolved = {false};
         long[] captured = {-1L};
