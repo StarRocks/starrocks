@@ -126,6 +126,7 @@ set(EXEC_FILES
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/window_test.cpp
         ./exprs/arithmetic_expr_test.cpp
         ./exprs/agg/aggregate_traits_test.cpp
         ./exprs/arithmetic_operation_test.cpp
