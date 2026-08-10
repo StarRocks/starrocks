@@ -453,57 +453,38 @@ void dump_lake_persistent_index_sst(const std::string& file_name, const starrock
 //
 // Each delete vector is |1-byte format version (0x01)|serialized roaring bitmap|, and the
 // integers in the bitmap are the deleted rowids (0-based) within that segment.
-void print_delvec(const std::string& file_name, uint64_t offset, uint64_t size) {
-    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
-    if (!res.ok()) {
-        std::cerr << "open file failed: " << res.status() << std::endl;
-        return;
-    }
-    auto file = std::move(res).value();
-
-    auto size_res = file->get_size();
-    if (!size_res.ok()) {
-        std::cerr << "get file size failed: " << size_res.status() << std::endl;
-        return;
-    }
-    auto file_size = static_cast<uint64_t>(size_res.value());
+Status print_delvec(const std::string& file_name, uint64_t offset, uint64_t size) {
+    ASSIGN_OR_RETURN(auto file, starrocks::FileSystem::Default()->new_random_access_file(file_name));
+    ASSIGN_OR_RETURN(const uint64_t file_size, file->get_size());
     if (offset >= file_size) {
-        std::cerr << fmt::format("offset {} is beyond the end of file, file size: {}\n", offset, file_size);
-        return;
+        return Status::InvalidArgument(
+                fmt::format("offset {} is beyond the end of file, file size: {}", offset, file_size));
     }
     if (size == 0) {
         size = file_size - offset;
     } else if (size > file_size - offset) {
-        std::cerr << fmt::format("[{}, {}) is beyond the end of file, file size: {}\n", offset, offset + size,
-                                 file_size);
-        return;
+        return Status::InvalidArgument(
+                fmt::format("[{}, {}) is beyond the end of file, file size: {}", offset, offset + size, file_size));
     }
 
     std::string buff(size, '\0');
-    auto st = file->read_at_fully(offset, buff.data(), buff.size());
-    if (!st.ok()) {
-        std::cerr << "read delvec failed: " << st << std::endl;
-        return;
-    }
+    RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
 
     starrocks::DelVector delvec;
     // The version lives in the metadata, not in the delvec itself, so pass a placeholder
     // and don't print it back. Roaring's deserialization throws on a malformed bitmap,
-    // which a mistyped offset/size easily produces, so keep that from aborting the tool.
+    // which a mistyped offset/size easily produces, so turn that into a status instead of
+    // letting it abort the tool.
     try {
-        st = delvec.load(/*version=*/0, buff.data(), buff.size());
+        RETURN_IF_ERROR(delvec.load(/*version=*/0, buff.data(), buff.size()));
     } catch (const std::exception& e) {
-        std::cerr << "decode delvec failed: " << e.what() << std::endl;
-        return;
-    }
-    if (!st.ok()) {
-        std::cerr << "load delvec failed: " << st << std::endl;
-        return;
+        return Status::Corruption(fmt::format("not a delete vector: {}", e.what()));
     }
     std::cout << fmt::format("File:        {}\n", file_name);
     std::cout << fmt::format("Range:       [{}, {}) {} bytes\n", offset, offset + size, size);
     std::cout << fmt::format("Cardinality: {}\n", delvec.cardinality());
     std::cout << fmt::format("Deleted rowids: {}\n", delvec.empty() ? std::string("{}") : delvec.roaring()->toString());
+    return Status::OK();
 }
 
 void show_meta() {
@@ -2003,7 +1984,11 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "no --file specified for print_delvec" << std::endl;
             return -1;
         }
-        print_delvec(FLAGS_file, FLAGS_delvec_offset, FLAGS_delvec_size);
+        Status st = print_delvec(FLAGS_file, FLAGS_delvec_offset, FLAGS_delvec_size);
+        if (!st.ok()) {
+            std::cerr << "print delvec failed: " << st << std::endl;
+            return -1;
+        }
     } else if (FLAGS_operation == "print_lake_metadata") {
         std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
