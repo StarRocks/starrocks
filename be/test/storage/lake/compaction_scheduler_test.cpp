@@ -333,7 +333,7 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-// Test for process_parallel_compaction (lines 299-369 in compaction_scheduler.cpp)
+// Tests for the parallel compaction path driven through compact()
 TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
     // Create a tablet with multiple rowsets for parallel compaction
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
@@ -468,13 +468,14 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
     latch->wait();
 }
 
-// Regression test for issue #76882: CompactionScheduler::compact() must NOT run the IO-heavy
-// process_parallel_compaction() (tablet-metadata load + StarletFileSystem creation) on the calling
-// brpc bthread. Running blocking filesystem IO on a bthread can make a pthread rwlock (StarOSWorker's
-// std::shared_mutex _cache_mtx) return EDEADLK on an unrelated bthread sharing the same worker pthread,
-// which surfaces as an uncaught std::system_error("Resource deadlock avoided") and aborts the CN. The
-// fix offloads process_parallel_compaction() to the dedicated _threads pthread pool. This test pins the
-// offload: it asserts process_parallel_compaction() executes on a thread different from the caller.
+// Regression test for issue #76882: the IO-heavy part of parallel compaction -- loading the tablet
+// metadata and building the StarOS/Starlet filesystem while planning the subtasks -- must NOT run on the
+// brpc bthread that called compact(). Blocking filesystem IO on a bthread can make a pthread rwlock
+// (StarOSWorker's std::shared_mutex _cache_mtx) return EDEADLK on an unrelated bthread sharing the same
+// worker pthread, which surfaces as an uncaught std::system_error("Resource deadlock avoided") and aborts
+// the CN. compact() therefore only builds and queues the contexts, exactly as the serial path does, and
+// the planning happens later in do_compaction() on a resident worker. This test pins that: the planning
+// hook must fire on a thread other than the caller.
 // (The other parallel tests above only prove "did not crash / did complete"; they pass against the old
 // inline code too, so they cannot catch a regression back to on-bthread execution.)
 TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thread) {
@@ -500,13 +501,13 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
     std::atomic<bool> fired{false};
     std::atomic<bool> ran_off_caller_thread{false};
     auto* sync_point = SyncPoint::GetInstance();
-    sync_point->SetCallBack("CompactionScheduler::process_parallel_compaction:enter", [&](void* /*arg*/) {
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
         ran_off_caller_thread.store(std::this_thread::get_id() != caller_id);
         fired.store(true);
     });
     sync_point->EnableProcessing();
     SCOPED_CLEANUP({
-        sync_point->ClearCallBack("CompactionScheduler::process_parallel_compaction:enter");
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
         sync_point->DisableProcessing();
     });
 
@@ -525,7 +526,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
 
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
-    // done->Run() (hence latch) only fires after process_parallel_compaction has entered, so the hook is
+    // done->Run() (hence latch) only fires after the planning hook has been reached, so the hook is
     // guaranteed to have run by the time wait() returns.
     latch->wait();
 
@@ -534,94 +535,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_runs_off_caller_thr
     EXPECT_TRUE(ran_off_caller_thread.load());
 }
 
-// Regression test for the #76882 fix's shutdown-safety guarantee. When the deferred parallel-compaction
-// task is cancelled in the thread pool (as happens when stop()/shutdown() drains the queue), the
-// CancellableRunnable's canceller MUST still complete the RPC (run `done`), otherwise the FE's compact RPC
-// hangs forever and the closure leaks. A plain submit_func() runnable has a no-op cancel() and would
-// exhibit exactly that hang; this test pins the CancellableRunnable choice.
-//
-// The "ThreadPool::do_submit:replace_task" sync point runs its callback synchronously inside submit() on
-// the caller thread, so we cancel the just-submitted dispatcher there (and swap in a no-op runnable). This
-// makes the whole test deterministic: `done` runs during compact() via the canceller, so latch->wait()
-// returns without depending on any background thread timing.
-TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_cancelled_completes_rpc) {
-    class MockRunnable : public Runnable {
-    public:
-        void run() override {}
-        void cancel() override {}
-    };
 
-    auto* sync_point = SyncPoint::GetInstance();
-    sync_point->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
-        auto ptr = (*(std::shared_ptr<Runnable>*)arg);
-        ptr->cancel(); // invoke the dispatcher's canceller (must reject_request + run `done`)
-        (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
-    });
-    sync_point->EnableProcessing();
-    SCOPED_CLEANUP({
-        sync_point->ClearCallBack("ThreadPool::do_submit:replace_task");
-        sync_point->DisableProcessing();
-    });
-
-    auto txn_id = next_id();
-    auto latch = std::make_shared<CountDownLatch>(1);
-    CompactRequest request;
-    CompactResponse response;
-    request.add_tablet_ids(_tablet_metadata->id());
-    request.set_timeout_ms(60 * 1000);
-    request.set_txn_id(txn_id);
-    request.set_version(1);
-    auto* parallel_config = request.mutable_parallel_config();
-    parallel_config->set_enable_parallel(true);
-    parallel_config->set_max_parallel_per_tablet(3);
-    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
-
-    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
-    _compaction_scheduler.compact(nullptr, &request, &response, cb);
-    // The canceller ran `done` synchronously during submit(); wait() must not hang.
-    latch->wait();
-
-    // The RPC was completed (not leaked) with a non-OK status.
-    EXPECT_NE(0, response.status().status_code());
-}
-
-// Third and last `done`-exactly-once path of the #76882 fix: when submitting the deferred
-// parallel-compaction task to the pool FAILS, the task was never enqueued (so neither run() nor cancel()
-// will ever fire) and compact() itself must complete the RPC, surfacing the real submit error. If it
-// didn't, the FE's compact RPC would hang forever.
-//
-// "ThreadPool::do_submit:1" hands the callback a pointer to the pool's computed capacity_remaining;
-// forcing it to 0 makes submit() return ServiceUnavailable deterministically.
-TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_submit_failure_completes_rpc) {
-    auto* sync_point = SyncPoint::GetInstance();
-    sync_point->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
-    sync_point->EnableProcessing();
-    SCOPED_CLEANUP({
-        sync_point->ClearCallBack("ThreadPool::do_submit:1");
-        sync_point->DisableProcessing();
-    });
-
-    auto txn_id = next_id();
-    auto latch = std::make_shared<CountDownLatch>(1);
-    CompactRequest request;
-    CompactResponse response;
-    request.add_tablet_ids(_tablet_metadata->id());
-    request.set_timeout_ms(60 * 1000);
-    request.set_txn_id(txn_id);
-    request.set_version(1);
-    auto* parallel_config = request.mutable_parallel_config();
-    parallel_config->set_enable_parallel(true);
-    parallel_config->set_max_parallel_per_tablet(3);
-    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
-
-    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
-    _compaction_scheduler.compact(nullptr, &request, &response, cb);
-    // compact() ran `done` inline on the submit-failure path; wait() must not hang.
-    latch->wait();
-
-    // The real submit error is surfaced, not a generic shutdown status.
-    EXPECT_NE(0, response.status().status_code());
-}
 
 // Once the IO-heavy task creation is offloaded to `_threads`, an exception escaping it stops being a crash
 // and becomes a silent hang: ThreadPool::dispatch_thread only logs an escaping exception (it does not run
@@ -630,9 +544,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_submit_failure_comp
 //
 // Inject the #76882 exception itself -- std::system_error("Resource deadlock avoided"), what a pthread rwlock
 // returning EDEADLK raises through std::shared_mutex -- into create_parallel_tasks() and assert the RPC still
-// completes. process_parallel_compaction() must absorb it and fall back to normal compaction, which keeps one
-// finish_task() per tablet id and therefore still runs `done`. Both handlers are exercised: the std::exception
-// one and the catch-all that covers a foreign exception thrown through the same call.
+// completes. do_compaction() must absorb it and compact the tablet serially with the same context, which
+// keeps one finish_task() per tablet id and therefore still runs `done`. Both handlers are exercised: the
+// std::exception one and the catch-all that covers a foreign exception thrown through the same call.
 TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes_rpc) {
     struct ForeignException {};
 
@@ -640,7 +554,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes
         std::atomic<bool> injected{false};
         auto* sync_point = SyncPoint::GetInstance();
         sync_point->SetCallBack(
-                "CompactionScheduler::process_parallel_compaction:create_parallel_tasks", [&](void* /*arg*/) {
+                "CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
                     injected.store(true);
                     if (foreign) {
                         throw ForeignException{};
@@ -650,7 +564,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_completes
                 });
         sync_point->EnableProcessing();
         SCOPED_CLEANUP({
-            sync_point->ClearCallBack("CompactionScheduler::process_parallel_compaction:create_parallel_tasks");
+            sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
             sync_point->DisableProcessing();
         });
 

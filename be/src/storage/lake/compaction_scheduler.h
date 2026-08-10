@@ -268,9 +268,11 @@ private:
     // Per-tablet parallel compaction manager
     std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
 
-    // Process compaction request with parallel mode
-    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
-                                     const std::shared_ptr<CompactionTaskCallback>& callback);
+    // Tries to replace one tablet's serial compaction with parallel subtasks. Called from do_compaction(),
+    // i.e. on a resident worker where the planning IO is safe. Returns true only if subtasks were
+    // submitted, in which case they own the tablet's completion and |context| has been unlinked and
+    // destroyed; returns false to have the caller compact the tablet serially with the same context.
+    bool try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {

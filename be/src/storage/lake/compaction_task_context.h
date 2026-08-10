@@ -193,6 +193,13 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::shared_ptr<TxnLogPB> txn_log;
     int64_t table_id;
     int64_t partition_id;
+    // Parallel-compaction request snapshot, taken from CompactRequest::parallel_config on the brpc
+    // bthread so that the worker which later plans the subtasks never dereferences the RPC's `request`.
+    // Kept as plain scalars rather than the TabletParallelConfig proto to avoid pulling
+    // gen_cpp/lake_service.pb.h into every translation unit that includes this header.
+    bool parallel_requested = false;
+    int32_t parallel_max_parallel_per_tablet = 0;
+    int64_t parallel_max_bytes_per_subtask = 0;
     int32_t subtask_id = -1; // -1 means not a parallel compaction subtask
     // Number of subtasks in this compaction (1 for normal compaction, >1 for parallel compaction)
     int32_t subtask_count = 1;
