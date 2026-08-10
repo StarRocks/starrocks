@@ -202,6 +202,9 @@ public class MergeTabletJob extends TabletReshardJob {
     protected void runRunningJob() {
         // 1. Publish the merge transaction, update new tablet ranges
         boolean allPartitionFinished = true;
+        // Publish failure seen in THIS pass, if any. Recomputed every pass so a retry that
+        // succeeds clears the reported reason instead of leaving it on a healthy job.
+        String failureReason = null;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
                 .getTaskExecutor();
 
@@ -227,11 +230,11 @@ public class MergeTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
-                    // Surface why the publish failed. A failed publish is only retried, so without
-                    // this the job stays in RUNNING with an empty ERROR_MESSAGE in
-                    // information_schema.tablet_reshard_jobs and the cause lives only in fe.log.
+                    // Remember why the publish failed so this pass can surface it (see
+                    // publishFailureReason); without it a job stuck retrying shows an empty
+                    // ERROR_MESSAGE and the cause lives only in fe.log.
                     if (publishResult.publishState() == PublishState.FAILED) {
-                        errorMessage = "publish version failed (retrying): " + publishResult.failureReason();
+                        failureReason = publishResult.failureReason();
                     }
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
@@ -270,6 +273,8 @@ public class MergeTabletJob extends TabletReshardJob {
                 }
             }
         }
+
+        publishFailureReason = failureReason;
 
         if (!allPartitionFinished) {
             return;
@@ -501,6 +506,8 @@ public class MergeTabletJob extends TabletReshardJob {
         item.setFinished_time(finishedTimeMs / 1000);
         if (errorMessage != null) {
             item.setError_message(errorMessage);
+        } else if (publishFailureReason != null) {
+            item.setError_message("publish version failed (retrying): " + publishFailureReason);
         } else {
             item.setError_message("");
         }

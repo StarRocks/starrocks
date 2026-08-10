@@ -74,6 +74,15 @@ public abstract class TabletReshardJob implements Writable {
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
 
+    // Reason of the publish failure the job is currently retrying, or null while the publish is
+    // healthy. Deliberately NOT serialized and NOT folded into errorMessage: a publish failure is
+    // always retried and never terminal, so it must not be journaled, and it must not outlive the
+    // failure -- a job whose retry succeeded would otherwise reach FINISHED still advertising an
+    // error. Recomputed on every runRunningJob pass and surfaced through getInfo(), so
+    // information_schema.tablet_reshard_jobs explains a job that is stuck retrying a publish
+    // instead of showing an empty ERROR_MESSAGE.
+    protected transient String publishFailureReason;
+
     // The warehouse this job should run its compute work (shard creation + publish) in. Set by the
     // pre-split caller to the triggering load's warehouse; null for an online split / merge (and for a
     // job journaled before this field existed), which then fall back to the background warehouse.
