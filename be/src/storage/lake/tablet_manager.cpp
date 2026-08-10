@@ -737,9 +737,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
               << " anchor_us=" << (trace_after_anchor_us - trace_after_cover_us)
               << " real_location_us=" << (trace_after_real_location_us - trace_after_anchor_us)
               << " schema_us=" << (trace_after_schema_us - trace_after_real_location_us)
-              << " open_us=" << (trace_after_open_us - trace_after_schema_us)
-              << " serialize_us=" << trace_serialize_us << " append_us=" << trace_append_us
-              << " close_us=" << (trace_after_close_us - trace_before_close_us)
+              << " open_us=" << (trace_after_open_us - trace_after_schema_us) << " serialize_us=" << trace_serialize_us
+              << " append_us=" << trace_append_us << " close_us=" << (trace_after_close_us - trace_before_close_us)
               << " metacache_us=" << (trace_end_us - trace_after_close_us);
     return Status::OK();
 }

@@ -360,6 +360,14 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
     bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
 
+    if (skip_write_tablet_metadata) {
+        // Arrival marker for aggregate sub-requests, so a peer that receives one and never answers
+        // can be told apart from an aggregator that never sent it.
+        LOG(INFO) << "aggregate sub publish_version begin txns=" << get_txn_ids_string(request)
+                  << " new_version=" << request->new_version() << " tablets=" << request->tablet_ids_size()
+                  << " tasks=" << task_num << " timeout_ms=" << timeout_ms;
+    }
+
     for (const auto& tablet_info : publish_tablet_infos) {
         auto task = std::make_shared<CancellableRunnable>(
                 [&, tablet_info] {
@@ -721,7 +729,54 @@ struct AggregatePublishContext {
     using PublishRequestCtx = RequestContext<PublishVersionResponse>;
     std::vector<PublishRequestCtx> publish_request_ctx;
 
+    // Per sub-request bookkeeping, so a handler that never leaves wait() can still be told apart
+    // from one whose peers all answered: the entry log names every target, and this says which of
+    // them came back and when.
+    struct SubRequestTrace {
+        const brpc::Controller* cntl{nullptr};
+        std::string target;
+        int64_t tablet_count{0};
+        int64_t dispatch_us{0};
+        int64_t done_us{0};
+        std::string result;
+    };
+    std::vector<SubRequestTrace> sub_traces;
+
     AggregatePublishContext() : begin_us(butil::gettimeofday_us()) {}
+
+    void record_dispatch(const brpc::Controller* cntl, std::string target, int64_t tablet_count) {
+        std::lock_guard l(mutex);
+        sub_traces.push_back({cntl, std::move(target), tablet_count, butil::gettimeofday_us(), 0, "pending"});
+    }
+
+    void record_done(const brpc::Controller* cntl, std::string result) {
+        std::lock_guard l(mutex);
+        for (auto& t : sub_traces) {
+            if (t.cntl == cntl) {
+                t.done_us = butil::gettimeofday_us();
+                t.result = std::move(result);
+                return;
+            }
+        }
+    }
+
+    std::string sub_traces_string() {
+        std::lock_guard l(mutex);
+        std::string s;
+        for (const auto& t : sub_traces) {
+            const int64_t elapsed = t.done_us > 0 ? t.done_us - t.dispatch_us : -1;
+            s.append(s.empty() ? "" : " ")
+                    .append(t.target)
+                    .append("(tablets=")
+                    .append(std::to_string(t.tablet_count))
+                    .append(",us=")
+                    .append(std::to_string(elapsed))
+                    .append(",")
+                    .append(t.result)
+                    .append(")");
+        }
+        return s;
+    }
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
@@ -822,6 +877,13 @@ static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse*
     // the resource will be release after all publish_request finished.
     DeferOp defer([&]() { ctx->count_down(); });
     if (cntl->Failed()) {
+        ctx->record_done(cntl, fmt::format("rpc_failed:{}", cntl->ErrorText()));
+    } else if (resp->status().status_code() != 0) {
+        ctx->record_done(cntl, fmt::format("status:{}", resp->status().status_code()));
+    } else {
+        ctx->record_done(cntl, "ok");
+    }
+    if (cntl->Failed()) {
         ctx->handle_failure("link rpc channel failed");
     } else if (resp->status().status_code() != 0) {
         std::string msg;
@@ -843,6 +905,28 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     // Collected up front, over every sub-request: the loop below stops dispatching once one of
     // them fails, and the expected set must describe the whole publish either way.
     collect_expected_metadata_tablet_ids(*request, &ctx.expected_tablet_ids);
+
+    // Logged before the fan-out so that a handler which never returns still leaves a record of
+    // having arrived and of who it was about to ask. Without it a stuck aggregate is invisible.
+    const int64_t trace_entry_us = butil::gettimeofday_us();
+    {
+        std::string targets;
+        for (int i = 0; i < request->publish_reqs_size(); ++i) {
+            const auto& node = request->compute_nodes(i);
+            targets.append(targets.empty() ? "" : ",")
+                    .append(node.host())
+                    .append(":")
+                    .append(std::to_string(node.brpc_port()))
+                    .append("/")
+                    .append(std::to_string(request->publish_reqs(i).tablet_ids_size()));
+        }
+        LOG(INFO) << "aggregate_publish_version begin"
+                  << " txns=" << (request->publish_reqs_size() > 0 ? get_txn_ids_string(&request->publish_reqs(0)) : "")
+                  << " new_version=" << (request->publish_reqs_size() > 0 ? request->publish_reqs(0).new_version() : -1)
+                  << " sub_reqs=" << request->publish_reqs_size()
+                  << " expected_tablets=" << ctx.expected_tablet_ids.size()
+                  << " targets(host:port/tablets)=" << targets;
+    }
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
@@ -870,14 +954,28 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
 
         auto* cntl_ptr = ctx.publish_request_ctx.back().cntl.get();
         auto* resp_ptr = ctx.publish_request_ctx.back().resp.get();
+        ctx.record_dispatch(cntl_ptr, fmt::format("{}:{}", compute_node.host(), compute_node.brpc_port()),
+                            single_req.tablet_ids_size());
         (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
                                 brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
     }
 
+    const int64_t trace_dispatched_us = butil::gettimeofday_us();
     // wait for publish task finish
     ctx.wait();
+    const int64_t trace_waited_us = butil::gettimeofday_us();
     // write aggregate metadata
     ctx.put_aggregate_metadata(_env);
+    const int64_t trace_end_us = butil::gettimeofday_us();
+
+    LOG(INFO) << "aggregate_publish_version end"
+              << " txns=" << (request->publish_reqs_size() > 0 ? get_txn_ids_string(&request->publish_reqs(0)) : "")
+              << " new_version=" << (request->publish_reqs_size() > 0 ? request->publish_reqs(0).new_version() : -1)
+              << " total_us=" << (trace_end_us - trace_entry_us)
+              << " dispatch_us=" << (trace_dispatched_us - trace_entry_us)
+              << " wait_us=" << (trace_waited_us - trace_dispatched_us)
+              << " put_meta_us=" << (trace_end_us - trace_waited_us) << " status=" << ctx.publish_status << " subs=["
+              << ctx.sub_traces_string() << "]";
 
     ctx.publish_status.to_protobuf(response->mutable_status());
 }
