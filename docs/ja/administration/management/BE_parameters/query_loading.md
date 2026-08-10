@@ -450,6 +450,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: パフォーマンスを向上させるために、Parquetファイルのブルームフィルターを有効にするかどうかを制御するブール値です。`true` はブルームフィルターを有効にすることを示し、`false` は無効にすることを示します。この動作は、システム変数 `enable_parquet_reader_bloom_filter` を使用してセッションレベルで制御することもできます。Parquetのブルームフィルターは、**各行グループ内の列レベルで**。Parquetファイルが特定の列のブルームフィルターを含んでいる場合、クエリはそれらの列の述語を使用して行グループを効率的にスキップできます。
 - 導入バージョン: v3.5
 
+### parquet_runtime_filter_push_down_enable
+
+- デフォルト: true
+- 型: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価し、Lazy列がマテリアライズされる前に一致しない行を除外するかどうかを制御するブール値です。`true` はこの行レベルのプッシュダウンを有効にすることを示し、`false` は無効にすることを示します。無効にした場合、Runtime Filterはrow groupおよびpageの統計情報による絞り込みにのみ使用され、行レベルのフィルタリングは下流のScanオペレーターで行われます。
+- 導入バージョン: -
+
 ### path_gc_check_step
 
 - デフォルト: 1000

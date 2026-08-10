@@ -458,6 +458,15 @@ This topic introduces the following types of BE configurations:
 - Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
 - Introduced in: v3.5
 
+### parquet_runtime_filter_push_down_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to evaluate join runtime filters against decoded rows inside the Parquet reader, so that non-matching rows are dropped before lazy columns are materialized. `true` indicates enabling this row-level pushdown, and `false` indicates disabling it, in which case runtime filters are only used for row group and page statistics pruning, and the row-level probe happens in the downstream scan operator instead.
+- Introduced in: -
+
 ### path_gc_check_step
 
 - Default: 1000

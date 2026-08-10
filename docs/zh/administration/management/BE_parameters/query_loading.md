@@ -446,6 +446,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
 - 引入版本：v3.5
 
+### parquet_runtime_filter_push_down_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制是否在 Parquet Reader 内部对已解码的数据行求值 Join Runtime Filter 的布尔值，从而在物化 Lazy 列之前提前过滤掉不匹配的行。`true` 表示启用该行级下推，`false` 表示禁用，此时 Runtime Filter 仅用于 row group 及 page 统计信息裁剪，行级过滤改由下游的 Scan 算子完成。
+- 引入版本：-
+
 ### path_gc_check_step
 
 - 默认值：1000
