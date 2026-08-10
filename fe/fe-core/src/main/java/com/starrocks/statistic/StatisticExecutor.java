@@ -289,6 +289,14 @@ public class StatisticExecutor {
         }
     }
 
+
+    public boolean dropExternalHistogramRawColumns(ConnectContext statsConnectCtx, String rawTableUUID,
+                                                   List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(rawTableUUID, columnNames);
+        LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
