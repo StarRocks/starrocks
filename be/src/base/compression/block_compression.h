@@ -121,8 +121,9 @@ public:
     // `use_ctx_cache` selects the decompression context strategy: true keeps a
     // dictionary-loaded context warm in a thread-local slot (so consecutive pages
     // of a column skip re-establishing the dictionary session), false borrows from
-    // the shared pool like every other decompression. The caller decides, because
-    // this layer must not read configuration.
+    // the shared pool like every other decompression. Reads pass true; false exists
+    // so that the pool path -- which is also where a context-allocation failure
+    // lands -- stays reachable from tests instead of only under memory pressure.
     virtual Status decompress(const Slice& input, Slice* output, const compression::ZstdDDict* ddict,
                               bool use_ctx_cache = true) const {
         return Status::NotSupported("dict-based decompress is not supported by this codec");

@@ -60,15 +60,6 @@ This topic introduces the following types of BE configurations:
 - Description: When true, StarRocks initializes system-level monitoring during startup: it discovers disk devices from the configured store paths and enumerates network interfaces, then passes this information into the metrics subsystem to enable collection of disk I/O, network traffic and memory-related system metrics. If device or interface discovery fails, initialization logs a warning and aborts system metrics setup. This flag only controls whether system metrics are initialized; periodic metric aggregation threads are controlled separately by `enable_metric_calculator`, and JVM metrics initialization is controlled by `enable_jvm_metrics`. Changing this value requires a restart.
 - Introduced in: v3.2.0
 
-### enable_zstd_compression_dict_ctx_cache
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to keep the dictionary-loaded ZSTD decompression contexts warm in a small thread-local set instead of borrowing them from the shared context pool. A context borrowed from the shared pool is reset when it is returned, which clears the sticky `refDDict` and forces the dictionary to be reloaded into a cold context once per page. This parameter affects only the reads of columns whose segments carry a ZSTD compression dictionary; for every other column the read path is unchanged. It is exposed as a switch so that the optimization can be turned off in production without a rollback. The cost of keeping it on is bounded and small: up to four decompression contexts (about 94 KB each, independent of dictionary size) per thread that has actually read such a column, released when the thread exits.
-- Introduced in: v4.2
-
 ### profile_report_interval
 
 - Default: 30

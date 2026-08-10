@@ -57,15 +57,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：为 true 时，StarRocks 在启动期间初始化系统级监控：它会根据配置的存储路径发现磁盘设备并枚举网络接口，然后将这些信息传入 metrics 子系统以启用磁盘 I/O、网络流量和内存相关的系统指标采集。如果设备或接口发现失败，初始化会记录警告并中止系统指标的设置。该标志仅控制是否初始化系统指标；周期性指标聚合线程由 `enable_metric_calculator` 单独控制，JVM 指标初始化由 `enable_jvm_metrics` 控制。更改此值需要重启。
 - 引入版本：v3.2.0
 
-### enable_zstd_compression_dict_ctx_cache
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否将已加载字典的 ZSTD 解压上下文保留在一个小的线程局部集合中，而不是从共享上下文池中借用。从共享池借用的上下文在归还时会被重置，这会清除粘性的 `refDDict`，导致每读一个页都要把字典重新加载到一个冷上下文中。该参数仅影响 Segment 中带 ZSTD 压缩字典的列的读取，其他列的读路径不受影响。以开关形式暴露，便于在生产环境中无需回滚即可关闭该优化。开启的代价有界且很小：每个真正读过这类列的线程最多常驻 4 个解压上下文（每个约 94 KB，与字典大小无关），线程退出时释放。
-- 引入版本：v4.2
-
 ### profile_report_interval
 
 - 默认值：30

@@ -734,7 +734,9 @@ namespace {
 // proportional to dictionary size (2KB and 64KB dictionaries cost the same).
 //
 // So dictionary decompression uses its own small thread-local set of contexts
-// instead of the shared pool. Each entry remembers which dictionary it has
+// instead of the shared pool. The cost is bounded and small: at most
+// kDictDCtxCacheSize contexts (~94KB each, independent of dictionary size) on a
+// thread that has actually decoded such a page, released when the thread exits. Each entry remembers which dictionary it has
 // loaded; consecutive pages of the same column hit it and skip the reload
 // entirely. These contexts never enter the shared pool, so the no-cross-talk
 // invariant is untouched.
