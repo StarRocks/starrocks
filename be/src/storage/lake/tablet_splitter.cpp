@@ -731,16 +731,55 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     TabletRange tablet_range;
     RETURN_IF_ERROR(tablet_range.from_proto(tablet_metadata->range()));
 
+    // The boundary list calculate_range_split_boundaries() sorts is built from the segments'
+    // sort_key_min / sort_key_max / sort_key_samples, all of which the writer produces from
+    // TabletSchema::sort_key_idxes. The tablet range is over the key columns instead. Feeding both
+    // into one std::sort compares a key-column datum against a sort-key column type and throws
+    // bad_variant_access, which on the publish path (publish_resharding_tablet -> split_tablet)
+    // aborts the BE -- all three CNs died this way, each restart re-running the same publish.
+    //
+    // The two key spaces coincide unless the table was created with an explicit ORDER BY, which is
+    // why this never fired before: an empty sort_key_idxes means "the sort key IS the key columns"
+    // (the convention the materialized TabletSchema applies), so the raw PB has to be read with that
+    // convention rather than through TabletSchema::has_separate_sort_key(), and materializing the
+    // schema here is not an option -- see the colocate branch above for why.
+    //
+    // Withhold the range when the spaces differ. It only refines the per-split size estimate (it
+    // pre-splits candidate ranges at the tablet's own edges so a shared segment reaching past them
+    // cannot inflate one split's stats); the boundaries themselves come from the segment tuples.
+    const bool sort_key_is_key_columns = [&] {
+        const auto& schema = tablet_metadata->schema();
+        if (schema.sort_key_idxes_size() == 0) {
+            return true;
+        }
+        int num_key_columns = 0;
+        for (const auto& col : schema.column()) {
+            if (col.is_key()) {
+                ++num_key_columns;
+            }
+        }
+        if (schema.sort_key_idxes_size() != num_key_columns) {
+            return false;
+        }
+        for (int i = 0; i < schema.sort_key_idxes_size(); ++i) {
+            if (schema.sort_key_idxes(i) != static_cast<uint32_t>(i)) {
+                return false;
+            }
+        }
+        return true;
+    }();
+    const TabletRange* boundary_tablet_range = sort_key_is_key_columns ? &tablet_range : nullptr;
+
     int64_t total_num_rows = 0;
     for (const auto& segment : segments) {
         total_num_rows += segment.num_rows;
     }
     int64_t avg_num_rows = std::max<int64_t>(1, total_num_rows / split_count);
 
-    ASSIGN_OR_RETURN(auto split_result,
-                     calculate_range_split_boundaries(segments, split_count, avg_num_rows,
-                                                      /*use_num_rows=*/true,
-                                                      /*track_sources=*/true, &tablet_range, colocate_column_count));
+    ASSIGN_OR_RETURN(auto split_result, calculate_range_split_boundaries(segments, split_count, avg_num_rows,
+                                                                         /*use_num_rows=*/true,
+                                                                         /*track_sources=*/true, boundary_tablet_range,
+                                                                         colocate_column_count));
 
     if (split_result.boundaries.empty()) {
         return Status::InvalidArgument("Not enough split ranges available");
