@@ -61,6 +61,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
@@ -608,6 +609,57 @@ public class StorageVolumeTest {
         Assertions.assertTrue(sv.isCredentialUsable());
         // The copy the managers cache must carry the repaired flag, not the stale one.
         Assertions.assertTrue(new StorageVolume(sv).isCredentialUsable());
+    }
+
+    @Test
+    public void testS3RejectsTemporaryKeysBecauseTheSessionTokenIsNotStored() {
+        // AwsSimpleCredentialInfo stores the access key and its secret only, so the session token is
+        // dropped and the temporary keys that come back can no longer authenticate.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        storageParams.put(AWS_S3_SESSION_TOKEN, "session_token");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AWS_S3_SESSION_TOKEN), e.getMessage());
+    }
+
+    @Test
+    public void testS3AccessKeyWithoutSessionTokenRemainsStorable() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"), storageParams, true, "");
+    }
+
+    @Test
+    public void testUnusableVolumeRefusesToBeWrittenBackAsAnotherType() throws DdlException {
+        // The factory chain falls through the cloud providers to the HDFS one, which accepts any
+        // properties, so an AZBLOB volume whose credential cannot be rebuilt serialises to an HDFS
+        // file store with the azure properties as plain Hadoop configuration. Writing that back
+        // would quietly turn the volume into an HDFS one, which is worse than failing, so
+        // toFileStoreInfo refuses instead.
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertFalse(sv.isCredentialUsable());
+        // The premise of the refusal: the configuration no longer serialises to an AZBLOB file store.
+        Assertions.assertNotEquals(FileStoreType.AZBLOB, sv.getCloudConfiguration().toFileStoreInfo().getFsType());
+
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class, sv::toFileStoreInfo);
+        Assertions.assertTrue(e.getMessage().contains("must not be written back"), e.getMessage());
     }
 
     @Test

@@ -246,6 +246,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 validateParams(copied.getType(), params);
             }
             applyChangesToVolume(copied, sv.getId(), svType, locations, comment, params, enabled);
+            // Checked on the result rather than on the volume we started from, so an ALTER that
+            // supplies a working credential repairs the volume, while one that only touches the
+            // comment or the enabled flag is refused instead of trying to write back a volume whose
+            // credential can no longer be turned into a file store.
+            checkCredentialUsable(copied);
             updateInternalNoLock(copied);
         }
     }
@@ -344,6 +349,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 locationChangedStorageVolumeId = newStorageVolume.getId();
             }
 
+            // Same reason as in updateStorageVolume: when the type is unchanged this reuses the old
+            // volume's credential, which a restore of a volume stored with an unusable one would
+            // otherwise try to write back.
+            checkCredentialUsable(newStorageVolume);
             replaceInternalNoLock(newStorageVolume);
         }
 
@@ -370,7 +379,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     protected static void checkCredentialUsable(StorageVolume sv) throws DdlException {
         if (!sv.isCredentialUsable()) {
             throw new DdlException(String.format("Storage volume %s has a credential that cannot be used, " +
-                    "it can only be described or dropped", sv.getName()));
+                            "it can only be described, dropped, or repaired by an ALTER that sets a working credential",
+                    sv.getName()));
         }
     }
 

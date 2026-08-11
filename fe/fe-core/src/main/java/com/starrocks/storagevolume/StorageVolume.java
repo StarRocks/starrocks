@@ -391,6 +391,18 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     "Storage params contain a credential that cannot be stored for a %s storage volume: %s",
                     svt, new Gson().toJson(maskedParams)));
         }
+        if (svt == StorageVolumeType.S3
+                && isCredentialPropertySet(params, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN)) {
+            // AwsSimpleCredentialInfo carries the access key and its secret and nothing else - the
+            // credential's own toFileStoreInfo says as much with a TODO - so the session token is
+            // dropped and what reads back is a pair of temporary keys that can no longer
+            // authenticate. Unlike the ADLS2 workload identity this form is not documented for
+            // storage volumes, and temporary keys would expire during the volume's life anyway, so
+            // refuse it rather than warn.
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
+                            "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN));
+        }
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;
         }
@@ -477,7 +489,21 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (vTabletGroupId != -1L) {
             properties.put(V_SHARD_GROUP_ID, String.valueOf(vTabletGroupId));
         }
-        FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
+        // What the configuration serialises to has to be a file store of this volume's own type.
+        // For a volume tolerated on read-back it is not: the factory chain falls through the cloud
+        // providers to the HDFS one, which accepts anything, so an AZBLOB volume whose credential
+        // cannot be rebuilt serialises to an HDFS file store carrying the azure properties as plain
+        // Hadoop configuration. Writing that back would silently change the volume's type in the
+        // file store rather than fail. The callers that write a volume back check
+        // isCredentialUsable() first, so reaching this means one was added without that check.
+        FileStoreInfo credentialInfo = cloudConfiguration.toFileStoreInfo();
+        if (credentialInfo == null || !credentialInfo.getFsType().name().equals(svt.name())) {
+            throw new IllegalStateException(String.format(
+                    "Storage volume '%s' of type %s has a credential that serialises to %s, " +
+                            "it must not be written back", name, svt,
+                    credentialInfo == null ? "nothing" : credentialInfo.getFsType()));
+        }
+        FileStoreInfo.Builder builder = credentialInfo.toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)

@@ -1944,4 +1944,44 @@ public class SharedDataStorageVolumeMgrTest {
                 "Storage volume " + storageVolumeName + " has a credential that cannot be used",
                 () -> svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
     }
+
+    @Test
+    public void testMetadataOnlyAlterOnUnusableVolumeFailsCleanly() {
+        // Writing such a volume back cannot produce a file store, so a comment-only ALTER used to
+        // die with a NullPointerException. It must fail with something an operator can act on, and
+        // the message has to name the ways out: drop it, or repair it in the same ALTER.
+        String storageVolumeName = "unusable_sv";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return storageVolumeName.equals(fsName) ? unusable : null;
+            }
+
+            @Mock
+            public void updateFileStore(FileStoreInfo fsInfo) {
+                throw new IllegalStateException("an unusable volume must never be written back");
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage volume " + storageVolumeName + " has a credential that cannot be used",
+                () -> svm.updateStorageVolume(storageVolumeName, null, null, new HashMap<>(), "new comment"));
+    }
 }
