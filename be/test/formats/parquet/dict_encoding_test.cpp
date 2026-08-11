@@ -290,4 +290,92 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         ASSERT_FALSE(st.ok());
     }
 }
+
+// A dictionary-encoded data page: one bit-width byte, then RLE/bit-packed runs. A single
+// repeated run covers every value, so the page is a handful of bytes however many values it
+// claims -- which is what keeps a multi-million-value test cheap. (Building the same page with
+// RleEncoder::Put would not: it costs seconds per 100k values.)
+static void build_repeated_run_page(faststring* page, uint32_t code, size_t num_values, int bit_width = 32) {
+    auto put_byte = [page](uint32_t b) {
+        auto byte = static_cast<uint8_t>(b);
+        page->append(&byte, 1);
+    };
+
+    put_byte(bit_width);
+    // Run indicator, ULEB128 of (num_values << 1); lsb 0 marks a repeated run.
+    uint64_t indicator = static_cast<uint64_t>(num_values) << 1;
+    for (; indicator >= 0x80; indicator >>= 7) {
+        put_byte((indicator & 0x7f) | 0x80);
+    }
+    put_byte(indicator);
+    // The repeated value, ceil(bit_width / 8) bytes, little endian.
+    for (int i = 0; i < (bit_width + 7) / 8; ++i) {
+        put_byte(code >> (8 * i));
+    }
+}
+
+// The batch size handed to a decoder is not the chunk size: StoredColumnReaderImpl::_read() passes
+// everything left in the current data page in one call, so a page holding millions of values
+// produces a batch that big. Scratch space sized by that batch must live on the heap; the VLAs
+// these paths used to declare killed the BE with a SIGSEGV raised inside the decoder.
+template <LogicalType DICT_TYPE, LogicalType TARGET_TYPE>
+static void large_batch_with_nulls_test() {
+    using TARGET_CXX_TYPE = RunTimeCppType<TARGET_TYPE>;
+    // 2^21 values: the removed VLAs wanted 8MB for the dict codes and the fixed-width values,
+    // and 24MB for the slices, against the 8MB stack a scan thread has.
+    constexpr size_t kCount = 1 << 21;
+    constexpr size_t kNullStride = 8;
+    constexpr uint32_t kCode = 3;
+
+    faststring page;
+    build_repeated_run_page(&page, kCode, kCount);
+
+    NullInfos infos;
+    infos.reset_with_capacity(kCount);
+    infos.num_nulls = 0;
+    for (size_t i = 0; i < kCount; ++i) {
+        infos.nulls_data()[i] = (i % kNullStride) == 0;
+        infos.num_nulls += infos.nulls_data()[i];
+    }
+    // num_ranges > 2 routes to the batched paths rather than the row-by-row fallback.
+    infos.num_ranges = kCount / 2;
+
+    // The dictionary holds "0".."9", every code in the page is kCode, and FakeDictDecoder makes
+    // dictionary entry i render as "i" for both the int and the string dictionary.
+    auto check = [&](const auto& dst) {
+        EXPECT_EQ(dst->size(), kCount);
+        EXPECTED_UNQUOTE(dst->debug_item(0), "NULL");
+        EXPECTED_UNQUOTE(dst->debug_item(kNullStride), "NULL");
+        EXPECTED_UNQUOTE(dst->debug_item(1), "3");
+        EXPECTED_UNQUOTE(dst->debug_item(kCount - 1), "3");
+    };
+
+    {
+        // dict codes
+        DictDecoder<TARGET_CXX_TYPE> decoder;
+        FakeDictDecoder<TARGET_TYPE> inner_decoder;
+        ASSERT_OK(decoder.set_data(Slice(page.data(), page.length())));
+        ASSERT_OK(decoder.set_dict(10, 10, &inner_decoder));
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(DICT_TYPE), true);
+        ASSERT_OK(decoder.next_batch_with_nulls(kCount, infos, ColumnContentType::DICT_CODE, dst.get(), nullptr));
+        check(dst);
+    }
+    {
+        // values
+        DictDecoder<TARGET_CXX_TYPE> decoder;
+        FakeDictDecoder<TARGET_TYPE> inner_decoder;
+        ASSERT_OK(decoder.set_data(Slice(page.data(), page.length())));
+        ASSERT_OK(decoder.set_dict(10, 10, &inner_decoder));
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TARGET_TYPE), true);
+        ASSERT_OK(decoder.next_batch_with_nulls(kCount, infos, ColumnContentType::VALUE, dst.get(), nullptr));
+        check(dst);
+    }
+}
+
+TEST(DictEncodingReadTest, LargeBatchWithNulls) {
+    large_batch_with_nulls_test<LogicalType::TYPE_INT, LogicalType::TYPE_INT>();
+    large_batch_with_nulls_test<LogicalType::TYPE_INT, LogicalType::TYPE_VARCHAR>();
+}
 } // namespace starrocks::parquet

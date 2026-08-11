@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstring>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -208,8 +209,13 @@ public:
 
         size_t max_size = 0;
         size_t read_count = count - null_cnt;
-        uint32_t lengths[read_count + 1];
-        char* datas[read_count + 1];
+        // Reusable members rather than VLAs: a data page may hold ~1M values and
+        // StoredColumnReaderImpl::_read() hands the whole page over in one call, so stack
+        // arrays sized by read_count overflow the thread stack.
+        _temp_lengths.resize(read_count + 1);
+        _temp_datas.resize(read_count + 1);
+        uint32_t* lengths = _temp_lengths.data();
+        char** datas = _temp_datas.data();
         size_t i = 0;
         size_t cursor = _offset;
         //
@@ -354,6 +360,8 @@ public:
 private:
     Slice _data;
     size_t _offset = 0;
+    std::vector<uint32_t> _temp_lengths;
+    std::vector<char*> _temp_datas;
 };
 
 // plain encoding for boolean type is stored as `Bit Packed`, `LSB` first format
