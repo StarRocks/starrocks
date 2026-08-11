@@ -19,6 +19,8 @@
 #include <algorithm>
 
 #include "base/string/string_util.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -118,6 +120,9 @@ Status PkTabletUnsortSSTWriter::append_records(const Chunk& data, const std::vec
     if (num_rows == 0) {
         return Status::OK();
     }
+    // GOALOOP-PROBE (temporary, not for merge)
+    const int64_t probe_append_start_ns = MonotonicNanos();
+    DeferOp probe_append_timer([&]() { _probe_append_ns += MonotonicNanos() - probe_append_start_ns; });
     if (rssid_rowids == nullptr || rssid_rowids->size() != num_rows) {
         return Status::InternalError(fmt::format("unsort pk sst writer requires per-row order keys, expected {} got {}",
                                                  num_rows, rssid_rowids == nullptr ? 0 : rssid_rowids->size()));
@@ -201,12 +206,22 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
     constexpr size_t kExactCheckMaxEntries = 4096;
     const size_t fixed_bytes = _keys_heap_size + _deleted_rowids.capacity() * sizeof(uint32_t);
     const size_t lower_bound = fixed_bytes + _map.size() * sizeof(decltype(_map)::value_type);
+    // GOALOOP-PROBE (temporary, not for merge)
+    ++_probe_calls;
+    _probe_sum_entries_at_call += _map.size();
     // `threshold - threshold / 5` rather than `threshold * 4 / 5`: the threshold comes from config and
     // tests set it to INT64_MAX, where the product would overflow.
     if (_map.size() > kExactCheckMaxEntries && lower_bound < threshold - threshold / 5) {
         return false;
     }
-    return memory_usage() >= threshold;
+    // GOALOOP-PROBE (temporary, not for merge): time only the exact reading.
+    const int64_t probe_start_ns = MonotonicNanos();
+    const size_t mem_usage = memory_usage();
+    _probe_walk_ns += MonotonicNanos() - probe_start_ns;
+    ++_probe_walks;
+    _probe_sum_entries_at_walk += _map.size();
+    _probe_max_mem_usage = std::max(_probe_max_mem_usage, mem_usage);
+    return mem_usage >= threshold;
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
@@ -259,6 +274,13 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
     const uint64_t size = builder.FileSize();
     RETURN_IF_ERROR(wf->close());
     _intermediate_ssts.push_back({location, size, std::move(encryption_meta)});
+    // GOALOOP-PROBE (temporary, not for merge): one line per spill, so the bound can be checked.
+    ++_probe_spills;
+    LOG(INFO) << "GOALOOP_SPILL tablet=" << _tablet_id << " spill=" << _probe_spills
+              << " entries=" << _map.size() << " mem_usage=" << memory_usage()
+              << " keys_heap=" << _keys_heap_size << " bytes_used=" << _map.bytes_used()
+              << " deleted_rowids_cap=" << _deleted_rowids.capacity() << " l0_max=" << config::l0_max_mem_usage
+              << " intermediates=" << _intermediate_ssts.size();
     _map.clear();
     _keys_heap_size = 0;
     return Status::OK();
@@ -403,6 +425,26 @@ StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletUnsortSSTWr
         }
         delete_files_async(std::move(intermediate_paths));
     }
+    // GOALOOP-PROBE (temporary, not for merge): one line per segment. ns_per_entry is measured from the
+    // calls that actually walked the tree; projected_ns is what the unconditional version would have
+    // cost, i.e. the same rate applied to every call's map size.
+    const double ns_per_entry =
+            _probe_sum_entries_at_walk > 0 ? static_cast<double>(_probe_walk_ns) / _probe_sum_entries_at_walk : 0.0;
+    const int64_t projected_ns = static_cast<int64_t>(ns_per_entry * _probe_sum_entries_at_call);
+    LOG(INFO) << "GOALOOP_COST tablet=" << _tablet_id << " calls=" << _probe_calls << " walks=" << _probe_walks
+              << " walk_ns=" << _probe_walk_ns << " append_ns=" << _probe_append_ns
+              << " sum_entries_at_call=" << _probe_sum_entries_at_call
+              << " sum_entries_at_walk=" << _probe_sum_entries_at_walk << " ns_per_entry=" << ns_per_entry
+              << " projected_unconditional_ns=" << projected_ns << " spills=" << _probe_spills
+              << " max_mem_usage=" << _probe_max_mem_usage << " l0_max=" << config::l0_max_mem_usage;
+    _probe_calls = 0;
+    _probe_walks = 0;
+    _probe_walk_ns = 0;
+    _probe_sum_entries_at_call = 0;
+    _probe_sum_entries_at_walk = 0;
+    _probe_append_ns = 0;
+    _probe_spills = 0;
+    _probe_max_mem_usage = 0;
     _wf.reset();
     _map.clear();
     _intermediate_ssts.clear();

@@ -128,6 +128,17 @@ private:
     // Heap allocations owned by non-SSO strings in `_map`. The std::string objects themselves live in
     // the B-tree nodes and are already included in `_map.bytes_used()`.
     size_t _keys_heap_size = 0;
+    // GOALOOP-PROBE (temporary, not for merge): cost accounting for is_map_full(). `walk_*` covers the
+    // calls that actually took the exact bytes_used() reading; `sum_entries_at_call` lets us project what
+    // the unconditional version would have cost from the measured per-entry walk rate.
+    mutable size_t _probe_calls = 0;
+    mutable size_t _probe_walks = 0;
+    mutable int64_t _probe_walk_ns = 0;
+    mutable size_t _probe_sum_entries_at_call = 0;
+    mutable size_t _probe_sum_entries_at_walk = 0;
+    mutable size_t _probe_max_mem_usage = 0;
+    int64_t _probe_append_ns = 0;
+    size_t _probe_spills = 0;
     std::vector<IntermediateSst> _intermediate_ssts;
     // Running rowid within the current segment (== rows appended so far); reset per segment.
     uint32_t _next_rowid = 0;
