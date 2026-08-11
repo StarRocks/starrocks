@@ -83,10 +83,14 @@ public class MatchExpr extends Expr {
         return new MatchExpr(this);
     }
 
+    @Override
+    public boolean equalsWithoutChild(Object obj) {
+        return super.equalsWithoutChild(obj) && ((MatchExpr) obj).matchOperator == matchOperator;
+    }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode());
+        return Objects.hash(super.hashCode(), matchOperator);
     }
 
     @Override

@@ -351,6 +351,9 @@ public class MaterializedViewAnalyzer {
             }
 
             // analyze query statement, can check whether tables and columns exist in catalog
+            // The MV data uses the lowered MATCH predicates, but reparsing the original search() after a config or
+            // DSL change could produce different rewrite semantics, so require a canonical MATCH definition.
+            SearchFunctionValidator.rejectMaterializedView(queryStatement);
             Analyzer.analyze(queryStatement, context);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
             AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");

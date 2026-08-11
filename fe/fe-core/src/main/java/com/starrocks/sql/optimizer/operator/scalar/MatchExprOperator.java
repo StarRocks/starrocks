@@ -65,12 +65,21 @@ public class MatchExprOperator extends ArgsScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(arguments.get(0), arguments.get(1));
+        return Objects.hash(hashCodeSelf(), arguments);
     }
 
     @Override
     public int hashCodeSelf() {
-        return Objects.hash(opType);
+        return Objects.hash(opType, type, matchOperator);
+    }
+
+    @Override
+    public boolean equalsSelf(Object obj) {
+        if (!super.equalsSelf(obj)) {
+            return false;
+        }
+        MatchExprOperator other = (MatchExprOperator) obj;
+        return this.matchOperator == other.matchOperator;
     }
 
     @Override
@@ -99,14 +108,7 @@ public class MatchExprOperator extends ArgsScalarOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        MatchExprOperator other = (MatchExprOperator) obj;
-        return Objects.equals(this.arguments, other.arguments) && this.matchOperator == other.matchOperator;
+        return equalsSelf(obj) && Objects.equals(arguments, ((MatchExprOperator) obj).arguments);
     }
 
     @Override

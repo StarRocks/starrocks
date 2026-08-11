@@ -199,6 +199,8 @@ public class FunctionSet {
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Full-text (GIN BM25) functions:
+    // Built-in search function name; its current standard mode is analyzed and rewritten in the FE.
+    public static final String SEARCH = "search";
     // score() is a zero-arg DOUBLE function returning the BM25 relevance of the current row w.r.t. the
     // WHERE MATCH predicate. It is only valid in a single-table full-text top-N query and is rewritten
     // into a synthetic score column by RewriteToBM25PlanRule; it is never executed by the BE.

@@ -648,10 +648,18 @@ public class QueryAnalyzer {
                 throw unsupportedException("Table function must be used with lateral join");
             }
             selectRelation.setRelation(resolvedRelation);
+            // Validate unsupported expression positions before JOIN predicates are analyzed. Field binding
+            // remains below, after the source has been resolved.
+            SearchFunctionValidator.validatePlacement(selectRelation);
             //for avoid init column meta, try to prune unused columns
             pruneScanColumns(selectRelation, resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
+
+            // Resolve the source first so search() can follow pass-through fields across simple subqueries to
+            // their underlying GIN-indexed OLAP columns. Lowering still happens before the outer expressions
+            // are analyzed.
+            SearchFunctionRewriter.rewrite(selectRelation);
 
             selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
 

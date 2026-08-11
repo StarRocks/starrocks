@@ -37,6 +37,7 @@ public class EliminateNegationsRewriter extends ScalarOperatorVisitor<ScalarOper
             .add(OperatorType.IN)
             .add(OperatorType.CONSTANT)
             .add(OperatorType.EXISTS)
+            .add(OperatorType.MATCH_EXPR)
             .add(OperatorType.COMPOUND)
             .build();
 

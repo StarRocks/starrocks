@@ -1026,6 +1026,13 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
+            // Valid built-in search() calls are rewritten before expression analysis. Reaching this
+            // fallback means the call is in an unsupported expression context; keep the global name
+            // reservation consistent instead of allowing a same-named UDF to capture it.
+            if (SearchFunctionResolver.isBuiltinSearchInvocation(node)) {
+                throw new SemanticException(
+                        "search() can only be used as a WHERE predicate on one OLAP table", node.getPos());
+            }
             if (node.isNondeterministicBuiltinFnName()) {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);

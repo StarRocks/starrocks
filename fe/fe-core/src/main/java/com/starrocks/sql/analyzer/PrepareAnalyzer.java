@@ -48,6 +48,9 @@ public class PrepareAnalyzer {
             if (!(innerStmt instanceof QueryStatement)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
             }
+            // PREPARE retains and reuses innerStmt across EXECUTE calls. Reject search() before analysis
+            // lowers it in place, otherwise later reanalysis would lose the original DSL and index checks.
+            SearchFunctionValidator.rejectPreparedStatement((QueryStatement) innerStmt);
             // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
             // execution plan
             Analyzer.analyze(innerStmt, ConnectContext.get());

@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -27,10 +28,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuse;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +41,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,6 +79,29 @@ public class ScalarOperatorsReuseTest {
                 add2);
 
         assertEquals(exceptResult, newOperators);
+    }
+
+    @Test
+    public void testMatchOperatorsReuseOnlyIdenticalOperatorKinds() {
+        ColumnRefOperator column = columnRefFactory.create("content", StringType.STRING, true);
+        ConstantOperator query = ConstantOperator.createVarchar("foo bar");
+        MatchExprOperator match1 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH, column, query);
+        MatchExprOperator match2 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH, column, query);
+        MatchExprOperator any1 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH_ANY, column, query);
+        MatchExprOperator any2 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH_ANY, column, query);
+        MatchExprOperator all1 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH_ALL, column, query);
+        MatchExprOperator all2 = new MatchExprOperator(MatchExpr.MatchOperator.MATCH_ALL, column, query);
+
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> common =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(
+                        null, ImmutableList.of(match1, match2, any1, any2, all1, all2), columnRefFactory);
+        Set<MatchExpr.MatchOperator> commonOperators = common.values().stream()
+                .flatMap(level -> level.keySet().stream())
+                .filter(MatchExprOperator.class::isInstance)
+                .map(operator -> ((MatchExprOperator) operator).getMatchOperator())
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of(MatchExpr.MatchOperator.values()), commonOperators);
     }
 
     @Test

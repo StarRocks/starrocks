@@ -504,6 +504,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用 UDF。
 - 引入版本: -
 
+### `enable_search_function`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否可变：Yes
+- 描述：是否在查询表达式中启用内置 `search()` 函数。该配置默认关闭，以避免升级时改变已有未限定 `search` UDF 调用的绑定结果。启用前，请检查同名 UDF 和持久化定义。启用后，未限定的 `search()` 调用均保留给内置函数；禁用后，此类调用使用常规函数解析流程。`db.search()` 等数据库限定调用始终使用常规函数解析流程。
+- 引入版本：-
+
 ### `expr_children_limit`
 
 - 默认值: 10000

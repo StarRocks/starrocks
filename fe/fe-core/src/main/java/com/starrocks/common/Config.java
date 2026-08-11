@@ -3708,6 +3708,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_gin = false;
 
+    @ConfField(mutable = true, comment = "Whether to enable the built-in search() function. When enabled, "
+            + "unqualified search() calls are reserved for the built-in function. When disabled, they use normal "
+            + "function resolution.")
+    public static boolean enable_search_function = false;
+
     // Master switch for the Context Base (semantic context / AgentBase) module. When false (the
     // default), ContextMetaManager does not start: the internal context tables are not bootstrapped
     // and no context metadata is seeded. Takes effect on FE restart.

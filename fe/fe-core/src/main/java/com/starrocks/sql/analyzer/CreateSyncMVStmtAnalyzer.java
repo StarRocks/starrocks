@@ -107,6 +107,9 @@ public class CreateSyncMVStmtAnalyzer {
 
     public static void analyze(CreateSyncMVStmt stmt, ConnectContext context) {
         QueryStatement queryStatement = stmt.getQueryStatement();
+        // The MV data uses the lowered MATCH predicates, but reparsing the original search() after a config or
+        // DSL change could produce different rewrite semantics, so require a canonical MATCH definition.
+        SearchFunctionValidator.rejectMaterializedView(queryStatement);
 
         long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
         try {

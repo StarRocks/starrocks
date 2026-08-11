@@ -18,7 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -71,6 +74,23 @@ public class AstToSqlTest extends PlanTestBase {
 
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("^..."), plan);
+    }
+
+    @Test
+    void testMatchOperatorRoundTrip() {
+        for (MatchExpr.MatchOperator operator : MatchExpr.MatchOperator.values()) {
+            String sql = "select * from tprimary where v1 " + operator.getName() + " 'foo bar'";
+            QueryStatement statement = (QueryStatement) SqlParser.parse(
+                    sql, connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statement, connectContext);
+
+            String serialized = AstToSQLBuilder.toSQL(statement);
+            QueryStatement reparsed = (QueryStatement) SqlParser.parse(
+                    serialized, connectContext.getSessionVariable()).get(0);
+            MatchExpr predicate = Assertions.assertInstanceOf(MatchExpr.class,
+                    ((SelectRelation) reparsed.getQueryRelation()).getWhereClause());
+            Assertions.assertEquals(operator, predicate.getMatchOperator());
+        }
     }
 
 

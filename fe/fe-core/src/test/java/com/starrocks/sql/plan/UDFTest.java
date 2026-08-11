@@ -23,12 +23,17 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.DropStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -216,6 +221,68 @@ public class UDFTest extends PlanTestBase {
                 getFragmentPlan(sql, dropViewFunc);
             });
             Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testSearchFunctionSwitchControlsUnqualifiedName() throws Exception {
+        boolean originalEnableUdf = Config.enable_udf;
+        boolean originalEnableSearchFunction = Config.enable_search_function;
+        try {
+            String definition = "CREATE FUNCTION search(x string) RETURNS concat('udf:', x);";
+            Config.enable_udf = true;
+            Config.enable_search_function = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(definition, connectContext);
+            new CreateFunctionAnalyzer().analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            SemanticException reservedName = Assertions.assertThrows(SemanticException.class,
+                    () -> getFragmentPlan("SELECT search('title:foo') FROM tab0"));
+            Assertions.assertTrue(reservedName.getMessage().contains("WHERE predicate"), reservedName.getMessage());
+            SemanticException reservedInValues = Assertions.assertThrows(SemanticException.class,
+                    () -> getFragmentPlan("SELECT * FROM (VALUES (search('title:foo'))) AS v"));
+            Assertions.assertTrue(
+                    reservedInValues.getMessage().contains("WHERE predicate"), reservedInValues.getMessage());
+            assertContains(getFragmentPlan("SELECT test.search('title:foo') FROM tab0"), "udf:title:foo");
+
+            Config.enable_search_function = false;
+            assertContains(getFragmentPlan("SELECT search('title:foo') FROM tab0"), "udf:title:foo");
+
+            PrepareStmt prepared = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "PREPARE search_udf_stmt FROM SELECT search('title:foo') FROM tab0 WHERE c_0_0 > ?",
+                    connectContext);
+            QueryStatement preparedQuery = (QueryStatement) prepared.getInnerStmt();
+            FunctionCallExpr preparedCall = (FunctionCallExpr) ((SelectRelation) preparedQuery.getQueryRelation())
+                    .getSelectList().getItems().get(0).getExpr();
+            Assertions.assertNotNull(preparedCall.getFn());
+            Assertions.assertNotNull(preparedCall.getFn().getFunctionName().getDb());
+
+            Config.enable_search_function = true;
+            Analyzer.analyze(preparedQuery, connectContext);
+            Assertions.assertNotNull(preparedCall.getFn());
+            Assertions.assertNotNull(preparedCall.getFn().getFunctionName().getDb());
+
+            Config.enable_search_function = false;
+            starRocksAssert.withView(
+                    "CREATE VIEW test.search_udf_view AS "
+                            + "SELECT search('title:foo') AS result FROM tab0");
+            try {
+                assertContains(getFragmentPlan("SELECT * FROM test.search_udf_view"), "udf:title:foo");
+            } finally {
+                starRocksAssert.dropView("test.search_udf_view");
+            }
+        } finally {
+            try {
+                String drop = "DROP FUNCTION IF EXISTS search(string);";
+                DropFunctionStmt dropFunctionStmt =
+                        (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(drop, connectContext);
+                DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+                DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+            } finally {
+                Config.enable_udf = originalEnableUdf;
+                Config.enable_search_function = originalEnableSearchFunction;
+            }
         }
     }
 

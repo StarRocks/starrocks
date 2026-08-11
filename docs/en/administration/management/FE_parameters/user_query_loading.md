@@ -505,6 +505,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable UDF.
 - Introduced in: -
 
+### `enable_search_function`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the built-in `search()` function in query expressions. It is disabled by default to preserve existing unqualified `search` UDF calls during upgrade. Before enabling it, audit same-named UDFs and persisted definitions. When enabled, unqualified `search()` calls are reserved for the built-in function; when disabled, they use normal function resolution. Database-qualified calls such as `db.search()` always use normal function resolution.
+- Introduced in: -
+
 ### `expr_children_limit`
 
 - Default: 10000

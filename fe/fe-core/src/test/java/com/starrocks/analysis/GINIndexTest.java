@@ -51,6 +51,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -245,10 +246,21 @@ public class GINIndexTest extends PlanTestBase {
 
     @Test
     public void testMatchExpr() {
-        SlotRef slot = new SlotRef(null, null, null);
-        StringLiteral stringExpr = new StringLiteral("test");
-        MatchExpr expr = new MatchExpr(slot, stringExpr);
-        MatchExpr newMatch = (MatchExpr) expr.clone();
+        MatchExpr match = new MatchExpr(MatchExpr.MatchOperator.MATCH,
+                new SlotRef(null, "f"), new StringLiteral("test"));
+        MatchExpr matchAny = new MatchExpr(MatchExpr.MatchOperator.MATCH_ANY,
+                new SlotRef(null, "f"), new StringLiteral("test"));
+        MatchExpr matchAll = new MatchExpr(MatchExpr.MatchOperator.MATCH_ALL,
+                new SlotRef(null, "f"), new StringLiteral("test"));
+
+        Assertions.assertNotEquals(match, matchAny);
+        Assertions.assertNotEquals(matchAny, matchAll);
+        for (MatchExpr expression : List.of(match, matchAny, matchAll)) {
+            MatchExpr clone = (MatchExpr) expression.clone();
+            Assertions.assertEquals(expression, clone);
+            Assertions.assertEquals(expression.hashCode(), clone.hashCode());
+        }
+        Assertions.assertEquals(3, new HashSet<>(List.of(match, matchAny, matchAll)).size());
     }
 
     @Test

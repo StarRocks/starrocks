@@ -1,0 +1,559 @@
+-- name: test_search_function_${uuid0}
+CREATE DATABASE test_search_function_${uuid0};
+-- result:
+-- !result
+USE test_search_function_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_search_function" = "true");
+-- result:
+-- !result
+CREATE TABLE documents (
+  id BIGINT,
+  title VARCHAR(100),
+  body VARCHAR(100),
+  category VARCHAR(100),
+  standard_text VARCHAR(100),
+  case_text VARCHAR(100),
+  exact_text VARCHAR(100),
+  bm25_text VARCHAR(100),
+  plain_text VARCHAR(100),
+  number_value INT,
+  INDEX idx_title (title) USING GIN("imp_lib"="builtin","parser"="english"),
+  INDEX idx_body (body) USING GIN("imp_lib"="builtin","parser"="english"),
+  INDEX idx_category (category) USING GIN("imp_lib"="builtin","parser"="english"),
+  INDEX idx_standard (standard_text) USING GIN("imp_lib"="builtin","parser"="standard"),
+  INDEX idx_case (case_text) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="false"),
+  INDEX idx_exact (exact_text) USING GIN("imp_lib"="builtin","parser"="none"),
+  INDEX idx_bm25 (bm25_text) USING GIN(
+      "imp_lib"="builtin","parser"="english","index_options"="DOCS_AND_FREQS")
+) ENGINE=OLAP DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO documents
+    (id, title, body, category, standard_text, case_text, exact_text, bm25_text, plain_text, number_value) VALUES
+  (1, 'Machine Learning', 'Cloud Database', 'Tech', 'Hello World', 'Hello World', 'Hello World',
+      'the quick brown fox', 'Hello', 1),
+  (2, 'Cloud Native', 'Machine Learning', 'Archive', 'Machine Learning', 'hello world', 'hello world',
+      'the lazy dog', 'World', 2),
+  (3, 'Other', 'Nothing', NULL, 'Other', 'Other', 'Other', 'quick quick fox', 'Other', 3),
+  (4, 'Machine Cloud', 'Database', 'Tech', 'Database', 'Machine', 'Machine Cloud',
+      'a slow green turtle', 'Machine', 4);
+-- result:
+-- !result
+SELECT id FROM documents WHERE search('title:Machine') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE search('title:Machine-Learning', '{"default_operator":"and"}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud', '{"default_field":"title","default_operator":"and"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('category:tech AND machine', '{"default_field":"title"}') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents WHERE id > 1 AND search('title:machine') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('title:machine OR body:machine AND category:archive') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents
+WHERE search('(title:machine OR body:machine) AND category:archive') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM documents
+WHERE search('title:machine AND NOT body:learning') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE id > 0 AND search('title:machine') AND NOT search('body:learning') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents WHERE id IN
+    (SELECT id FROM documents WHERE search('title:machine')) ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM (
+    SELECT id, title AS heading FROM documents WHERE id > 0
+) docs WHERE search('docs.heading:machine') ORDER BY id;
+-- result:
+1
+4
+-- !result
+WITH matched AS (SELECT id FROM documents WHERE search('title:machine'))
+SELECT id FROM matched ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine AND cloud', '{"fields":["title","body"],"type":"best_fields"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine AND (cloud OR NOT learning)',
+             '{"fields":["title","body"],"type":"best_fields"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine AND cloud', '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud',
+             '{"fields":["title","body"],"type":"best_fields","default_operator":"and"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud',
+             '{"fields":["title","body"],"type":"cross_fields","default_operator":"and"}') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents
+WHERE search('title:(machine cloud)', '{"default_operator":"and"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud AND database',
+             '{"fields":["title","body"],"type":"best_fields"}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud AND database',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud AND database',
+             '{"fields":["title","body"],"type":"best_fields","default_operator":"and"}') ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM documents
+WHERE search('machine cloud AND database',
+             '{"fields":["title","body"],"type":"cross_fields","default_operator":"and"}') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE search('machine AND NOT learning',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents
+WHERE search('NOT (machine OR cloud)',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+3
+-- !result
+SELECT id FROM documents
+WHERE search('title:machine AND body:database',
+             '{"fields":["title","case_text"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents
+WHERE search('ANY(machine learning)',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents
+WHERE search('ALL(machine learning)',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+2
+-- !result
+SELECT id FROM documents
+WHERE search('IN(Machine Cloud)',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents
+WHERE search('Mach*',
+             '{"fields":["title","body"],"type":"cross_fields"}') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents WHERE search('case_text:Hel*') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM documents WHERE search('case_text:hel*') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM documents WHERE search('standard_text:Hello') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM documents WHERE search('exact_text:EXACT(Hello World)') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM documents WHERE search('exact_text:EXACT(Hello  World)') ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM documents WHERE search('exact_text:Mach*') ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM documents WHERE search('title:EXACT(Machine)') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents WHERE search('title:EXACT(Machine Learning)') ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM documents
+WHERE search('hello', '{"fields":["title","case_text"],"type":"best_fields"}') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM documents WHERE search('title:any(cloud other)') ORDER BY id;
+-- result:
+2
+3
+4
+-- !result
+SELECT id FROM documents WHERE search('title:ANY(cloud other)') ORDER BY id;
+-- result:
+2
+3
+4
+-- !result
+SELECT id FROM documents WHERE search('body:ALL(machine learning)') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM documents WHERE search('category:IN(Tech Archive)') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents WHERE search('title:Mach*') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents WHERE search('category:*') ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM documents WHERE search('NOT category:archive') ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM documents WHERE search('NOT category:*') ORDER BY id;
+-- result:
+3
+-- !result
+SELECT id FROM documents
+WHERE search('bm25_text:ANY(quick fox)') ORDER BY score() DESC LIMIT 10;
+-- result:
+3
+1
+-- !result
+SELECT id FROM documents
+WHERE id > 0 AND search('bm25_text:ALL(quick fox)') ORDER BY score() DESC LIMIT 10;
+-- result:
+3
+1
+-- !result
+SELECT id FROM documents
+WHERE search('bm25_text:(quick fox)') ORDER BY score() DESC LIMIT 10;
+-- result:
+[REGEX].*score.. supports exactly one MATCH column.*
+-- !result
+SELECT id FROM documents
+WHERE search('quick', '{"fields":["bm25_text","title"],"type":"cross_fields"}')
+ORDER BY score() DESC LIMIT 10;
+-- result:
+[REGEX].*score.. supports exactly one MATCH column.*
+-- !result
+SELECT id FROM documents
+WHERE search('bm25_text:quick') OR id = 2 ORDER BY score() DESC LIMIT 10;
+-- result:
+[REGEX].*score.. does not support a MATCH predicate nested inside OR.*
+-- !result
+SELECT id FROM documents WHERE search('');
+-- result:
+[REGEX].*search.. DSL must not be empty.*
+-- !result
+SELECT id FROM documents WHERE search('title:"foo bar"');
+-- result:
+[REGEX].*phrase query is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:/foo/');
+-- result:
+[REGEX].*regex query is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:[a TO z]');
+-- result:
+[REGEX].*range query is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo~2');
+-- result:
+[REGEX].*fuzzy query is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo?');
+-- result:
+[REGEX].*single-character wildcard.*is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo^2');
+-- result:
+[REGEX].*boost query is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo%');
+-- result:
+[REGEX].*literal.*is not allowed in search.. terms.*
+-- !result
+SELECT id FROM documents WHERE search('+foo', '{"default_field":"title"}');
+-- result:
+[REGEX].*required/prohibited term prefixes are not supported.*
+-- !result
+SELECT id FROM documents WHERE search('foo && bar', '{"default_field":"title"}');
+-- result:
+[REGEX].*use the uppercase AND, OR, and NOT operators.*
+-- !result
+SELECT id FROM documents WHERE search('foo || bar', '{"default_field":"title"}');
+-- result:
+[REGEX].*use the uppercase AND, OR, and NOT operators.*
+-- !result
+SELECT id FROM documents WHERE search('!foo', '{"default_field":"title"}');
+-- result:
+[REGEX].*use the uppercase AND, OR, and NOT operators.*
+-- !result
+SELECT id FROM documents WHERE search('title:nested');
+-- result:
+[REGEX].*NESTED is not supported.*
+-- !result
+SELECT id FROM documents WHERE search('title:ANY (foo)');
+-- result:
+[REGEX].*ANY must be immediately followed.*
+-- !result
+SELECT id FROM documents WHERE search('title:ANY()');
+-- result:
+[REGEX].*unexpected.*search.. DSL.*
+-- !result
+SELECT id FROM documents WHERE search('title:IN(foo*)');
+-- result:
+[REGEX].*wildcard.*is not supported inside IN.*
+-- !result
+SELECT id FROM documents WHERE search('title:*foo');
+-- result:
+[REGEX].*wildcard.*only supported once at the end.*
+-- !result
+SELECT id FROM documents WHERE search('title:fo*o');
+-- result:
+[REGEX].*wildcard.*only supported once at the end.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo**');
+-- result:
+[REGEX].*wildcard.*only supported once at the end.*
+-- !result
+SELECT id FROM documents WHERE search('bad-field:foo');
+-- result:
+[REGEX].*invalid field name.*bad-field.*
+-- !result
+SELECT id FROM documents WHERE search('title:');
+-- result:
+[REGEX].*unexpected end of input.*search.. DSL.*
+-- !result
+SELECT id FROM documents WHERE search('AND', '{"default_field":"title"}');
+-- result:
+[REGEX].*unexpected.*AND.*search.. DSL.*
+-- !result
+SELECT id FROM documents WHERE search('foo');
+-- result:
+[REGEX].*unqualified clause.*specify.*default_field.*fields.*
+-- !result
+SELECT id FROM documents WHERE search();
+-- result:
+[REGEX].*search.. expects one DSL string and an optional options string.*
+-- !result
+SELECT id FROM documents WHERE search(*);
+-- result:
+[REGEX].*Getting syntax error.*
+-- !result
+SELECT id FROM documents WHERE search(DISTINCT 'title:foo');
+-- result:
+[REGEX].*Getting syntax error.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo', title);
+-- result:
+[REGEX].*search.. arguments must be constant strings.*
+-- !result
+SELECT id FROM documents
+WHERE search('foo', '{"default_field":"body","fields":["title"]}');
+-- result:
+[REGEX].*default_field.*fields.*mutually exclusive.*
+-- !result
+SELECT id FROM documents WHERE search('missing:foo');
+-- result:
+[REGEX].*unknown search.. field.*missing.*
+-- !result
+SELECT id FROM documents WHERE search('plain_text:foo');
+-- result:
+[REGEX].*plain_text.*requires a GIN index.*
+-- !result
+SELECT id FROM documents WHERE search('plain_text:*');
+-- result:
+[REGEX].*plain_text.*requires a GIN index.*
+-- !result
+SELECT id FROM documents WHERE search('number_value:foo');
+-- result:
+[REGEX].*number_value.*must be CHAR, VARCHAR, or STRING.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo', '{"default_operator":"xor"}');
+-- result:
+[REGEX].*default_operator.*must be.*and.*or.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo', '{"fields":"title"}');
+-- result:
+[REGEX].*fields.*must be a string array.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo', '{"unknown":true}');
+-- result:
+[REGEX].*unknown search.. option.*unknown.*
+-- !result
+SELECT id FROM documents WHERE search('title:foo', '{"type":"cross_fields"}');
+-- result:
+[REGEX].*type.*requires a non-empty.*fields.*
+-- !result
+SELECT id FROM documents
+WHERE search('foo', '{"fields":["title","standard_text"],"type":"cross_fields"}');
+-- result:
+[REGEX].*cross_fields.*compatible GIN parser.*
+-- !result
+SELECT id FROM documents
+WHERE search('foo', '{"fields":["title","case_text"],"type":"cross_fields"}');
+-- result:
+[REGEX].*cross_fields.*case-normalization settings.*
+-- !result
+SELECT search('title:foo') FROM documents;
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate.*SELECT list.*
+-- !result
+SELECT id FROM documents GROUP BY id HAVING search('title:foo');
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate.*HAVING.*
+-- !result
+SELECT count(*) FROM documents GROUP BY search('title:foo');
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate.*GROUP BY.*
+-- !result
+SELECT id FROM documents ORDER BY search('title:foo');
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate.*ORDER BY.*
+-- !result
+SELECT a.id FROM documents a JOIN documents b ON search('a.title:foo');
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate.*JOIN ON.*
+-- !result
+SELECT a.id FROM documents a JOIN documents b ON a.id = b.id WHERE search('a.title:foo');
+-- result:
+[REGEX].*search.. currently supports WHERE on one OLAP table only.*
+-- !result
+SELECT id FROM documents WHERE if(search('title:foo'), true, false);
+-- result:
+[REGEX].*search.. must be a boolean leaf.*
+-- !result
+SELECT * FROM (VALUES (search('title:foo'))) AS v;
+-- result:
+[REGEX].*search.. can only be used as a WHERE predicate on one OLAP table.*
+-- !result
+PREPARE search_stmt FROM
+SELECT id FROM documents WHERE search('title:foo') AND id > ?;
+-- result:
+[REGEX].*search.. is not supported in prepared statements.*
+-- !result
+CREATE MATERIALIZED VIEW search_async_mv
+DISTRIBUTED BY RANDOM AS SELECT id FROM documents WHERE search('title:foo');
+-- result:
+[REGEX].*search.. is not supported in materialized view definitions.*
+-- !result
+CREATE MATERIALIZED VIEW search_sync_mv AS
+SELECT id, count(*) FROM documents WHERE search('title:foo') GROUP BY id;
+-- result:
+[REGEX].*search.. is not supported in materialized view definitions.*
+-- !result
+CREATE VIEW machine_documents AS
+SELECT id FROM documents WHERE search('title:ALL(machine learning)');
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_search_function" = "false");
+-- result:
+-- !result
+SELECT id FROM machine_documents ORDER BY id;
+-- result:
+1
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_search_function" = "true");
+-- result:
+-- !result
+SELECT id FROM machine_documents WHERE search('title:foo');
+-- result:
+[REGEX].*search.. currently supports WHERE on one OLAP table only.*
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_search_function" = "false");
+-- result:
+-- !result
+DROP DATABASE IF EXISTS test_search_function_${uuid0};
+-- result:
+-- !result
