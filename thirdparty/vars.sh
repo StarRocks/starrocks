@@ -341,10 +341,10 @@ VPACK_SOURCE="velocypack-XYZ1.0"
 VPACK_MD5SUM="161cbf4c347f6daadacfb749c31842f8"
 
 # open-telemetry
-OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.2.0.tar.gz"
-OPENTELEMETRY_NAME=opentelemetry-cpp-v1.2.0.tar.gz
-OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
-OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
+OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz"
+OPENTELEMETRY_NAME=opentelemetry-cpp-v1.9.1.tar.gz
+OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.9.1
+OPENTELEMETRY_MD5SUM="fd353f085f3f3bfbc2c28197287335a0"
 
 # benchmark
 BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
@@ -383,7 +383,7 @@ SERDES_SOURCE="libserdes-7.3.1"
 SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 
 # lzo
-LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_DOWNLOAD="https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
 LZO2_NAME=lzo-2.10.tar.gz
 LZO2_SOURCE=lzo-2.10
 LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"

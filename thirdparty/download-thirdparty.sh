@@ -109,7 +109,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --progress=dot:mega --tries=3 --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --tries=3 $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -783,11 +783,11 @@ fi
 # patch opentelemetry
 if [[ -d $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.2.0" ]; then
+    if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.9.1" ]; then
         # thrift 0.24.0 dropped <boost/numeric/conversion/cast.hpp> from
         # TTransportException.h, which used to drag in <unistd.h>. The jaeger
         # exporter calls ::close via THRIFT_CLOSESOCKET, so include it directly.
-        apply_patch -p1 $TP_PATCH_DIR/opentelemetry-cpp-1.2.0-thrift-0.24-unistd.patch
+        apply_patch -p1 $TP_PATCH_DIR/opentelemetry-cpp-1.9.1-thrift-0.24-unistd.patch
         touch $PATCHED_MARK
     fi
     echo "Finished patching $OPENTELEMETRY_SOURCE"

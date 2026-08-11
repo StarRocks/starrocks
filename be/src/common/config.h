@@ -1341,6 +1341,11 @@ CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
+// Evaluate join runtime filters against decoded rows inside the parquet reader, so
+// non-matching rows are dropped before lazy columns are materialized. When disabled,
+// runtime filters are only used for row group / page statistics pruning and the
+// row-level probe happens in the downstream scan operator instead.
+CONF_mBool(parquet_runtime_filter_push_down_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
@@ -2021,6 +2026,14 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// Whether horizontal compaction fills the local data cache with the input segments it reads.
+// Unlike vertical compaction, which scans the input once per column group, horizontal compaction
+// reads every input byte exactly once and the input rowsets are replaced right afterwards, so
+// caching them mostly evicts query-hot data and adds an inline local-disk write on each cache miss.
+// Defaults to false, matching the other full-scan background paths under storage/lake (schema
+// change, tablet merge, ADD INDEX). Set to true to restore the previous always-fill behavior.
+CONF_mBool(lake_enable_horizontal_compaction_fill_data_cache, "false");
 
 // If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
 // If set to false, skip LIST and use approximate tablet size (base_size=0).

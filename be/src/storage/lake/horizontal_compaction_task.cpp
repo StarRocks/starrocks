@@ -19,6 +19,7 @@
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
 #include "runtime/current_thread.h"
@@ -72,9 +73,16 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.lake_io_opts = {.fill_data_cache = true,
+    // `fill_metadata_cache` is named explicitly: assigning the whole struct replaces the
+    // TabletReaderParams default (`{.fill_data_cache = true, .fill_metadata_cache = true}`) with
+    // LakeIOOptions' in-class defaults for every field not listed, which silently turned metadata
+    // caching off. Segment footers and column indexes are small, and on the common path
+    // calculate_chunk_size() has already opened the same segments, so caching them is worth it even
+    // when the column data below is not.
+    reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes};
+                                  .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes,
+                                  .fill_metadata_cache = true};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction.
@@ -269,10 +277,14 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+        // This pass only touches segment footers and column indexes, never column data, so the
+        // data cache stays off. The metadata cache is filled so that the read pass in execute()
+        // reuses these Segment objects instead of re-reading every footer from remote storage
+        // (TabletManager::load_segment always probes the metacache but only inserts when asked).
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
                                    .metadata_buffer_size = config::lake_compaction_metadata_buffer_size_bytes,
-                                   .fill_metadata_cache = false};
+                                   .fill_metadata_cache = true};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by

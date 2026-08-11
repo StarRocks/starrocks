@@ -514,6 +514,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，是否允许自动清理损坏的元数据缓存。
 - 引入版本：v3.3
 
+### lake_enable_horizontal_compaction_fill_data_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否允许 Horizontal Compaction 任务将读取的输入数据缓存到本地磁盘上。`true` 表示启用，`false` 表示不启用。Horizontal Compaction 对每个输入 Segment 只读取一次，且输入 Rowset 在任务结束后即被替换，因此缓存这部分数据主要会挤占本地缓存中的查询热数据。设置为 `true` 可恢复此前始终缓存的行为。
+- 引入版本：v4.2
+
 ### lake_enable_vertical_compaction_fill_data_cache
 
 - 默认值：true

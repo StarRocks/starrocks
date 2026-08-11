@@ -245,7 +245,7 @@ let
       sha256 = "12zlqlp7j3fri1bvwfpz7637cvf6iv7mq18j54imxcs48y814xak";
     };
     "lzo-2.10.tar.gz" = {
-      url = "http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
+      url = "https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz";
       md5 = "39d3f3f9c55c87b1e5d6888e1420f4b5";
       sha256 = "0wm04519pd3g8hqpjqhfr72q8qmbiwqaxcs3cndny9h86aa95y60";
     };
@@ -259,10 +259,10 @@ let
       md5 = "710c2368d28f1a25ab92e25b5b9b11ec";
       sha256 = "0q5kvar91asbv7k203sx3rafqirf4rhqih3anz829a7hgjnj9bin";
     };
-    "opentelemetry-cpp-v1.2.0.tar.gz" = {
-      url = "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.2.0.tar.gz";
-      md5 = "c084abc742c6b3cd4c9c3684e559d4e1";
-      sha256 = "1hlplg4fzq96y725qvh8r7n1v9vd25g0xqq6bcdbhi7swkwj0r3s";
+    "opentelemetry-cpp-v1.9.1.tar.gz" = {
+      url = "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz";
+      md5 = "fd353f085f3f3bfbc2c28197287335a0";
+      sha256 = "0jc2nink6pp0xj2j9ryv793l3kcp5aqdrn9a15snvly8h57y53b6";
     };
     "poco-1.12.5-release.tar.gz" = {
       url = "https://github.com/pocoproject/poco/archive/refs/tags/poco-1.12.5-release.tar.gz";
@@ -503,7 +503,7 @@ let
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
       "fast-float-3.5.1.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
@@ -573,7 +573,7 @@ let
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
       "fast-float-3.5.1.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
@@ -642,7 +642,7 @@ let
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
-      "opentelemetry-cpp-v1.2.0.tar.gz"
+      "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
       "fast-float-3.5.1.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
