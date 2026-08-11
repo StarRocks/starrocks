@@ -35,6 +35,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.planner.expression.ExprOpcodeRegistry;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
@@ -53,6 +54,7 @@ import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -238,6 +240,15 @@ public class HashJoinNode extends JoinNode {
         // cannot go stale: whatever an ASOF join grows next, it still will not be cached.
         if (joinOp.isAsofJoin()) {
             normalizer.setUncacheable(true);
+        }
+        // Same reasoning as NestLoopJoinNode: the conjuncts reference these definitions by slot id.
+        // A HashJoinNode reaches the digested subtree under narrower conditions (isTransformJoin()
+        // also demands a left-transform op and a non-shuffled distribution), and no probe of mine
+        // made this one collide, but the omission is identical and costs nothing to close.
+        if (commonSlotMap != null) {
+            Pair<List<Integer>, List<ByteBuffer>> cse = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+            hashJoinNode.setCse_slot_ids(cse.first);
+            hashJoinNode.setCse_exprs(cse.second);
         }
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);

@@ -1,0 +1,139 @@
+-- name: test_query_cache_join_predicate_cse
+CREATE TABLE n1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj_${uuid0}");
+-- result:
+-- !result
+CREATE TABLE n2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj_${uuid0}");
+-- result:
+-- !result
+INSERT INTO n1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 0, 100
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+INSERT INTO n2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 63));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+-- result:
+3348000
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+-- result:
+3472000
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+-- result:
+3348000
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+-- result:
+3472000
+-- !result
+CREATE TABLE n3 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj3_${uuid0}");
+-- result:
+-- !result
+CREATE TABLE n4 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj3_${uuid0}");
+-- result:
+-- !result
+INSERT INTO n3
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 0, 100
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+INSERT INTO n4
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 63));
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select n3.c1, sum(n3.v1) s from n3 join n4
+  on (n4.ts % 9) > n3.ts and (n4.ts % 9) < n3.v1 group by n3.c1) x;
+-- result:
+3472000
+-- !result
+select sum(s) from (select n3.c1, sum(n3.v1) s from n3 join n4
+  on (n4.ts % 7) > n3.ts and (n4.ts % 7) < n3.v1 group by n3.c1) x;
+-- result:
+3348000
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+-- result:
+418600
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+-- result:
+434000
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+-- result:
+434000
+-- !result
