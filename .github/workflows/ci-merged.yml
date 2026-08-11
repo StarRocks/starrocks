@@ -71,7 +71,6 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
-<<<<<<< HEAD
   # Backport fan-out — SYNC-EXCLUSIVE dry-run shadow. Fires ONLY on sync PRs (SR -> CD
   # forward sync merged to main), the mirror of the job above (which excludes them).
   # Restricts the target set to release lines CD has but SR LACKS (e.g. enterprise-only
@@ -99,8 +98,6 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --exclusive-vs StarRocks/starrocks --dry-run
 
-=======
->>>>>>> 193acf5b605... [Tool] ci-merged: add checkbox x AI-affected backport reconcile dry-run shadow (#77262)
   # Decision-10 phase B shadow: checkbox x AI-affected reconciliation, DRY-RUN.
   # Runs on [self-hosted, ubuntu, ai] — that pool has BOTH /var/lib/ci-tool AND
   # `claude` + the github-bugfix-versions plugin (see bugfix-version-index.yml).
@@ -114,11 +111,7 @@ jobs:
     if: >
       github.event.pull_request.merged == true &&
       github.base_ref == 'main' &&
-<<<<<<< HEAD
       github.repository == 'CelerData/celerdata-enterprise' &&
-=======
-      github.repository == 'StarRocks/starrocks' &&
->>>>>>> 193acf5b605... [Tool] ci-merged: add checkbox x AI-affected backport reconcile dry-run shadow (#77262)
       startsWith(github.event.pull_request.title, '[BugFix]') &&
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
