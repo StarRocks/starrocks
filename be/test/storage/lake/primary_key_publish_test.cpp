@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <ctime>
 #include <map>
 #include <random>
 
@@ -41,8 +42,10 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/transactions.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -50,6 +53,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/defer_op.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -2828,6 +2832,70 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_loads_segments_u
 
     // Segments were loaded (flag on), so every live row survives the compaction.
     EXPECT_EQ(240, read_rows(tablet_id, version));
+}
+
+// Verify the publish path emits the trace counters added to attribute a slow lake publish. The test
+// harness publishes via lake::publish_version (bypassing the LakeServiceImpl RPC layer), so it covers
+// the counters on that path -- finalize (delvec write + metadata put) and the compaction internals --
+// but not publish_tablet_total_us, which is emitted in the RPC handler.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_emits_trace_counters) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    for (int i = 0; i < 3; i++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, /*shift=*/i, /*random_shuffle=*/false,
+                                                   /*upsert=*/true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_slot_pointers)
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+        CHECK_OK(dw->open());
+        CHECK_OK(dw->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    int64_t txn_id = next_id();
+    auto old_min = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp reset_min([&] { config::lake_pk_compaction_min_input_segments = old_min; });
+    auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    // Publish the compaction txn under an adopted trace; the publish runs synchronously on this thread,
+    // so the counters land on `trace`.
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(std::time(nullptr));
+    txn_info.set_force_publish(false);
+    auto txns = std::vector<TxnInfoPB>{std::move(txn_info)};
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(lake::publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version, version + 1, txns,
+                                        false)
+                          .status());
+    }
+    version++;
+
+    const std::string metrics = trace->MetricsAsJSON();
+    // finalize() always writes the delvec file and persists the tablet metadata.
+    EXPECT_NE(metrics.find("finalize_delvec_write_us"), std::string::npos) << metrics;
+    EXPECT_NE(metrics.find("put_tablet_metadata_us"), std::string::npos) << metrics;
+    // A compaction publish runs the conflict resolver and applies the compaction to the PK index.
+    EXPECT_NE(metrics.find("compaction_conflict_resolve_us"), std::string::npos) << metrics;
+    EXPECT_NE(metrics.find("index_apply_opcompaction_us"), std::string::npos) << metrics;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
