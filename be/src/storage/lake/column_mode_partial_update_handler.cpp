@@ -14,22 +14,9 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
-<<<<<<< HEAD
-=======
 #include <climits>
 
-#include "base/debug/trace.h"
-#include "base/phmap/phmap.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "column/chunk_schema_helper.h"
-#include "column/serde/column_array_serde.h"
-#include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
-#include "common/config_rowset_fwd.h"
->>>>>>> 2f91b5ef0f ([Enhancement] Stream source segments for lake column updates (#77275))
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -52,6 +39,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/phmap/phmap.h"
 #include "util/stack_util.h"
@@ -244,12 +232,8 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
     seg_options.chunk_size = config::vector_chunk_size;
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
-<<<<<<< HEAD
-    auto source_chunk_ptr = ChunkHelper::new_chunk(schema, segment->num_rows());
-    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);
-=======
-    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
-    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    auto source_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
     uint32_t start_rowid = 0;
     // Accumulate the source bytes incrementally. bytes_usage() may walk every value for
     // object-backed columns, while appending a batch adds exactly that batch's bytes.
@@ -267,7 +251,6 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
         source_chunk_bytes = 0;
         return Status::OK();
     };
->>>>>>> 2f91b5ef0f ([Enhancement] Stream source segments for lake column updates (#77275))
     while (true) {
         tmp_chunk_ptr->reset();
         auto st = seg_iter->get_next(tmp_chunk_ptr.get());
