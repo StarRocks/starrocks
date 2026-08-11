@@ -403,7 +403,7 @@ set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
-starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libhttp_client_curl.a)
+starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libopentelemetry_http_client_curl.a)
 add_library(http_client_curl STATIC IMPORTED GLOBAL)
 set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${HTTP_CLIENT_CURL_LIBRARY})
 
