@@ -1,0 +1,24 @@
+-- name: test_expr_partition_prune_null_partition
+CREATE TABLE partition_unixtime_null (
+        id bigint,
+        ts bigint
+)
+PARTITION BY from_unixtime(ts, 'yyyy-MM-dd HH:mm:ss', 'UTC');
+-- from_unixtime is NULL for a negative ts, so those rows land in the NULL partition,
+-- and a row with a NULL ts lands there too
+insert into partition_unixtime_null values(1, 1196440219),(2, 1196440219),(3, 1500000000);
+insert into partition_unixtime_null values(-1, -1),(-2, -1);
+insert into partition_unixtime_null(id) values(9);
+select count(*) from partition_unixtime_null;
+-- a predicate on ts must not prune the NULL partition: from_unixtime(-1) is NULL but -1 < 0
+select id, ts from partition_unixtime_null where ts < 0 order by id;
+select id, ts from partition_unixtime_null where not (ts > 1196440219) order by id;
+select id, ts from partition_unixtime_null where ts = -1 order by id;
+-- a row whose ts IS NULL is still excluded from both branches, and only matches IS NULL
+select id, ts from partition_unixtime_null where ts > 1196440219 order by id;
+select id, ts from partition_unixtime_null where (ts > 1196440219) is null order by id;
+-- ternary logic partitioning: the three branches must add up to the whole table
+select count(*) from (
+        (select * from partition_unixtime_null where ts > 1196440219)
+        union all (select * from partition_unixtime_null where not (ts > 1196440219))
+        union all (select * from partition_unixtime_null where (ts > 1196440219) is null)) t;
