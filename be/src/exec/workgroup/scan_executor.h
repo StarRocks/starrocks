@@ -34,7 +34,7 @@ class ScanExecutor {
 public:
     explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
                           pipeline::ScanExecutorMetrics* metrics);
-    virtual ~ScanExecutor() = default;
+    virtual ~ScanExecutor();
 
     void initialize(int32_t num_threads);
     void close();
@@ -50,6 +50,8 @@ public:
 
 private:
     void worker_thread();
+    // Detaches the thread pool from the process-wide metrics. Idempotent.
+    void _stop_monitoring();
 
     LimitSetter _num_threads_setter;
     std::unique_ptr<ScanTaskQueue> _task_queue;
