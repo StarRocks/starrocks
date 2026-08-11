@@ -62,12 +62,27 @@ struct TNormalHashJoinNode {
   6: optional list<binary> partition_exprs
   7: optional list<Types.TSlotId> output_columns
   8: optional bool late_materialization
+  // Same commonSlotMap omission as TNormalNestLoopJoinNode above.
+  //
+  // 9 is reserved and unused. It was claimed by a sibling fix for the ASOF temporal condition,
+  // which sits outside the conjunct lists in the same way; that fix ended up marking the fragment
+  // uncacheable instead and needs no field at all. The ordinal is left alone rather than reused,
+  // so that the numbering here does not depend on which of the two changes landed first.
+  10: optional list<Types.TSlotId> cse_slot_ids
+  11: optional list<binary> cse_exprs
 }
 
 
 struct TNormalNestLoopJoinNode {
   1: optional PlanNodes.TJoinOp join_op
   2: optional list<binary> join_conjuncts
+  // Common sub-expressions of the join predicate. join_conjuncts reference these by slot id
+  // only, so without their definitions two joins whose predicates share a shape but differ in
+  // a factored-out subexpression -- `(t.ts % 7) > s.a and (t.ts % 7) < s.b` versus the same
+  // with % 9 -- normalize identically. A NestLoopJoinNode is always a transform join, so it
+  // sits inside the digested subtree and decides which rows the cached aggregate is built from.
+  3: optional list<Types.TSlotId> cse_slot_ids
+  4: optional list<binary> cse_exprs
 }
 
 
