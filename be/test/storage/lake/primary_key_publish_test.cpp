@@ -18,7 +18,6 @@
 #include <map>
 #include <random>
 
-#include "base/debug/trace.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -51,6 +50,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "util/defer_op.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
