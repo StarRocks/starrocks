@@ -293,6 +293,33 @@ void distribute_segment_to_ranges(const SegmentSplitInfo& segment, std::vector<R
 // Core range split algorithm (public API)
 // ================================================================================
 
+// True when the tablet's sort key is exactly its key columns, i.e. the tuples the writer stores per
+// segment (sort_key_min / sort_key_max / sort_key_samples, built from TabletSchema::sort_key_idxes)
+// live in the same key space as a tablet range. An empty sort_key_idxes means "the sort key IS the
+// key columns" -- that convention lives in the materialized TabletSchema, and this reads the raw PB
+// with it applied, because materializing here is not an option (see the colocate branch in
+// get_tablet_split_ranges_impl for why).
+static bool sort_key_is_key_columns(const TabletSchemaPB& schema) {
+    if (schema.sort_key_idxes_size() == 0) {
+        return true;
+    }
+    int num_key_columns = 0;
+    for (const auto& col : schema.column()) {
+        if (col.is_key()) {
+            ++num_key_columns;
+        }
+    }
+    if (schema.sort_key_idxes_size() != num_key_columns) {
+        return false;
+    }
+    for (int i = 0; i < schema.sort_key_idxes_size(); ++i) {
+        if (schema.sort_key_idxes(i) != static_cast<uint32_t>(i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
                                                             bool use_num_rows, bool track_sources,
@@ -747,28 +774,8 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
     // Withhold the range when the spaces differ. It only refines the per-split size estimate (it
     // pre-splits candidate ranges at the tablet's own edges so a shared segment reaching past them
     // cannot inflate one split's stats); the boundaries themselves come from the segment tuples.
-    const bool sort_key_is_key_columns = [&] {
-        const auto& schema = tablet_metadata->schema();
-        if (schema.sort_key_idxes_size() == 0) {
-            return true;
-        }
-        int num_key_columns = 0;
-        for (const auto& col : schema.column()) {
-            if (col.is_key()) {
-                ++num_key_columns;
-            }
-        }
-        if (schema.sort_key_idxes_size() != num_key_columns) {
-            return false;
-        }
-        for (int i = 0; i < schema.sort_key_idxes_size(); ++i) {
-            if (schema.sort_key_idxes(i) != static_cast<uint32_t>(i)) {
-                return false;
-            }
-        }
-        return true;
-    }();
-    const TabletRange* boundary_tablet_range = sort_key_is_key_columns ? &tablet_range : nullptr;
+    const TabletRange* boundary_tablet_range =
+            sort_key_is_key_columns(tablet_metadata->schema()) ? &tablet_range : nullptr;
 
     int64_t total_num_rows = 0;
     for (const auto& segment : segments) {
@@ -1749,6 +1756,34 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     }
     if (splitting_tablet.new_tablet_ids_size() <= 0) {
         return Status::InvalidArgument("splitting tablet has no new tablet");
+    }
+
+    // Split compares the segments' key tuples (sort_key_min / sort_key_max / sort_key_samples,
+    // which the writer produces from TabletSchema::sort_key_idxes) against tablet ranges, which are
+    // over the key columns: when picking boundaries, when filtering candidate ranges, and when
+    // deciding which new tablet each segment belongs to. Those comparisons dispatch std::get on one
+    // side's declared type, so once the two key spaces differ they throw bad_variant_access. Nothing
+    // on the publish path catches it, the BE aborts, the transaction stays unpublished, and the FE
+    // re-issues the publish to whichever CN comes back -- observed as all three CNs of a cluster
+    // going down together and staying down.
+    //
+    // This is not one bad comparison but an assumption the whole path is built on; tablet_splitter.cc
+    // alone has dozens of such comparisons, and fixing them one at a time just moves the abort to the
+    // next one (measured: boundary sort -> segment ownership). Refuse the split instead. A non-OK
+    // status here routes through make_identical_new_tablet_metadata, so the tablet simply does not
+    // split -- it keeps growing past the threshold, which is a degradation but not a correctness or
+    // availability problem.
+    //
+    // Also covers the FE-supplied-boundaries path: those boundaries are in key-column space and are
+    // fine, but segment ownership still compares them against sort-key tuples.
+    //
+    // Lifting this restriction means giving split a boundary source that is in key-column space --
+    // the primary key index is already sorted that way -- rather than sampling the segments' sort key.
+    if (!sort_key_is_key_columns(tablet_metadata->schema())) {
+        return Status::NotSupported(
+                "cannot split a tablet whose sort key differs from its key columns: split boundaries "
+                "and segment ownership are computed from the segments' sort key, which is not "
+                "comparable with the tablet range");
     }
 
     // Flush the old tablet's PK-index memtable into sstables before propagating
