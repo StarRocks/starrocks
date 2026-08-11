@@ -32,6 +32,15 @@ struct TNormalOlapScanNode {
   // cleared before serializing: they are per-query state, and leaving them in would give
   // structurally identical plans different digests and stop them sharing an entry.
   16: optional binary vector_search_options;
+  // The schema the scan reads with. A fast schema evolution (ADD/DROP COLUMN) deliberately does
+  // not rewrite data, so it leaves the partition versions -- and therefore the rest of the cache
+  // key -- untouched, while changing what the very same query returns. Without this field the
+  // entries populated before such a DDL keep being served after it.
+  //
+  // Set only when the schema has actually diverged from the index it belongs to, so that tables
+  // which were never altered keep the digest they had before this field existed. See the note in
+  // OlapScanNode.toNormalForm().
+  17: optional i64 schema_id;
 }
 
 struct TNormalProjectNode {
