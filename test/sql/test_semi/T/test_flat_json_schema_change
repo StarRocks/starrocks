@@ -25,16 +25,21 @@ INSERT INTO t_json_schema_change VALUES
 (3, parse_json('{"name": "charlie", "age": 35, "city": "chicago"}'), 7, 8, 9);
 
 ALTER TABLE t_json_schema_change ADD COLUMN col4 int;
+function: wait_alter_table_finish()
 ALTER TABLE t_json_schema_change ADD COLUMN col5 int;
+function: wait_alter_table_finish()
 ALTER TABLE t_json_schema_change ADD COLUMN col6 int;
 function: wait_alter_table_finish()
 
 ALTER TABLE t_json_schema_change DROP COLUMN col1;
+function: wait_alter_table_finish()
 ALTER TABLE t_json_schema_change DROP COLUMN col2;
+function: wait_alter_table_finish()
 ALTER TABLE t_json_schema_change DROP COLUMN col3;
 function: wait_alter_table_finish()
 
 ALTER TABLE t_json_schema_change ADD COLUMN col7 int;
+function: wait_alter_table_finish()
 ALTER TABLE t_json_schema_change ADD COLUMN col8 int;
 function: wait_alter_table_finish()
 

@@ -110,6 +110,7 @@ select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "
 
 -- schema change
 ALTER TABLE js1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
+function: wait_alter_table_finish()
 ALTER TABLE js1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
 
 function: wait_alter_table_finish()
@@ -138,6 +139,7 @@ select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j2, "
 
 
 ALTER TABLE js1 DROP COLUMN j1;
+function: wait_alter_table_finish()
 ALTER TABLE js1 DROP COLUMN j4;
 
 function: wait_alter_table_finish()
