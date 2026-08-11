@@ -588,6 +588,31 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testAlterRepairsUnusableCredentialAndMarksVolumeUsableAgain() throws DdlException {
+        // ALTER is how such a volume gets repaired, so the derived flag has to follow the new
+        // configuration. It used to stay false until the next metadata reload, which left the
+        // repaired volume rejected by every path that checks isCredentialUsable().
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertFalse(sv.isCredentialUsable());
+
+        Map<String, String> repaired = new HashMap<>();
+        repaired.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        sv.setCloudConfiguration(repaired);
+
+        Assertions.assertTrue(sv.isCredentialUsable());
+        // The copy the managers cache must carry the repaired flag, not the stale one.
+        Assertions.assertTrue(new StorageVolume(sv).isCredentialUsable());
+    }
+
+    @Test
     public void testStorageVolumeWithUnusableCredentialIsNotUsable() throws DdlException {
         FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
                 .setFsKey("1")

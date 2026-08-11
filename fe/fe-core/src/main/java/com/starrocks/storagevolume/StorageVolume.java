@@ -232,6 +232,11 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         // Assigned only once both checks pass, so a rejected ALTER leaves the volume untouched.
         this.cloudConfiguration = newConfiguration;
         this.params = newParams;
+        // An ALTER is how a volume that was only readable - stored with a credential that can no
+        // longer be used - gets repaired, so this derived flag has to follow the new configuration
+        // rather than stay false until the next metadata reload. Both update paths set the type
+        // before calling this, so the predicate already sees the final type.
+        this.credentialUsable = isValidCloudConfiguration(svt, newConfiguration);
     }
 
     /**

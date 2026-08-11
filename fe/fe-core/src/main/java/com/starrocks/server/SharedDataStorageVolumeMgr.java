@@ -704,12 +704,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
-            throws MetaNotFoundException {
+            throws MetaNotFoundException, DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume storageVolume = this.getStorageVolumeByName(storageVolumeName);
             if (storageVolume == null) {
                 throw new MetaNotFoundException("Unknown src storage volume while creating virtual tablet: " + storageVolumeName);
             }
+            // Before any side effect: what follows allocates a path, creates a shard and a shard
+            // group and writes the volume back, and replication would only trip over the unusable
+            // credential after all of that. Same guard as the db/table binding paths.
+            checkCredentialUsable(storageVolume);
 
             long vTabletId = storageVolume.getVTabletId();
             if (vTabletId != -1) {

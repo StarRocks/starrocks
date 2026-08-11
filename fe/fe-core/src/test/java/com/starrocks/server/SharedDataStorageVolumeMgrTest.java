@@ -17,9 +17,11 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
 import com.staros.client.StarClientException;
+import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -1898,5 +1900,48 @@ public class SharedDataStorageVolumeMgrTest {
         // Instance profile without a role is stored as a profile credential, which carries no
         // role fields at all.
         Assertions.assertFalse(params.containsKey(AWS_S3_IAM_ROLE_ARN));
+    }
+
+    @Test
+    public void testGetOrCreateVirtualTabletIdRejectsVolumeWithUnusableCredential() {
+        // A volume stored with a credential that can no longer be used is tolerated on read-back so
+        // it can still be shown and dropped. Lake replication names such a volume as its source, and
+        // everything after this point has side effects - allocating a path, creating a shard and a
+        // shard group, writing the volume back - so it has to be refused up front.
+        String storageVolumeName = "unusable_sv";
+        String srcServiceId = "test_service_id";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return storageVolumeName.equals(fsName) ? unusable : null;
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String svKey, String serviceId) {
+                throw new IllegalStateException("allocateFilePath must not run for an unusable volume");
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        Assertions.assertFalse(svm.getStorageVolumeByName(storageVolumeName).isCredentialUsable());
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage volume " + storageVolumeName + " has a credential that cannot be used",
+                () -> svm.getOrCreateVirtualTabletId(storageVolumeName, srcServiceId));
     }
 }

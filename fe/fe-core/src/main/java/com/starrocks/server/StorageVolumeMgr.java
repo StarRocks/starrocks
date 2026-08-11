@@ -632,7 +632,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
 
     public abstract long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
-            throws MetaNotFoundException;
+            throws MetaNotFoundException, DdlException;
 
     public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
 }
