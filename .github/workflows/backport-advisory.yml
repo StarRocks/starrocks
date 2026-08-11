@@ -1,0 +1,43 @@
+name: BACKPORT ADVISORY
+
+# Phase 1 (pre-merge advisory). For a native [BugFix] PR, comment which release
+# branches the AI thinks the fix should be backported to (AI-主导) and where that
+# differs from the author's version checkbox — so the owner can adjust BEFORE merge.
+#
+# Advisory ONLY: it upserts a single "<!-- backport-advisory -->" comment and NEVER
+# posts @Mergifyio. The actual backport still happens at merge (ci-merged reconcile).
+#
+# Affected lines are derived by `claude` over local git + gh (no plugin / no code_kb),
+# see ci-tool/bin/backport_reconcile.sh. Synced PRs (label `sync`) are excluded here —
+# they auto-merge with no human to advise; their backport is decided at merge.
+#
+# Runner: [self-hosted, ubuntu, ai]. Requires ci-tool Phase 0 (reconcile --ai-lead
+# --advisory) on the runner.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  advisory:
+    runs-on: [self-hosted, ubuntu, ai]
+    if: >
+      github.repository == 'StarRocks/starrocks' &&
+      startsWith(github.event.pull_request.title, '[BugFix]') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: pre-merge backport advisory (AI-主导, comment only)
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead --advisory --no-dry-run
