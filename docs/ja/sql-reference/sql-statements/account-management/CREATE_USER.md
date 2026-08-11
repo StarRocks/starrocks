@@ -31,28 +31,12 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ユーザーがログインすると、ロールは自動的にユーザーに割り当てられ、デフォルトでアクティブ化されます。指定されていない場合、このユーザーはどの権限も持ちません。指定されたすべてのロールが既に存在することを確認してください。
 
-<<<<<<< HEAD
-    JSON Web Token (JWT) 認証および OAuth 2.0 認証における `auth_properties` の詳細については、対応するドキュメントを参照してください：
-    - [JSON Web Token 認証](../../../administration/user_privs/authentication/jwt_authentication.md)
-    - [OAuth 2.0 認証](../../../administration/user_privs/authentication/oauth2_authentication.md)
-
-- `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ロールはユーザーに自動的に割り当てられ、ユーザーがログインするとデフォルトで有効になります。指定されていない場合、このユーザーには特権がありません。指定されたすべてのロールが既に存在していることを確認してください。
-
-- `PROPERTIES` はユーザープロパティを設定し、最大ユーザー接続数 (`max_user_connections`)、パスワードポリシー (`PASSWORD_POLICY`)、catalog、データベースまたはセッション変数をユーザーレベルで設定します。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
-=======
 - `PROPERTIES` は、最大ユーザー接続数 (`max_user_connections`)、カタログ、データベース、またはユーザーレベルのセッション変数を含むユーザープロパティを設定します。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能はv3.3.3以降でサポートされています。
->>>>>>> 6e705593f24... [Doc] move to snippet (backport #73117) (#73118)
 
   ```SQL
   -- 最大ユーザー接続数を設定します。
   PROPERTIES ("max_user_connections" = "<Integer>")
-<<<<<<< HEAD
-  -- 既存のパスワードポリシーをユーザーにバインドします。
-  PROPERTIES ("PASSWORD_POLICY" = "<policy_name>")
-  -- catalog を設定します。
-=======
   -- カタログを設定します。
->>>>>>> 6e705593f24... [Doc] move to snippet (backport #73117) (#73118)
   PROPERTIES ("catalog" = "<catalog_name>")
   -- データベースを設定します。
   PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
@@ -61,15 +45,9 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   :::tip
-<<<<<<< HEAD
-  - `PROPERTIES` はユーザーに対して機能し、ユーザーアイデンティティには機能しません。
-  - `PASSWORD_POLICY` には既存のパスワードポリシーを指定する必要があります。設定すると、そのユーザーではシステムレベルのパスワードポリシーより優先されます。
-  - グローバル変数と読み取り専用変数は特定のユーザーに設定することはできません。
-=======
 
   - `PROPERTIES` は、ユーザーIDではなくユーザーに対して機能します。
   - グローバル変数および読み取り専用変数は、特定のユーザーに対して設定できません。
->>>>>>> 6e705593f24... [Doc] move to snippet (backport #73117) (#73118)
   - 変数は次の順序で有効になります: SET_VAR > セッション > ユーザープロパティ > グローバル。
   - 以下を使用して、[SHOW PROPERTY](./SHOW_PROPERTY.md)特定のユーザーのプロパティを表示できます。
 :::
@@ -145,17 +123,7 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
-<<<<<<< HEAD
-例 12: ユーザーを作成し、既存のパスワードポリシーをバインドします。
-
-```SQL
-CREATE USER 'jack'@'192.168.%' IDENTIFIED BY '123456Ab!' PROPERTIES ('PASSWORD_POLICY' = 'app_password_policy');
-```
-
-例 13: JSON Web Token 認証を使用したユーザーを作成します。
-=======
 例12: JSON Web Token認証を使用してユーザーを作成します。
->>>>>>> 6e705593f24... [Doc] move to snippet (backport #73117) (#73118)
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_jwt AS
@@ -167,11 +135,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-<<<<<<< HEAD
-例 14: OAuth 2.0 認証を使用したユーザーを作成します。
-=======
 例13: OAuth 2.0認証を使用してユーザーを作成します。
->>>>>>> 6e705593f24... [Doc] move to snippet (backport #73117) (#73118)
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
