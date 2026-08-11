@@ -44,6 +44,11 @@ struct TNormalAggregationNode {
   7: optional i32 agg_func_set_version = 1
   8: optional bool has_outer_join_child
   9: optional PlanNodes.TStreamingPreaggregationMode streaming_preaggregation_mode
+  // AggregationNode.localLimit, which is NOT PlanNode.limit -- toThrift() asserts !hasLimit()
+  // before overwriting msg.limit with it, so PlanNode.normalize() records -1 and the value is
+  // invisible to the digest. SplitTwoPhaseAggRule sets it on the local aggregation of a
+  // group-by-only split.
+  10: optional i64 local_limit
 }
 
 struct TNormalDecodeNode {

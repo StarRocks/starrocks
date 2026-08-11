@@ -553,6 +553,12 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         } else {
             aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
+        // localLimit is a second, separate limit: toThrift() asserts !hasLimit() and then
+        // overwrites msg.limit with it, so PlanNode.normalize() -- which reads getLimit() --
+        // records -1 and the value never reaches the digest on its own.
+        if (localLimit > 0) {
+            aggrNode.setLocal_limit(localLimit);
+        }
         aggrNode.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
         planNode.setAgg_node(aggrNode);
