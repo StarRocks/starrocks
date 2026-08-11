@@ -379,6 +379,27 @@ SHOW CREATE TABLE t0;
 
 DROP DATABASE test_schema_change_for_after;
 
+-- name: test_add_normal_and_generated_column_with_data @native
+CREATE DATABASE test_add_normal_and_generated_column_with_data;
+USE test_add_normal_and_generated_column_with_data;
+
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+INSERT INTO t0 VALUES (1, 1), (2, 2), (3, 3);
+
+-- the ordinary column is placed before the generated one, which shifts the generated column's
+-- position in the new schema. Adding it to a table that already has data used to crash the BE.
+alter table t0 add column testcol1 BIGINT, add column testcol2 BIGINT as v1 * 10;
+function: wait_alter_table_finish()
+SHOW CREATE TABLE t0;
+SELECT * FROM t0 ORDER BY v1;
+
+-- two generated columns in one ALTER: their values must land in their own columns, not swapped
+alter table t0 add column testcol3 BIGINT, add column testcol4 BIGINT as v1 * 100, add column testcol5 BIGINT as v1 * 1000;
+function: wait_alter_table_finish()
+SELECT * FROM t0 ORDER BY v1;
+
+DROP DATABASE test_add_normal_and_generated_column_with_data;
+
 -- name: test_compaction_after_adding_generated_column @native
 CREATE DATABASE test_compaction_after_adding_generated_column;
 USE test_compaction_after_adding_generated_column;
