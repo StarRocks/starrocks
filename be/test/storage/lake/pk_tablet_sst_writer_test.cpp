@@ -1144,6 +1144,58 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage_across_spills)
     EXPECT_TRUE(w->take_deleted_rowids().empty());
 }
 
+TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_spill_past_estimate_shortcut) {
+    // Once the map is large, is_map_full() may answer "not full" from a cheap lower bound instead of
+    // measuring it. The shortcut must never defer a spill: past the threshold the exact reading is
+    // always the one that decides.
+    const int64_t tablet_id = _tablet_metadata->id();
+    auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
+    // Comfortably past the entry count below which is_map_full() always measures exactly.
+    constexpr int kRowsPerChunk = 8192;
+
+    auto chunk_of = [&](int base) {
+        std::vector<std::pair<std::string, int>> rows;
+        rows.reserve(kRowsPerChunk);
+        for (int i = 0; i < kRowsPerChunk; ++i) {
+            rows.emplace_back(fmt::format("unsort_shortcut_key_{:0>20d}", base + i), i);
+        }
+        return make_kv_chunk(_schema, rows);
+    };
+    auto order_of = [&](int round) {
+        std::vector<uint64_t> order(kRowsPerChunk);
+        for (uint32_t i = 0; i < kRowsPerChunk; ++i) {
+            order[i] = (static_cast<uint64_t>(round + 1) << 32) | i;
+        }
+        return order;
+    };
+
+    size_t usage_after_one_chunk = 0;
+    {
+        ConfigResetGuard<int64_t> no_spill_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+        auto probe = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+        ASSERT_OK(probe->reset_sst_writer(lp, _fs));
+        auto chunk = chunk_of(0);
+        auto order = order_of(0);
+        ASSERT_OK(probe->append_sst_record(chunk, &order));
+        usage_after_one_chunk = probe->memory_usage();
+        ASSERT_OK(probe->flush_sst_writer().status());
+    }
+
+    // One chunk is already at the threshold, so the very first append must spill and leave the map empty.
+    ConfigResetGuard<int64_t> spill_guard(&config::l0_max_mem_usage, static_cast<int64_t>(usage_after_one_chunk));
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    ASSERT_OK(w->reset_sst_writer(lp, _fs));
+    const size_t empty_usage = w->memory_usage();
+    for (int round = 0; round < 2; ++round) {
+        auto chunk = chunk_of(round * kRowsPerChunk);
+        auto order = order_of(round);
+        ASSERT_OK(w->append_sst_record(chunk, &order));
+        EXPECT_EQ(empty_usage, w->memory_usage()) << "after round " << round;
+    }
+    ASSIGN_OR_ABORT(auto flush_result, w->flush_sst_writer());
+    EXPECT_FALSE(flush_result.first.path.empty());
+}
+
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {
     const int64_t tablet_id = _tablet_metadata->id();
     auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);

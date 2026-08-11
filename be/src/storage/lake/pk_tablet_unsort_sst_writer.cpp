@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 #include "base/string/string_util.h"
 #include "column/chunk.h"
 #include "common/config_cache_fwd.h"
@@ -179,18 +181,32 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
     // map keeps the writer's combined footprint near the bound instead of letting _map independently
     // pile another l0_max_mem_usage on top of the loser vector. (_delete_keys is filled only at flush,
     // never during append, so it is not part of the footprint at this spill check.)
-    const size_t mem_usage = memory_usage();
-    if (mem_usage >= static_cast<size_t>(config::l0_max_mem_usage)) {
-        return true;
-    }
+    size_t threshold = static_cast<size_t>(config::l0_max_mem_usage);
     // Under memory pressure, spill at a lower bound, mirroring LakePersistentIndex::is_memtable_full.
     auto* update_mgr = _tablet_mgr->update_mgr();
     if (update_mgr != nullptr && update_mgr->mem_tracker() != nullptr &&
-        update_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
-        mem_usage >= static_cast<size_t>(config::l0_min_mem_usage)) {
-        return true;
+        update_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level)) {
+        threshold = std::min(threshold, static_cast<size_t>(config::l0_min_mem_usage));
     }
-    return false;
+    // memory_usage() is not an O(1) reading: btree_map::bytes_used() recursively visits every node
+    // (internal_stats), and this runs once per appended chunk, so measuring unconditionally would
+    // rescan the whole growing map on every chunk of the fill/spill cycle. Skip it while the map is
+    // demonstrably far from the threshold: every entry occupies a slot inside an allocated node, so
+    // `size() * sizeof(value_type)` is a true lower bound on bytes_used(), and if even that lower bound
+    // is a fifth short of the threshold the exact reading is not going to cross it either. The bound is
+    // only tight once there are enough nodes for their per-node overhead to amortize, so below that the
+    // exact reading is taken unconditionally -- a walk over a handful of nodes costs nothing. The
+    // decision at the boundary is therefore always the exact one; only the early, obviously-not-full
+    // chunks take the shortcut.
+    constexpr size_t kExactCheckMaxEntries = 4096;
+    const size_t fixed_bytes = _keys_heap_size + _deleted_rowids.capacity() * sizeof(uint32_t);
+    const size_t lower_bound = fixed_bytes + _map.size() * sizeof(decltype(_map)::value_type);
+    // `threshold - threshold / 5` rather than `threshold * 4 / 5`: the threshold comes from config and
+    // tests set it to INT64_MAX, where the product would overflow.
+    if (_map.size() > kExactCheckMaxEntries && lower_bound < threshold - threshold / 5) {
+        return false;
+    }
+    return memory_usage() >= threshold;
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
