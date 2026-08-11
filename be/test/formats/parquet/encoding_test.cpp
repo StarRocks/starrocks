@@ -1154,4 +1154,54 @@ TEST_F(ParquetEncodingTest, DeltaBinaryPackedCorruptHeader) {
     }
 }
 
+// The batch size handed to a decoder is not the chunk size: StoredColumnReaderImpl::_read() passes
+// everything left in the current data page in one call, so a page holding ~1M values produces a
+// ~1M-value batch. Scratch space sized by that batch must live on the heap; the VLAs this path used
+// to declare needed ~12MB of stack and killed the BE with a SIGSEGV raised inside the decoder.
+TEST_F(ParquetEncodingTest, PlainByteArrayLargeBatchWithNulls) {
+    constexpr size_t kCount = 1 << 20;
+    constexpr size_t kNullStride = 8;
+    const std::string value("abcdefgh");
+
+    NullInfos null_infos;
+    null_infos.reset_with_capacity(kCount);
+    uint8_t* nulls = null_infos.nulls_data();
+    null_infos.num_nulls = 0;
+    for (size_t i = 0; i < kCount; ++i) {
+        nulls[i] = (i % kNullStride) == 0;
+        null_infos.num_nulls += nulls[i];
+    }
+    null_infos.num_ranges = kCount / 2;
+    const size_t read_count = kCount - null_infos.num_nulls;
+
+    const EncodingInfo* plain_encoding = nullptr;
+    (void)EncodingInfo::get(tparquet::Type::BYTE_ARRAY, tparquet::Encoding::PLAIN, &plain_encoding);
+    ASSERT_TRUE(plain_encoding != nullptr);
+
+    std::vector<Slice> slices(read_count, Slice(value));
+    std::unique_ptr<Encoder> encoder;
+    Status st = plain_encoding->create_encoder(&encoder);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    st = encoder->append(reinterpret_cast<uint8_t*>(slices.data()), slices.size());
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    std::unique_ptr<Decoder> decoder;
+    st = plain_encoding->create_decoder(&decoder);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    st = decoder->set_data(encoder->build());
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    auto dst = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    st = decoder->next_batch_with_nulls(kCount, null_infos, ColumnContentType::VALUE, dst.get(), nullptr);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(kCount, dst->size());
+    ASSERT_TRUE(dst->is_null(0));
+    ASSERT_FALSE(dst->is_null(1));
+    ASSERT_FALSE(dst->is_null(kCount - 1));
+    auto* binary_column = down_cast<BinaryColumn*>(dst->data_column().get());
+    ASSERT_EQ(read_count * value.size(), binary_column->get_bytes().size());
+    ASSERT_EQ(value, binary_column->get_slice(1).to_string());
+}
+
 } // namespace starrocks::parquet
