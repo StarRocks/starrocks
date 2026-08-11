@@ -187,6 +187,7 @@ public:
     // For UT test now
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
+    static int64_t calc_upt_memory_usage_per_row(int64_t total_update_row_size, int64_t num_rows_upt);
     static int64_t calc_upt_memory_usage_per_row(Rowset* rowset);
 
 private:

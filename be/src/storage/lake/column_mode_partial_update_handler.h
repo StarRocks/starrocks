@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset_column_update_state.h"
@@ -42,12 +44,14 @@ public:
 
 private:
     Status _load_update_state(const RowsetUpdateStateParams& params);
+    StatusOr<int64_t> _calc_upt_memory_usage_per_row(const TabletSchema& tablet_schema);
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
-                                       ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema);
-    StatusOr<ChunkPtr> _read_from_source_segment(const RowsetUpdateStateParams& params, const Schema& schema,
-                                                 uint32_t rssid);
+                                       StreamChunkContainer container, int32_t condition_idx_in_partial_schema);
+    Status _read_from_source_segment_and_update(const RowsetUpdateStateParams& params, const Schema& schema,
+                                                uint32_t rssid,
+                                                const std::function<Status(StreamChunkContainer)>& update_func);
     // Resolve txn_meta.merge_condition() to a column id in `tschema`.
     // Returns -1 when no condition is set, or an error when the named column is missing from the schema.
     static StatusOr<int32_t> _resolve_condition_cid(const RowsetTxnMetaPB& txn_meta, const TabletSchema& tschema);
@@ -72,6 +76,7 @@ private:
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
+    int64_t _upt_memory_usage_per_row = 0;
 };
 
 class CompactionUpdateConflictChecker {
