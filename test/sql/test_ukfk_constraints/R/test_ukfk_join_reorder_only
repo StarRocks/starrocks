@@ -1,0 +1,99 @@
+-- name: test_ukfk_join_reorder_only
+-- enable_ukfk_join_reorder is an independent switch from enable_ukfk_opt, but JoinOrder.buildJoinExpr used to
+-- collect the UK/FK constraints through a helper that short-circuits on enable_ukfk_opt. Turning only the former
+-- on therefore left both join children without constraints, and buildJoinColumnConstraint dereferenced null, so
+-- any join below an aggregate failed with an internal NullPointerException. enable_ukfk_join_reorder is off by
+-- default, which is exactly why this needs to be set explicitly here.
+CREATE TABLE t_jr (
+  c0 int(11) NULL,
+  c1 int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_jr VALUES (1, 1), (2, 2);
+-- result:
+-- !result
+-- A table without any declared unique key is not what triggers this; a table with one fails the same way.
+CREATE TABLE t_jr_pk (
+  c0 int(11) NOT NULL,
+  c1 int(11) NULL
+) ENGINE=OLAP
+PRIMARY KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_jr_pk VALUES (1, 1), (2, 2);
+-- result:
+-- !result
+-- enable_ukfk_opt deliberately keeps its default value (false) here.
+set enable_ukfk_join_reorder = true;
+-- result:
+-- !result
+SELECT count(1) FROM t_jr a, t_jr b;
+-- result:
+4
+-- !result
+SELECT count(1) FROM t_jr a, t_jr b, t_jr c;
+-- result:
+8
+-- !result
+SELECT count(1) FROM t_jr, t_jr_pk;
+-- result:
+4
+-- !result
+SELECT count(1) FROM t_jr_pk a, t_jr_pk b, t_jr_pk c;
+-- result:
+8
+-- !result
+SELECT count(1) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0;
+-- result:
+2
+-- !result
+SELECT count(1) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0 JOIN t_jr c ON b.c1 = c.c1;
+-- result:
+2
+-- !result
+SELECT sum(a.c0) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0 LEFT JOIN t_jr c ON b.c1 = c.c1;
+-- result:
+3
+-- !result
+-- The same queries must keep working when both switches are on.
+set enable_ukfk_opt = true;
+-- result:
+-- !result
+SELECT count(1) FROM t_jr a, t_jr b;
+-- result:
+4
+-- !result
+SELECT count(1) FROM t_jr a, t_jr b, t_jr c;
+-- result:
+8
+-- !result
+SELECT count(1) FROM t_jr, t_jr_pk;
+-- result:
+4
+-- !result
+SELECT count(1) FROM t_jr_pk a, t_jr_pk b, t_jr_pk c;
+-- result:
+8
+-- !result
+SELECT count(1) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0;
+-- result:
+2
+-- !result
+SELECT count(1) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0 JOIN t_jr c ON b.c1 = c.c1;
+-- result:
+2
+-- !result
+SELECT sum(a.c0) FROM t_jr a JOIN t_jr b ON a.c0 = b.c0 LEFT JOIN t_jr c ON b.c1 = c.c1;
+-- result:
+3
+-- !result
