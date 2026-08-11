@@ -141,49 +141,12 @@ TEST_F(MetricsActionTest, prometheus_no_name) {
     action.handle(&request);
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(MetricsActionTest, prometheus_output_with_table_metrics) {
-    ProcessMetricsRegistry registry("test");
-    enable_table_metrics(&registry);
-    s_expect_response =
-            "# TYPE starrocks_be_table_load_bytes counter\n"
-            "starrocks_be_table_load_bytes{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_load_rows counter\n"
-            "starrocks_be_table_load_rows{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_scan_read_bytes counter\n"
-            "starrocks_be_table_scan_read_bytes{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_scan_read_rows counter\n"
-            "starrocks_be_table_scan_read_rows{table_id=\"42\"} 11\n";
-    HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry, &mock_send_reply);
-    action.handle(&request);
-}
-
-TEST_F(MetricsActionTest, json_output_with_table_metrics) {
-    ProcessMetricsRegistry registry("test");
-    IntCounter put_requests_total(MetricUnit::NOUNIT);
-    put_requests_total.increment(2345);
-    registry.root_registry()->register_metric("requests_total", MetricLabels().add("type", "put"), &put_requests_total);
-    enable_table_metrics(&registry);
-    s_expect_response =
-            "[{\"tags\":{\"metric\":\"requests_total\",\"type\":\"put\"},\"unit\":\"nounit\",\"value\":2345},"
-            "{\"tags\":{\"metric\":\"table_load_bytes\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_load_rows\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_scan_read_bytes\",\"table_id\":\"42\"},\"unit\":\"bytes\",\"value\":0},"
-            "{\"tags\":{\"metric\":\"table_scan_read_rows\",\"table_id\":\"42\"},\"unit\":\"rows\",\"value\":11}]";
-    HttpRequest request(_evhttp_req);
-    request.add_param("type", "json");
-    MetricsAction action(&registry, &mock_send_reply);
-    action.handle(&request);
-}
-
 TEST_F(MetricsActionTest, prometheus_output_with_bvar_metrics) {
     config::dump_metrics_with_bvar = true;
     g_metrics_action_test_gauge_bvar << 1;
     g_metrics_action_test_rpc_error << 1;
 
-    ProcessMetricsRegistry registry("test");
+    MetricRegistry registry("test");
     std::string response;
     s_captured_response = &response;
     HttpRequest request(_evhttp_req);
@@ -199,18 +162,4 @@ TEST_F(MetricsActionTest, prometheus_output_with_bvar_metrics) {
     EXPECT_THAT(response, testing::HasSubstr("rpc_server_metrics_action_test_method_error "));
 }
 
-TEST_F(MetricsActionTest, core_output_does_not_collect_table_metrics) {
-    ProcessMetricsRegistry registry("starrocks_be");
-    IntGauge process_thread_num(MetricUnit::NOUNIT);
-    process_thread_num.set_value(5);
-    registry.root_registry()->register_metric("process_thread_num", &process_thread_num);
-    enable_table_metrics(&registry);
-    s_expect_response = "starrocks_be_process_thread_num LONG 5\n";
-    HttpRequest request(_evhttp_req);
-    request.add_param("type", "core");
-    MetricsAction action(&registry, &mock_send_reply);
-    action.handle(&request);
-}
-
->>>>>>> d03504a50d ([BugFix] Report bRPC method error bvars as counters (#76956))
 } // namespace starrocks
