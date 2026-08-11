@@ -131,6 +131,50 @@ SELECT dict_mapping("dict", col_1, col_2) FROM t;
 DROP DATABASE test_dictmapping_null_column;
 -- result:
 -- !result
+-- name: test_dictmapping_nested_null_key @native
+CREATE DATABASE test_dictmapping_nested_null_key;
+-- result:
+-- !result
+use test_dictmapping_nested_null_key;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, NULL);
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_1, col_2)) FROM t;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result
+SELECT bit_shift_left(1, dict_mapping("dict", col_1, col_2)) FROM t;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result
+SELECT count(*) FROM t;
+-- result:
+1
+-- !result
+DROP DATABASE test_dictmapping_nested_null_key;
+-- result:
+-- !result
 -- name: test_dictmapping_DictQueryOperator_bug
 CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
 -- result:
