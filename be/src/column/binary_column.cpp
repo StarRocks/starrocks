@@ -193,7 +193,9 @@ StatusOr<MutableColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>
     size_t total_size = 0;              // total size to copy
     for (auto i = 0; i < src_size; ++i) {
         auto bytes_size = _offsets[i + 1] - _offsets[i];
-        total_size += bytes_size * (offsets[i + 1] - offsets[i]);
+        auto repeat_count = offsets[i + 1] - offsets[i];
+        // widen to size_t before multiplying, otherwise bytes_size * repeat_count can overflow T (e.g. uint32_t)
+        total_size += static_cast<size_t>(bytes_size) * repeat_count;
     }
 
     if (total_size >= Column::MAX_CAPACITY_LIMIT) {

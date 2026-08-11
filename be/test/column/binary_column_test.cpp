@@ -670,6 +670,26 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     ASSERT_EQ("def", slices[4]);
 }
 
+// NOLINTNEXTLINE
+GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_replicate_overflow) {
+    // one element of 64KB, repeated 65537 times: true total size is
+    // 65536 * 65537 = 4295032832, which exceeds Column::MAX_CAPACITY_LIMIT (2^32).
+    // If bytes_size * repeat_count were computed in 32-bit (T) arithmetic instead of
+    // being widened to size_t first, it would wrap around to 65536 and wrongly pass
+    // the capacity check, leading to a too-small buffer allocation and an out-of-bounds
+    // write in the copy loop below.
+    auto c1 = BinaryColumn::create();
+    std::string large_str(65536, 'a');
+    c1->append_datum(Slice(large_str));
+
+    Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(65537);
+
+    auto result = c1->replicate(offsets);
+    ASSERT_FALSE(result.ok());
+}
+
 PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     auto column = BinaryColumn::create();
     column->append("");
