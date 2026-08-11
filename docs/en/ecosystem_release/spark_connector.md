@@ -33,6 +33,26 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 
 ### 1.1
 
+#### 1.1.4
+
+This release mainly includes some features and improvements.
+
+**Features**
+
+- Added support for StarRocks catalog. [#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- Added support for `bitmap_hash64`. [#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- Supports nested fields (Structs, Arrays, and Maps). [#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- Supports reading and writing through Spark catalog. [#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- Supports Spark 4.0 and Scala 2.13. [#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**Improvements**
+
+- Added the security policy. [#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**BugFix**
+
+- Incorrect filter pushdown in DataSource V2. [#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
+
 #### 1.1.3
 
 This release mainly includes some features and improvements.
