@@ -1299,6 +1299,27 @@ public class ExpressionStatisticCalculator {
             double averageRowSize;
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.CONVERT_TZ:
+                    // Timezone offsets differ by at most 26 hours
+                    // (see ExtractRangePredicateFromScalarApplyRule).
+                    ColumnStatistic childStat = childColumnStatisticList.get(0);
+                    ColumnStatistic fromTzStat = childColumnStatisticList.get(1);
+                    ColumnStatistic toTzStat = childColumnStatisticList.get(2);
+                    final double maxOffset = 26.0 * 3600.0;
+
+                    distinctValues = Math.min(rowCount,
+                            childStat.getDistinctValuesCount()
+                                    * fromTzStat.getDistinctValuesCount()
+                                    * toTzStat.getDistinctValuesCount());
+
+                    return ColumnStatistic.builder()
+                            .setMinValue(childStat.getMinValue() - maxOffset)
+                            .setMaxValue(childStat.getMaxValue() + maxOffset)
+                            .setNullsFraction(childStat.getNullsFraction())
+                            .setAverageRowSize(callOperator.getType().getTypeSize())
+                            .setDistinctValuesCount(distinctValues)
+                            .setHistogram(transformHistogramForConvertTz(callOperator, childStat).orElse(null))
+                            .build();
                 case FunctionSet.COALESCE:
                     return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
@@ -1464,6 +1485,46 @@ public class ExpressionStatisticCalculator {
             } else {
                 return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
             }
+        }
+
+        private Optional<Histogram> transformHistogramForConvertTz(CallOperator callOperator,
+                                                                  ColumnStatistic childStats) {
+            Histogram hist = childStats == null ? null : childStats.getHistogram();
+            if (hist == null || hist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            if (fromTz.isEmpty() || toTz.isEmpty()) {
+                return Optional.empty();
+            }
+
+            final Type resultType = callOperator.getType();
+            Map<String, Long> newMcv = new HashMap<>();
+            for (Map.Entry<String, Long> entry : hist.getMCV().entrySet()) {
+                Optional<ConstantOperator> parsedKey =
+                        ConstantOperator.createVarchar(entry.getKey()).castTo(resultType);
+                if (parsedKey.isEmpty() || parsedKey.get().isNull()) {
+                    return Optional.empty();
+                }
+
+                ConstantOperator converted;
+                try {
+                    converted = ScalarOperatorFunctions.convert_tz(parsedKey.get(), fromTz.get(), toTz.get());
+                } catch (Exception e) {
+                    return Optional.empty();
+                }
+
+                Optional<ConstantOperator> keyString = converted.castTo(VarcharType.VARCHAR);
+                if (keyString.isEmpty()) {
+                    return Optional.empty();
+                }
+                newMcv.merge(keyString.get().getVarchar(), entry.getValue(), Long::sum);
+            }
+
+            // MCV only: convert_tz is not a uniform bucket shift under DST.
+            return Optional.of(new Histogram(Collections.emptyList(), newMcv));
         }
 
         /**
