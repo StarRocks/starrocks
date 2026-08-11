@@ -276,11 +276,10 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
     _intermediate_ssts.push_back({location, size, std::move(encryption_meta)});
     // GOALOOP-PROBE (temporary, not for merge): one line per spill, so the bound can be checked.
     ++_probe_spills;
-    LOG(INFO) << "GOALOOP_SPILL tablet=" << _tablet_id << " spill=" << _probe_spills
-              << " entries=" << _map.size() << " mem_usage=" << memory_usage()
-              << " keys_heap=" << _keys_heap_size << " bytes_used=" << _map.bytes_used()
-              << " deleted_rowids_cap=" << _deleted_rowids.capacity() << " l0_max=" << config::l0_max_mem_usage
-              << " intermediates=" << _intermediate_ssts.size();
+    LOG(INFO) << "GOALOOP_SPILL tablet=" << _tablet_id << " spill=" << _probe_spills << " entries=" << _map.size()
+              << " mem_usage=" << memory_usage() << " keys_heap=" << _keys_heap_size
+              << " bytes_used=" << _map.bytes_used() << " deleted_rowids_cap=" << _deleted_rowids.capacity()
+              << " l0_max=" << config::l0_max_mem_usage << " intermediates=" << _intermediate_ssts.size();
     _map.clear();
     _keys_heap_size = 0;
     return Status::OK();
