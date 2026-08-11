@@ -214,6 +214,10 @@ select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "
 ALTER TABLE js1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE js1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
 -- result:
 -- !result
@@ -311,6 +315,10 @@ select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j2, "
 -- !result
 ALTER TABLE js1 DROP COLUMN j1;
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE js1 DROP COLUMN j4;
 -- result:
