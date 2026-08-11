@@ -718,7 +718,6 @@
         "max_segment_file_size",
         "meta_threshold_to_manual_compact",
         "lake_compaction_stream_buffer_size_bytes",
-        "lake_compaction_metadata_buffer_size_bytes",
         "lake_compaction_check_valid_interval_minutes",
         "lake_compaction_max_bytes_per_subtask",
         "lake_compaction_max_rowset_size",

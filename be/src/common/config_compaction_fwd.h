@@ -142,13 +142,6 @@ CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 
-// Buffer size for the segment footer and short-key index reads a compaction issues, once per
-// input segment. Kept separate from lake_compaction_stream_buffer_size_bytes because those are
-// small scattered structures: raising the streaming buffer to help data blocks would otherwise
-// make every footer read fetch far more than the footer. Negative means "same as
-// lake_compaction_stream_buffer_size_bytes".
-CONF_mInt64(lake_compaction_metadata_buffer_size_bytes, "1048576"); // 1MB
-
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 
