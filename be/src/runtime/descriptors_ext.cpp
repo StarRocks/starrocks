@@ -579,6 +579,11 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ODPS_TABLE:
             desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool, mr);
             break;
+        case TTableType::BIGQUERY_TABLE:
+            // BigQuery uses the standard HDFS table descriptor; all scan params are
+            // carried in THdfsScanRange.bigquery_split_infos by the FE scan node.
+            desc = ALLOC_DESC(HiveTableDescriptor, tdesc, pool, mr);
+            break;
         case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
         case TTableType::ICEBERG_REFS_TABLE:
         case TTableType::ICEBERG_HISTORY_TABLE:

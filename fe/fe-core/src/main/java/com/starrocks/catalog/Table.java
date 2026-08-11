@@ -133,7 +133,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("ICEBERG_VIEW")
         ICEBERG_VIEW,
         @SerializedName("PAIMON_VIEW")
-        PAIMON_VIEW;
+        PAIMON_VIEW,
+        @SerializedName("BIGQUERY")
+        BIGQUERY;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -164,6 +166,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                     .add(TableType.ODPS)
                     .add(TableType.DELTALAKE)
                     .add(TableType.PAIMON)
+                    .add(TableType.BIGQUERY)
                     .build();
 
     @SerializedName(value = "id")
@@ -426,6 +429,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isOdpsTable() {
         return type == TableType.ODPS;
+    }
+
+    public boolean isBigQueryTable() {
+        return type == TableType.BIGQUERY;
     }
 
     public boolean isJDBCTable() {

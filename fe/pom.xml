@@ -65,6 +65,8 @@ under the License.
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <odps.version>0.48.7-public</odps.version>
+        <bigquery.version>2.41.0</bigquery.version>
+        <bigquery-storage.version>3.9.0</bigquery-storage.version>
         <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>7.0.2</hikaricp.version>
         <kafka-clients.version>3.9.1</kafka-clients.version>
@@ -1393,6 +1395,25 @@ under the License.
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-vector</artifactId>
                 <version>${arrow.version}</version>
+            </dependency>
+
+            <!-- BigQuery external catalog -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>google-cloud-bigquery</artifactId>
+                <version>${bigquery.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>google-cloud-bigquery-storage</artifactId>
+                <version>${bigquery-storage.version}</version>
+                <exclusions>
+                    <!-- Pin gRPC transitive deps to the version already managed in this pom -->
+                    <exclusion>
+                        <groupId>io.grpc</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
