@@ -994,12 +994,12 @@ TEST_F(ParquetFileWriterTest, TestRequiredColumnRejectsNull) {
 }
 
 TEST_F(ParquetFileWriterTest, TestRequiredColumnRejectsNullBeforeWritingAnyColumn) {
-    // Both columns REQUIRED. A chunk whose *second* column violates the constraint must be
-    // rejected without the *first* column having been written into the row group, otherwise
-    // the writer is left holding a row group with mismatched column chunk lengths.
+    // "a" OPTIONAL, "b" REQUIRED: only "b" is evaluated up front, so this pins that a violation
+    // on "b" still stops "a" from reaching the row group, which would otherwise leave the
+    // writer holding a row group with mismatched column chunk lengths.
     std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
     std::vector<std::string> column_names = {"a", "b"};
-    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {false, false}, column_names));
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {true, false}, column_names));
 
     auto good_chunk = std::make_shared<Chunk>();
     {

@@ -50,14 +50,11 @@ std::unordered_map<std::string, formats::FileColumnId> build_top_level_field_id_
     return field_ids_by_name;
 }
 
-// Maps top-level Iceberg schema field name -> nullable, mirroring org.apache.iceberg's
-// isOptional(). This is the only place a written column's requiredness may come from: it must
-// NOT be derived from tuple/slot nullability, which reflects what an output expression can
-// produce (e.g. UpdatePlanner assigns row-delta data slots from the feeding expression's
-// nullability, not from the target column) and can disagree with the target schema in either
-// direction. A field missing here (not set by an older FE, or not part of iceberg_schema at
-// all, e.g. reserved system columns) must default to nullable=true - only ever fail closed
-// towards NOT enforcing, never silently enforce NOT NULL without an explicit schema signal.
+// The Iceberg schema is the only valid source of a written column's requiredness. Slot
+// nullability is not: it describes what the feeding expression can produce, and on the
+// row-delta path UpdatePlanner derives it from that expression, so the two can disagree
+// in either direction. Unset is_optional (older FE) means nullable, so we fail towards
+// not enforcing.
 std::unordered_map<std::string, bool> build_top_level_nullable_map(const std::vector<TIcebergSchemaField>& fields) {
     std::unordered_map<std::string, bool> nullable_by_name;
     nullable_by_name.reserve(fields.size());
@@ -74,8 +71,7 @@ bool resolve_iceberg_sink_column_nullable(const SlotDescriptor* slot,
     if (it != nullable_by_name.end()) {
         return it->second;
     }
-    // Reserved system columns (_row_id, _last_updated_sequence_number, ...) are not part of
-    // the Iceberg schema fields; they have no requiredness of their own to enforce.
+    // Reserved columns (_row_id, ...) are not Iceberg schema fields.
     return slot->is_nullable();
 }
 
@@ -323,8 +319,6 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
     for (size_t i = 0; i < num_evaluators; ++i) {
         RETURN_IF_ERROR(append_iceberg_sink_column((*slots)[i], field_ids_by_name, &data_sink_ctx->column_names,
                                                    &data_sink_ctx->parquet_field_ids));
-        // The tuple may carry more slots than there are output expressions, so follow the
-        // evaluator count here rather than the whole tuple.
         data_sink_ctx->nullable.push_back(resolve_iceberg_sink_column_nullable((*slots)[i], nullable_by_name));
     }
 
@@ -546,11 +540,6 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     for (size_t i = 0; i < num_data_evaluators; ++i) {
         RETURN_IF_ERROR(append_iceberg_sink_column(slots[data_column_start + i], field_ids_by_name,
                                                    &data_sink_ctx->column_names, &data_sink_ctx->parquet_field_ids));
-        // Data columns start after _file/_pos, so index off data_column_start rather than the
-        // full row-delta tuple. Nullability comes from the Iceberg schema (see
-        // build_top_level_nullable_map), NOT from the slot: UpdatePlanner assigns row-delta
-        // data slot nullability from the feeding output expression, which can disagree with
-        // the target column's schema in either direction (StarRocksTest #11630).
         data_sink_ctx->nullable.push_back(
                 resolve_iceberg_sink_column_nullable(slots[data_column_start + i], nullable_by_name));
     }

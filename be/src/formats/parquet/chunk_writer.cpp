@@ -60,23 +60,33 @@ Status ChunkWriter::write(Chunk* chunk) {
         ++leaf_column_idx;
     };
 
-    // Evaluate every column and reject NULLs in REQUIRED fields before writing any of them.
-    // Writing is column-at-a-time, so a violation found while writing column N would leave
-    // columns 0..N-1 already appended to the row group with no way to take them back.
-    std::vector<ColumnPtr> columns(_type_descs.size());
+    // Check required fields before writing any column: writing is column-at-a-time, so failing
+    // midway would leave earlier columns already appended to the row group. Only required
+    // fields are evaluated up front; optional ones cannot fail this check and stay lazy so we
+    // do not hold every evaluated column alive at once.
+    std::vector<ColumnPtr> required_columns(_type_descs.size());
     for (size_t i = 0; i < _type_descs.size(); i++) {
-        ASSIGN_OR_RETURN(columns[i], _eval_func(chunk, i));
         const auto& field = _schema->field(i);
-        if (field->is_required() && columns[i]->has_null()) {
+        if (!field->is_required()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(required_columns[i], _eval_func(chunk, i));
+        if (required_columns[i]->has_null()) {
             return Status::DataQualityError(fmt::format("NULL value in non-nullable column '{}'", field->name()));
         }
     }
 
     for (size_t i = 0; i < _type_descs.size(); i++) {
+        ColumnPtr col;
+        if (_schema->field(i)->is_required()) {
+            col = std::move(required_columns[i]);
+        } else {
+            ASSIGN_OR_RETURN(col, _eval_func(chunk, i));
+        }
         auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i), _timezone, _use_legacy_decimal_encoding,
                                           _use_int96_timestamp_encoding);
         RETURN_IF_ERROR(level_builder.init());
-        RETURN_IF_ERROR(level_builder.write(ctx, columns[i], write_leaf_column));
+        RETURN_IF_ERROR(level_builder.write(ctx, col, write_leaf_column));
     }
 
     return Status::OK();

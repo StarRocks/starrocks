@@ -452,9 +452,9 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539); // _last_updated_sequence_number reserved field ID
 }
 
-// The sink must carry each target column's nullability through to the file writer, otherwise
-// a NOT NULL Iceberg field is written as an OPTIONAL parquet column and NULLs slip through.
-TEST_F(IcebergTableSinkTest, nullable_flags_follow_slot_nullability) {
+// Without this the target column's nullability never reaches the file writer, and a NOT NULL
+// Iceberg field gets written as an OPTIONAL parquet column.
+TEST_F(IcebergTableSinkTest, nullable_flags_follow_schema) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
@@ -478,9 +478,6 @@ TEST_F(IcebergTableSinkTest, nullable_flags_follow_slot_nullability) {
     c3.__set_column_name("c3");
     t_iceberg_table.__set_columns({c1, c2, c3});
 
-    // Nullability is sourced from the Iceberg schema's is_optional, not from slot nullability
-    // (see build_top_level_nullable_map) - set explicitly here so the assertions below reflect
-    // the real signal, matching how FE's IcebergApiConverter always populates this field.
     TIcebergSchema iceberg_schema;
     TIcebergSchemaField f1, f2, f3;
     f1.__set_field_id(1);
@@ -552,8 +549,6 @@ TEST_F(IcebergTableSinkTest, nullable_flags_aligned_with_evaluators_not_tuple) {
     c2.__set_column_name("c2");
     t_iceberg_table.__set_columns({c1, c2});
 
-    // Nullability is sourced from the Iceberg schema's is_optional, not from slot nullability -
-    // set explicitly here so the assertions below reflect the real signal.
     TIcebergSchema iceberg_schema;
     TIcebergSchemaField f1, f2;
     f1.__set_field_id(1);
@@ -864,15 +859,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 }
 
-// Regression for StarRocksTest #11630 on the row-delta path: UpdatePlanner assigns each
-// row-delta data slot's nullability from the OUTPUT EXPRESSION that feeds it
-// (`slot.setIsNullable(outputExprs.get(index).isNullable())`, UpdatePlanner.java:242), not
-// from the target column's Iceberg-schema nullability. A constant assignment (`SET a = 300`)
-// produces a non-nullable expression even when `a` is a nullable column; a column read-back
-// produces a nullable expression even when `b` is NOT NULL. So slot nullability and target
-// schema nullability can be - and on the reproducing cluster were observed to be - exact
-// opposites. This test pins slot nullability to that inverted state and asserts the sink
-// still derives `nullable` from the Iceberg schema's `is_optional`, not from the slot.
+// UpdatePlanner derives row-delta data slot nullability from the feeding output expression,
+// so it can be the exact opposite of the target column's Iceberg nullability. Slots are set
+// to that inverted state here to pin that the sink follows the schema, not the slot.
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_follows_schema_not_slot) {
     // Tuple layout for a pure UPDATE row-delta write: [_file, _pos, a, b].
     TDescriptorTableBuilder table_desc_builder;
@@ -884,8 +873,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_nullable_fol
                              .build();
     auto pos_slot =
             slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("_pos").column_pos(1).nullable(false).build();
-    // Inverted on purpose: schema says a is nullable, b is NOT NULL - the opposite of these
-    // slot flags - to prove the sink does not fall back to slot nullability for named columns.
+    // Inverted on purpose: schema says a is nullable and b is NOT NULL, the opposite of these.
     auto a_slot = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("a").column_pos(2).nullable(false).build();
     auto b_slot =
             slot_desc_builder.type(LogicalType::TYPE_VARCHAR).column_name("b").column_pos(3).nullable(true).build();
