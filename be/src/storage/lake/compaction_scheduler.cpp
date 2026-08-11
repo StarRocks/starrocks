@@ -40,6 +40,7 @@
 #include "platform/thrift_rpc_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -107,6 +108,36 @@ Status CompactionTaskCallback::has_error() const {
     }
 }
 
+// Populate the metacache with a txn log that this node produced but did NOT persist itself.
+//
+// On the aggregate/file-bundling path the compaction txn log is not written to object storage by the
+// compaction worker: it travels back in `CompactResponse.txn_logs` and the aggregator folds every
+// tablet's log into one combined `<txn_id>.logs` object. Without a cache entry the subsequent publish
+// of this tablet has to download that combined object (`load_txn_log()` in transactions.cpp first
+// probes the metacache under the per-tablet txn log path, then falls back to
+// `get_combined_txn_log()`), so every file-bundling compaction pays an extra remote GET at publish
+// time. This mirrors what the file-bundling tablet metadata path already does -- skip the object
+// storage write, but still cache the metadata (`publish_version()` -> `cache_tablet_metadata()`) --
+// and what the load path already does for its own combined txn logs
+// (`DeltaWriterImpl::finish_with_txnlog()` under kDontWriteTxnLog).
+//
+// The raw (non-normalized) log is cached, exactly like `put_txn_log()` caches the caller's log rather
+// than the dual-written copy it serializes: the legacy arrays only exist for on-disk rollback compat
+// and are folded back into the structured fields by `normalize_txn_log_after_load()` on read.
+//
+// Only the complete log for a tablet reaches here. Parallel compaction subtasks carry
+// skip_write_txnlog=true as well, but their partial logs are funneled through
+// `TabletParallelCompactionManager::on_subtask_complete()` and only the merged context is handed to
+// finish_task(), so a partial log can never land in the cache under the tablet's txn log key.
+void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context) {
+    if (_scheduler == nullptr) { // unit tests may construct a callback without a scheduler
+        return;
+    }
+    auto* tablet_mgr = _scheduler->_tablet_mgr;
+    tablet_mgr->metacache()->cache_txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id),
+                                           context.txn_log);
+}
+
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
     std::unique_lock l(_mtx);
 
@@ -138,6 +169,13 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         TxnLogPB normalized(*context->txn_log);
         if (auto st = normalize_txn_log_before_save(&normalized); st.ok()) {
             _response->add_txn_logs()->Swap(&normalized);
+            if (context->status.ok()) {
+                // Only cache a log that will actually become durable. Once any tablet in the request
+                // fails, the aggregator skips write_combined_txn_log() altogether, so a failed
+                // tablet's log exists nowhere remotely and its txn is headed for abort -- caching it
+                // would put an entry in the metacache that no publish can ever validate against.
+                cache_txn_log(*context);
+            }
         } else {
             LOG(WARNING) << "Fail to normalize aggregate-compact txn log: " << st
                          << " tablet_id=" << context->tablet_id;
