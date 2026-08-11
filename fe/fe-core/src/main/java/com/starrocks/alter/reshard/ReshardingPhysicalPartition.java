@@ -39,6 +39,14 @@ public class ReshardingPhysicalPartition {
 
     protected Future<Map<Long, TabletRange>> publishFuture;
 
+    // Reason this partition's last publish attempt failed, or null while it is healthy. Scoped to
+    // the partition (not the job) so a partition that recovers stops reporting even while a sibling
+    // partition is still retrying. Deliberately NOT serialized: a publish failure is always retried
+    // and never terminal, so it must not reach the journal. volatile because runRunningJob writes it
+    // from the reshard daemon while getInfo() reads it on an RPC thread, and the job stays in
+    // RUNNING throughout, so there is no other happens-before edge to publish the write.
+    protected transient volatile String publishFailureReason;
+
     public ReshardingPhysicalPartition(long physicalPartitionId,
             Map<Long, ReshardingMaterializedIndex> reshardingIndexes) {
         this.physicalPartitionId = physicalPartitionId;
@@ -63,6 +71,14 @@ public class ReshardingPhysicalPartition {
 
     public void setPublishFuture(Future<Map<Long, TabletRange>> publishFuture) {
         this.publishFuture = publishFuture;
+    }
+
+    public void setPublishFailureReason(String publishFailureReason) {
+        this.publishFailureReason = publishFailureReason;
+    }
+
+    public String getPublishFailureReason() {
+        return publishFailureReason;
     }
 
     public enum PublishState {

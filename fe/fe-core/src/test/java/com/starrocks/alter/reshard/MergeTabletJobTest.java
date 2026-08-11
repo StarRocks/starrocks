@@ -1230,31 +1230,39 @@ public class MergeTabletJobTest {
     // getInfo() therefore renders publishFailureReason only when there is no terminal errorMessage.
     @Test
     public void testGetInfoReportsRetriedPublishFailureWithoutJournalingIt() {
+        Map<Long, ReshardingPhysicalPartition> partitions = new HashMap<>();
+        ReshardingPhysicalPartition p1 = new ReshardingPhysicalPartition(1L, new HashMap<>());
+        ReshardingPhysicalPartition p2 = new ReshardingPhysicalPartition(2L, new HashMap<>());
+        partitions.put(1L, p1);
+        partitions.put(2L, p2);
         MergeTabletJob job = new MergeTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), new HashMap<>());
+                db.getId(), table.getId(), partitions);
 
         // healthy: nothing to report
         Assertions.assertEquals("", job.getInfo().getError_message());
 
-        // retrying a failed publish: surfaced, but errorMessage (the journaled field) stays null
-        job.publishFailureReason = "link rpc channel failed";
+        // one partition is retrying a failed publish: surfaced, but errorMessage (the journaled
+        // field) stays null, and it keeps being reported for as long as that partition holds the
+        // reason -- an IN_PROGRESS retry must not blank the diagnostic after a single tick
+        p1.setPublishFailureReason("link rpc channel failed");
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                job.getInfo().getError_message());
         Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
                 job.getInfo().getError_message());
         Assertions.assertNull(job.errorMessage);
 
-        // the reason survives across passes while the resubmitted publish is still IN_PROGRESS --
-        // runRunningJob only clears it once every partition has published, so a slow or hung retry
-        // keeps explaining itself instead of blanking after a single scheduler tick
-        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
-                job.getInfo().getError_message());
-
-        // the retry succeeded: runRunningJob clears the reason, so nothing is reported
-        job.publishFailureReason = null;
+        // that partition recovered while the sibling is still publishing: reporting stops even
+        // though not every partition has finished
+        p1.setPublishFailureReason(null);
         Assertions.assertEquals("", job.getInfo().getError_message());
+
+        // a failure on any partition is reported
+        p2.setPublishFailureReason("no alive node");
+        Assertions.assertEquals("publish version failed (retrying): no alive node",
+                job.getInfo().getError_message());
 
         // a terminal error always wins over a transient publish failure
         job.errorMessage = "Table not found";
-        job.publishFailureReason = "link rpc channel failed";
         Assertions.assertEquals("Table not found", job.getInfo().getError_message());
     }
 }

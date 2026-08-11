@@ -214,9 +214,6 @@ public class SplitTabletJob extends TabletReshardJob {
     protected void runRunningJob() {
         // 1. Publish the split transaction, update new tablet ranges
         boolean allPartitionFinished = true;
-        // Publish failure seen in THIS pass, if any. Recomputed every pass so a retry that
-        // succeeds clears the reported reason instead of leaving it on a healthy job.
-        String failureReason = null;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
                 .getTaskExecutor();
 
@@ -242,11 +239,13 @@ public class SplitTabletJob extends TabletReshardJob {
                         || publishResult.publishState() == PublishState.FAILED) {
                     // Publish not started or publish failed
                     allPartitionFinished = false;
-                    // Remember why the publish failed so this pass can surface it (see
-                    // publishFailureReason); without it a job stuck retrying shows an empty
-                    // ERROR_MESSAGE and the cause lives only in fe.log.
+                    // Remember why THIS partition's publish failed so a job stuck retrying can
+                    // explain itself; without it ERROR_MESSAGE is empty and the cause lives only in
+                    // fe.log. Kept until this partition publishes (an IN_PROGRESS retry must not
+                    // blank it) and scoped per partition so recovery here is not masked by a
+                    // sibling partition that is still retrying.
                     if (publishResult.publishState() == PublishState.FAILED) {
-                        failureReason = publishResult.failureReason();
+                        reshardingPhysicalPartition.setPublishFailureReason(publishResult.failureReason());
                     }
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
@@ -260,6 +259,8 @@ public class SplitTabletJob extends TabletReshardJob {
                     // Publish is in progress
                     allPartitionFinished = false;
                 } else if (publishResult.publishState() == PublishState.SUCCESS) {
+                    // This partition published: its earlier failure (if any) has recovered.
+                    reshardingPhysicalPartition.setPublishFailureReason(null);
                     // Publish success, update new tablet ranges
                     // Note this will be executed repeatedly when retry job, it should be idempotent
                     Map<Long, TabletRange> tabletRanges = publishResult.tabletRanges();
@@ -300,18 +301,6 @@ public class SplitTabletJob extends TabletReshardJob {
                 }
             }
         }
-
-        if (failureReason != null) {
-            // A publish failed in this pass.
-            publishFailureReason = failureReason;
-        } else if (allPartitionFinished) {
-            // Every partition published: the retry recovered, so stop reporting the old reason.
-            publishFailureReason = null;
-        }
-        // Otherwise a resubmitted publish is still IN_PROGRESS. Keep the previous reason: the
-        // scheduler ticks every few milliseconds, so clearing it here would expose the diagnostic
-        // for a single tick and then blank ERROR_MESSAGE again for the whole duration of a slow or
-        // hung retry -- exactly the case it exists to explain.
 
         if (!allPartitionFinished) {
             return;
@@ -520,6 +509,19 @@ public class SplitTabletJob extends TabletReshardJob {
         return sb.toString();
     }
 
+    // First partition currently retrying a failed publish, or null when none is. Read live from the
+    // per-partition state so a partition that recovers drops out without any job-level bookkeeping.
+    @Override
+    protected String anyPublishFailureReason() {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            String reason = reshardingPhysicalPartition.getPublishFailureReason();
+            if (reason != null) {
+                return reason;
+            }
+        }
+        return null;
+    }
+
     @Override
     public TTabletReshardJobsItem getInfo() {
         TTabletReshardJobsItem item = new TTabletReshardJobsItem();
@@ -550,10 +552,10 @@ public class SplitTabletJob extends TabletReshardJob {
         item.setFinished_time(finishedTimeMs / 1000);
         if (errorMessage != null) {
             item.setError_message(errorMessage);
-        } else if (publishFailureReason != null) {
-            item.setError_message("publish version failed (retrying): " + publishFailureReason);
         } else {
-            item.setError_message("");
+            String publishFailureReason = anyPublishFailureReason();
+            item.setError_message(publishFailureReason == null
+                    ? "" : "publish version failed (retrying): " + publishFailureReason);
         }
         return item;
     }
