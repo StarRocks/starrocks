@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <ctime>
 #include <map>
 #include <random>
 
@@ -41,8 +42,10 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/transactions.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -2870,10 +2873,19 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_emits_trace_counters) {
 
     // Publish the compaction txn under an adopted trace; the publish runs synchronously on this thread,
     // so the counters land on `trace`.
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(std::time(nullptr));
+    txn_info.set_force_publish(false);
+    auto txns = std::vector<TxnInfoPB>{std::move(txn_info)};
     scoped_refptr<Trace> trace(new Trace);
     {
         ADOPT_TRACE(trace.get());
-        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        ASSERT_OK(lake::publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version, version + 1, txns,
+                                        false)
+                          .status());
     }
     version++;
 
