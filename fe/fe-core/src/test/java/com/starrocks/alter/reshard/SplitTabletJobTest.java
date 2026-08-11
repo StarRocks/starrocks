@@ -846,7 +846,13 @@ public class SplitTabletJobTest {
                 job.getInfo().getError_message());
         Assertions.assertNull(job.errorMessage);
 
-        // the retry succeeded: recomputed to null every pass, so nothing is reported
+        // the reason survives across passes while the resubmitted publish is still IN_PROGRESS --
+        // runRunningJob only clears it once every partition has published, so a slow or hung retry
+        // keeps explaining itself instead of blanking after a single scheduler tick
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                job.getInfo().getError_message());
+
+        // the retry succeeded: runRunningJob clears the reason, so nothing is reported
         job.publishFailureReason = null;
         Assertions.assertEquals("", job.getInfo().getError_message());
 

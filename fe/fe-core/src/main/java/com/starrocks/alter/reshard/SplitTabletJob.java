@@ -301,7 +301,17 @@ public class SplitTabletJob extends TabletReshardJob {
             }
         }
 
-        publishFailureReason = failureReason;
+        if (failureReason != null) {
+            // A publish failed in this pass.
+            publishFailureReason = failureReason;
+        } else if (allPartitionFinished) {
+            // Every partition published: the retry recovered, so stop reporting the old reason.
+            publishFailureReason = null;
+        }
+        // Otherwise a resubmitted publish is still IN_PROGRESS. Keep the previous reason: the
+        // scheduler ticks every few milliseconds, so clearing it here would expose the diagnostic
+        // for a single tick and then blank ERROR_MESSAGE again for the whole duration of a slow or
+        // hung retry -- exactly the case it exists to explain.
 
         if (!allPartitionFinished) {
             return;
