@@ -4061,8 +4061,19 @@ public class StmtExecutor {
             } while (!batch.isEos());
             processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
+<<<<<<< HEAD
             context.getState().setError(e.getMessage());
             LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+=======
+            // A global dict collection that finds no dict is an expected outcome, not a failure: the caller
+            // turns it into a "not a low cardinality column" decision. Keep it out of the warn log, the same
+            // way DefaultCoordinator suppresses it, so it can't drown the real failures on this path.
+            if (coord != null && coord.getExecStatus().isSuppressedError()) {
+                LOG.debug("Failed to execute executeStmtWithExecPlan: {}", e.getMessage());
+            } else {
+                LOG.warn("Failed to execute executeStmtWithExecPlan", e);
+            }
+>>>>>>> aa2efa3cf87... [Enhancement] Suppress the stack trace for a global dict collection that finds no dict (#77451)
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             boolean async = false;
