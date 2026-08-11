@@ -69,6 +69,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/slice.h"
 
 using std::string;
 
@@ -1403,7 +1404,7 @@ TEST_F(RowsetTest, horizontal_writer_dtor_skips_builtin_gin_index) {
     ASSERT_OK(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
 
     auto schema = ChunkHelper::convert_schema(tablet_schema);
-    auto chunk = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
     auto cols = chunk->columns();
     cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
     cols[1]->as_mutable_ptr()->append_datum(Datum(Slice("apple")));
@@ -1435,7 +1436,7 @@ TEST_F(RowsetTest, vertical_writer_dtor_skips_builtin_gin_index) {
     {
         std::vector<uint32_t> column_indexes{0};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkFactory::new_chunk(schema, 16);
+        auto chunk = ChunkHelper::new_chunk(schema, 16);
         chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(1)));
         ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
         ASSERT_OK(rowset_writer->flush_columns());

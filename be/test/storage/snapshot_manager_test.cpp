@@ -21,8 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "base/testutil/assert.h"
-#include "common/config_storage_fwd.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -32,6 +31,7 @@
 #include "storage/snapshot_meta.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
