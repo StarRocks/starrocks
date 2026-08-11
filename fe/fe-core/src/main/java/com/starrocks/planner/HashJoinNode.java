@@ -217,6 +217,28 @@ public class HashJoinNode extends JoinNode {
         hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
         hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
         hashJoinNode.setLate_materialization(enableLateMaterialization);
+        // An ASOF join's temporal condition is split out of the ON clause by PlanFragmentBuilder
+        // and is carried by neither eqJoinConjuncts nor otherJoinConjuncts, so nothing below
+        // normalizes it: `... and t.ts >= s.ts` and `... and t.ts > s.ts` produce the same digest
+        // while selecting different nearest matches, and the second query is served the first
+        // one's cached rows.
+        //
+        // The route in is a nested one. On the leftmost path an ASOF join is rejected outright --
+        // JoinOperator.isLeftTransform() lists INNER/LEFT_SEMI/LEFT_OUTER/LEFT_ANTI and was never
+        // extended to ASOF_INNER_JOIN/ASOF_LEFT_OUTER_JOIN, so isTransformJoin() is false. But
+        // isTransformJoin() is only consulted for joins ON the leftmost path; a join nested in a
+        // right subtree is filtered only by isCacheable(), which admits any HashJoinNode. An ASOF
+        // join in a build side therefore does sit inside the digested subtree, and it decides
+        // which rows the cached per-tablet aggregate is built from.
+        //
+        // The fragment is marked uncacheable rather than the condition being added to the digest.
+        // Normalizing it would work, but it buys a cache for a shape that only reaches the
+        // digested subtree by nesting, at the cost of a thrift field and of one more thing that
+        // has to be kept in step every time the ASOF representation changes. Refusing to cache
+        // cannot go stale: whatever an ASOF join grows next, it still will not be cached.
+        if (joinOp.isAsofJoin()) {
+            normalizer.setUncacheable(true);
+        }
         planNode.setHash_join_node(hashJoinNode);
         planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
