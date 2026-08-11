@@ -745,6 +745,8 @@ public class StmtExecutor {
                 return "paimon";
             case ODPS:
                 return "odps";
+            case BIGQUERY:
+                return "bigquery";
             case KUDU:
                 return "kudu";
             case ELASTICSEARCH:

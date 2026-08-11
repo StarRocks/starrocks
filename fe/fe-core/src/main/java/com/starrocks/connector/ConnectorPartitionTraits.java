@@ -32,6 +32,7 @@ import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
 import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
+import com.starrocks.connector.partitiontraits.BigQueryPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
@@ -73,6 +74,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
                     .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
+                    .put(Table.TableType.BIGQUERY, BigQueryPartitionTraits::new)
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)

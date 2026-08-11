@@ -858,6 +858,16 @@ under the License.
             <artifactId>odps-sdk-table-api</artifactId>
         </dependency>
 
+        <!-- BigQuery external catalog -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-bigquery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-bigquery-storage</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
         <dependency>
             <groupId>org.owasp.encoder</groupId>

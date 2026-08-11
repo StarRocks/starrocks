@@ -619,6 +619,17 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+// ---------------bigquery jni scanner------------------
+std::unique_ptr<JniScanner> create_bigquery_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params.insert(scan_range.bigquery_split_infos.begin(), scan_range.bigquery_split_infos.end());
+
+    const std::string scanner_factory_class = "com/starrocks/bigquery/reader/BigQuerySplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
 // ---------------iceberg metadata jni scanner------------------
 std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);

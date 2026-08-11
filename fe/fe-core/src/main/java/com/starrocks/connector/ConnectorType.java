@@ -23,6 +23,7 @@ import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
 import com.starrocks.connector.kudu.KuduConnector;
+import com.starrocks.connector.bigquery.BigQueryConnector;
 import com.starrocks.connector.odps.OdpsConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.unified.UnifiedConnector;
@@ -42,7 +43,8 @@ public enum ConnectorType {
     PAIMON("paimon", PaimonConnector.class, null),
     ODPS("odps", OdpsConnector.class, null),
     KUDU("kudu", KuduConnector.class, null),
-    UNIFIED("unified", UnifiedConnector.class, null);
+    UNIFIED("unified", UnifiedConnector.class, null),
+    BIGQUERY("bigquery", BigQueryConnector.class, null);
 
     public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
             ES,
@@ -54,7 +56,8 @@ public enum ConnectorType {
             PAIMON,
             ODPS,
             KUDU,
-            UNIFIED
+            UNIFIED,
+            BIGQUERY
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {

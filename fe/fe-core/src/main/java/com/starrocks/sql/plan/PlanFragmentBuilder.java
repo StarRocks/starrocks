@@ -95,6 +95,7 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.NoopSink;
+import com.starrocks.planner.BigQueryScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
@@ -196,6 +197,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalBigQueryScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
@@ -1509,6 +1511,53 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        public PlanFragment visitPhysicalBigQueryScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalBigQueryScanOperator node = (PhysicalBigQueryScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            BigQueryScanNode bigQueryScanNode =
+                    new BigQueryScanNode(context.getNextNodeId(), tupleDescriptor, "BigQueryScanNode");
+            bigQueryScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            currentExecGroup.add(bigQueryScanNode, true);
+            try {
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    bigQueryScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                ScanOperatorPredicates scanOperatorPredicates = node.getScanOperatorPredicates();
+                Collection<Long> selectedPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
+                List<PartitionKey> partitionKeys =
+                        selectedPartitionIds.stream()
+                                .map(id -> scanOperatorPredicates.getIdToPartitionKey().get(id))
+                                .collect(Collectors.toList());
+                bigQueryScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), partitionKeys);
+                HDFSScanNodePredicates scanNodePredicates = bigQueryScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, scanOperatorPredicates, context, referenceTable);
+                prepareCommonExpr(scanNodePredicates, scanOperatorPredicates, context);
+            } catch (Exception e) {
+                LOG.error("BigQuery scan node get scan range locations failed", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            bigQueryScanNode.setLimit(node.getLimit());
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(bigQueryScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), bigQueryScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

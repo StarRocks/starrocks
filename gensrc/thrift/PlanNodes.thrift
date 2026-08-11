@@ -471,6 +471,12 @@ struct THdfsScanRange {
 
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
+
+    // whether to use JNI scanner to read data of BigQuery table via Storage Read API
+    39: optional bool use_bigquery_jni_reader
+
+    // BigQuery split info (read_session_name, read_stream_name, credentials, etc.)
+    40: optional map<string, string> bigquery_split_infos
 }
 
 struct TBinlogScanRange {
