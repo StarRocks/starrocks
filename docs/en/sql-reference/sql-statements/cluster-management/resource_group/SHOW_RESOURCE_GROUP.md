@@ -30,19 +30,19 @@ SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP <resource_group_name> }
 
 ## Return
 
-| **Return**                 | **Description**                                              |
-| -------------------------- | ------------------------------------------------------------ |
-| name                       | Name of the resource group.                                  |
-| id                         | ID of the resource group.                                    |
-| cpu_weight                 | CPU scheduling weight of this resource group on a BE node.   |
-| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.        |
-| mem_limit                  | Memory limit of the resource group.                          |
-| big_query_cpu_second_limit | Big query upper time limit of the resource group.            |
-| big_query_scan_rows_limit  | Big query scan row limit of the resource group.              |
-| big_query_mem_limit        | Big query memory limit of the resource group.                |
-| concurrency_limit          | Concurrency limit of the resource group.                     |
+| **Return**                 | **Description**                                                                                                                    |
+|----------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| name                       | Name of the resource group.                                                                                                        |
+| id                         | ID of the resource group.                                                                                                          |
+| cpu_weight                 | CPU scheduling weight of this resource group on a BE node.                                                                         |
+| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.                                                                              |
+| mem_limit                  | Memory limit of the resource group.                                                                                                |
+| big_query_cpu_second_limit | Big query upper time limit of the resource group.                                                                                  |
+| big_query_scan_rows_limit  | Big query scan row limit of the resource group.                                                                                    |
+| big_query_mem_limit        | Big query memory limit of the resource group.                                                                                      |
+| concurrency_limit          | Concurrency limit of the resource group.                                                                                           |
 | mem_used_pct_limit         | Memory usage percentage limit of the resource group. Requires `enable_group_level_query_queue` to be enabled.                      |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.       |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                                             |
 | classifiers                | Classifiers that are associated with the resource group. `id` is the ID of the classifier, and `weight` is the degree of matching. |
 
 ## Examples

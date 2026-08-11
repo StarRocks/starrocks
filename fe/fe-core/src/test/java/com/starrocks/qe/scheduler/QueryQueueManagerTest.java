@@ -1363,7 +1363,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 1. Report the group at 90% memory >= 80% -> queries of the group are queued.
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
-                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(90).setMem_limit_bytes(100));
+                new TResourceGroupUsage().setGroup_id(groupId).setMem_used_bytes(90).setMem_limit_bytes(100)
+                        .setNum_running_queries(1));
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, groupUsages);
 
         List<Thread> threads = new ArrayList<>();

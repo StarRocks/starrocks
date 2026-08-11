@@ -42,20 +42,20 @@ Each resource group is a set of computing resources from a specific BE. You can 
 
 You can specify CPU and memory resource quotas for a resource group on a BE by using the following parameters:
 
-| Parameter                  | Description                                                    | Value Range                                                    | Default |
-| -------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
-| cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
-| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1. | [0, 100] (takes effect when greater than 0)     | 0       |
-| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
-| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1. | [0, 100] (takes effect when greater than 0) | 0       |
-| mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
-| mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
-| concurrency_limit          | Maximum number of concurrent queries in this resource group.   | Integer (takes effect when greater than 0)                     | 0       |
-| mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. | [0, 1] (takes effect when greater than 0)     | 0       |
-| big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.   | Integer (takes effect when greater than 0)               | 0       |
-| big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.   | Integer (takes effect when greater than 0)                 | 0       |
-| big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.        | Integer (takes effect when greater than 0)                     | 0       |
+| Parameter                  | Description                                                                                                    | Value Range                                                    | Default          |
+|----------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|------------------|
+| cpu_weight                 | The CPU scheduling weight of this resource group on a BE node.                                                 | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0                |
+| cpu_weight_percent         | The CPU scheduling weight percentage of this resource group on a BE node. Supported from v4.1.                 | [0, 100] (takes effect when greater than 0)                    | 0                |
+| exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.                                                          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0                |
+| exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1.                                    | [0, 100] (takes effect when greater than 0)                    | 0                |
+| mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node.                  | (0, 1] (required)                                              | -                |
+| mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
+| concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
+| mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. | [0, 1] (takes effect when greater than 0)                      | 0                |
+| big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
+| big_query_scan_rows_limit  | Maximum number of rows big query tasks can scan on each BE node.                                               | Integer (takes effect when greater than 0)                     | 0                |
+| big_query_mem_limit        | Maximum memory big query tasks can use on each BE node.                                                        | Integer (takes effect when greater than 0)                     | 0                |
 
 #### CPU resource parameters
 
