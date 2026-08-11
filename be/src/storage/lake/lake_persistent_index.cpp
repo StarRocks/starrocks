@@ -175,7 +175,12 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
 }
 
 bool LakePersistentIndex::is_memtable_full() const {
-    const auto memtable_mem_size = _memtable->memory_usage();
+    // memory_usage() walks the whole B-tree, and this check runs after every write batch, so measuring
+    // unconditionally rescans the growing memtable each time. Walking a small memtable is free, so below
+    // the cutoff take the exact reading; past it the O(1) estimate decides.
+    const auto memtable_mem_size = _memtable->size() <= PersistentIndexMemtable::kExactMemoryUsageMaxEntries
+                                           ? _memtable->memory_usage()
+                                           : _memtable->estimated_memory_usage();
     const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =

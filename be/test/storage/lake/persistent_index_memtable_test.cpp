@@ -167,4 +167,35 @@ TEST(PersistentIndexMemtableTest, test_memory_usage) {
     ASSERT_TRUE(memtable->memory_usage() < 100000 && memtable->memory_usage() > 0);
 }
 
+TEST(PersistentIndexMemtableTest, test_estimated_memory_usage) {
+    // The estimate skips the B-tree walk by charging one slot per entry, so it must never exceed the
+    // exact reading, must grow with the memtable, and must stay close enough to be usable as the
+    // fullness signal once the memtable is past kExactMemoryUsageMaxEntries.
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    ASSERT_LE(memtable->estimated_memory_usage(), memtable->memory_usage());
+
+    using Key = uint64_t;
+    const int N = 2 * PersistentIndexMemtable::kExactMemoryUsageMaxEntries;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    values.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+    ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
+
+    const size_t exact = memtable->memory_usage();
+    const size_t estimated = memtable->estimated_memory_usage();
+    ASSERT_EQ(N, memtable->size());
+    ASSERT_GT(estimated, 0);
+    ASSERT_LE(estimated, exact);
+    // Only the B-tree's per-node overhead is missing, so the estimate stays within a small fraction.
+    ASSERT_GT(estimated * 2, exact);
+}
+
 } // namespace starrocks::lake

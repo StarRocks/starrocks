@@ -196,6 +196,14 @@ size_t PersistentIndexMemtable::memory_usage() const {
     return _keys_heap_size + _map.bytes_used();
 }
 
+size_t PersistentIndexMemtable::estimated_memory_usage() const {
+    // Same, except the btree is estimated instead of walked: every entry occupies one slot of an
+    // allocated node, so this never exceeds memory_usage(). It leaves out the btree's own per-node
+    // overhead, ~10% of the node bytes on a densely packed map, so a flush decided by it can overshoot
+    // the threshold by about that much.
+    return _keys_heap_size + _map.size() * sizeof(decltype(_map)::value_type);
+}
+
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb) {
     return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
 }
