@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+from sqlalchemy import Column
 from sqlalchemy.sql.ddl import DDLElement as ExecutableDDLElement  # for 1.4 compatibility
 
 from .schema import MaterializedView, View
@@ -197,3 +198,41 @@ class AlterTableProperties(ExecutableDDLElement):
         self.table_name = table_name
         self.schema = schema
         self.properties = properties
+
+
+class AlterTableColumns(ExecutableDDLElement):
+    """Represent a combined ``ALTER TABLE ... ADD/DROP COLUMN`` statement.
+
+    StarRocks runs schema changes asynchronously and allows only a single
+    in-flight schema-change job per table. Emitting one ``ALTER TABLE`` per
+    column therefore fails once the second statement is submitted while the
+    first job is still running. StarRocks does support combining several
+    column changes into a single statement (hence a single job)::
+
+        ALTER TABLE t ADD COLUMN a INT, DROP COLUMN c, ADD COLUMN b INT;
+
+    This DDL element renders exactly that: every ``ADD COLUMN`` clause is
+    rendered with the compiler's column specification, and every ``DROP
+    COLUMN`` clause with the quoted column name, joined with commas.
+    """
+
+    __visit_name__ = "alter_table_columns"
+
+    def __init__(
+        self,
+        table_name: str,
+        adds: Optional[List[Column]] = None,
+        drops: Optional[List[str]] = None,
+        schema: Optional[str] = None,
+    ):
+        """
+        Args:
+            table_name: The name of the table.
+            adds: Column objects to add (rendered as ``ADD COLUMN <spec>``).
+            drops: Column names to drop (rendered as ``DROP COLUMN <name>``).
+            schema: The schema (StarRocks database) of the table.
+        """
+        self.table_name = table_name
+        self.schema = schema
+        self.adds = adds or []
+        self.drops = drops or []
