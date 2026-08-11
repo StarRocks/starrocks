@@ -178,6 +178,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             LOG.warn("Storage volume '{}' has an unusable credential. It can still be listed and " +
                     "dropped, but not used: {}", name, dumpMaskedParams(params));
         }
+        if (requireUsableCredential) {
+            // Every volume that is about to be written goes through here, including the one
+            // StorageVolumeMgr#replaceStorageVolume builds when a restore changes the volume type,
+            // which reaches the file store without passing createFileStoreInfo.
+            validateCredentialIsPersistable(this.cloudConfiguration, params);
+        }
         validateStorageVolumeConstraints();
     }
 
@@ -353,10 +359,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
      * accepts is richer than what the file store models: an ADLS2 credential authenticating with a
      * workload identity loses its token file and reads back as a managed identity, so the volume
      * stays valid while quietly authenticating as somebody else. The second half therefore requires,
-     * for Azure volumes, that every credential property that was given also survives the round trip.
-     * The same class of loss exists for the AWS web identity profile, which is stored as an assume
-     * role or a default credential, but volumes relying on it exist in the wild and rejecting them
-     * belongs in its own change rather than in this fix.
+     * for Azure volumes, that the credential properties given and the ones read back are the same
+     * set. The comparison runs both ways on purpose: the file store records no OAuth2 flow, so the
+     * read-back path infers one, and a property it infers is as much of a mode change as a property
+     * it drops. The same class of loss exists for the AWS web identity profile, which is stored as
+     * an assume role or a default credential, but volumes relying on it exist in the wild and
+     * rejecting them belongs in its own change rather than in this fix.
      *
      * <p>The restored parameters go through the same {@link #preprocessAuthenticationIfNeeded}
      * derivation as the incoming ones, otherwise fields derived from the locations rather than the
@@ -377,15 +385,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;
         }
-        List<String> droppedProperties = AZURE_CREDENTIAL_PROPERTIES.stream()
-                .filter(key -> isCredentialPropertySet(params, key) && !isCredentialPropertySet(restored, key))
+        List<String> changedProperties = AZURE_CREDENTIAL_PROPERTIES.stream()
+                .filter(key -> isCredentialPropertySet(params, key) != isCredentialPropertySet(restored, key))
                 .sorted()
                 .collect(Collectors.toList());
-        if (!droppedProperties.isEmpty()) {
+        if (!changedProperties.isEmpty()) {
             // Names only: the values are the credential we are refusing to store.
             throw new SemanticException(String.format(
                     "Storage params contain a credential that cannot be stored for a %s storage volume, " +
-                            "storing it would drop %s", svt, String.join(", ", droppedProperties)));
+                            "storing it would change %s", svt, String.join(", ", changedProperties)));
         }
     }
 
@@ -430,7 +438,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                                                     List<String> locations, Map<String, String> params,
                                                     boolean enabled, String comment) throws DdlException {
         StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
-        sv.validateCredentialIsPersistable(sv.cloudConfiguration, params);
         return sv.toFileStoreInfo();
     }
 
@@ -583,12 +590,18 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 if (!Strings.isNullOrEmpty(clientId)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, clientId);
                 }
-                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)) {
-                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
-                }
                 String clientSecret = adls2credentialInfo.getClientSecret();
                 if (!Strings.isNullOrEmpty(clientSecret)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, clientSecret);
+                }
+                // The file store has no field saying which OAuth2 flow was used, so it is inferred: a
+                // tenant and a client with no secret is a managed identity, the same three with a
+                // secret is a service principal. Inferring a managed identity from the tenant and the
+                // client alone made a stored service principal come back as a managed identity, since
+                // the credential builder prefers a managed identity over the client secret.
+                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)
+                        && Strings.isNullOrEmpty(clientSecret)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
                 }
                 String clientEndpoint = adls2credentialInfo.getAuthorityHost();
                 if (!Strings.isNullOrEmpty(clientEndpoint)) {

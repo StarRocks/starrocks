@@ -65,6 +65,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
@@ -605,6 +606,42 @@ public class StorageVolumeTest {
         StorageVolume usable = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
                 storageParams, true, "");
         Assertions.assertTrue(usable.isCredentialUsable());
+    }
+
+    @Test
+    public void testAdls2ServicePrincipalStaysAServicePrincipal() throws DdlException {
+        // The file store records no OAuth2 flow, so the read-back path infers one. Inferring a
+        // managed identity from the tenant and the client alone turned a stored service principal
+        // into a managed identity, because the credential builder prefers a managed identity over
+        // the client secret - a silent change of who the volume authenticates as.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client_secret");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "client_endpoint");
+
+        FileStoreInfo fsInfo = StorageVolume.createFileStoreInfo("test", "adls2",
+                Arrays.asList("adls2://aaa"), storageParams, true, "");
+
+        Map<String, String> restored = StorageVolume.getParamsFromFileStoreInfo(fsInfo);
+        Assertions.assertEquals("client_secret", restored.get(AZURE_ADLS2_OAUTH2_CLIENT_SECRET));
+        Assertions.assertEquals("client_endpoint", restored.get(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT));
+        Assertions.assertFalse(restored.containsKey(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY), restored.toString());
+    }
+
+    @Test
+    public void testConstructorRejectsCredentialThatCannotBePersisted() {
+        // Not every write goes through createFileStoreInfo: StorageVolumeMgr#replaceStorageVolume
+        // builds the replacement with this constructor when a restore changes the volume type and
+        // then hands its file store straight to the store, so the check has to sit here.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+
+        Assertions.assertThrows(SemanticException.class, () ->
+                new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
     }
 
     @Test
