@@ -1698,6 +1698,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         }
         scanNode.setKey_column_names(keyColumnNames);
         scanNode.setKey_column_types(keyColumnTypes);
+        // A fast schema evolution changes what this scan returns without touching any partition
+        // version, so the schema has to be part of the key or pre-DDL entries stay live. See the
+        // note on TNormalOlapScanNode.schema_id.
+        //
+        // Only when it actually carries information. MaterializedIndexMeta starts life with
+        // schemaId == indexMetaId and only diverges once a schema change assigns a new schema, and
+        // index_id is already in the digest above -- so for a table that has never been altered the
+        // field would be a second copy of a value the key already has. Emitting it unconditionally
+        // would still change the serialized bytes, which would invalidate every existing entry on
+        // upgrade for no gain. Written only when it differs, the digests of unaltered tables are
+        // byte-identical to before this fix and only the tables that were altered lose their
+        // entries -- which is exactly the set that has to.
+        if (selectedIndexMetaId != -1) {
+            MaterializedIndexMeta selectedIndexMeta = olapTable.getIndexMetaByMetaId(selectedIndexMetaId);
+            if (selectedIndexMeta != null && selectedIndexMeta.getSchemaId() != selectedIndexMetaId) {
+                scanNode.setSchema_id(selectedIndexMeta.getSchemaId());
+            }
+        }
         scanNode.setIs_preaggregation(isPreAggregation);
         scanNode.setSort_column(sortColumn);
         scanNode.setRollup_name(olapTable.getIndexNameByMetaId(selectedIndexMetaId));
