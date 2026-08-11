@@ -82,6 +82,43 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testCollectionSubscriptIsSubjectToGroupBy() {
+        // The subscript of a collection element is an ordinary expression: a bare column there is no more
+        // legal than anywhere else. It used to slip past this check and blow up later in the optimizer
+        // with an unactionable "Invalid plan:".
+        analyzeFail("select map_agg(v1, v2)[v3] from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select map_agg(v1, v2)[v3] from t0 group by v1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+
+        analyzeSuccess("select map_agg(v1, v2)[1] from t0");
+        analyzeSuccess("select map_agg(v1, v2)[v3] from t0 group by v3");
+
+        // The same rule has to hold wherever the check runs, not only in the select list.
+        analyzeFail("select v1 from t0 group by v1 having map_agg(v1, v2)[v3] = 'x'",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select map_agg(v1, v2)[v3] from t0 order by map_agg(v1, v2)[v3]",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
+    public void testEveryChildIsSubjectToGroupBy() {
+        // Several visitors used to look at only some of their children, so a bare column in the other ones
+        // reached the optimizer, which rejected its own plan with an unactionable "Invalid plan:".
+
+        // The LIKE pattern only has to be a string expression, so it can be a column.
+        analyzeFail("select max(ta) like ta from tall",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeSuccess("select max(ta) like ta from tall group by ta");
+        analyzeSuccess("select max(ta) like 'a%' from tall");
+
+        // BITNOT is a unary ArithmeticExpr: asking for a second child yields null, which used to NPE.
+        analyzeSuccess("select ~v1, count(*) from t0 group by v1");
+        analyzeFail("select ~v1, count(*) from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
     public void testGrouping() {
         analyzeFail("select grouping(foo) from t0 group by grouping sets((v1), (v2))",
                 "cannot be resolved");
