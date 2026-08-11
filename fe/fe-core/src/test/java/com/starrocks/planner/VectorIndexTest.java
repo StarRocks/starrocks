@@ -73,6 +73,16 @@ public class VectorIndexTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
                 + "PROPERTIES ('replication_num'='1');");
 
+        starRocksAssert.withTable("CREATE TABLE test.test_inner_product ("
+                + " c0 INT,"
+                + " c1 array<float> NOT NULL,"
+                + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'inner_product', "
+                + "'is_vector_normed' = 'false', 'M' = '16', 'index_type' = 'hnsw', 'dim'='5') "
+                + ") "
+                + "DUPLICATE KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
         starRocksAssert.withTable("CREATE TABLE test.test_ivfpq ("
                 + " c0 INT,"
                 + " c1 array<float> NOT NULL,"
@@ -917,6 +927,28 @@ public class VectorIndexTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
             connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
         }
+    }
+
+    @Test
+    public void testInnerProductVectorIndexRewrite() throws Exception {
+        String query = "[1.1,2.2,3.3,4.4,5.5]";
+        String sql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product order by score desc limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "VECTORINDEX: ON");
+        assertContains(plan, "__vector_approx_inner_product");
+        assertContains(plan, "Order: DESC");
+
+        String rangeSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product where approx_inner_product(" + query + ", c1) >= -2.5 "
+                + "order by score desc limit 10";
+        String rangePlan = getFragmentPlan(rangeSql);
+        assertContains(rangePlan, "VECTORINDEX: ON");
+        assertContains(rangePlan, "Predicate Range: -2.5");
+
+        String wrongOrderSql = "select c0, approx_inner_product(" + query + ", c1) as score "
+                + "from test.test_inner_product order by score asc limit 10";
+        assertNotContains(getFragmentPlan(wrongOrderSql), "VECTORINDEX: ON");
     }
 
     // Regression guard for the vector distance-column schema pollution bug.

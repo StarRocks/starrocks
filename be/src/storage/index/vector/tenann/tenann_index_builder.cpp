@@ -26,6 +26,7 @@
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "tenann/factory/index_factory.h"
 #include "tenann/index/index_cache.h"
+#include "tenann/index/parameters.h"
 
 namespace starrocks {
 
@@ -47,6 +48,15 @@ Status TenAnnIndexBuilderProxy::init() {
         return Status::InvalidArgument("metric_type is needed because it's a critical common param");
     }
 
+    const auto& index_params = meta.index_params();
+    if (meta.index_type() == tenann::IndexType::kFaissHnsw && index_params.contains(index::vector::QUANTIZER) &&
+        index_params[index::vector::QUANTIZER] == static_cast<int>(tenann::ScalarQuantizerType::kPQ)) {
+        const int nbits_pq = index_params[index::vector::NBITS_PQ];
+        if (nbits_pq != 4 && nbits_pq != 8) {
+            return Status::InvalidArgument("nbits_pq must be 4 or 8 in StarRocks");
+        }
+    }
+
     // Build-time cache fill is opt-in (enable_vector_index_cache_on_build, default off):
     // the cache is sized for the query working set, so loads and compactions would
     // otherwise evict indexes queries are using; TenANNReader::init_searcher fills it on
@@ -58,6 +68,12 @@ Status TenAnnIndexBuilderProxy::init() {
 
     auto meta_copy = meta;
     meta_copy.index_writer_options()[tenann::IndexWriterOptions::write_index_cache_key] = write_index_cache;
+    if (params[index::vector::METRIC_TYPE] == static_cast<int>(tenann::MetricType::kCosineSimilarity)) {
+        // Keep the physical implementation of logical cosine indexes inside StarRocks. This is deliberately
+        // not a table/index property: readers infer the physical metric from the serialized index, while all
+        // new cosine builds (including compaction and async rebuilds) consistently use inner product.
+        meta_copy.index_writer_options()["cosine_backend"] = "inner_product";
+    }
 
     try {
         // build and write index

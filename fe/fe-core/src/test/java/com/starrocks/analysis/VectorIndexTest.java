@@ -225,7 +225,7 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.QUANTIZER.name(), "bogus");
                 }}, KeysType.DUP_KEYS));
 
-        // NBITS_PQ range (single-field) is enforced via the enum's check().
+        // StarRocks accepts only the deployable PQ code widths 4 and 8.
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
@@ -237,9 +237,9 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
                     put(IndexParamsKey.M_PQ.name(), "16");
-                    put(IndexParamsKey.NBITS_PQ.name(), "2");
+                    put(IndexParamsKey.NBITS_PQ.name(), "16");
                 }}, KeysType.DUP_KEYS),
-                "Value of `NBITS_PQ` must be in [4, 16]");
+                "Value of `NBITS_PQ` must be 4 or 8");
     }
 
     @Test
@@ -260,6 +260,32 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
                     put(IndexParamsKey.M_PQ.name(), "16");
                     put(IndexParamsKey.NBITS_PQ.name(), "8");
+                }}, KeysType.DUP_KEYS));
+
+        // Inner product is supported by every HNSW storage type, including PQ.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.INNER_PRODUCT.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // Native inner product is also available to IVFPQ.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.INNER_PRODUCT.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.NLIST.name(), "16");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "16");
                 }}, KeysType.DUP_KEYS));
 
         // Quantized HNSW (SQ/PQ) on cosine_similarity: tenann composes the factory

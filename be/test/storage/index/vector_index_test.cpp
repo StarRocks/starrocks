@@ -331,6 +331,69 @@ TEST_F(VectorIndexWriterTest, hnsw_sq8_end_to_end) {
     EXPECT_NE(result[0], -1) << "SQ8 search returned no hit";
 }
 
+TEST_F(VectorIndexWriterTest, hnsw_sq8_inner_product_end_to_end) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "inner_product");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "sq8");
+
+    auto path = test_vector_index_dir + "/sq8_ip_" + vector_index_name;
+    write_vector_index(path, tablet_index);
+
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {}));
+    auto searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(meta);
+    searcher->ReadIndex(path);
+    ASSERT_TRUE(searcher->is_index_loaded());
+
+    std::vector<float> query{1.0f, 2.0f, 3.0f};
+    tenann::PrimitiveSeqView q{.data = reinterpret_cast<uint8_t*>(query.data()),
+                               .size = 3,
+                               .elem_type = tenann::PrimitiveType::kFloatType};
+    std::vector<int64_t> result(3, -1);
+    std::vector<float> scores(3, 0.0f);
+    searcher->AnnSearch(q, result.size(), result.data(), reinterpret_cast<uint8_t*>(scores.data()));
+    EXPECT_EQ(result[0], 10);
+    EXPECT_GT(scores[0], 60.0f);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_pq_rejects_unsupported_nbits) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "8");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "pq");
+    tablet_index->add_index_properties("m_pq", "2");
+    tablet_index->add_index_properties("nbits_pq", "16");
+
+    std::unique_ptr<VectorIndexWriter> writer;
+    VectorIndexWriter::create(tablet_index, test_vector_index_dir + "/pq16.vi", true, &writer);
+    ASSERT_OK(writer->init());
+
+    auto element = FixedLengthColumn<float>::create();
+    for (int i = 0; i < 8; ++i) {
+        element->append(static_cast<float>(i));
+    }
+    auto null_column = NullColumn::create(element->size(), 0);
+    auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(8);
+    auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
+
+    auto status = writer->append(*array_column);
+    ASSERT_TRUE(status.is_invalid_argument()) << status.to_string();
+    EXPECT_NE(status.message().find("nbits_pq must be 4 or 8"), std::string_view::npos);
+}
+
 TEST_F(VectorIndexWriterTest, hnsw_pq_end_to_end) {
     // PQ requires real training data: faiss recommends (1<<nbits_pq)*100 rows.
     // Use nbits_pq=4 -> 1600 minimum, m_pq=2 (must divide dim=8). Generate
