@@ -1,0 +1,103 @@
+-- name: test_minmax_after_replace_partition
+DROP DATABASE IF EXISTS test_minmax_replace_partition;
+-- result:
+-- !result
+CREATE DATABASE test_minmax_replace_partition;
+-- result:
+-- !result
+USE test_minmax_replace_partition;
+-- result:
+-- !result
+CREATE TABLE t (
+  ds DATE NOT NULL,
+  v  INT  NOT NULL
+) DUPLICATE KEY(ds)
+PARTITION BY RANGE(ds) (PARTITION p1 VALUES [('2024-01-01'), ('2024-02-01')))
+DISTRIBUTED BY HASH(ds) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t ADD TEMPORARY PARTITION tp VALUES [('2024-01-01'), ('2024-02-01'));
+-- result:
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+INSERT INTO t TEMPORARY PARTITION (tp) VALUES ('2024-01-05', 10);
+-- result:
+-- !result
+shell: sleep 2
+-- result:
+0
+
+-- !result
+INSERT INTO t VALUES ('2024-01-20', 999);
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_replace_partition.t', 'v');
+-- result:
+ColumnMinMax[minValue=999, maxValue=999]
+-- !result
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_replace_partition.t" | grep -c "EXECUTE IN FE"
+-- result:
+0
+1
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+999
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+999
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+ALTER TABLE t REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp);
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+10
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+10
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_replace_partition.t', 'v');
+-- result:
+ColumnMinMax[minValue=10, maxValue=10]
+-- !result
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_replace_partition.t" | grep -c "EXECUTE IN FE"
+-- result:
+0
+1
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+10
+-- !result
+INSERT INTO t VALUES ('2024-01-25', 500);
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+500
+-- !result
+SELECT MIN(v) FROM t;
+-- result:
+10
+-- !result
+DROP DATABASE test_minmax_replace_partition;
+-- result:
+-- !result
