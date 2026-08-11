@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -2390,6 +2391,258 @@ public class ExpressionStatisticsCalculatorTest {
 
         // THEN
         Assertions.assertNull(result.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzWidensRangeAndUsesProductOfNdvsWhenBelowRowCount() {
+        final int rowCount = 100;
+        final double dtNdv = 2;
+        final double fromTzNdv = 1;
+        final double toTzNdv = 2;
+        final double nullsFraction = 0.1;
+        final double minEpoch = getLongFromDateTime(LocalDateTime.of(2021, 1, 10, 8, 30, 0));
+        final double maxEpoch = getLongFromDateTime(LocalDateTime.of(2021, 12, 25, 23, 59, 59));
+        final double maxOffsetSec = 26.0 * 3600.0;
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minEpoch)
+                        .setMaxValue(maxEpoch)
+                        .setNullsFraction(nullsFraction)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(dtNdv)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(fromTzNdv)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(toTzNdv)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertFalse(actual.isUnknown());
+        Assertions.assertEquals(minEpoch - maxOffsetSec, actual.getMinValue(), 0.001);
+        Assertions.assertEquals(maxEpoch + maxOffsetSec, actual.getMaxValue(), 0.001);
+        Assertions.assertEquals(nullsFraction, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100, 2*1*2)
+        Assertions.assertEquals(DateType.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzCapsDistinctValuesAtRowCount() {
+        final int rowCount = 5;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 1, 0, 0, 0)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(3)
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(5, actual.getDistinctValuesCount(), 0.001); // min(5, 3*2*2)
+    }
+
+    @Test
+    public void testConvertTzMcvPropagationWithConstantTimezones() {
+        final String fromTz = "UTC";
+        final String toTz = "Asia/Shanghai";
+        final String dt1 = "2024-01-15 10:20:30";
+        final String dt2 = "2024-01-15 14:45:00";
+        final Map<String, Long> inputMcv = Map.of(dt1, 100L, dt2, 200L);
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnStatistic dtStat = ColumnStatistic.builder()
+                .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
+                .setNullsFraction(0)
+                .setAverageRowSize(8)
+                .setDistinctValuesCount(2)
+                .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                .build();
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, dtStat)
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNotNull(actual.getHistogram());
+        Assertions.assertTrue(actual.getHistogram().getBuckets().isEmpty());
+        final Map<String, Long> mcv = actual.getHistogram().getMCV();
+        Assertions.assertEquals(2, mcv.size());
+        Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));
+        Assertions.assertEquals(200L, mcv.get(convertTzMcvKey(dt2, fromTz, toTz)));
+    }
+
+    @Test
+    public void testConvertTzNoMcvWhenTimezonesAreNotConstant() {
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "to_tz", true);
+        final Map<String, Long> inputMcv = Map.of("2024-01-15 10:20:30", 100L);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                        .build())
+                .addColumnStatistic(fromTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .addColumnStatistic(toTzCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(dtCol, fromTzCol, toTzCol));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNull(actual.getHistogram());
+        Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(1000, 1*2*2)
+    }
+
+    @Test
+    public void testConvertTzNoMcvWhenInputHasNoHistogram() {
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNull(actual.getHistogram());
+        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzNoMcvWhenTimezoneInvalid() {
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Map<String, Long> inputMcv = Map.of("2024-01-15 10:20:30", 100L);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("Not/AZone"),
+                        ConstantOperator.createVarchar("UTC")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzNoMcvWhenMcvKeyInvalid() {
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Map<String, Long> inputMcv = Map.of("not-a-datetime", 100L);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), inputMcv))
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
+        final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
+                ConstantOperator.createVarchar(datetime).castTo(DateType.DATETIME).get(),
+                ConstantOperator.createVarchar(fromTz),
+                ConstantOperator.createVarchar(toTz));
+        return converted.castTo(VarcharType.VARCHAR).get().getVarchar();
     }
 
     @Test
