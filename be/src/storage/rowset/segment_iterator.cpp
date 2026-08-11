@@ -97,6 +97,12 @@ namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
+enum class VectorMetricType {
+    kL2Distance,
+    kCosineSimilarity,
+    kInnerProduct,
+};
+
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
 static int compare(const SeekTuple& tuple, const Chunk& chunk) {
@@ -371,12 +377,13 @@ private:
         std::unordered_map<rowid_t, float> id2distance_map;
         std::map<std::string, std::string> query_params;
         double vector_range = -1.0;
+        bool has_vector_range = false;
         int result_order = 0;
         bool refine_distance = false;
 
         // Brute-force fallback fields (when .vi file is missing)
         bool use_brute_force = false;
-        bool is_cosine_similarity = false; // metric type from index metadata
+        VectorMetricType metric_type = VectorMetricType::kL2Distance;
         ColumnId vector_data_column_id = 0;
         int32_t vector_data_column_uid = -1;
         bool added_vector_data_column = false; // true if we appended vector column to _schema
@@ -949,11 +956,15 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _vector_index_ctx->vector_column_id = _opts.vector_search_option->vector_column_id;
         _vector_index_ctx->vector_slot_id = _opts.vector_search_option->vector_slot_id;
         _vector_index_ctx->vector_range = _opts.vector_search_option->vector_range;
+        // The explicit bit supports negative similarity thresholds. The fallback keeps manually
+        // constructed/legacy options that use the old non-negative sentinel convention working.
+        _vector_index_ctx->has_vector_range =
+                _opts.vector_search_option->has_vector_range || _opts.vector_search_option->vector_range >= 0;
         _vector_index_ctx->result_order = _opts.vector_search_option->result_order;
         _vector_index_ctx->refine_distance = _opts.vector_search_option->refine_distance;
         _vector_index_ctx->query_params = _opts.vector_search_option->query_params;
 
-        if (_vector_index_ctx->vector_range >= 0 && _vector_index_ctx->refine_distance) {
+        if (_vector_index_ctx->has_vector_range && _vector_index_ctx->refine_distance) {
             _vector_index_ctx->k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                                    _opts.vector_search_option->k_factor;
         } else {
@@ -1278,26 +1289,28 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
 #endif
 }
 
-// Resolves the metric the exact distance kernel must compute: true = cosine similarity,
-// false = l2 distance, nullopt = missing/unsupported metadata (callers must not silently
-// fall back to L2).
 // Single home of the vector_range orientation: result_order 0 (ascending, l2) keeps distance <=
-// range; descending (cosine) keeps similarity >= range. Bounds are inclusive, matching the FE's
+// range; descending (cosine/IP) keeps similarity >= range. Bounds are inclusive, matching the FE's
 // `<=` / `>=` conjunct forms.
 static inline bool within_vector_range(float d, float range, bool ascending) {
     return ascending ? d <= range : d >= range;
 }
 
-// Returns true iff the index's distance metric is cosine similarity; l2_distance -- and any value
-// FE should never emit -- is scored as L2.
-static bool index_metric_is_cosine(const TabletIndex& index) {
+static StatusOr<VectorMetricType> get_vector_metric_type(const TabletIndex& index) {
     auto it = index.common_properties().find("metric_type");
     if (it == index.common_properties().end()) {
-        return false;
+        return Status::InvalidArgument("metric_type is missing from vector index metadata");
     }
-    std::string metric = it->second;
-    std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
-    return metric == "cosine_similarity";
+    if (boost::iequals(it->second, "l2_distance")) {
+        return VectorMetricType::kL2Distance;
+    }
+    if (boost::iequals(it->second, "cosine_similarity")) {
+        return VectorMetricType::kCosineSimilarity;
+    }
+    if (boost::iequals(it->second, "inner_product")) {
+        return VectorMetricType::kInnerProduct;
+    }
+    return Status::InvalidArgument(fmt::format("unsupported vector metric_type: {}", it->second));
 }
 
 // Sets up brute-force fallback state and ensures the vector data column is in _schema.
@@ -1307,7 +1320,7 @@ Status SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     _vector_index_ctx->use_vector_index = false;
     _vector_index_ctx->use_brute_force = true;
     _vector_index_ctx->vector_data_column_uid = vector_col_uid;
-    _vector_index_ctx->is_cosine_similarity = index_metric_is_cosine(index);
+    ASSIGN_OR_RETURN(_vector_index_ctx->metric_type, get_vector_metric_type(index));
 
     // Check if the vector column is already in _schema
     for (const auto& field : _schema.fields()) {
@@ -1399,9 +1412,8 @@ Status SegmentIterator::_init_ann_reader() {
     }
 
     if (_vector_index_ctx->use_vector_index) {
-        // The ANN-route exact rescans key on is_cosine_similarity, which is otherwise initialized
-        // only by _setup_brute_force_fallback; resolve it here so a cosine index is not scored as L2.
-        _vector_index_ctx->is_cosine_similarity = index_metric_is_cosine(*tablet_index_meta);
+        // Exact rescans reached from the ANN route still need the logical metric from tablet metadata.
+        ASSIGN_OR_RETURN(_vector_index_ctx->metric_type, get_vector_metric_type(*tablet_index_meta));
     }
 
     // Decide PRE vs brute now: routing to brute must add the embedding column to _schema before
@@ -1483,7 +1495,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
-        if (_vector_index_ctx->vector_range >= 0) {
+        if (_vector_index_ctx->has_vector_range) {
             st = _vector_index_ctx->ann_reader->range_search(
                     _vector_index_ctx->query_view, search_k, &result_ids, &result_distances, &del_id_filter,
                     static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
@@ -1509,7 +1521,8 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
     // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
     // under a radius, returning fewer rows is legitimate.
-    if (pre_narrowed && _vector_index_ctx->vector_range < 0 && config::enable_vector_index_topk_underfill_fallback) {
+    if (pre_narrowed && !_vector_index_ctx->has_vector_range &&
+        config::enable_vector_index_topk_underfill_fallback) {
         const size_t found = id2distance_map.size();
         const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
         if (found < want) {
@@ -3133,7 +3146,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
         // Apply vector_range filter before removing columns, so slot_id mapping is intact
         double vr = _vector_index_ctx->vector_range;
-        if (vr >= 0 && chunk->num_rows() > 0) {
+        if (_vector_index_ctx->has_vector_range && chunk->num_rows() > 0) {
             auto dist_col = chunk->get_column_by_slot_id(_vector_index_ctx->vector_slot_id);
             const auto* distances = down_cast<const FloatColumn*>(dist_col.get());
             const float* dist_data = distances->get_data().data();
@@ -3358,7 +3371,9 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
     const size_t dim = query_vec.size();
     const size_t num_rows = vector_column->size();
 
-    bool is_cosine_similarity = _vector_index_ctx->is_cosine_similarity;
+    const VectorMetricType metric_type = _vector_index_ctx->metric_type;
+    const bool is_cosine_similarity = metric_type == VectorMetricType::kCosineSimilarity;
+    const bool is_inner_product = metric_type == VectorMetricType::kInnerProduct;
 
     // Unwrap NullableColumn if needed
     const Column* data_col = vector_column;
@@ -3403,7 +3418,9 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
         query_norm = std::sqrt(query_norm);
     }
 
-    auto sentinel = is_cosine_similarity ? -1.0f : std::numeric_limits<float>::max();
+    const float sentinel = is_cosine_similarity ? -1.0f
+                                                : (is_inner_product ? std::numeric_limits<float>::lowest()
+                                                                    : std::numeric_limits<float>::max());
     for (size_t i = 0; i < num_rows; i++) {
         if (null_data && null_data[i]) {
             // Null vector: use max distance / min similarity as sentinel
@@ -3448,6 +3465,12 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
             // Non-finite (NaN/Inf from Inf inputs) would break the top-k heap's ordering (NaN compares
             // false both ways), so map it to the sentinel -- ranked worst, like a null vector.
             distance_column->append(std::isfinite(sim) ? sim : sentinel);
+        } else if (is_inner_product) {
+            float score = 0;
+            for (size_t j = 0; j < calc_dim; j++) {
+                score += query_vec[j] * vec[j];
+            }
+            distance_column->append(std::isfinite(score) ? score : sentinel);
         } else {
             // l2_distance = sum((q[j] - v[j])^2)
             float dist = 0;
@@ -3504,7 +3527,7 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
     // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan
     // predicate, so nothing downstream re-checks it. Same convention as the brute read path
     // (ascending keeps d <= range, descending keeps d >= range).
-    const bool has_range = _vector_index_ctx->vector_range >= 0;
+    const bool has_range = _vector_index_ctx->has_vector_range;
     const auto range = static_cast<float>(_vector_index_ctx->vector_range);
     const bool ascending = _vector_index_ctx->result_order == 0;
 

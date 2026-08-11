@@ -2008,6 +2008,19 @@ TEST_F(VecMathFunctionsTest, cosineSimilarityNorm) {
     ASSERT_NEAR(res[1], 0.5f, 1e-5f);
 }
 
+TEST_F(VecMathFunctionsTest, innerProduct) {
+    auto base_col = build_float_array_column({{2, 3, -1}, {1, 2, 3}});
+    auto target_col = build_float_array_column({{4, -2, 5}, {2, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], -3.0f);
+    ASSERT_FLOAT_EQ(res[1], 5.0f);
+}
+
 // cosine_similarity: zero vector returns 0 (not NaN/inf)
 TEST_F(VecMathFunctionsTest, cosineSimilarityZeroVector) {
     auto base_col = build_float_array_column({{0, 0, 0}});

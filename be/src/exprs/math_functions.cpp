@@ -1371,7 +1371,8 @@ static inline void cosine_similarity_fixed_dim_float(const float* base_data, con
 }
 
 template <LogicalType TYPE, bool isNorm>
-StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
+static StatusOr<ColumnPtr> vector_similarity(FunctionContext* context, const Columns& columns,
+                                             const char* function_name) {
     DCHECK_EQ(columns.size(), 2);
 
     const Column* base = columns[0].get();
@@ -1379,14 +1380,12 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     size_t target_size = target->size();
     if (base->size() != target_size) {
         return Status::InvalidArgument(
-                fmt::format("cosine_similarity requires equal length arrays. base array size is {} and target "
-                            "array size is {}.",
-                            base->size(), target->size()));
+                fmt::format("{} requires equal length arrays. base array size is {} and target array size is {}.",
+                            function_name, base->size(), target->size()));
     }
     if (base->has_null() || target->has_null()) {
-        return Status::InvalidArgument(
-                fmt::format("cosine_similarity does not support null values. {} array has null value.",
-                            base->has_null() ? "base" : "target"));
+        return Status::InvalidArgument(fmt::format("{} does not support null values. {} array has null value.",
+                                                   function_name, base->has_null() ? "base" : "target"));
     }
 
     bool base_is_const = base->is_constant();
@@ -1437,7 +1436,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             down_cast<const ArrayColumn*>(target_arr_for_meta)->offsets().immutable_data().data();
 
     if (base_flat_meta->has_null() || target_flat_meta->has_null()) {
-        return Status::InvalidArgument("cosine_similarity does not support null values");
+        return Status::InvalidArgument(fmt::format("{} does not support null values", function_name));
     }
     if (base_flat_meta->is_nullable()) {
         base_flat_meta = down_cast<const NullableColumn*>(base_flat_meta)->data_column().get();
@@ -1472,9 +1471,9 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             uint32_t dim = base_offset_meta[1] - base_offset_meta[0];
             if (!offsets_equal_dim(target_offset, target_size, dim)) {
                 return Status::InvalidArgument(fmt::format(
-                        "cosine_similarity requires equal length arrays in each row. base array dimension size "
-                        "is {}, target array dimension size is {}.",
-                        dim, target_offset[1] - target_offset[0]));
+                        "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                        "dimension size is {}.",
+                        function_name, dim, target_offset[1] - target_offset[0]));
             }
             const float* base_vec = reinterpret_cast<const float*>(base_data_head);
             const float* target_data = reinterpret_cast<const float*>(target_data_head);
@@ -1487,9 +1486,9 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             uint32_t dim = target_offset_meta[1] - target_offset_meta[0];
             if (!offsets_equal_dim(base_offset, target_size, dim)) {
                 return Status::InvalidArgument(fmt::format(
-                        "cosine_similarity requires equal length arrays in each row. base array dimension size "
-                        "is {}, target array dimension size is {}.",
-                        base_offset[1] - base_offset[0], dim));
+                        "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                        "dimension size is {}.",
+                        function_name, base_offset[1] - base_offset[0], dim));
             }
             const float* target_vec = reinterpret_cast<const float*>(target_data_head);
             const float* base_data = reinterpret_cast<const float*>(base_data_head);
@@ -1499,7 +1498,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         uint32_t dim = target_offset[1] - target_offset[0];
         if (offsets_equal_dim_two(base_offset, target_offset, target_size, dim)) {
             if (dim == 0) {
-                return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
+                return Status::InvalidArgument(fmt::format("{} requires non-empty arrays in each row", function_name));
             }
             cosine_similarity_fixed_dim_float<isNorm>(reinterpret_cast<const float*>(base_data_head),
                                                       reinterpret_cast<const float*>(target_data_head), target_size,
@@ -1507,9 +1506,10 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
             return result;
         }
         if (!offsets_equal_nonzero(base_offset, target_offset, target_size)) {
-            return Status::InvalidArgument(
-                    "cosine_similarity requires equal length arrays in each row. base array dimension size is "
-                    "inconsistent with target array dimension size");
+            return Status::InvalidArgument(fmt::format(
+                    "{} requires equal length arrays in each row. base array dimension size is inconsistent with "
+                    "target array dimension size",
+                    function_name));
         }
     }
 
@@ -1517,13 +1517,13 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         size_t t_dim_size = target_offset[i + 1] - target_offset[i];
         size_t b_dim_size = base_offset[i + 1] - base_offset[i];
         if (t_dim_size != b_dim_size) {
-            return Status::InvalidArgument(
-                    fmt::format("cosine_similarity requires equal length arrays in each row. base array dimension size "
-                                "is {}, target array dimension size is {}.",
-                                b_dim_size, t_dim_size));
+            return Status::InvalidArgument(fmt::format(
+                    "{} requires equal length arrays in each row. base array dimension size is {}, target array "
+                    "dimension size is {}.",
+                    function_name, b_dim_size, t_dim_size));
         }
         if (t_dim_size == 0) {
-            return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
+            return Status::InvalidArgument(fmt::format("{} requires non-empty arrays in each row", function_name));
         }
     }
 
@@ -1558,11 +1558,22 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     return result;
 }
 
+template <LogicalType TYPE, bool isNorm>
+StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
+    return vector_similarity<TYPE, isNorm>(context, columns, "cosine_similarity");
+}
+
+template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::inner_product(FunctionContext* context, const Columns& columns) {
+    return vector_similarity<TYPE, true>(context, columns, "inner_product");
+}
+
 // explicitly instantiate template function.
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, true>(FunctionContext* context,
                                                                                 const Columns& columns);
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>(FunctionContext* context,
                                                                                  const Columns& columns);
+template StatusOr<ColumnPtr> MathFunctions::inner_product<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
 
 template <LogicalType TYPE>
 StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const Columns& columns) {
