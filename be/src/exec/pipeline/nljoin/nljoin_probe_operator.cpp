@@ -665,7 +665,9 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
             }
         }
         permute_rows += chunk->num_rows();
-        {
+        // Every build row of this chunk may have been matched already, leaving nothing to permute.
+        // The common exprs cannot be evaluated against an empty chunk.
+        if (!chunk->is_empty()) {
             CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
             RETURN_IF_ERROR(guard.evaluate());
             RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
@@ -723,7 +725,10 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(size_t chunk_
         ASSIGN_OR_RETURN(ChunkPtr chunk, _permute_chunk_for_other_join(chunk_size));
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_other_join(chunk));
-        {
+        // The permuted chunk may have no row left, either because the join conjuncts filtered all of
+        // them out, or because the previous round already consumed the last probe row. There is
+        // nothing to evaluate on it, and the common exprs cannot be evaluated against an empty chunk.
+        if (chunk != nullptr && !chunk->is_empty()) {
             CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
             RETURN_IF_ERROR(guard.evaluate());
             RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
