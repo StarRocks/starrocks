@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -41,16 +42,21 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import com.starrocks.type.IntegerType;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Enterprise-only IVM rewrite rule that maintains an aggregate materialized view over a cloud-native
@@ -175,15 +181,179 @@ public class IvmDeltaRetractableAggregateRule extends TransformationRule {
             return List.of();
         }
 
+        List<OptExpression> singleSnapshot = buildSingleSnapshotPlan(context, delta, agg, child, childOutputs);
+        if (singleSnapshot != null) {
+            return singleSnapshot;
+        }
+        return buildTwoSnapshotPlan(context, delta, agg, child, childOutputs);
+    }
+
+    /**
+     * Recompute the affected groups from the TO snapshot alone, and read each group's action off whether that
+     * recompute still produced a row for it:
+     *
+     * <pre>
+     *   CTEAnchor
+     *     ├── affectedKeys = DISTINCT(group keys) over Delta(child)
+     *     └── Project(__ACTION__ = survived ? UPSERT : DELETE)
+     *           └── affectedKeys ⟕ Aggregate(group keys) over (Version(TO, child) ⋉ affectedKeys)
+     * </pre>
+     *
+     * <p>One row per affected group instead of the UPSERT/DELETE pair {@link #buildTwoSnapshotPlan} emits: a
+     * surviving group's UPSERT already overwrites its MV row, so the paired DELETE is redundant -- net-collapse
+     * discards it. Only an emptied group still needs a DELETE, and a DELETE needs the key alone, which the
+     * affected-keys side already carries.
+     *
+     * <p>Dropping the old aggregate values is sound only while nothing above consumes this delta: net-collapse
+     * and the PK sink key on {@code __ROW_ID__} and ignore the rest. {@link #check} enforces that through
+     * {@code isRootDelta}, and IVMAnalyzer rejects both routes that would break it (an MV as an IVM base, and
+     * a join over an aggregate). Lift either gate and this branch has to start carrying values again.
+     */
+    private static List<OptExpression> buildSingleSnapshotPlan(OptimizerContext context, LogicalDeltaOperator delta,
+                                                               LogicalAggregationOperator agg, OptExpression child,
+                                                               List<ColumnRefOperator> childOutputs) {
+        // buildTwoSnapshotPlan carries the aggregate over verbatim; this plan rebuilds it, so whatever the
+        // rebuild cannot express keeps the old plan: a LIMIT would be dropped, and a projection's common
+        // sub-expressions have nowhere to live (LogicalProjectOperator takes only a columnRefMap).
+        if (agg.hasLimit() || (agg.getProjection() != null
+                && !agg.getProjection().getCommonSubOperatorMap().isEmpty())) {
+            return null;
+        }
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        List<ColumnRefOperator> groupingKeys = agg.getGroupingKeys();
+        List<ColumnRefOperator> aggRefs = agg.getAggregations().keySet().stream()
+                .sorted(Comparator.comparingInt(ColumnRefOperator::getId))
+                .collect(Collectors.toList());
+
+        BranchPlan affectedChild = cloneChild(context, groupingKeys, child, childOutputs);
+        int cteId = context.getCteContext().getNextCteId();
+        OptExpression affectedKeysProducer = createAffectedKeysProducer(factory, cteId, affectedChild);
+
+        // Aggregating below the outer join, not above it, is what keeps the join at one row per affected group
+        // instead of every raw row of every affected group.
+        OptExpressionDuplicator toDuplicator = new OptExpressionDuplicator(factory, context);
+        OptExpression toChild = toDuplicator.duplicate(child);
+        List<ColumnRefOperator> toGroupingKeys = toDuplicator.getMappedColumns(groupingKeys);
+        OptExpression toSnapshot = OptExpression.create(
+                new LogicalVersionOperator(LogicalVersionOperator.VersionRefType.TO_VERSION), toChild);
+        OptExpression toJoin = createLeftSemiJoin(factory, cteId, affectedChild.groupingKeys,
+                new BranchPlan(toSnapshot, toDuplicator.getMappedColumns(childOutputs), toGroupingKeys));
+        if (toJoin == null) {
+            return null;
+        }
+        List<ColumnRefOperator> toAggRefs = Lists.newArrayList();
+        Map<ColumnRefOperator, CallOperator> toAggregations = Maps.newHashMap();
+        for (ColumnRefOperator aggRef : aggRefs) {
+            ScalarOperator rewritten = toDuplicator.rewriteAfterDuplicate(agg.getAggregations().get(aggRef));
+            if (!(rewritten instanceof CallOperator call)) {
+                return null;
+            }
+            ColumnRefOperator newRef = factory.create(aggRef.getName(), aggRef.getType(), aggRef.isNullable());
+            toAggregations.put(newRef, call);
+            toAggRefs.add(newRef);
+        }
+        // A NULL group key is a real group that the EQ_FOR_NULL join matches, so a null-valued key on the
+        // recompute side cannot distinguish "no match" from "matched the NULL group" -- carry a marker.
+        ColumnRefOperator survivedMarker =
+                factory.create("__SURVIVED__", IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+        Map<ColumnRefOperator, ScalarOperator> recomputeMap = Maps.newHashMap();
+        toGroupingKeys.forEach(col -> recomputeMap.put(col, col));
+        toAggRefs.forEach(col -> recomputeMap.put(col, col));
+        recomputeMap.put(survivedMarker, ConstantOperator.createTinyInt((byte) 1));
+        OptExpression recompute = OptExpression.create(new LogicalProjectOperator(recomputeMap),
+                OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL, toGroupingKeys, toAggregations),
+                        toJoin));
+
+        List<ColumnRefOperator> consumerOutputs = Lists.newArrayList();
+        Map<ColumnRefOperator, ColumnRefOperator> consumerMap = Maps.newHashMap();
+        for (ColumnRefOperator producerCol : affectedChild.groupingKeys) {
+            ColumnRefOperator consumerCol =
+                    factory.create(producerCol.getName(), producerCol.getType(), producerCol.isNullable());
+            consumerMap.put(consumerCol, producerCol);
+            consumerOutputs.add(consumerCol);
+        }
+        ScalarOperator onPredicate = buildSemiJoinPredicate(consumerOutputs, toGroupingKeys);
+        if (onPredicate == null) {
+            return null;
+        }
+        OptExpression outerJoin = OptExpression.create(
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, onPredicate),
+                OptExpression.create(new LogicalCTEConsumeOperator(cteId, consumerMap)), recompute);
+
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        for (int i = 0; i < groupingKeys.size(); i++) {
+            projectMap.put(groupingKeys.get(i), consumerOutputs.get(i));
+        }
+        for (int i = 0; i < aggRefs.size(); i++) {
+            ScalarOperator emptyValue =
+                    emptyGroupValue(aggRefs.get(i), agg.getAggregations().get(aggRefs.get(i)));
+            if (emptyValue == null) {
+                return null;
+            }
+            projectMap.put(aggRefs.get(i), new CaseWhenOperator(aggRefs.get(i).getType(), null, toAggRefs.get(i),
+                    List.of(new IsNullPredicateOperator(survivedMarker), emptyValue)));
+        }
+        projectMap.put(delta.getActionColumn(), new CaseWhenOperator(IvmRuleUtils.ACTION_COLUMN_TYPE, null,
+                ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION),
+                List.of(new IsNullPredicateOperator(survivedMarker),
+                        ConstantOperator.createTinyInt(IvmRuleUtils.DELETE_ACTION))));
+        OptExpression root = OptExpression.create(new LogicalProjectOperator(projectMap), outerJoin);
+
+        // The original aggregate's projection (the MV's SELECT list over the aggregate outputs) rode on the
+        // aggregate; this project now stands where that aggregate was, so replay it or the sink loses those refs.
+        if (agg.getProjection() != null) {
+            Map<ColumnRefOperator, ScalarOperator> replayMap =
+                    Maps.newHashMap(agg.getProjection().getColumnRefMap());
+            replayMap.put(delta.getActionColumn(), delta.getActionColumn());
+            root = OptExpression.create(new LogicalProjectOperator(replayMap), root);
+        }
+        return List.of(OptExpression.create(new LogicalCTEAnchorOperator(cteId), affectedKeysProducer, root));
+    }
+
+    /**
+     * What an aggregate returns over the group that just went empty. NULL for most, but the MV's hidden
+     * {@code __AGG_STATE_count(*)} column is declared NOT NULL -- a count over no rows is zero, not null, and
+     * the sink rejects the row otherwise. Returns null for any other non-nullable state, whose empty value
+     * this rule cannot name, so the caller falls back to the two-snapshot plan.
+     */
+    private static ScalarOperator emptyGroupValue(ColumnRefOperator aggRef, CallOperator aggCall) {
+        if (aggRef.isNullable()) {
+            return ConstantOperator.createNull(aggRef.getType());
+        }
+        String fnName = aggCall.getFnName();
+        String baseName = fnName.endsWith(FunctionSet.AGG_STATE_COMBINE_SUFFIX)
+                ? fnName.substring(0, fnName.length() - FunctionSet.AGG_STATE_COMBINE_SUFFIX.length())
+                : fnName;
+        if (FunctionSet.COUNT.equalsIgnoreCase(baseName) && aggRef.getType().matchesType(IntegerType.BIGINT)) {
+            return ConstantOperator.createBigint(0);
+        }
+        return null;
+    }
+
+    private static OptExpression createAffectedKeysProducer(ColumnRefFactory factory, int cteId,
+                                                            BranchPlan affectedChild) {
+        ColumnRefOperator affectedAction =
+                factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+        OptExpression affectedKeysExpr = OptExpression.create(
+                new LogicalAggregationOperator(AggType.GLOBAL, affectedChild.groupingKeys, Maps.newHashMap()),
+                OptExpression.create(new LogicalDeltaOperator(false, affectedAction), affectedChild.optExpression));
+        return OptExpression.create(new LogicalCTEProduceOperator(cteId), affectedKeysExpr);
+    }
+
+    private static List<OptExpression> buildTwoSnapshotPlan(OptimizerContext context, LogicalDeltaOperator delta,
+                                                            LogicalAggregationOperator agg, OptExpression child,
+                                                            List<ColumnRefOperator> childOutputs) {
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        List<ColumnRefOperator> groupingKeys = agg.getGroupingKeys();
         // Full FROM/TO snapshots of the child, each tagged with a constant UPSERT/DELETE action.
-        SnapshotInfo toSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
+        BranchPlan toSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
                 LogicalVersionOperator.VersionRefType.TO_VERSION, IvmRuleUtils.INSERT_ACTION);
-        SnapshotInfo fromSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
+        BranchPlan fromSnapshot = createSnapshotChild(context, groupingKeys, child, childOutputs,
                 LogicalVersionOperator.VersionRefType.FROM_VERSION, IvmRuleUtils.DELETE_ACTION);
 
         // The group keys touched by the delta, published once as a CTE and semi-joined into both
         // snapshots so only affected groups are recomputed. The per-row delta action is irrelevant here.
-        SnapshotInfo affectedChild = cloneChild(context, groupingKeys, child, childOutputs);
+        BranchPlan affectedChild = cloneChild(context, groupingKeys, child, childOutputs);
         ColumnRefOperator affectedAction =
                 factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
         OptExpression affectedKeysExpr = OptExpression.create(
@@ -221,20 +391,20 @@ public class IvmDeltaRetractableAggregateRule extends TransformationRule {
                 new LogicalCTEAnchorOperator(cteId), affectedKeysProducer, newAggExpr));
     }
 
-    private static SnapshotInfo cloneChild(OptimizerContext context, List<ColumnRefOperator> oldGroupingKeys,
+    private static BranchPlan cloneChild(OptimizerContext context, List<ColumnRefOperator> oldGroupingKeys,
                                            OptExpression child, List<ColumnRefOperator> oldOutputs) {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
         OptExpression newChild = duplicator.duplicate(child);
-        return new SnapshotInfo(newChild, duplicator.getMappedColumns(oldOutputs),
+        return new BranchPlan(newChild, duplicator.getMappedColumns(oldOutputs),
                 duplicator.getMappedColumns(oldGroupingKeys));
     }
 
-    private static SnapshotInfo createSnapshotChild(OptimizerContext context, List<ColumnRefOperator> groupingKeys,
+    private static BranchPlan createSnapshotChild(OptimizerContext context, List<ColumnRefOperator> groupingKeys,
                                                     OptExpression child, List<ColumnRefOperator> oldOutputs,
                                                     LogicalVersionOperator.VersionRefType versionRefType,
                                                     byte actionValue) {
         ColumnRefFactory factory = context.getColumnRefFactory();
-        SnapshotInfo cloned = cloneChild(context, groupingKeys, child, oldOutputs);
+        BranchPlan cloned = cloneChild(context, groupingKeys, child, oldOutputs);
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator out : cloned.outputColumns) {
             projectMap.put(out, out);
@@ -246,12 +416,12 @@ public class IvmDeltaRetractableAggregateRule extends TransformationRule {
                 OptExpression.create(new LogicalProjectOperator(projectMap), cloned.optExpression));
         List<ColumnRefOperator> outputs = Lists.newArrayList(cloned.outputColumns);
         outputs.add(actionColumn);
-        return new SnapshotInfo(optExpr, outputs, cloned.groupingKeys);
+        return new BranchPlan(optExpr, outputs, cloned.groupingKeys);
     }
 
     private static OptExpression createLeftSemiJoin(ColumnRefFactory factory, int cteId,
                                                     List<ColumnRefOperator> producerOutputColumns,
-                                                    SnapshotInfo leftSnapshot) {
+                                                    BranchPlan leftSnapshot) {
         List<ColumnRefOperator> consumerOutputs = Lists.newArrayList();
         Map<ColumnRefOperator, ColumnRefOperator> consumerMap = Maps.newHashMap();
         for (ColumnRefOperator producerCol : producerOutputColumns) {
@@ -283,7 +453,7 @@ public class IvmDeltaRetractableAggregateRule extends TransformationRule {
         return Utils.compoundAnd(conjuncts);
     }
 
-    private record SnapshotInfo(OptExpression optExpression, List<ColumnRefOperator> outputColumns,
+    private record BranchPlan(OptExpression optExpression, List<ColumnRefOperator> outputColumns,
                                 List<ColumnRefOperator> groupingKeys) {
     }
 }

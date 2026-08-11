@@ -1,0 +1,42 @@
+-- name: test_ivm_ret_agg_multikey_null @cloud
+-- Multi-key GROUP BY where either key may be NULL. Two mechanisms meet here: the affected-keys
+-- semi-join compares every key with <=>, so a NULL key still matches its own group, and the recompute
+-- side carries a non-null marker so "no outer-join match" is not read as "matched the NULL group".
+-- Getting either wrong leaves a stale row for an emptied NULL-keyed group, which the oracle catches.
+CREATE TABLE pk_mk (id INT NOT NULL, a INT, b INT, v BIGINT)
+  PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2
+  PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- groups: (1,1) (1,NULL) (NULL,1) (NULL,NULL)x2
+INSERT INTO pk_mk VALUES (1,1,1,10),(2,1,NULL,20),(3,NULL,1,30),(4,NULL,NULL,40),(5,NULL,NULL,50);
+CREATE MATERIALIZED VIEW mv_mk REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT a, b, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM pk_mk GROUP BY a, b;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- update inside the (NULL,NULL) group
+UPDATE pk_mk SET v = 45 WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- shrink (NULL,NULL) to one row: MAX must fall back 50 -> 45
+DELETE FROM pk_mk WHERE id = 5;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- empty (NULL,NULL): both keys null, the row must leave the MV
+DELETE FROM pk_mk WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- empty (1,NULL): one key null
+DELETE FROM pk_mk WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- bring (NULL,NULL) back
+INSERT INTO pk_mk VALUES (6,NULL,NULL,60);
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+-- migrate a row from (1,1) into (NULL,1) in one delta: (1,1) empties and (NULL,1) grows
+UPDATE pk_mk SET a = NULL WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_mk WITH SYNC MODE;
+SELECT IFNULL(a,-1) AS a, IFNULL(b,-1) AS b, sv, mx, c FROM mv_mk ORDER BY 1, 2;
+SELECT COUNT(*) AS diff FROM (SELECT a,b,sv,mx,c FROM mv_mk EXCEPT SELECT a,b,SUM(v),MAX(v),COUNT(*) FROM pk_mk GROUP BY a,b) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT a,b,SUM(v),MAX(v),COUNT(*) FROM pk_mk GROUP BY a,b EXCEPT SELECT a,b,sv,mx,c FROM mv_mk) t;
+DROP MATERIALIZED VIEW mv_mk;
+DROP TABLE pk_mk;

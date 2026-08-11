@@ -1,0 +1,70 @@
+-- name: test_ivm_ret_partition_agg_by_partition_col @cloud
+-- Aggregate IVM MV over a range-partitioned PK base, grouped BY the partition column. Every group is
+-- then contained in one partition, so an emptied group's rows all sit in the partition the delta hit.
+-- Oracle: MV == (SELECT dt, SUM/MAX/COUNT ... GROUP BY dt), diff=0 both ways.
+CREATE TABLE pk_pa (id INT NOT NULL, dt DATE NOT NULL, k INT, v BIGINT)
+  PRIMARY KEY(id, dt)
+  PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+                          PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+                          PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+INSERT INTO pk_pa VALUES (1,'2026-01-15',7,10),(2,'2026-01-20',7,20),(3,'2026-02-15',8,30),(4,'2026-03-15',9,40);
+CREATE MATERIALIZED VIEW mv_pa REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT dt, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM pk_pa GROUP BY dt;
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- update one row inside p1
+UPDATE pk_pa SET v = 25 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- delete the only row of a group that is also the only row of p3: the group must leave the MV
+DELETE FROM pk_pa WHERE id = 4;
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- a brand new group inside an existing partition
+INSERT INTO pk_pa VALUES (5,'2026-02-20',8,50);
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- move a row to another partition (dt is in the PK, so this is a delete plus an insert): the old
+-- group empties and a new one appears, in different partitions, within one delta
+DELETE FROM pk_pa WHERE id = 1;
+INSERT INTO pk_pa VALUES (1,'2026-03-05',7,10);
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+SELECT COUNT(*) AS diff FROM (SELECT dt,sv,mx,c FROM mv_pa EXCEPT SELECT dt,SUM(v),MAX(v),COUNT(*) FROM pk_pa GROUP BY dt) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt,SUM(v),MAX(v),COUNT(*) FROM pk_pa GROUP BY dt EXCEPT SELECT dt,sv,mx,c FROM mv_pa) t;
+DROP MATERIALIZED VIEW mv_pa;
+DROP TABLE pk_pa;
+
+-- name: test_ivm_ret_partition_agg_across_partitions @cloud
+-- Same partitioned base, grouped by a NON-partition column, so one group spans partitions. Emptying
+-- such a group needs the recompute to see the absence of rows outside the partition the delta hit --
+-- the case a partition-scoped shortcut would get wrong.
+CREATE TABLE pk_pk2 (id INT NOT NULL, dt DATE NOT NULL, k INT, v BIGINT)
+  PRIMARY KEY(id, dt)
+  PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+                          PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+                          PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- group 7 lives in p1 and p2; group 8 only in p3
+INSERT INTO pk_pk2 VALUES (1,'2026-01-15',7,10),(2,'2026-02-15',7,20),(3,'2026-03-15',8,30);
+CREATE MATERIALIZED VIEW mv_pk2 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, SUM(v) AS sv, MIN(v) AS mn, COUNT(*) AS c FROM pk_pk2 GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- delete group 7's p1 row: the group survives on its p2 row, and MIN must rise 10 -> 20
+DELETE FROM pk_pk2 WHERE id = 1;
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- delete group 7's last row, which is in a different partition than the first delete touched
+DELETE FROM pk_pk2 WHERE id = 2;
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- recreate group 7 with rows in two partitions in a single delta
+INSERT INTO pk_pk2 VALUES (4,'2026-01-10',7,70),(5,'2026-03-10',7,80);
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+SELECT COUNT(*) AS diff FROM (SELECT k,sv,mn,c FROM mv_pk2 EXCEPT SELECT k,SUM(v),MIN(v),COUNT(*) FROM pk_pk2 GROUP BY k) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k,SUM(v),MIN(v),COUNT(*) FROM pk_pk2 GROUP BY k EXCEPT SELECT k,sv,mn,c FROM mv_pk2) t;
+DROP MATERIALIZED VIEW mv_pk2;
+DROP TABLE pk_pk2;

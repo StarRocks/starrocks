@@ -35,7 +35,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalVersionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
@@ -77,7 +79,7 @@ public class IvmDeltaRetractableAggregateRuleTest {
     }
 
     @Test
-    public void testTransformProducesRecomputePlan(@Mocked OlapTable table) {
+    public void testTransformProducesSingleSnapshotPlan(@Mocked OlapTable table) {
         mockOlapPk(table);
         ColumnRefFactory factory = new ColumnRefFactory();
         OptimizerContext context = OptimizerFactory.mockContext(factory);
@@ -86,11 +88,82 @@ public class IvmDeltaRetractableAggregateRuleTest {
         deriveLogicalProperty(aggExpr);
 
         List<OptExpression> result = new IvmDeltaRetractableAggregateRule().transform(aggExpr, context);
-        // recompute plan: CTEAnchor(affectedKeys producer, re-aggregate over UNION ALL of FROM/TO snapshots)
         Assertions.assertEquals(1, result.size());
-        Assertions.assertTrue(result.get(0).getOp() instanceof LogicalCTEAnchorOperator);
-        Assertions.assertTrue(result.get(0).inputAt(1).getOp() instanceof LogicalAggregationOperator);
-        Assertions.assertTrue(result.get(0).inputAt(1).inputAt(0).getOp() instanceof LogicalUnionOperator);
+        OptExpression root = result.get(0);
+        Assertions.assertTrue(root.getOp() instanceof LogicalCTEAnchorOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof LogicalProjectOperator);
+        LogicalJoinOperator join = root.inputAt(1).inputAt(0).getOp().cast();
+        Assertions.assertEquals(JoinOperator.LEFT_OUTER_JOIN, join.getJoinType());
+        // The point of the plan: the FROM snapshot is gone, so the base is read once, not twice.
+        Assertions.assertEquals(1, countVersions(root, LogicalVersionOperator.VersionRefType.TO_VERSION));
+        Assertions.assertEquals(0, countVersions(root, LogicalVersionOperator.VersionRefType.FROM_VERSION));
+    }
+
+    @Test
+    public void testTransformFallsBackWhenEmptyGroupValueIsUnnameable(@Mocked OlapTable table) {
+        mockOlapPk(table);
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+
+        // A non-nullable MAX state: an emptied group has no value this rule can name for it, unlike a count,
+        // so it must keep rebuilding the old aggregate from the FROM snapshot instead of guessing.
+        ColumnRefOperator actionRef = factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IntegerType.TINYINT, false);
+        ColumnRefOperator gRef = factory.create("g", IntegerType.INT, false);
+        ColumnRefOperator vRef = factory.create("v", IntegerType.BIGINT, true);
+        Map<ColumnRefOperator, Column> colRefMap = Maps.newHashMap();
+        colRefMap.put(gRef, new Column("g", IntegerType.INT, false));
+        colRefMap.put(vRef, new Column("v", IntegerType.BIGINT, true));
+        Map<ColumnRefOperator, CallOperator> aggMap = Maps.newHashMap();
+        aggMap.put(factory.create("max_combine", IntegerType.BIGINT, false),
+                new CallOperator("max_combine", IntegerType.BIGINT, List.of(vRef)));
+        OptExpression aggExpr = OptExpression.create(new LogicalDeltaOperator(true, actionRef),
+                OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL, List.of(gRef), aggMap),
+                        newOlapPkScan(table, colRefMap)));
+        deriveLogicalProperty(aggExpr);
+
+        OptExpression root = new IvmDeltaRetractableAggregateRule().transform(aggExpr, context).get(0);
+        Assertions.assertTrue(root.getOp() instanceof LogicalCTEAnchorOperator);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof LogicalAggregationOperator);
+        Assertions.assertTrue(root.inputAt(1).inputAt(0).getOp() instanceof LogicalUnionOperator);
+        Assertions.assertEquals(1, countVersions(root, LogicalVersionOperator.VersionRefType.TO_VERSION));
+        Assertions.assertEquals(1, countVersions(root, LogicalVersionOperator.VersionRefType.FROM_VERSION));
+    }
+
+    @Test
+    public void testTransformFallsBackWhenAggregateCarriesLimit(@Mocked OlapTable table) {
+        mockOlapPk(table);
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+
+        // A dropped LIMIT would silently give the MV more rows than its definition asks for.
+        ColumnRefOperator actionRef = factory.create(IvmRuleUtils.ACTION_COLUMN_NAME, IntegerType.TINYINT, false);
+        ColumnRefOperator gRef = factory.create("g", IntegerType.INT, false);
+        ColumnRefOperator vRef = factory.create("v", IntegerType.BIGINT, true);
+        Map<ColumnRefOperator, Column> colRefMap = Maps.newHashMap();
+        colRefMap.put(gRef, new Column("g", IntegerType.INT, false));
+        colRefMap.put(vRef, new Column("v", IntegerType.BIGINT, true));
+        Map<ColumnRefOperator, CallOperator> aggMap = Maps.newHashMap();
+        aggMap.put(factory.create("sum_combine", IntegerType.BIGINT, true),
+                new CallOperator("sum_combine", IntegerType.BIGINT, List.of(vRef)));
+        LogicalAggregationOperator agg = LogicalAggregationOperator.builder()
+                .withOperator(new LogicalAggregationOperator(AggType.GLOBAL, List.of(gRef), aggMap))
+                .setLimit(10).build();
+        OptExpression aggExpr = OptExpression.create(new LogicalDeltaOperator(true, actionRef),
+                OptExpression.create(agg, newOlapPkScan(table, colRefMap)));
+        deriveLogicalProperty(aggExpr);
+
+        OptExpression root = new IvmDeltaRetractableAggregateRule().transform(aggExpr, context).get(0);
+        Assertions.assertTrue(root.inputAt(1).getOp() instanceof LogicalAggregationOperator);
+        Assertions.assertEquals(1, countVersions(root, LogicalVersionOperator.VersionRefType.FROM_VERSION));
+    }
+
+    private static int countVersions(OptExpression root, LogicalVersionOperator.VersionRefType type) {
+        int count = root.getOp() instanceof LogicalVersionOperator version
+                && version.getVersionRefType() == type ? 1 : 0;
+        for (OptExpression input : root.getInputs()) {
+            count += countVersions(input, type);
+        }
+        return count;
     }
 
     @Test

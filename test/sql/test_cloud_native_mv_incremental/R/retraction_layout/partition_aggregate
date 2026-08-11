@@ -1,0 +1,146 @@
+-- name: test_ivm_ret_partition_agg_by_partition_col @cloud
+CREATE TABLE pk_pa (id INT NOT NULL, dt DATE NOT NULL, k INT, v BIGINT)
+  PRIMARY KEY(id, dt)
+  PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+                          PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+                          PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_pa VALUES (1,'2026-01-15',7,10),(2,'2026-01-20',7,20),(3,'2026-02-15',8,30),(4,'2026-03-15',9,40);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pa REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT dt, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM pk_pa GROUP BY dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- result:
+2026-01-15	10	10	1
+2026-01-20	20	20	1
+2026-02-15	30	30	1
+2026-03-15	40	40	1
+-- !result
+UPDATE pk_pa SET v = 25 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- result:
+2026-01-15	10	10	1
+2026-01-20	25	25	1
+2026-02-15	30	30	1
+2026-03-15	40	40	1
+-- !result
+DELETE FROM pk_pa WHERE id = 4;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- result:
+2026-01-15	10	10	1
+2026-01-20	25	25	1
+2026-02-15	30	30	1
+-- !result
+INSERT INTO pk_pa VALUES (5,'2026-02-20',8,50);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- result:
+2026-01-15	10	10	1
+2026-01-20	25	25	1
+2026-02-15	30	30	1
+2026-02-20	50	50	1
+-- !result
+DELETE FROM pk_pa WHERE id = 1;
+-- result:
+-- !result
+INSERT INTO pk_pa VALUES (1,'2026-03-05',7,10);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pa WITH SYNC MODE;
+SELECT dt, sv, mx, c FROM mv_pa ORDER BY dt;
+-- result:
+2026-01-20	25	25	1
+2026-02-15	30	30	1
+2026-02-20	50	50	1
+2026-03-05	10	10	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt,sv,mx,c FROM mv_pa EXCEPT SELECT dt,SUM(v),MAX(v),COUNT(*) FROM pk_pa GROUP BY dt) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt,SUM(v),MAX(v),COUNT(*) FROM pk_pa GROUP BY dt EXCEPT SELECT dt,sv,mx,c FROM mv_pa) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pa;
+-- result:
+-- !result
+DROP TABLE pk_pa;
+-- result:
+-- !result
+-- name: test_ivm_ret_partition_agg_across_partitions @cloud
+CREATE TABLE pk_pk2 (id INT NOT NULL, dt DATE NOT NULL, k INT, v BIGINT)
+  PRIMARY KEY(id, dt)
+  PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+                          PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+                          PARTITION p3 VALUES LESS THAN ('2026-04-01'))
+  DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1', 'enable_change_data_capture'='true');
+-- result:
+-- !result
+INSERT INTO pk_pk2 VALUES (1,'2026-01-15',7,10),(2,'2026-02-15',7,20),(3,'2026-03-15',8,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pk2 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, SUM(v) AS sv, MIN(v) AS mn, COUNT(*) AS c FROM pk_pk2 GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- result:
+7	30	10	2
+8	30	30	1
+-- !result
+DELETE FROM pk_pk2 WHERE id = 1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- result:
+7	20	20	1
+8	30	30	1
+-- !result
+DELETE FROM pk_pk2 WHERE id = 2;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- result:
+8	30	30	1
+-- !result
+INSERT INTO pk_pk2 VALUES (4,'2026-01-10',7,70),(5,'2026-03-10',7,80);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_pk2 WITH SYNC MODE;
+SELECT k, sv, mn, c FROM mv_pk2 ORDER BY k;
+-- result:
+7	150	70	2
+8	30	30	1
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k,sv,mn,c FROM mv_pk2 EXCEPT SELECT k,SUM(v),MIN(v),COUNT(*) FROM pk_pk2 GROUP BY k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k,SUM(v),MIN(v),COUNT(*) FROM pk_pk2 GROUP BY k EXCEPT SELECT k,sv,mn,c FROM mv_pk2) t;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_pk2;
+-- result:
+-- !result
+DROP TABLE pk_pk2;
+-- result:
+-- !result
