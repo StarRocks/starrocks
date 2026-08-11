@@ -136,8 +136,8 @@ public class ResourceGroup {
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
                     new Column(MEM_USED_PCT_LIMIT, TypeFactory.createVarcharType(200)),
-                    (rg, classifier) -> new DecimalFormat("#.##").format(
-                            Objects.requireNonNullElse(rg.getMemUsedPctLimit(), 0.0) * 100) + "%"),
+                    (rg, classifier) -> rg.getMemUsedPctLimit() == null ? "null" :
+                            new DecimalFormat("#.##").format(rg.getMemUsedPctLimit() * 100) + "%"),
             new ColumnMeta(
                     new Column(GROUP_TYPE, TypeFactory.createVarcharType(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),

@@ -754,7 +754,9 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             return true;
         }
 
+        // Only enforce when we have at least on running query to avoid starvation of the group
         return usage.group.isMemUsedPctLimitEffective() && usage.isMemUsagePctEffective() &&
+                usage.getNumRunningQueries() > 0 &&
                 usage.getMemUsagePct() >= usage.group.getMemUsedPctLimit();
     }
 
@@ -821,6 +823,10 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             return memUsageBytes;
         }
 
+        public long getEffectiveMemUsageBytes() {
+            return isSharedMemPool() ? memPoolMemUsageBytes : memUsageBytes;
+        }
+
         public int getNumRunningQueries() {
             return numRunningQueries;
         }
@@ -829,12 +835,19 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             return memLimitBytes;
         }
 
-        public boolean isMemUsagePctEffective() {
-            return memLimitBytes > 0;
+        public long getEffectiveMemLimitBytes() {
+            return isSharedMemPool() ? memPoolMemLimitBytes : memLimitBytes;
         }
 
+        public boolean isMemUsagePctEffective() {
+            return getEffectiveMemLimitBytes() > 0;
+        }
+
+        // For a group with shared named mem_pool, memLimitBytes instead holds the whole pool's limit
+        // so the group-level usage must be compared against the pool-level usage and limit instead
         public double getMemUsagePct() {
-            return memLimitBytes > 0 ? (double) memUsageBytes / memLimitBytes : 0.0;
+            long limitBytes = getEffectiveMemLimitBytes();
+            return limitBytes > 0 ? (double) getEffectiveMemUsageBytes() / limitBytes : 0.0;
         }
 
         public String getMemPool() {
@@ -849,5 +862,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
             return memPoolMemLimitBytes;
         }
 
+        public boolean isSharedMemPool() {
+            return memPool != null && !ResourceGroup.DEFAULT_MEM_POOL.equals(memPool);
+        }
     }
 }
