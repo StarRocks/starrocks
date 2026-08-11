@@ -579,6 +579,12 @@ struct TIcebergSchemaField {
     // Refer to field name
     2: optional string name
 
+    // Whether this field is optional (nullable) in the Iceberg schema, mirroring
+    // org.apache.iceberg.types.Types.NestedField#isOptional(). Unset (older FE, or a field
+    // where requiredness was never propagated) must be treated as optional by readers - never
+    // silently enforce NOT NULL without an explicit signal from the Iceberg schema.
+    3: optional bool is_optional
+
     // You can fill other field properties here if you needed
     // .......
 
