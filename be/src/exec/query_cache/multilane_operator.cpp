@@ -240,8 +240,7 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk)
 StatusOr<ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode) {
     auto processor_is_finished = lane.processor->is_finished();
     // Same gate as has_output(); see the note there.
-    auto need_send_eof =
-            !passthrough_mode && processor_is_finished && lane.last_chunk_received && !lane.eof_sent;
+    auto need_send_eof = !passthrough_mode && processor_is_finished && lane.last_chunk_received && !lane.eof_sent;
     auto need_send_chunk = !processor_is_finished && lane.processor->has_output();
 
     auto create_eof_chunk = [&lane]() -> auto {
