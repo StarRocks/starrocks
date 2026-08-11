@@ -219,17 +219,29 @@ public:
         _primary_index_cache_expire_sec = primary_index_cache_expire_sec;
     }
 
-    std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
+    std::shared_ptr<BinlogConfig> get_binlog_config() const {
+        std::shared_lock rdlock(_config_lock);
+        return _binlog_config;
+    }
 
-    std::shared_ptr<FlatJsonConfig> get_flat_json_config() { return _flat_json_config; }
+    std::shared_ptr<FlatJsonConfig> get_flat_json_config() const {
+        std::shared_lock rdlock(_config_lock);
+        return _flat_json_config;
+    }
 
+    // Build the new config fully before publishing it, so that a concurrent reader can never
+    // observe a half-initialized one.
     void set_binlog_config(const BinlogConfig& new_config) {
-        _binlog_config = std::make_shared<BinlogConfig>();
-        _binlog_config->update(new_config);
+        auto config = std::make_shared<BinlogConfig>();
+        config->update(new_config);
+        std::unique_lock wrlock(_config_lock);
+        _binlog_config = std::move(config);
     }
 
     void set_flat_json_config(const FlatJsonConfig& new_config) {
-        _flat_json_config = std::make_shared<FlatJsonConfig>(new_config);
+        auto config = std::make_shared<FlatJsonConfig>(new_config);
+        std::unique_lock wrlock(_config_lock);
+        _flat_json_config = std::move(config);
     }
 
     BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
@@ -293,6 +305,16 @@ private:
     // can be serialized with tablet meta automatically
     TabletUpdates* _updates = nullptr;
 
+    // Guards _binlog_config and _flat_json_config only.
+    //
+    // ALTER TABLE ... SET ("binlog_enable"=...) / ("flat_json.enable"=...) replaces these two
+    // wholesale from an agent thread, while load (DeltaWriter::_init), compaction
+    // (CompactionUtils::construct_output_rowset_writer), query (TabletReader) and the tablet
+    // report read them concurrently. The writer holds Tablet::_meta_lock but none of those
+    // readers do, so the shared_ptr members themselves need their own synchronization:
+    // concurrently copying and assigning the same shared_ptr object is a data race, and the
+    // control block can be freed between a reader loading it and incrementing its refcount.
+    mutable std::shared_mutex _config_lock;
     std::shared_ptr<BinlogConfig> _binlog_config;
     std::shared_ptr<FlatJsonConfig> _flat_json_config;
 

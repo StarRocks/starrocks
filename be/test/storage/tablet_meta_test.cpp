@@ -36,7 +36,10 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_meta.h"
@@ -334,6 +337,77 @@ TEST(TabletMetaTest, sum_rowset_data_disk_size_multiple_rowsets) {
 
     ASSERT_EQ(300u, sum_rowset_data_disk_size(*tablet_meta));
     ASSERT_EQ(333u, tablet_meta->tablet_footprint());
+}
+
+// ALTER TABLE ... SET ("binlog_enable"=...) / ("flat_json.enable"=...) replaces these configs
+// from an agent thread while load, compaction, query and report threads read them, and those
+// readers hold no tablet lock. Two things must hold:
+//   1. a reader never observes a half-initialized config (set_binlog_config used to publish an
+//      empty BinlogConfig and only then fill it in, so version 0 was observable);
+//   2. copying and assigning the shared_ptr members does not race (an ASAN build turns the old
+//      code's control-block use-after-free into a hard failure here).
+// Every published config is self-describing -- each field is derived from its version -- so a
+// reader can tell a whole config from a mix of two.
+// NOLINTNEXTLINE
+TEST(TabletMetaTest, test_concurrent_config_update) {
+    auto tablet_meta = std::make_shared<TabletMeta>();
+
+    constexpr int64_t kVersions = 2000;
+    constexpr int kReaders = 4;
+
+    auto make_binlog_config = [](int64_t v) {
+        BinlogConfig config;
+        config.update(v, (v % 2) == 0, v * 10, v * 100);
+        return config;
+    };
+    auto make_flat_json_config = [](int64_t v) {
+        FlatJsonConfig config((v % 2) == 0, v * 0.001, v * 0.002, static_cast<int>(v));
+        config.set_flat_json_config_version(v);
+        return config;
+    };
+
+    tablet_meta->set_binlog_config(make_binlog_config(1));
+    tablet_meta->set_flat_json_config(make_flat_json_config(1));
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> failures{0};
+    std::vector<std::thread> readers;
+    readers.reserve(kReaders);
+    for (int i = 0; i < kReaders; i++) {
+        readers.emplace_back([&]() {
+            while (!stop.load(std::memory_order_relaxed)) {
+                auto binlog = tablet_meta->get_binlog_config();
+                if (binlog == nullptr || binlog->version < 1 || binlog->binlog_enable != ((binlog->version % 2) == 0) ||
+                    binlog->binlog_ttl_second != binlog->version * 10 ||
+                    binlog->binlog_max_size != binlog->version * 100) {
+                    failures.fetch_add(1);
+                }
+                auto flat_json = tablet_meta->get_flat_json_config();
+                if (flat_json == nullptr) {
+                    failures.fetch_add(1);
+                    continue;
+                }
+                int64_t version = flat_json->get_flat_json_config_version();
+                if (version < 1 || flat_json->is_flat_json_enabled() != ((version % 2) == 0) ||
+                    flat_json->get_flat_json_max_column_max() != static_cast<int>(version)) {
+                    failures.fetch_add(1);
+                }
+            }
+        });
+    }
+
+    for (int64_t version = 2; version <= kVersions; version++) {
+        tablet_meta->set_binlog_config(make_binlog_config(version));
+        tablet_meta->set_flat_json_config(make_flat_json_config(version));
+    }
+    stop.store(true);
+    for (auto& reader : readers) {
+        reader.join();
+    }
+
+    ASSERT_EQ(0, failures.load());
+    ASSERT_EQ(kVersions, tablet_meta->get_binlog_config()->version);
+    ASSERT_EQ(kVersions, tablet_meta->get_flat_json_config()->get_flat_json_config_version());
 }
 
 } // namespace starrocks

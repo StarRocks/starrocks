@@ -1581,12 +1581,13 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
         tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
         tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
         tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
-        if (_tablet_meta->get_binlog_config() != nullptr) {
-            tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        // Snapshot each config once: a concurrent ALTER may replace it between the null check
+        // and the dereference.
+        if (auto binlog_config = _tablet_meta->get_binlog_config(); binlog_config != nullptr) {
+            tablet_info->__set_binlog_config_version(binlog_config->version);
         }
-        if (_tablet_meta->get_flat_json_config() != nullptr) {
-            tablet_info->__set_flat_json_config_version(
-                    _tablet_meta->get_flat_json_config()->get_flat_json_config_version());
+        if (auto flat_json_config = _tablet_meta->get_flat_json_config(); flat_json_config != nullptr) {
+            tablet_info->__set_flat_json_config_version(flat_json_config->get_flat_json_config_version());
         }
         if (_updates == nullptr) {
             int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();

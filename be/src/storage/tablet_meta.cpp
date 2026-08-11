@@ -442,8 +442,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
         tablet_meta_pb->mutable_updates()->CopyFrom(*_updatesPB);
     }
 
-    if (_binlog_config != nullptr) {
-        _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
+    // Take a snapshot through the accessor: a concurrent ALTER may replace the config between
+    // the null check and the dereference.
+    if (auto binlog_config = get_binlog_config(); binlog_config != nullptr) {
+        binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
         BinlogLsnPB* lsn = tablet_meta_pb->mutable_binlog_min_lsn();
         lsn->set_version(_binlog_min_lsn.version());
         lsn->set_seq_id(_binlog_min_lsn.seq_id());
@@ -456,8 +458,8 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schem
         _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
     }
 
-    if (_flat_json_config != nullptr) {
-        _flat_json_config->to_pb(tablet_meta_pb->mutable_flat_json_config());
+    if (auto flat_json_config = get_flat_json_config(); flat_json_config != nullptr) {
+        flat_json_config->to_pb(tablet_meta_pb->mutable_flat_json_config());
     }
 }
 
