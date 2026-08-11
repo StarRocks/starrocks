@@ -17,6 +17,7 @@ package com.starrocks.storagevolume;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
@@ -49,6 +50,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
@@ -361,15 +363,17 @@ public class StorageVolume implements Writable, GsonPostProcessable {
      * configuration of the same cloud, which also covers credential forms added later.
      *
      * <p>Staying the same cloud is not sufficient on Azure though, where the credential the factory
-     * accepts is richer than what the file store models: an ADLS2 credential authenticating with a
-     * workload identity loses its token file and reads back as a managed identity, so the volume
-     * stays valid while quietly authenticating as somebody else. The second half therefore requires,
-     * for Azure volumes, that the credential properties given and the ones read back are the same
-     * set. The comparison runs both ways on purpose: the file store records no OAuth2 flow, so the
-     * read-back path infers one, and a property it infers is as much of a mode change as a property
-     * it drops. The same class of loss exists for the AWS web identity profile, which is stored as
-     * an assume role or a default credential, but volumes relying on it exist in the wild and
-     * rejecting them belongs in its own change rather than in this fix.
+     * accepts is richer than what the file store models, so a volume can stay valid while quietly
+     * authenticating as somebody else. The second half therefore requires, for Azure volumes, that
+     * the credential properties given and the ones read back are the same set. The comparison runs
+     * both ways on purpose: the file store records no OAuth2 flow, so the read-back path infers one,
+     * and a property it infers is as much of a mode change as a property it drops.
+     *
+     * <p>Two kinds of loss are knowingly left alone because refusing them would take away something
+     * users have today rather than protect them: the ADLS2 workload identity, which is documented
+     * and only warned about below, and the AWS web identity profile, which is stored as an assume
+     * role or a default credential. Both deserve their own change - a token file field in the file
+     * store for the former - rather than being turned into errors by this fix.
      *
      * <p>The restored parameters go through the same {@link #preprocessAuthenticationIfNeeded}
      * derivation as the incoming ones, otherwise fields derived from the locations rather than the
@@ -390,7 +394,26 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;
         }
+        Set<String> tolerated = ImmutableSet.of();
+        if (isCredentialPropertySet(params, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE)) {
+            // A workload identity is a documented way to reach ADLS2 - see the "If you use Workload
+            // Identity" recipe in CREATE_STORAGE_VOLUME.md - yet ADLS2CredentialInfo has no field
+            // for the token file: it carries the shared key, the SAS token, the tenant, the client,
+            // the client secret, the certificate path and the authority host. The token file is
+            // therefore dropped and the volume reads back as a managed identity. Withdrawing a
+            // documented capability is not this fix's call, so warn instead of rejecting and leave
+            // the repair to the only place it can happen, a token file field in the file store.
+            // Only the two properties that follow from this are tolerated, so anything else the
+            // file store would drop is still refused.
+            LOG.warn("Storage volume '{}' authenticates to ADLS2 with a workload identity. The token " +
+                    "file is not part of the stored credential, so once the volume is read back it " +
+                    "authenticates as a managed identity instead.", name);
+            tolerated = ImmutableSet.of(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE,
+                    CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY);
+        }
+        Set<String> toleratedProperties = tolerated;
         List<String> changedProperties = AZURE_CREDENTIAL_PROPERTIES.stream()
+                .filter(key -> !toleratedProperties.contains(key))
                 .filter(key -> isCredentialPropertySet(params, key) != isCredentialPropertySet(restored, key))
                 .sorted()
                 .collect(Collectors.toList());

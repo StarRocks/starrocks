@@ -528,21 +528,19 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAdls2RejectsWorkloadIdentityBecauseTheTokenFileIsNotStored() {
-        // A workload identity survives as an ADLS2 credential - the tenant and the client are
-        // stored - but its token file is not, so what is read back authenticates as a managed
-        // identity instead. Same kind of cloud, different identity: checking the cloud type alone
-        // would let this through.
+    public void testAdls2WorkloadIdentityStaysAcceptedEvenThoughTheTokenFileIsNotStored()
+            throws DdlException {
+        // The token file has no field in ADLS2CredentialInfo, so it is dropped and the volume reads
+        // back as a managed identity. CREATE_STORAGE_VOLUME.md documents this authentication, so it
+        // is warned about rather than refused - refusing it would withdraw a documented capability.
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
         storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
         storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
         storageParams.put(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/secrets/azure/token");
 
-        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
-                StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
-                        storageParams, true, ""));
-        Assertions.assertTrue(e.getMessage().contains(AZURE_ADLS2_OAUTH2_TOKEN_FILE), e.getMessage());
+        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
+                storageParams, true, "");
     }
 
     @Test
