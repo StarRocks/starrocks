@@ -254,6 +254,11 @@ public class QueryDumpSerializationReplayTest extends PlanTestBase {
         private final Map<Long, Map<String, Histogram>> histograms = new HashMap<>();
 
         @Override
+        public void addHistogramStatistics(Table table, String column, Histogram histogram) {
+            histograms.computeIfAbsent(table.getId(), ignored -> new HashMap<>()).put(column, histogram);
+        }
+
+        @Override
         public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
             Map<String, Histogram> tableHistograms = histograms.getOrDefault(table.getId(), Map.of());
             Map<String, Histogram> result = new HashMap<>();
