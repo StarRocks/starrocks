@@ -1,0 +1,192 @@
+-- name: test_add_column_default_uuid
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column u VARCHAR(36) DEFAULT (uuid());
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where u is NULL;
+-- result:
+0
+-- !result
+select count(distinct u) from t where id in (1, 2);
+-- result:
+2
+-- !result
+select count(distinct u) from t;
+-- result:
+3
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+-- result:
+uuid()
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_add_column_default_uuid_numeric
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column u LARGEINT DEFAULT (uuid_numeric());
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where u is NULL;
+-- result:
+0
+-- !result
+select count(distinct u) from t where id in (1, 2);
+-- result:
+2
+-- !result
+select count(distinct u) from t;
+-- result:
+3
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+-- result:
+uuid_numeric()
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_add_column_default_uuid_not_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column u VARCHAR(36) NOT NULL DEFAULT (uuid());
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where u is NULL;
+-- result:
+0
+-- !result
+select count(distinct u) from t where id in (1, 2);
+-- result:
+2
+-- !result
+select count(distinct u) from t;
+-- result:
+3
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+-- result:
+uuid()
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_add_column_default_uuid_numeric_not_null
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id INT
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("fast_schema_evolution" = "true", "replication_num" = "1");
+-- result:
+-- !result
+insert into t values (1), (2);
+-- result:
+-- !result
+alter table t add column u LARGEINT NOT NULL DEFAULT (uuid_numeric());
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t (id) values (3);
+-- result:
+-- !result
+select count(*) from t where u is NULL;
+-- result:
+0
+-- !result
+select count(distinct u) from t where id in (1, 2);
+-- result:
+2
+-- !result
+select count(distinct u) from t;
+-- result:
+3
+-- !result
+select column_default from information_schema.columns
+where table_schema = 'db_${uuid0}' and table_name = 't' and column_name = 'u';
+-- result:
+uuid_numeric()
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
