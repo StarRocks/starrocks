@@ -9,7 +9,7 @@ Calculates the SHA-224 hash value, SHA-256 hash value, SHA-384 hash value, or SH
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR sha2(VARCHAR expr, INT hash_length)
 ```
 

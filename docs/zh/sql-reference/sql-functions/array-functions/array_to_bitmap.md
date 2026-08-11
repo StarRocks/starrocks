@@ -11,7 +11,7 @@ description: "将ARRAY类型转化为BITMAP类型。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_to_bitmap(array)
 ```
 

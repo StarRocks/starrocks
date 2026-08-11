@@ -13,7 +13,7 @@ The return value must be of the TIME type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
 ```
 

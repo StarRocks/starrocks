@@ -625,6 +625,15 @@ This topic introduces the following types of FE configurations:
 - Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
 - Introduced in: v3.2.0
 
+### `lake_enable_batch_publish_multi_table`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Introduced in: v4.1.5
+
 ### `lake_enable_tablet_creation_optimization`
 
 - Default: false
@@ -697,6 +706,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
+
+### `iceberg_remove_orphan_files_min_retention_seconds`
+
+- Default: 86400
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The `older_than` argument of the `remove_orphan_files` procedure must be earlier than `current time - this value`. A later `older_than` is rejected, because deleting files that recent can remove data that a concurrent write has not committed yet and leave the table unreadable. Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7-day default. Lower this value only when nothing writes to the table while the procedure runs.
+- Introduced in: v4.1.5
 
 ##### lake_balance_tablets_threshold
 
@@ -926,7 +944,7 @@ This topic introduces the following types of FE configurations:
 
 ### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
+- Default: 60
 - Type: Long
 - Unit: Seconds
 - Is mutable: No
@@ -1079,7 +1097,7 @@ This topic introduces the following types of FE configurations:
 
 ### `jwt_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No
@@ -1205,7 +1223,7 @@ This topic introduces the following types of FE configurations:
 
 ### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
+- Default: 8
 - Type: Int
 - Unit: -
 - Is mutable: Yes
@@ -1277,7 +1295,7 @@ This topic introduces the following types of FE configurations:
 
 ### `oauth2_principal_field`
 
-- Default: Empty string
+- Default: sub
 - Type: String
 - Unit: -
 - Is mutable: No

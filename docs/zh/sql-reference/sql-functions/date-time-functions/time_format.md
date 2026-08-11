@@ -11,7 +11,7 @@ description: "按指定格式格式化TIME类型时间值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR TIME_FORMAT(TIME time, VARCHAR format)
 ```
 

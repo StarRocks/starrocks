@@ -15,7 +15,7 @@ description: "文字列をJSON値に変換します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 parse_json(string_expr)
 ```
 

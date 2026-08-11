@@ -11,7 +11,7 @@ description: "返回ARRAY中所有元素的最小值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_min(array(type))
 ```
 

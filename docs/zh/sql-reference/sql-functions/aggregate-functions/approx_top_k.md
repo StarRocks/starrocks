@@ -13,7 +13,7 @@ description: "approx_top_k 返回表达式中最常出现的 k 个项目及其�
 
 ## 语法
 
-```Haskell
+```plaintext
 APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ```
 

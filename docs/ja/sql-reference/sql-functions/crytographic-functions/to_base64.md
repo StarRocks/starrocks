@@ -9,7 +9,7 @@ description: "文字列を Base64 エンコードされた文字列に変換し�
 
 ## 構文
 
-```Haskell
+```plaintext
 to_base64(str);
 ```
 

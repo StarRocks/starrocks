@@ -11,7 +11,7 @@ Adds hours to a date or datetime.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME hours_add(DATETIME|DATE date, INT hours);
 ```
 

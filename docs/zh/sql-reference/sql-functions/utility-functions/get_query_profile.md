@@ -15,7 +15,7 @@ description: "通过 query_id 来获取指定查询的 Profile。"
 
 ## 语法
 
-```Haskell
+```plaintext
 get_query_profile(x)
 ```
 

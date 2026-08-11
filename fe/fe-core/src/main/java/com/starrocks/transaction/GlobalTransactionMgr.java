@@ -101,6 +101,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     // ExplicitTxnStateItem, and the transaction state is recorded in TransactionState.
     private final Map<Long, ExplicitTxnState> explicitTxnStateMap = Maps.newConcurrentMap();
 
+    // Serializes the registration of explicit transaction states. `explicitTxnStateMap` itself is concurrent, but
+    // `BEGIN WITH LABEL` has to verify that the label is unused and publish the new state as a single atomic step:
+    // without this lock two concurrent sessions can both pass the uniqueness check before either of them publishes,
+    // and both `BEGIN` succeed with the same label.
+    private final Object explicitTxnStateLock = new Object();
+
     private final GlobalStateMgr globalStateMgr;
 
     public GlobalTransactionMgr(GlobalStateMgr globalStateMgr) {
@@ -137,17 +143,39 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     public void addTransactionState(long txnId, ExplicitTxnState explicitTxnState) {
-        explicitTxnStateMap.put(txnId, explicitTxnState);
+        synchronized (explicitTxnStateLock) {
+            explicitTxnStateMap.put(txnId, explicitTxnState);
+        }
+    }
+
+    /**
+     * Register an explicit transaction state, after checking that its label is not already used by another
+     * transaction in the cluster. The check and the registration are done atomically, so that concurrent
+     * `BEGIN WITH LABEL <same label>` from different sessions can not both succeed.
+     *
+     * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction. In that
+     *                                   case the state is not registered.
+     */
+    public void addTransactionStateWithLabelCheck(long txnId, ExplicitTxnState explicitTxnState)
+            throws LabelAlreadyUsedException {
+        synchronized (explicitTxnStateLock) {
+            checkLabelUsedInAnyDatabase(explicitTxnState.getTransactionState().getLabel());
+            explicitTxnStateMap.put(txnId, explicitTxnState);
+        }
     }
 
     /**
      * Check if a label is already used in any database's transaction.
      * This method is used to validate label uniqueness before starting an explicit transaction.
+     * <p>
+     * NOTE: the result is only meaningful while `explicitTxnStateLock` is held, otherwise another session may
+     * register a transaction with the same label right after the check returns. Callers that register a
+     * transaction afterwards must go through {@link #addTransactionStateWithLabelCheck}.
      *
      * @param label the label to check
      * @throws LabelAlreadyUsedException if the label is already used by another non-aborted transaction
      */
-    public void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
+    private void checkLabelUsedInAnyDatabase(String label) throws LabelAlreadyUsedException {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             TransactionState txnState = dbTransactionMgr.getLabelTransactionState(label);
             if (txnState != null && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
@@ -339,7 +367,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             dbTransactionMgr.prepareTransaction(
-                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment, true);
+                    transactionId, preparedTimeoutMs, tabletCommitInfos, tabletFailInfos, attachment,
+                    TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE);
             LOG.debug("prepare transaction: {} success", transactionId);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
@@ -369,22 +398,12 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
-        List<Long> tableIdList = transactionState.getTableIdList();
-
-        Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE,
-                timeoutMillis, TimeUnit.MILLISECONDS)) {
-            String errMsg = String.format("get database write lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
-                    transactionId, db.getFullName(), timeoutMillis);
-            throw new StarRocksException(errMsg);
-        }
-        try {
-            waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
-        }
+        waiter = retryCommitPreparedOnRateLimitExceeded(db, transactionId, timeoutMillis);
         if (waiter == null) {
+            TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+            if (transactionState == null) {
+                throw new TransactionNotFoundException(transactionId);
+            }
             throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
                     transactionState.toString()));
         }
@@ -403,6 +422,49 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             String errMsg = String.format("publish timeout: %d, transactionId=%d",
                     timeoutMillis, transactionId);
             throw new StarRocksException(errMsg);
+        }
+    }
+
+    VisibleStateWaiter retryCommitPreparedOnRateLimitExceeded(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        long startTime = System.currentTimeMillis();
+        long lockTimeoutMs = timeoutMs;
+        while (true) {
+            try {
+                return commitPreparedTransactionUnderIntensiveDbLock(db, transactionId, lockTimeoutMs);
+            } catch (CommitRateExceededException e) {
+                throttleCommitOnRateExceed(e, startTime, timeoutMs);
+                if (timeoutMs != 0) {
+                    lockTimeoutMs = timeoutMs - (System.currentTimeMillis() - startTime);
+                    // A zero lock timeout means wait forever, so do not retry after a finite budget is exhausted.
+                    if (lockTimeoutMs <= 0) {
+                        throw e;
+                    }
+                }
+            }
+        }
+    }
+
+    VisibleStateWaiter commitPreparedTransactionUnderIntensiveDbLock(
+            @NotNull Database db, long transactionId, long timeoutMs) throws StarRocksException {
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        if (transactionState == null) {
+            throw new TransactionNotFoundException(transactionId);
+        }
+        List<Long> tableIdList = transactionState.getTableIdList();
+
+        Locker locker = new Locker();
+        if (!locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), tableIdList, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+            String errMsg = String.format(
+                    "get database/table lock timeout, transactionId=%d, database=%s, timeoutMillis=%d",
+                    transactionId, db.getFullName(), timeoutMs);
+            throw new StarRocksException(errMsg);
+        }
+        try {
+            return getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
     }
 
@@ -715,9 +777,20 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      */
     public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList)
             throws AnalysisException {
+        return isPreviousTransactionsFinished(endTransactionId, dbId, tableIdList, Collections.emptySet());
+    }
+
+    /**
+     * Like {@link #isPreviousTransactionsFinished(long, long, List)} but ignores the transactions in
+     * {@code excludeTransactionIds} when checking. Used by tablet-reshard cleaning to skip waiting for
+     * compaction transactions on partitions the reshard job does not touch.
+     */
+    public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIdList,
+                                                  Set<Long> excludeTransactionIds)
+            throws AnalysisException {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList);
+            return dbTransactionMgr.isPreviousTransactionsFinished(endTransactionId, tableIdList, excludeTransactionIds);
         } catch (AnalysisException e) {
             // NOTICE: At present, this situation will only happen when the database no longer exists.
             // In fact, getDatabaseTransactionMgr() should explicitly throw a MetaNotFoundException,

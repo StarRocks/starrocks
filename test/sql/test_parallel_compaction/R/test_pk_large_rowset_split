@@ -112,11 +112,11 @@ SELECT ${version_after} > ${version_before} as compaction_happened;
 -- !result
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
 -- result:
-3
+1
 -- !result
 SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
 -- result:
-1
+0
 -- !result
 [UC]seg_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
 -- result:

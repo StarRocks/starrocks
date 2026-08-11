@@ -66,6 +66,9 @@ import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -200,6 +203,37 @@ public class AnalyzeStmtTest {
         sql = "analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assertions.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
+    }
+
+    @Test
+    public void testAnalyzeExternalPredicateColumns() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of(new ExternalColumnUsage("table-hash", table.getCatalogName(),
+                        table.getCatalogDBName(), table.getCatalogTableName(), "c_name",
+                        ColumnUsage.UseCase.PREDICATE));
+            }
+        };
+
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(
+                "analyze sample table hive0.tpch.customer predicate columns");
+        Assertions.assertTrue(analyzeStmt.isExternal());
+        Assertions.assertTrue(analyzeStmt.isSample());
+        Assertions.assertEquals(List.of("c_name"), analyzeStmt.getColumnNames());
+    }
+
+    @Test
+    public void testAnalyzeExternalPredicateColumnsWithoutUsage() {
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+                return List.of();
+            }
+        };
+
+        analyzeFail("analyze sample table hive0.tpch.customer predicate columns",
+                "No predicate columns found for external table 'customer'");
     }
 
     @Test
@@ -555,8 +589,9 @@ public class AnalyzeStmtTest {
                         "db_id, table_id, column_name," +
                         " sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as bigint)) as string), " +
-                        "cast(min(cast(min as bigint)) as string), cast(avg(collection_size) as bigint) FROM column_statistics " +
+                        "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                        "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                        "cast(avg(collection_size) as bigint) FROM column_statistics " +
                         "WHERE table_id = %d and column_name in (\"v1\", \"v2\") " +
                         "GROUP BY db_id, table_id, column_name", table.getId()),
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(table.getId(),
@@ -763,13 +798,13 @@ public class AnalyzeStmtTest {
 
         String pattern = String.format("SELECT cast(10 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                 "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string), " +
+                "cast(max(cast(nullif(max, '') as string)) as string), cast(min(cast(nullif(min, '') as string)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk2\") " +
                 "GROUP BY db_id, table_id, column_name " +
                 "UNION ALL SELECT cast(10 as INT), now(), db_id, table_id, column_name, " +
                 "sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                "cast(max(cast(max as bigint)) as string), cast(min(cast(min as bigint)) as string), " +
+                "cast(max(cast(nullif(max, '') as bigint)) as string), cast(min(cast(nullif(min, '') as bigint)) as string), " +
                 "cast(avg(collection_size) as bigint) " +
                 "FROM column_statistics WHERE table_id = %d and column_name in (\"kk1\") " +
                 "GROUP BY db_id, table_id, column_name", table.getId(), table.getId());

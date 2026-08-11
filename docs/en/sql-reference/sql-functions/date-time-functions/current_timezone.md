@@ -11,7 +11,7 @@ Obtains the current time zone and returns a value of the VARCHAR type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR CURRENT_TIMETIME()
 ```
 

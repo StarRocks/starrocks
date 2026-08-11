@@ -12,7 +12,7 @@ The input seconds represent the time elapsed since the start of a day (00:00:00)
 
 ## Syntax
 
-```Haskell
+```plaintext
 TIME sec_to_time(BIGINT sec)
 ```
 

@@ -15,7 +15,7 @@ The alias is transform().
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_map(lambda_function, arr1, arr2...)
 array_map(arr1, arr2..., lambda_function)
 ```

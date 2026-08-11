@@ -38,11 +38,21 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     @SerializedName(value = "asyncRefreshContext")
     private MaterializedView.AsyncRefreshContext asyncRefreshContext;
 
+    // Wall-clock confirm time; unlike lastRefreshTime it is not recomputable from the version map, so it must be logged.
+    @SerializedName(value = "lastFreshnessConfirmedAt")
+    private long lastFreshnessConfirmedAt;
+
     public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView) {
+        this(materializedView, materializedView.getRefreshScheme());
+    }
+
+    public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView,
+                                                  MaterializedView.MvRefreshScheme refreshScheme) {
         this.id = materializedView.getId();
         this.dbId = materializedView.getDbId();
-        this.refreshType = materializedView.getRefreshScheme().getType();
-        this.asyncRefreshContext = materializedView.getRefreshScheme().getAsyncRefreshContext().copy();
+        this.refreshType = refreshScheme.getType();
+        this.asyncRefreshContext = refreshScheme.getAsyncRefreshContext().copy();
+        this.lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {
@@ -64,7 +74,9 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return asyncRefreshContext;
     }
 
-
+    public long getLastFreshnessConfirmedAt() {
+        return lastFreshnessConfirmedAt;
+    }
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {
         try {

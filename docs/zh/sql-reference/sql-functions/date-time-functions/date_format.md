@@ -53,7 +53,7 @@ description: "将日期按照指定的格式转化为字符串。"
 
 ## 语法
 
-```Haskell
+```plaintext
 VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 ```
 

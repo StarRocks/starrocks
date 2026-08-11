@@ -369,6 +369,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
 
     rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.sample_options = params.sample_options;
     rs_opts.has_preaggregation = true;
     if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
         rs_opts.has_preaggregation = true;

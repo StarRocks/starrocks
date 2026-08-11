@@ -475,6 +475,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
 - 引入版本：-
 
+### process_force_exit_after_crash_handler_hang_second
+
+- 默认值：0
+- 类型：Int
+- 单位：秒
+- 是否动态：否
+- 描述：当致命信号（崩溃）处理函数发生挂起时（例如在生成 core dump 前释放资源时发生 jemalloc 死锁），在该秒数之后强制进程退出，以便编排系统重启该进程。崩溃标记仍会先被设置，因此在该宽限期内 FE 会持续收到 `SHUTDOWN` 心跳；此配置仅限制崩溃进程存活的最长时间。默认禁用（`0`），以便升级后保持原有的崩溃与 core dump 行为不变；如需启用，请根据自身环境设置一个正值并重启节点。该值仅在启动时读取一次，且只有为正值时才会启动看门狗线程；取值小于等于 `0` 时保持该看门狗禁用。
+- 引入版本：v4.0.15, v4.1.5
+
 ### rpc_compress_ratio_threshold
 
 - 默认值：1.1
@@ -483,6 +492,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：在决定是否以压缩形式通过网络发送序列化的 row-batches 时使用的阈值（uncompressed_size / compressed_size）。当尝试压缩时（例如在 DataStreamSender、exchange sink、tablet sink 的索引通道、dictionary cache writer 中），StarRocks 会计算 compress_ratio = uncompressed_size / compressed_size；仅当 compress_ratio `>` rpc_compress_ratio_threshold 时才使用压缩后的负载。默认值 1.1 意味着压缩数据必须至少比未压缩小约 9.1% 才会被使用。将该值调低以偏好压缩（以更多 CPU 换取更小的带宽）；将其调高以避免压缩开销，除非压缩能带来更大的尺寸缩减。注意：此项适用于 RPC/shuffle 序列化，仅在启用 row-batch 压缩（compress_rowbatches）时生效。
 - 引入版本：v3.2.0
+
+### enable_threadpool_catch_task_exception
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：ThreadPool 的工作线程是否吞掉任务抛出的异常并继续执行下一个任务。设置为 `false`（默认）时，任务体外层没有 catch 语句，任务抛出的异常找不到处理者，会在抛出点终止 BE 进程。设置为 `true` 时，异常以 ERROR 级别记入日志，进程级指标 [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) 加一，工作线程继续执行下一个任务，进程得以存活。注意工作线程存活并不意味着任务是异常安全的：如果任务通过 `DeferOp` 或析构函数发出完成信号，而记录结果的语句被跳过，等待方会把该任务读作成功，因为未赋值的 `Status` 读出来就是 OK。此时故障不会报错，而是产生错误的结果。仅在需要缓解崩溃循环时将该项设置为 `true`，并预期相关故障会变为静默。
+- 引入版本：-
 
 ### ssl_private_key_path
 

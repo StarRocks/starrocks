@@ -11,7 +11,7 @@ description: "返回ARRAY中所有元素的平均数，忽略NULL值。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_avg(array(type))
 ```
 

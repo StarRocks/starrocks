@@ -13,7 +13,7 @@ StarRocks 同时提供 `year()`、`quarter()`、`month()`、`week()`、`day()`�
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME|DATE date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 ```
 

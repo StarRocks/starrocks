@@ -77,6 +77,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
@@ -180,6 +181,117 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    // init() plans the sink during the load, before an explicit transaction (multi-statement stream
+    // load / BEGIN..COMMIT) is upserted into the DatabaseTransactionMgr. getTransactionState then
+    // returns null, so init() must fall back to the explicit transaction registry to observe the
+    // combined-txn-log decision; otherwise write_txn_log stays at the per-tablet default and publish
+    // (which expects combined logs) wedges.
+    @Test
+    public void testInitFallsBackToExplicitTxnStateForCombinedTxnLog(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // The explicit-txn fallback must NOT apply to INSERT_STREAMING (SQL BEGIN..COMMIT): that source
+    // emits per-load-id txn logs that publish reads via the load_ids branch (which takes precedence
+    // over combined_txn_log), so honoring the combined flag here would make BE skip those logs and
+    // drop data. write_txn_log must stay at the per-tablet/per-load-id default (false).
+    @Test
+    public void testInitDoesNotFallBackForInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test
@@ -932,6 +1044,63 @@ public class OlapTableSinkTest {
         //      be2 SHUTDOWN status could not be checked, so choose replica4 as primary replica. 
         Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getId(), replica4.getId());
         Assertions.assertEquals(singleReplicaList.get(lowUsageIndex2).getBackendId(), be2.getId());
+    }
+
+    @Test
+    public void testFindPrimaryReplicaSkipDecommission() throws StarRocksException {
+        Backend be1 = new Backend(2001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(2002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(2003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+
+        //be1 hosts the fewest primaries, so without the DECOMMISSION check it would be selected
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 0L);
+        bePrimaryMap.put(be2.getId(), 1L);
+        bePrimaryMap.put(be3.getId(), 2L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.a replica being decommissioned must not be selected while other candidates exist
+        Replica decommissioned = new Replica(55L, be1.getId(), Replica.ReplicaState.DECOMMISSION, 1, 0);
+        Replica normal1 = new Replica(66L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica normal2 = new Replica(77L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        decommissioned.setLastWriteFail(false);
+        normal1.setLastWriteFail(false);
+        normal2.setLastWriteFail(false);
+        List<Replica> replicaList = new ArrayList<>();
+        replicaList.add(decommissioned);
+        replicaList.add(normal1);
+        replicaList.add(normal2);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, replicaList);
+        Assertions.assertEquals(normal1.getId(), replicaList.get(lowUsageIndex1).getId());
+        Assertions.assertEquals(be2.getId(), replicaList.get(lowUsageIndex1).getBackendId());
+
+        //2.fall back to the decommissioned replica when it is the only candidate
+        List<Replica> onlyDecommissionedList = new ArrayList<>();
+        onlyDecommissionedList.add(decommissioned);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, onlyDecommissionedList);
+        Assertions.assertEquals(decommissioned.getId(), onlyDecommissionedList.get(lowUsageIndex2).getId());
     }
 
     @Test

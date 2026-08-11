@@ -9,7 +9,7 @@ description: "指定されたバイナリ形式に基づいてVARCHAR文字列�
 
 ## Syntax
 
-```Haskell
+```plaintext
 to_binary(str[, binary_type])
 ```
 

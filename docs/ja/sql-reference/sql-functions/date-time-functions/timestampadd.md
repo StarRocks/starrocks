@@ -13,7 +13,7 @@ MILLISECOND (3.2以降), SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, または YEAR�
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME TIMESTAMPADD(unit, interval, DATETIME datetime_expr)
 ```
 

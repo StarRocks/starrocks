@@ -465,6 +465,15 @@ This topic introduces the following types of BE configurations:
 - Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as `10.10.10.0/24`. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
 
+### process_force_exit_after_crash_handler_hang_second
+
+- Default: 0
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: If the fatal-signal (crash) handler hangs, for example a jemalloc deadlock while releasing resources before the core dump, the BE/CN forces the process to exit after this many seconds so that an orchestrator can restart it. The crash flag is still set first, so the FE keeps seeing `SHUTDOWN` heartbeats during the grace window; this only bounds how long a crashing process can linger while alive. Disabled by default (`0`) so that an upgrade keeps the existing crash and core dump behavior unchanged; set a positive value (and restart the node) to opt in, choosing a timeout suited to your environment. The value is read once at startup, and the watchdog thread is only launched when it is positive; a value of `0` or less keeps the watchdog disabled.
+- Introduced in: v4.0.15, v4.1.5
+
 ### rpc_compress_ratio_threshold
 
 - Default: 1.1
@@ -473,6 +482,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio `>` rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
 - Introduced in: v3.2.0
+
+### enable_threadpool_catch_task_exception
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a ThreadPool worker swallows an exception thrown by a task and continues with the next task. When set to `false` (default), there is no catch clause enclosing the task body, so an exception that escapes the task finds no handler and terminates the BE process at the throw point. When set to `true`, the exception is logged at the ERROR level, the process-wide metric [`threadpool_task_exception_total`](../monitoring/metric_details/t-z.md#threadpool_task_exception_total) is incremented, and the worker proceeds to the next task, which keeps the process alive. Note that keeping the worker alive does not make the task exception-safe: if a task signals its completion from a `DeferOp` or from its destructor while the statements that record its result are skipped, the waiter reads the task as successful, because an unset `Status` reads as OK. The failure then produces wrong results instead of an error. Set this item to `true` only to mitigate a crash loop, and expect the affected failures to become silent.
+- Introduced in: -
 
 ### ssl_private_key_path
 

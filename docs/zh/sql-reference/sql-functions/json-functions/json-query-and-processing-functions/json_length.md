@@ -25,7 +25,7 @@ description: "返回 JSON 文档的长度。"
 
 ## 语法
 
-```Haskell
+```plaintext
 json_length(json_doc[, path])
 ```
 

@@ -9,7 +9,7 @@ description: "列内の値（NULLを除く）をビットマップに集約し�
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP_AGG(col)
 ```
 

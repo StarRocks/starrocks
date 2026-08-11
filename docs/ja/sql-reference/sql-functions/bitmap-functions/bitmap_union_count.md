@@ -9,7 +9,7 @@ description: "ビットマップ値の和集合を返し、その和集合の基
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT bitmap_union_count(BITMAP value)
 ```
 

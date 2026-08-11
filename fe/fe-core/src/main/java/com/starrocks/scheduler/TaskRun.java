@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
@@ -77,6 +78,8 @@ public class TaskRun implements Comparable<TaskRun> {
     // Set on pinned-PCT batches only; value is the pinning job's START_TASK_RUN_ID.
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     public static final String SUBMIT_USER_SYSTEM = "system";
+    // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
+    public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
 
@@ -303,6 +306,12 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setIsLastStmt(true);
         context.setSingleStmt(true);
         context.resetSessionVariable();
+        if (task instanceof OptimizeTask) {
+            // OptimizeJobV2 executes its rewrite through a new task-run context, so the
+            // submitter's ConnectContext marker cannot reach the planner. Restore the marker
+            // from the task type before parsing and planning the internal INSERT.
+            context.setOptimizeRewrite(true);
+        }
         // Preserve critical session variables from parent context if available
         // This ensures that settings like enableSingleNodeSchedule are inherited
         if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {

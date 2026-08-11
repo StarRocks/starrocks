@@ -11,7 +11,7 @@ description: "将给定元素重复指定次数返回一个数组。"
 
 ## 语法
 
-```Haskell
+```plaintext
 array_repeat(element, count)
 ```
 

@@ -136,7 +136,8 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.resource_group AS resource_group, " +
                         "information_schema.materialized_views.query_rewrite_status_reason AS query_rewrite_status_reason, " +
                         "information_schema.materialized_views.base_table_refresh_version_times " +
-                        "AS base_table_refresh_version_times" +
+                        "AS base_table_refresh_version_times, " +
+                        "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
@@ -180,7 +181,6 @@ public class ShowMaterializedViewTest {
         List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
         Assertions.assertTrue(schema.stream()
                 .anyMatch(c -> c.getName().equalsIgnoreCase("QUERY_REWRITE_STATUS_REASON")));
-        Assertions.assertEquals("BASE_TABLE_REFRESH_VERSION_TIMES", schema.get(schema.size() - 1).getName());
     }
 
     @Test
@@ -197,6 +197,7 @@ public class ShowMaterializedViewTest {
         // Sync MVs aren't evaluated by the async rewrite framework these columns describe; both stay empty.
         Assertions.assertTrue(status.getQueryRewriteStatus() == null || status.getQueryRewriteStatus().isEmpty());
         Assertions.assertTrue(status.getQueryRewriteStatusReason() == null || status.getQueryRewriteStatusReason().isEmpty());
+        Assertions.assertEquals(0, status.getLastFreshnessConfirmedAt());
     }
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {

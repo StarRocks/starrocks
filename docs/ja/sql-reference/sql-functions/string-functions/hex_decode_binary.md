@@ -11,7 +11,7 @@ description: "16進数でエンコードされた文字列をバイナリにデ�
 
 ## Syntax
 
-```Haskell
+```plaintext
 hex_decode_binary(str);
 ```
 

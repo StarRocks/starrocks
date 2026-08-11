@@ -634,6 +634,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 启用后，PublishVersionDaemon 会为同一个 Lake（存算分离）表/分区批处理就绪事务，并将其版本一起发布，而不是为每个事务单独发布。在 RunMode shared-data 中，守护进程调用 getReadyPublishTransactionsBatch() 并使用 publishVersionForLakeTableBatch(...) 执行分组发布操作（减少 RPC 并提高吞吐量）。禁用时，守护进程回退到通过 publishVersionForLakeTable(...) 进行的逐事务发布。实现通过内部集合协调进行中的工作，以避免在切换开关时重复发布，并且受 `lake_publish_version_max_threads` 的线程池大小影响。
 - 引入版本: v3.2.0
 
+### `lake_enable_batch_publish_multi_table`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
+- 引入版本: v4.1.5
+
 ### `lake_enable_tablet_creation_optimization`
 
 - 默认值: false
@@ -696,6 +705,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
+
+### `iceberg_remove_orphan_files_min_retention_seconds`
+
+- 默认值: 86400
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: `remove_orphan_files` procedure 的 `older_than` 必须早于 `当前时间 - 该值`，更晚的 `older_than` 会被拒绝 —— 因为删除这么新的文件可能删掉并发写入尚未提交的数据，导致表不可读。此配置仅约束显式传入的 `older_than`；不传该参数时仍使用该 procedure 自身的 7 天默认值。仅当 procedure 运行期间该表没有任何写入时，才降低此值。
+- 引入版本: v4.1.5
 
 ### lake_balance_tablets_threshold
 

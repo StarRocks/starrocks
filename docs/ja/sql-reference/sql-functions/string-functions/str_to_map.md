@@ -11,7 +11,7 @@ description: "文字列を2つの区切り文字でキーと値のペアに分�
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP<VARCHAR, VARCHAR> str_to_map(VARCHAR content[, VARCHAR delimiter[, VARCHAR map_delimiter]])
 ```
 

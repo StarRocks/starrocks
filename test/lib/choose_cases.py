@@ -485,7 +485,7 @@ class ChooseCase(object):
                 tools.assert_greater(len(tmp_loop_stat), 0, "LOOP FORMAT ERROR(EMPTY)!")
                 tmp_sql.append({
                     "type": LOOP_FLAG,
-                    "stat": tmp_loop_stat,
+                    "stat": list(tmp_loop_stat),
                     "prop": tmp_loop_prop,
                     "ori": f_lines[l_loop_line: r_loop_line + 1]
                 })

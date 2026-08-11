@@ -681,11 +681,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `query_queue_slots_estimator_strategy`
 
-- デフォルト：MAX
+- デフォルト：PBE
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は、MBE (メモリベース)、PBE (並行性ベース)、MAX (MBE と PBE の最大値を取る)、MIN (MBE と PBE の最小値を取る) です。MBE は、予測されたメモリまたは計画コストをスロットあたりのメモリターゲットで割ってスロットを推定し、`totalSlots` で上限が設定されます。PBE は、フラグメントの並行性 (スキャン範囲のカウントまたはカーディナリティ / スロットあたりの行数) と CPU コストベースの計算 (スロットあたりの CPU コストを使用) からスロットを導出し、結果を [numSlots/2, numSlots] の範囲内に制限します。MAX と MIN は、MBE と PBE の最大値または最小値を取ることによってそれらを結合します。設定された値が無効な場合、デフォルト (`MAX`) が使用されます。
+- 説明：`enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は `PBE` (並行性ベース、デフォルト)、`MBE` (メモリコストベース)、`CBE` (CPU コストベース) です。PBE はスキャン並行性(ワーカー数を上限)からクエリのスロットを推定します。OLAP テーブルでは剪定後に残ったスキャン範囲数を使うため、非常に小さいクエリのみワーカー数を下回ります。connector/外部スキャンは単一スロットではなくフルパラレルスキャン(ワーカー数)として扱われます。MBE はクエリのメモリコストを `query_queue_v2_mem_bytes_per_slot` で割ってスロットを推定します。CBE は計画 CPU コストを `query_queue_v2_cpu_costs_per_slot` で割ってスロットを推定します。MBE と CBE のクエリごとのスロットは、さらに `number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。後方互換性のため、レガシー値 `MAX` と `MIN` は引き続き受け入れられ、デフォルトの推定器として扱われます。それ以外の値は構成検証で拒否されます。
 - 導入時期：v3.5.0
 
 ### `query_queue_v2_concurrency_level`
@@ -694,7 +694,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：システムの総クエリスロットを計算する際に使用される論理的な並行性「レイヤー」の数を制御します。Shared-nothing モードでは、総スロット = `query_queue_v2_concurrency_level` * BE の数 * BE ごとのコア数 (BackendResourceStat から派生)。マルチウェアハウスモードでは、実効並行性は max(1, `query_queue_v2_concurrency_level` / 4) にスケーリングされます。設定値が非正の場合、`4` として扱われます。この値を変更すると、totalSlots (したがって同時クエリ容量) が増減し、スロットごとのリソースに影響します。memBytesPerSlot はワーカーごとのメモリを (ワーカーごとのコア数 * 並行性) で割って導出され、CPU アカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスターサイズに比例して設定してください。非常に大きな値はスロットごとのメモリを減らし、リソースの断片化を引き起こす可能性があります。
+- 説明：デフォルトレベル `4` を基準とした容量レベルとして解釈されます。デフォルト (PBE) および CPU コストベース (CBE) の推定器では、システムの総クエリスロットは `number_of_workers * cores_per_worker * (query_queue_v2_concurrency_level / 4)` (BackendResourceStat から派生) として計算されます。メモリコストベース (MBE) の推定器では、総スロットは代わりにウェアハウスのメモリ予算から導出されます。設定値が非正の場合、`4` として扱われます。totalSlots は少なくとも `number_of_workers` になるようにクランプされます。この値を増やすと totalSlots (したがって同時クエリ容量) が増加します。デフォルト `4` では、総容量は `number_of_workers * cores_per_worker` に等しくなります。クラスターに必要な並行性に比例して設定してください。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_cpu_costs_per_slot`
@@ -703,8 +703,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：planner CPU cost units
 - 変更可能：Yes
-- 説明：プランナー CPU コストからクエリが必要とするスロット数を推定するために使用されるスロットごとの CPU コストしきい値。スケジューラーは、スロットを整数 (`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) として計算し、結果を [1, totalSlots] の範囲にクランプします (totalSlots はクエリキュー V2 `V2` パラメーターから派生)。V2 コードは非正の設定を 1 に正規化するため (Math.max(1, value))、非正の値は事実上 `1` になります。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。並行性対リソースの粒度を制御するために、`query_queue_v2_num_rows_per_slot` および並行性設定と合わせて調整してください。
+- 説明：CPU コストベースの推定器 (CBE) が計画 CPU コストからクエリの必要スロット数を推定するために使用するスロットごとの CPU コストしきい値。スケジューラーはスロットを `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` として計算し、結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲にクランプします。非正の値は `1` に正規化されます。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
+
+### `query_queue_v2_mem_bytes_per_slot`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：バイト
+- 変更可能：Yes
+- 説明：メモリコストベースの推定器 (MBE) が使用するスロットごとのメモリターゲット。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロットはウェアハウスのメモリ予算から導出され、クエリのスロットはその総メモリコストをこの値で割って推定され、`number_of_workers * max(1, pipeline_dop / 2)` で上限が設定されます。非正の場合、Query Queue V2 はコアあたりの平均ワーカーメモリを使用します。
+- 導入時期：-
 
 ### `query_queue_v2_num_rows_per_slot`
 
@@ -712,7 +721,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Rows
 - 変更可能：Yes
-- 説明：クエリごとのスロット数を推定する際に、単一のスケジューリングスロットに割り当てられるターゲットのソース行レコード数。StarRocks は、`estimated_slots` = (ソースノードのカーディナリティ) / `query_queue_v2_num_rows_per_slot` を計算し、その結果を [1, totalSlots] の範囲にクランプし、計算された値が非正の場合は最低 1 を強制します。totalSlots は利用可能なリソース (おおよそ DOP * `query_queue_v2_concurrency_level` * ワーカー/BE の数) から導出され、したがってクラスター/コア数に依存します。この値を増やすと、スロット数が減少し (各スロットがより多くの行を処理)、スケジューリングオーバーヘッドが減少します。減らすと、並行性が増加し (より多くの、より小さいスロット)、リソース制限まで増加します。
+- 説明：Query Queue V2 の既存のシリアライズ / デバッグ出力との後方互換性のために保持されています。PBE、MBE、CBE のスロット推定器では使用されなくなりました。
 - 導入時期：v3.3.4, v3.4.0, v3.5.0
 
 ### `query_queue_v2_schedule_strategy`

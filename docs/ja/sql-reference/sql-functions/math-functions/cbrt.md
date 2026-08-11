@@ -11,7 +11,7 @@ description: "引数の立方根を計算します。"
 
 ## 構文
 
-```Haskell
+```plaintext
 DOUBLE cbrt(DOUBLE arg)
 ```
 

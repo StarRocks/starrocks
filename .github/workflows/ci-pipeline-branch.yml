@@ -75,20 +75,13 @@ jobs:
         if: github.base_ref != 'main'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-          ref: refs/pull/${{ github.event.pull_request.number }}/head
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          git remote add upstream https://github.com/${{ github.event.pull_request.base.repo.full_name }}.git
-          git fetch upstream
-          git merge upstream/${{ github.event.pull_request.base.ref }} --no-edit
+          fetch-depth: 1
+          ref: refs/heads/${{ github.base_ref }}
+          sparse-checkout: .github
 
       - name: Branch Access Check
         id: branch_access_check
-        if: steps.checkout_pr.outcome =='success'
+        if: steps.checkout_code.outcome == 'success'
         env:
           PR_TITLE: ${{ steps.get_title.outputs.PR_TITLE }}
         run: |

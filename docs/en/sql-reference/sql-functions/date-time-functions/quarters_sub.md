@@ -11,7 +11,7 @@ Subtracts a specified number of quarters from the date. One quarter equals three
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME quarters_sub(DATETIME expr1, INT expr2);
 ```
 

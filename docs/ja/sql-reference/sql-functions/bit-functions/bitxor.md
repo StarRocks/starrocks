@@ -9,7 +9,7 @@ description: "2つの数値式のビットごとのXORを返します。"
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITXOR(x,y);
 ```
 

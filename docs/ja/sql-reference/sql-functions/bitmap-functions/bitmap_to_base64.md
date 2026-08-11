@@ -9,7 +9,7 @@ description: "ビットマップを Base64 エンコードされた文字列に�
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR bitmap_to_base64(BITMAP bitmap)
 ```
 

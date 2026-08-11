@@ -13,7 +13,7 @@ It is based on Apache DataSketches and provides high precision for approximate d
 
 ## Syntax
 
-```Haskell
+```plaintext
 sketch ds_hll_combine(sketch)
 ```
 
@@ -59,7 +59,8 @@ INSERT INTO t2 SELECT id, dt,
   ds_hll_accumulate(province, 10), 
   ds_hll_accumulate(age, 20, "HLL_6"), 
   ds_hll_accumulate(dt, 10, "HLL_8") 
-FROM t1;
+FROM t1
+GROUP BY id, dt;
 
 -- Combine sketches grouped by date
 SELECT dt, 

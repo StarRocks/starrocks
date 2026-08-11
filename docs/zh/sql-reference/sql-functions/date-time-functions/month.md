@@ -11,7 +11,7 @@ description: "返回指定日期中的月份，取值范围 1 到 12。"
 
 ## 语法
 
-```Haskell
+```plaintext
 INT MONTH(DATE|DATETIME date)
 ```
 

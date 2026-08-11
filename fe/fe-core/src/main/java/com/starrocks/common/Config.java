@@ -918,9 +918,10 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_query_queue_v2 = true;
     /**
-     * Used to calculate the total number of slots the system has,
-     * which is equal to the configuration value * BE number * BE cores.
-     * It will be set to `4` if it is non-positive.
+     * Used to calculate the total number of slots the system has.
+     * If it is non-positive, Query Queue V2 uses 4 as the effective level.
+     * The effective level is interpreted as a level against the default level 4:
+     * total_slots = workers * cores_per_worker * (effective_level / 4).
      */
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
@@ -928,22 +929,29 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Schedule strategy of pending queries: SWRR/SJF")
     public static String query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.createDefault().name();
 
-    @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: MBE/PBE/MAX/MIN")
+    @ConfField(mutable = true, comment = "Slot estimator strategy of queue based queries: PBE/MBE/CBE")
     public static String query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
 
     @ConfField(mutable = true, comment = "The max number of history allocated slots for a query queue")
     public static int max_query_queue_history_slots_number = 0;
 
     /**
-     * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
-     * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
-     * It will be set to `1` if it is non-positive.
+     * Used by MBE to estimate query slots from memory cost.
+     * If it is non-positive, Query Queue V2 uses average worker memory per core.
+     */
+    @ConfField(mutable = true)
+    public static long query_queue_v2_mem_bytes_per_slot = 0;
+
+    /**
+     * Retained for compatibility with existing Query Queue V2 serialized/debug output.
+     * It is not used by PBE, MBE, or CBE slot estimation.
      */
     @ConfField(mutable = true)
     public static int query_queue_v2_num_rows_per_slot = 4096;
     /**
-     * Used to estimate the number of slots of a query based on the plan cpu costs.
-     * It is equal to the plan cpu costs divided by the configuration value and is limited to between [1, totalSlots].
+     * Used by CBE to estimate the number of slots of a query based on the plan cpu costs.
+     * It is equal to the plan cpu costs divided by the configuration value and is limited to between
+     * [1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))].
      * It will be set to `1` if it is non-positive.
      */
     @ConfField(mutable = true)
@@ -1185,6 +1193,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;
+
+    @ConfField(mutable = true, comment = "Allow batching consecutive multi-table transactions into one publish. " +
+            "Effective only when lake_enable_batch_publish_version is true. Enable this only after all FE nodes " +
+            "are upgraded to a version that supports it.")
+    public static boolean lake_enable_batch_publish_multi_table = false;
 
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
@@ -3052,6 +3065,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = false)
     public static int iceberg_commit_queue_max_size = 1000;
+
+    /**
+     * `remove_orphan_files` only accepts an `older_than` earlier than `current time - this value` (in
+     * seconds). A later `older_than` is rejected, because deleting files that recent can remove data a
+     * concurrent write has not committed yet and leave the table unreadable.
+     * <p>
+     * Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7 day default.
+     * <p>
+     * Default: 86400 (24 hours)
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_remove_orphan_files_min_retention_seconds = 24L * 60L * 60L;
 
     /**
      * paimon metadata cache preheat, default false

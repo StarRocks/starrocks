@@ -11,7 +11,7 @@ description: "ARRAY_GENERATE関数は指定された範囲内の異なる値の�
 
 ## 構文
 
-```Haskell
+```plaintext
 ARRAY array_generate([start,] end [, step])
 ```
 

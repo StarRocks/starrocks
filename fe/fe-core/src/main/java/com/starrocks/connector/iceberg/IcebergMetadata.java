@@ -455,12 +455,19 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());
         updateCommitInfo(deleteFiles, context);
+        boolean shouldInvalidateCache = true;
         try {
             deleteFiles.commit();
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            shouldInvalidateCache = e instanceof CommitStateUnknownException;
             LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(
                     String.format("Failed to truncate iceberg table: %s.%s", dbName, tableName), e);
+        } finally {
+            if (shouldInvalidateCache) {
+                invalidateCacheAfterCommit(dbName, tableName);
+                asyncRefreshOthersFeMetadataCache(dbName, tableName);
+            }
         }
     }
 
@@ -617,6 +624,21 @@ public class IcebergMetadata implements ConnectorMetadata {
         DeleteFiles deleteFiles = nativeTbl.newDelete();
         String deleteDesc;
         if (residual.hasResidual()) {
+            // This branch enumerates the files to delete (and skips the commit when nothing matches) from
+            // nativeTbl, which is served from a cross-query cache and can lag the real table until the cache is
+            // next refreshed (lazily on access, or by the periodic background refresh controlled by
+            // background_refresh_metadata_interval_millis). Refresh so files appended by an external writer since
+            // the handle was cached are not silently left behind; the row-filter branch below needs no refresh
+            // because its DeleteFiles.commit() re-applies the filter against a refreshed snapshot internally.
+            try {
+                nativeTbl.refresh();
+            } catch (Exception e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to refresh Iceberg table %s.%s before metadata delete: %s",
+                        dbName, tableName, e.getMessage());
+            }
             if (icebergTable.hasPartitionTransformedEvolution()) {
                 // Defensive: canDeleteUsingMetadata should have returned false; never silently mis-delete.
                 ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
@@ -956,7 +978,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
             // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
             if (DataOperations.REPLACE.equals(snapshot.operation())) {
-                lastSnapshotId = snapshot.snapshotId();
+                // A REPLACE still ends the range preceding it, so it stays a usable boundary for an older
+                // delta. Before anything is emitted it would instead strand the range end on a snapshot
+                // no delta covers, which the caller reads as a lineage break.
+                if (!tvrDeltaTraits.isEmpty()) {
+                    lastSnapshotId = snapshot.snapshotId();
+                }
                 continue;
             }
             long currentSnapshotId = snapshot.snapshotId();
@@ -968,6 +995,12 @@ public class IcebergMetadata implements ConnectorMetadata {
                 tvrDeltaTraits.add(TvrTableDeltaTrait.ofRetractable(delta, stats));
             }
             lastSnapshotId = currentSnapshotId;
+        }
+        if (tvrDeltaTraits.isEmpty()) {
+            // Nothing but skipped REPLACEs in range: emit one zero-stats delta spanning it so the caller
+            // advances past the compaction. An empty list means "no delta derivable" and fails the refresh.
+            return List.of(TvrTableDeltaTrait.ofMonotonic(
+                    TvrTableDelta.of(fromSnapshotExclusive.to, toSnapshotInclusive.to), TvrDeltaStats.EMPTY));
         }
         // reserve to ensure the last snapshot is in the last of the collection.
         Collections.reverse(tvrDeltaTraits);

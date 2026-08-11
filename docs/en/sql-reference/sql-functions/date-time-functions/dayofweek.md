@@ -13,7 +13,7 @@ The `date` parameter must be of the DATE or DATETIME type, or a valid expression
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT dayofweek(DATETIME date)
 ```
 

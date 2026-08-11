@@ -458,8 +458,6 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable eager build of PK index files during import and compaction.
-CONF_mBool(enable_pk_index_eager_build, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
@@ -830,6 +828,18 @@ CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
 // The increased frequency of priority for remaining tasks in BlockingPriorityQueue.
 CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
+
+// Whether ThreadPool swallows an exception thrown by a task and keeps the worker running.
+//
+// false (default): the task body has no enclosing catch clause, so an escaping exception
+// finds no handler and terminates the process at the throw point. Loud, and no task can
+// report success without having produced a result.
+//
+// true: the exception is logged and the worker moves on to the next task. This keeps the
+// process alive but does NOT make the task exception safe -- a task whose result write is
+// skipped while its completion signal still fires is reported to its waiter as success.
+// Only turn this on to mitigate a crash loop, and expect the failure to become silent.
+CONF_mBool(enable_threadpool_catch_task_exception, "false");
 
 // Sync tablet_meta when modifing meta.
 CONF_mBool(sync_tablet_meta, "false");
@@ -1408,6 +1418,20 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
+// tablet from cumulative selection (the size-tiered small-file merge, which favors small
+// freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
+// deleted rows first) to drop deleted rows and shrink their delete vectors:
+//   1. lake_pk_compaction_base_delete_ratio_threshold: the tablet's aggregate delete ratio
+//      (sum(num_dels)/sum(num_rows) across rowsets) reaches this fraction.
+//   2. lake_pk_compaction_base_delete_rows_threshold: the tablet's absolute delete-row count
+//      (sum(num_dels)) reaches this many rows. This matters because on hot update/delete tables
+//      the deletes bloat the delete vectors and waste space (delvec bytes ~= num_dels * 0.23)
+//      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
+// Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
+// deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
+CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
@@ -1425,10 +1449,10 @@ CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
 // a file has it, regardless of this flag; the flag only controls the write format. Defaults to
-// false: enable it only after the whole cluster has been upgraded to a version that understands
-// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
-// the legacy reader and cannot parse files written in the new format.
-CONF_mBool(lake_enable_protobuf_file_checksum, "false");
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
@@ -1919,6 +1943,15 @@ CONF_Int32(python_worker_expire_time_sec, "300");
 CONF_mBool(enable_pk_strict_memcheck, "true");
 // Reduce core file size by not dumping jemalloc retain pages
 CONF_mBool(enable_core_file_size_optimization, "true");
+// If the fatal-signal (crash) handler hangs, e.g. a jemalloc deadlock while releasing resources
+// before the core dump (https://github.com/StarRocks/starrocks/issues/59226), force the process to
+// exit after this many seconds so orchestrators can restart it. The crash flag is still set first,
+// so the FE keeps seeing SHUTDOWN heartbeats during the grace window; this only bounds how long a
+// crashing process can linger while alive (https://github.com/StarRocks/starrocks/issues/76441).
+// Disabled by default (0) so an upgrade keeps the existing crash/core-dump behavior unchanged; set a
+// positive value to opt in and force-exit after that many seconds. A value <= 0 keeps it disabled.
+// Read once at startup: the watchdog thread is only launched when the value is positive.
+CONF_Int64(process_force_exit_after_crash_handler_hang_second, "0");
 // Current supported modules:
 // 1. data_cache (data cache for shared-nothing table, data cache for external table, data cache for shared-data table)
 // 2. connector_scan_executor
