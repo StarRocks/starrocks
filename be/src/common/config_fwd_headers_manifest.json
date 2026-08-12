@@ -719,6 +719,7 @@
         "meta_threshold_to_manual_compact",
         "lake_compaction_stream_buffer_size_bytes",
         "lake_compaction_check_valid_interval_minutes",
+        "lake_compact_slow_log_ms",
         "lake_compaction_max_bytes_per_subtask",
         "lake_compaction_max_rowset_size",
         "lake_enable_compaction_async_write",
