@@ -2399,6 +2399,9 @@ Status SegmentIterator::_apply_tablet_range() {
     // itself, so there the narrowing is both well-defined and load-bearing.
     if (_segment->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
         _segment->tablet_schema().has_separate_sort_key()) {
+        LOG_EVERY_N(WARNING, 100) << "skip tablet range narrowing: primary-key tablet orders its segments by a "
+                                     "separate sort key, so the range has no rowid interval. segment="
+                                  << _segment->file_name();
         return Status::OK();
     }
 
