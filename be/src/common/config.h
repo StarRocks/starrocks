@@ -2236,6 +2236,13 @@ CONF_mBool(enable_compaction_parallel_merge_init, "false");
 // Size of the thread pool that runs the parallel merge prefill. Only takes effect the first
 // time enable_compaction_parallel_merge_init drives a merge; the pool is built once.
 CONF_Int32(compaction_parallel_merge_init_threads, "16");
+// Number of chunk slots kept per merge input. With one slot the merge holds the only chunk and
+// refilling it is a blocking read, so the merge stalls for a full round trip every time an input
+// runs dry. With more slots a background reader keeps the free ones filled while the merge
+// consumes the held one, and that round trip overlaps the merge instead of stopping it. Costs one
+// extra chunk per input per added slot. Only takes effect when the merge prefill pool is
+// available; 1 keeps the original behavior.
+CONF_mInt32(compaction_merge_child_buffers, "1");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");

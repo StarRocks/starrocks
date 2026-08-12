@@ -735,7 +735,8 @@
         "enable_lake_compaction_range_split",
         "lake_compaction_chunk_size",
         "enable_compaction_parallel_merge_init",
-        "compaction_parallel_merge_init_threads"
+        "compaction_parallel_merge_init_threads",
+        "compaction_merge_child_buffers"
       ]
     },
     {
