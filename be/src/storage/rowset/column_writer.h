@@ -110,6 +110,10 @@ struct ColumnWriterOptions {
     // per-column per-segment sampled dictionary and compress every data page
     // referencing it. Only meaningful for ZSTD PLAIN string/JSON columns.
     bool use_zstd_compression = false;
+    // How much smaller the trial pages have to get before the per-column dictionary
+    // is kept. Tests lower it to force a decision either way; production leaves it
+    // alone.
+    double zstd_compression_dict_min_gain = 0.02;
     // Initialized from config::zstd_compression_dict_sample_bytes in the constructor
     // (config.h is deliberately not included by this header).
     uint32_t zstd_compression_dict_sample_bytes;
@@ -141,6 +145,7 @@ struct ColumnWriterOptions {
         oss << "need_flat=" << need_flat << ", ";
         oss << "field_name=\"" << field_name << "\", ";
         oss << "use_zstd_compression=" << use_zstd_compression << ", ";
+        oss << "zstd_compression_dict_min_gain=" << zstd_compression_dict_min_gain << ", ";
         oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
         oss << "}";
         return oss.str();
@@ -353,6 +358,19 @@ private:
     // help (incompressible bytes, rows so large a page holds one of them, columns
     // whose redundancy a plain page already captures).
     bool _zstd_compression_dict_proven = false;
+    // Trial state. The first kZstdDictTrialPages pages after the sample are
+    // compressed BOTH ways and written plainly, so the decision stays reversible
+    // without buffering anything. Several pages rather than one, because a column
+    // whose rows differ wildly in size can easily open with pages the dictionary
+    // cannot help and still benefit greatly overall.
+    static constexpr int kZstdDictTrialPages = 8;
+    int _zstd_compression_dict_trial_pages = 0;
+    uint64_t _zstd_compression_dict_trial_with = 0;
+    uint64_t _zstd_compression_dict_trial_without = 0;
+    // A column that never reaches kZstdDictTrialPages pages ends up with no
+    // dictionary at all, which is the right answer for it: the dictionary page is
+    // about a page in size, so on a column of a few pages it cannot pay for itself
+    // however well it compresses them.
     // Set when the trial rejected the dictionary. The decision is final for the
     // whole column: without it the sampling gate below, which only asks whether a
     // dictionary exists right now, would simply build another one from a later page

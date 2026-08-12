@@ -1180,7 +1180,10 @@ TEST_F(ColumnReaderWriterTest, idg_probe_skipped_when_col_uid_negative) {
 TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
     const std::string fname = strings::Substitute("$0/test_zstd_compression_dict_roundtrip.data", TEST_DIR);
 
-    const int N = 3000;
+    // Enough rows to get past the trial. The sample page plus the trial pages are
+    // written plain, so a column shorter than that ends up with no dictionary at
+    // all whatever the threshold says.
+    const int N = 20000;
     // JSON-ish rows that share a lot of scaffolding (like starsight remain bytes)
     // so the compression dict is effective and values span multiple data pages.
     // Every value must be DISTINCT: a varchar column goes through
@@ -1222,6 +1225,13 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
         writer_opts.meta->set_compression_level(-1);
         writer_opts.meta->set_is_nullable(true);
         writer_opts.use_zstd_compression = true; // enable compression dict
+        // This test is about the write/read roundtrip, not about whether a
+        // dictionary is worth keeping: on rows this short and this alike a 64KB
+        // page already holds hundreds of them, so the trial would rightly decline
+        // one. A negative threshold makes it keep the dictionary regardless, which
+        // is what puts the dictionary path under test at all. The decision itself is
+        // covered by zstd_compression_dict_{dropped,kept}_when_it_*pay* above.
+        writer_opts.zstd_compression_dict_min_gain = -1.0;
 
         TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -1452,6 +1462,96 @@ struct BenchArm {
 };
 
 } // namespace
+
+// Matrix probe: for every (corpus, page size) it writes the column three ways --
+// no dictionary, dictionary forced on, dictionary decided by the trial -- and
+// reports whether the automatic choice matched the better of the two.
+TEST_F(ColumnReaderWriterTest, DISABLED_zstd_dict_auto_matrix) {
+    const char* corpus_env = getenv("ZSTD_BENCH_CORPUS");
+    if (corpus_env == nullptr) {
+        GTEST_SKIP() << "set ZSTD_BENCH_CORPUS";
+    }
+    auto rows = load_bench_corpus(corpus_env, 512UL * 1024 * 1024);
+    ASSERT_FALSE(rows.empty());
+    size_t raw_bytes = 0;
+    std::vector<Slice> slices;
+    slices.reserve(rows.size());
+    for (const auto& r : rows) {
+        raw_bytes += r.size();
+        slices.emplace_back(r);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(rows.size());
+    col->append_strings(slices);
+
+    auto write_once = [&](bool use_dict, uint32_t page, double min_gain, const char* tag, uint64_t* out_size,
+                          bool* out_has_dict) {
+        const std::string fname = strings::Substitute("$0/zstd_matrix_$1.data", TEST_DIR, tag);
+        ColumnMetaPB meta;
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = &meta;
+            meta.set_column_id(0);
+            meta.set_unique_id(0);
+            meta.set_type(TYPE_VARCHAR);
+            meta.set_length(1024 * 1024);
+            meta.set_encoding(PLAIN_ENCODING);
+            meta.set_compression(starrocks::ZSTD);
+            meta.set_compression_level(-1);
+            meta.set_is_nullable(true);
+            writer_opts.use_zstd_compression = use_dict;
+            writer_opts.zstd_compression_dict_min_gain = min_gain;
+            if (page > 0) {
+                writer_opts.data_page_size = page;
+            }
+            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            ASSERT_OK(writer->append(*col));
+            ASSERT_OK(writer->finish());
+            ASSERT_OK(writer->write_data());
+            ASSERT_OK(writer->write_ordinal_index());
+            ASSERT_OK(wfile->close());
+        }
+        ASSIGN_OR_ABORT(const uint64_t size, _fs->get_file_size(fname));
+        *out_size = size;
+        *out_has_dict = meta.has_zstd_compression_dict_page();
+        (void)_fs->delete_file(fname);
+    };
+
+    fprintf(stderr, "\n%s: %zu rows, %.1f MB, avg %.0f B/row\n", corpus_env, rows.size(), raw_bytes / 1048576.0,
+            static_cast<double>(raw_bytes) / rows.size());
+    fprintf(stderr, "  %-8s %12s %12s %12s %8s %8s %8s\n", "页", "无字典MB", "强制字典MB", "自动MB", "自动选择",
+            "距最优", "判定");
+
+    const uint32_t pages[] = {65536, 262144, 1024 * 1024};
+    for (uint32_t page : pages) {
+        uint64_t nodict = 0;
+        uint64_t forced = 0;
+        uint64_t automatic = 0;
+        bool dummy = false;
+        bool forced_has = false;
+        bool auto_has = false;
+        write_once(false, page, 0.02, "nodict", &nodict, &dummy);
+        // A negative threshold makes the trial keep the dictionary whatever it
+        // measures, which is how we learn what keeping it would have cost.
+        write_once(true, page, -1.0, "forced", &forced, &forced_has);
+        write_once(true, page, 0.02, "auto", &automatic, &auto_has);
+
+        // What matters is the outcome, not which way the flag went: the automatic
+        // choice has to land on the better of the two, within the margin it is
+        // allowed to decline a dictionary for.
+        const uint64_t best = std::min(nodict, forced);
+        const bool ok = automatic <= static_cast<uint64_t>(static_cast<double>(best) * 1.02);
+        fprintf(stderr, "  %-8u %12.2f %12.2f %12.2f %8s %7.2f%% %8s\n", page / 1024, nodict / 1048576.0,
+                forced / 1048576.0, automatic / 1048576.0, auto_has ? "字典" : "无字典",
+                100.0 * (static_cast<double>(automatic) / static_cast<double>(best) - 1.0), ok ? "OK" : "MISMATCH");
+        EXPECT_TRUE(ok) << "page=" << page << " nodict=" << nodict << " forced=" << forced << " auto=" << automatic
+                        << " auto_has_dict=" << auto_has;
+    }
+}
 
 TEST_F(ColumnReaderWriterTest, DISABLED_zstd_options_benchmark) {
     const char* corpus_env = getenv("ZSTD_BENCH_CORPUS");

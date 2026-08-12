@@ -739,33 +739,42 @@ Status ScalarColumnWriter::finish_current_page() {
     // trying to compress page body
     faststring compressed_body;
     if (cdict != nullptr && !_zstd_compression_dict_proven) {
-        // First page compressed since the dictionary was built. Compress it both
-        // ways and keep the dictionary only if it earns its place. Whether a
-        // dictionary pays is a property of the data, so it is measured on one page
-        // rather than guessed from row length or page size, and this decides it for
-        // the whole column. Runs once per column per segment.
-        _zstd_compression_dict_proven = true;
-        faststring plain_body;
+        // Trial. Compress both ways, keep the PLAIN result so the decision stays
+        // reversible, and accumulate over several pages before deciding. Whether a
+        // dictionary pays is a property of the data, so it is measured rather than
+        // guessed from row length or page size.
+        faststring dict_body;
         RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
-                                                   &plain_body, nullptr));
+                                                   &compressed_body, nullptr));
         RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
-                                                   &compressed_body, cdict));
+                                                   &dict_body, cdict));
         // compress_page_body returns an empty body when compressing did not save
         // enough to be worth it; that case means "the uncompressed size".
-        const size_t raw_size = Slice::compute_total_size(body);
-        const size_t with_dict = compressed_body.size() == 0 ? raw_size : compressed_body.size();
-        const size_t without_dict = plain_body.size() == 0 ? raw_size : plain_body.size();
-        // The margin keeps a dictionary that merely breaks even from costing a page
-        // per column per segment plus the read-side work of loading it.
-        constexpr double kMinDictGain = 0.02;
-        if (static_cast<double>(with_dict) > static_cast<double>(without_dict) * (1.0 - kMinDictGain)) {
-            _compression_cdict.reset();
-            _zstd_compression_dict_sample.clear();
-            _zstd_compression_dict_ready = false;
-            _zstd_compression_dict_abandoned = true;
-            cdict = nullptr;
-            compressed_body.swap(plain_body);
-            StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+        const uint64_t raw_size = Slice::compute_total_size(body);
+        _zstd_compression_dict_trial_with += dict_body.size() == 0 ? raw_size : dict_body.size();
+        _zstd_compression_dict_trial_without += compressed_body.size() == 0 ? raw_size : compressed_body.size();
+        cdict = nullptr; // this page goes out plain whichever way the trial lands
+
+        if (++_zstd_compression_dict_trial_pages >= kZstdDictTrialPages) {
+            _zstd_compression_dict_proven = true;
+            const uint64_t saved = _zstd_compression_dict_trial_without > _zstd_compression_dict_trial_with
+                                           ? _zstd_compression_dict_trial_without - _zstd_compression_dict_trial_with
+                                           : 0;
+            // One condition: the saving has to be worth more than the noise. The
+            // other half of the rule is structural rather than arithmetic -- a
+            // column too short to finish the trial never gets a dictionary at all,
+            // which is the right answer for it, because the dictionary page is
+            // roughly a page in size and cannot pay for itself over a handful.
+            const bool worth_the_margin =
+                    static_cast<double>(saved) >=
+                    static_cast<double>(_zstd_compression_dict_trial_without) * _opts.zstd_compression_dict_min_gain;
+            if (!worth_the_margin) {
+                _compression_cdict.reset();
+                _zstd_compression_dict_sample.clear();
+                _zstd_compression_dict_ready = false;
+                _zstd_compression_dict_abandoned = true;
+                StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+            }
         }
     } else {
         RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
