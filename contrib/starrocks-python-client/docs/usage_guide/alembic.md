@@ -140,6 +140,41 @@ def run_migrations_online() -> None:
         ...
 ```
 
+### Advanced: Choosing the canonicalization schema for view/MV comparison
+
+On StarRocks versions before 4.0.6 a view/MV definition is stored in the engine's own
+canonical form, which could differ textually from the SQL in the model (dropped
+`col AS col` aliases, added parentheses, etc.) but the same semantically. To avoid
+reporting a phantom change on every autogenerate, the dialect canonicalizes your model's
+definition by round-tripping it through a **temporary view** and comparing the engine's
+stored form of both sides.
+
+By default that temporary view is created in the schema of the object being compared, so
+the migration user needs privileges to create views in every schema that contains a view or
+MV. If your user is locked down, set `starrocks_temp_view_schema` to a single dedicated
+schema and grant the required privileges only there.
+
+```python
+# alembic/env.py
+context.configure(
+    # ... your existing parameters (render_item, include_object, etc.) ...
+    starrocks_temp_view_schema="__alembic_canon__",  # host the transient comparison view here
+)
+```
+
+Grant the migration user, on that one schema, the privileges needed for the
+create → read-back → drop round-trip (`CREATE VIEW` alone is not enough):
+
+```sql
+GRANT CREATE VIEW ON DATABASE __alembic_canon__ TO '<user>';
+GRANT SELECT, DROP ON ALL VIEWS IN DATABASE __alembic_canon__ TO '<user>';
+```
+
+When `starrocks_temp_view_schema` is unset the previous behaviour is unchanged (the temp
+view is created in the compared object's own schema). If the temporary view cannot be
+created (missing privilege, or a referenced object that does not exist yet), the comparison
+logs a DEBUG message and falls back to in-process AST/regex normalization.
+
 ### Advanced: Custom Object Filtering
 
 If you need to add custom filtering logic to control which database objects Alembic should process during autogeneration (e.g., excluding temporary tables, test tables, or certain schemas), you can use the `combine_include_object` helper function.
