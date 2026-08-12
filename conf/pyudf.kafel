@@ -1,0 +1,31 @@
+// Seccomp-bpf policy (kafel syntax) for the Python UDF worker sandbox.
+//
+// Applied by nsjail before it exec()s the python worker, so it also covers
+// CPython / pyarrow / gRPC startup. Rules:
+//   - DENY-LIST (DEFAULT ALLOW): everything the runtime needs
+//     (clone/futex/epoll/mmap/read/write/socket(AF_UNIX)/...) stays allowed;
+//     only clearly-hostile syscalls a UDF has no business calling are killed.
+//   - Do NOT KILL syscalls the runtime touches benignly at startup. CPython
+//     opens a socket() at startup, so socket() is NOT filtered here; outbound
+//     network is cut by the network namespace instead (nsjail rootless/privileged
+//     modes). gRPC also opens AF_INET sockets at startup, and connect() addresses
+//     cannot be filtered by seccomp anyway.
+//   - Do NOT block execve/clone here: nsjail needs execve to launch the worker
+//     and the runtime uses clone for threads.
+//
+// NOTE: kafel uses C-style comments (//), not '#' (which is a preprocessor
+// directive). Validated to compile against nsjail's bundled kafel and to let a
+// real flight_server.py (pyarrow + gRPC over a unix socket) start and serve.
+// Operators may tighten this file; re-validate against the worker after edits.
+
+KILL_PROCESS {
+  ptrace, process_vm_readv, process_vm_writev,
+  mount, pivot_root, chroot,
+  setns, unshare,
+  init_module, finit_module, delete_module,
+  kexec_load, reboot,
+  bpf, perf_event_open,
+  add_key, request_key, keyctl,
+  swapon, swapoff, userfaultfd
+}
+DEFAULT ALLOW
