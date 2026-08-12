@@ -21,7 +21,6 @@
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
@@ -41,6 +40,11 @@
 #include "types/datum.h"
 
 namespace starrocks::lake {
+
+PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr,
+                                                 int64_t tablet_id)
+        : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id),
+          _map(std::less<>(), MapAllocator(&_map_node_bytes)) {}
 
 Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                                                  const std::shared_ptr<FileSystem>& fs) {
@@ -63,7 +67,7 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
     _deleted_rowids.clear();
     _delete_keys.reset();
     _intermediate_ssts.clear();
-    _map_entry_bytes = 0;
+    _keys_heap_size = 0;
     _next_rowid = 0;
     return Status::OK();
 }
@@ -95,20 +99,9 @@ void PkTabletUnsortSSTWriter::reconcile_entry(std::string_view key, uint64_t ord
     // not allocate; only a first-seen key materializes the owning std::string on the emplace branch.
     auto it = _map.find(key);
     if (it == _map.end()) {
-        // Per-entry logical estimate: encoded key bytes + Entry + btree node overhead.
-        //
-        // Deliberately not the counting allocator (#77251). In a release build that allocator charges
-        // tls_delta_memory rather than the requested size, and on this write path it over-reports the
-        // map by ~300x -- ~29 KB per 24-byte primary key. is_map_full() then fires on roughly every
-        // chunk, so a 2 GB UNSHARE input spilled ~3500 intermediate SSTs instead of the ~20 the 100 MB
-        // bound implies, and flush was left with a K-way merge whose K was in the thousands.
-        // Measured on a 1 FE + 3 CN cluster, same input, only this accounting changed:
-        // spills 2953-3590 -> 8-10, merge 285-357s -> 10-15s, split 667s -> 215s.
-        // The estimate is coarse but monotonic in what the map actually holds, which is what a spill
-        // bound needs. BE_TEST builds never saw this: there the allocator uses n * sizeof(T).
-        static constexpr size_t kBtreeEntryOverhead = 24;
-        _map_entry_bytes += key.size() + sizeof(Entry) + kBtreeEntryOverhead;
-        _map.emplace(std::string(key), Entry{order, rowid});
+        auto [inserted_it, inserted] = _map.emplace(std::string(key), Entry{order, rowid});
+        DCHECK(inserted);
+        _keys_heap_size += is_string_heap_allocated(inserted_it->first) ? inserted_it->first.capacity() : 0;
     } else if (order > it->second.order) {
         if (it->second.rowid != kDeleteRowid) {
             _deleted_rowids.push_back(it->second.rowid);
@@ -186,15 +179,12 @@ Status PkTabletUnsortSSTWriter::project_pk_columns(const Chunk& data, const std:
 }
 
 bool PkTabletUnsortSSTWriter::is_map_full() const {
-    // Only `_map` is spillable, so only `_map` may drive the trigger. `_deleted_rowids` must survive
-    // until flush to build the segment delvec, and a spill deliberately does not shrink it -- so
-    // counting it here made the trigger latch: once its capacity alone reached l0_max_mem_usage no
-    // spill could bring the total back under, and every subsequent append spilled. That shattered a
-    // run into thousands of tiny intermediate SSTs (measured: ~3000 for a 2 GB input, one per chunk
-    // instead of one per 100 MB) and left flush with a K-way merge whose K was in the thousands,
-    // which then dominated the whole compaction. Bounding the loser vector needs its own mechanism;
-    // spilling the map is not one.
-    const size_t mem_usage = map_memory_usage();
+    // Count the loser rowids too, not just the map: a dup-heavy batch can hold a lot of memory in
+    // _deleted_rowids (which a map spill does not shrink) while _map itself stays small, so spilling the
+    // map keeps the writer's combined footprint near the bound instead of letting _map independently
+    // pile another l0_max_mem_usage on top of the loser vector. (_delete_keys is filled only at flush,
+    // never during append, so it is not part of the footprint at this spill check.)
+    const size_t mem_usage = memory_usage();
     if (mem_usage >= static_cast<size_t>(config::l0_max_mem_usage)) {
         return true;
     }
@@ -209,7 +199,8 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
-    return _map_entry_bytes;
+    DCHECK_GE(_map_node_bytes, 0);
+    return sizeof(_map) + static_cast<size_t>(_map_node_bytes) + _keys_heap_size;
 }
 
 size_t PkTabletUnsortSSTWriter::memory_usage() const {
@@ -217,7 +208,6 @@ size_t PkTabletUnsortSSTWriter::memory_usage() const {
 }
 
 Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
-    SCOPED_RAW_TIMER(&_spill_ns);
     if (_map.empty()) {
         return Status::OK();
     }
@@ -256,13 +246,11 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
     RETURN_IF_ERROR(wf->close());
     _intermediate_ssts.push_back({location, size, std::move(encryption_meta)});
     _map.clear();
-    _map_entry_bytes = 0;
+    _keys_heap_size = 0;
     return Status::OK();
 }
 
 Status PkTabletUnsortSSTWriter::merge_intermediates_into(sstable::TableBuilder* builder) {
-    SCOPED_RAW_TIMER(&_merge_ns);
-    _intermediate_sst_total = _intermediate_ssts.size();
     // Open every intermediate SST for reading. `rfs`/`tables` own the files/tables for the whole
     // merge. `iter_holders` owns the child iterators ONLY until the merging iterator is built: the
     // MergingIterator returned by NewMergingIterator takes ownership of the children and deletes them
@@ -404,7 +392,7 @@ StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletUnsortSSTWr
     _wf.reset();
     _map.clear();
     _intermediate_ssts.clear();
-    _map_entry_bytes = 0;
+    _keys_heap_size = 0;
     _next_rowid = 0;
     return std::make_pair(file_info, range_pb);
 }

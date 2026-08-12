@@ -25,7 +25,6 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/sstable/table_builder.h"
-#include "storage_primitive/storage_stats.h"
 
 namespace starrocks::lake {
 
@@ -34,9 +33,6 @@ class PersistentIndexSstableStreamBuilder;
 class DefaultSSTWriter {
 public:
     virtual ~DefaultSSTWriter() = default;
-    // Report per-writer timings into the tablet writer's stats. Default no-op: only writers that
-    // spill and merge (PkTabletUnsortSSTWriter) have anything to attribute.
-    virtual void collect_sst_stats(OlapWriterStatistics* stats) const {}
     // `rssid_rowids`, when non-null, carries one per-row ordering key aligned with `data`'s rows.
     // Its high 32 bits encode the source memtable flush order (slot_idx); writers that must resolve
     // duplicate primary keys by "last-flushed wins" (see PkTabletUnsortSSTWriter) use it. Writers

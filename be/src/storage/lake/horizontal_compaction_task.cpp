@@ -42,32 +42,22 @@ namespace starrocks::lake {
 
 Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
-    _context->stats->compaction_type = "horizontal";
 
     int64_t total_num_rows = 0;
     int64_t input_bytes = 0;
-    int32_t chunk_size = 0;
-    Schema schema;
-    {
-        SCOPED_RAW_TIMER(&_context->stats->input_prepare_ns);
-        for (auto& rowset : _input_rowsets) {
-            total_num_rows += rowset->num_rows();
-            _context->stats->read_segment_count += rowset->num_segments();
-            input_bytes += rowset->data_size_after_deletion();
-        }
-        _context->stats->input_rowset_count = _input_rowsets.size();
-        _context->stats->input_row_count = total_num_rows;
-        ASSIGN_OR_RETURN(chunk_size, calculate_chunk_size());
-        schema = ChunkHelper::convert_schema(_tablet_schema);
+    for (auto& rowset : _input_rowsets) {
+        total_num_rows += rowset->num_rows();
+        _context->stats->read_segment_count += rowset->num_segments();
+        input_bytes += rowset->data_size_after_deletion();
     }
+
+    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
 
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
     TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, _tablet_schema);
-    {
-        SCOPED_RAW_TIMER(&_context->stats->reader_prepare_ns);
-        RETURN_IF_ERROR(reader.prepare());
-    }
+    RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
@@ -101,32 +91,13 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         }
     }
 
-    {
-        SCOPED_RAW_TIMER(&_context->stats->reader_open_ns);
-        RETURN_IF_ERROR(reader.open(reader_params));
-    }
-    DeferOp reader_defer([&]() {
-        SCOPED_RAW_TIMER(&_context->stats->reader_close_ns);
-        reader.close();
-        _context->stats->collect(reader.stats());
-    });
+    RETURN_IF_ERROR(reader.open(reader_params));
 
-    std::unique_ptr<TabletWriter> writer;
-    {
-        SCOPED_RAW_TIMER(&_context->stats->writer_create_ns);
-        ASSIGN_OR_RETURN(writer,
-                         _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
-                                                        _tablet_schema /** output rowset schema**/))
-    }
-    {
-        SCOPED_RAW_TIMER(&_context->stats->writer_open_ns);
-        RETURN_IF_ERROR(writer->open());
-    }
-    DeferOp defer([&]() {
-        SCOPED_RAW_TIMER(&_context->stats->writer_close_ns);
-        writer->close();
-        _context->stats->collect(writer->stats());
-    });
+    ASSIGN_OR_RETURN(auto writer,
+                     _tablet.new_writer_with_schema(kHorizontal, _txn_id, 0, flush_pool, true /** compaction **/,
+                                                    _tablet_schema /** output rowset schema**/))
+    RETURN_IF_ERROR(writer->open());
+    DeferOp defer([&]() { writer->close(); });
 
     if (should_enable_pk_index_eager_build(input_bytes)) {
         writer->try_enable_pk_index_eager_build();
@@ -150,13 +121,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 #endif
         {
             auto st = Status::OK();
-            {
-                SCOPED_RAW_TIMER(&_context->stats->reader_get_next_ns);
-                if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
-                    st = reader.get_next(chunk.get(), &rssid_rowids);
-                } else {
-                    st = reader.get_next(chunk.get());
-                }
+            if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && enable_light_pk_compaction_publish) {
+                st = reader.get_next(chunk.get(), &rssid_rowids);
+            } else {
+                st = reader.get_next(chunk.get());
             }
             if (st.is_end_of_file()) {
                 break;
@@ -164,42 +132,34 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                 return st;
             }
         }
-        _context->stats->read_chunk_count++;
-        {
-            SCOPED_RAW_TIMER(&_context->stats->chunk_transform_ns);
-            ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
-            if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
-                ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
-                                                      _tablet.metadata()->range(), _tablet_schema, *chunk));
-                if (!rssid_rowids.empty()) {
-                    DCHECK_EQ(rssid_rowids.size(), filter.size());
-                    size_t output_index = 0;
-                    for (size_t i = 0; i < rssid_rowids.size(); ++i) {
-                        if (filter[i]) {
-                            rssid_rowids[output_index++] = rssid_rowids[i];
-                        }
+        if (_context->is_unshare && _tablet_schema->has_separate_sort_key()) {
+            ASSIGN_OR_RETURN(auto filter, TabletRangeHelper::create_primary_key_range_filter(
+                                                  _tablet.metadata()->range(), _tablet_schema, *chunk));
+            if (!rssid_rowids.empty()) {
+                DCHECK_EQ(rssid_rowids.size(), filter.size());
+                size_t output_index = 0;
+                for (size_t i = 0; i < rssid_rowids.size(); ++i) {
+                    if (filter[i]) {
+                        rssid_rowids[output_index++] = rssid_rowids[i];
                     }
-                    rssid_rowids.resize(output_index);
                 }
-                chunk->filter(filter);
+                rssid_rowids.resize(output_index);
             }
+            chunk->filter(filter);
         }
         if (chunk->num_rows() == 0) {
             chunk->reset();
             rssid_rowids.clear();
             continue;
         }
-        {
-            SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
-            if (rssid_rowids.empty()) {
-                RETURN_IF_ERROR(writer->write(*chunk));
-            } else {
-                // pk table compaction
-                RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
-            }
+        if (rssid_rowids.empty()) {
+            RETURN_IF_ERROR(writer->write(*chunk));
+        } else {
+            // pk table compaction
+            RETURN_IF_ERROR(writer->write(*chunk, rssid_rowids));
         }
-        _context->stats->write_chunk_count++;
         chunk->reset();
         rssid_rowids.clear();
 
@@ -209,47 +169,44 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         _context->stats->collect(reader.stats());
     }
 
-    {
-        SCOPED_RAW_TIMER(&_context->stats->writer_finish_ns);
-        RETURN_IF_ERROR(writer->finish());
-    }
-    _context->stats->output_row_count = writer->num_rows();
+    RETURN_IF_ERROR(writer->finish());
 
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
 
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
+    reader.close();
+
+    _context->stats->collect(reader.stats());
     _context->stats->collect(writer->stats());
 
-    std::shared_ptr<TxnLog> txn_log;
-    {
-        SCOPED_RAW_TIMER(&_context->stats->txn_log_build_ns);
-        txn_log = std::make_shared<TxnLog>();
-        auto op_compaction = txn_log->mutable_op_compaction();
-        txn_log->set_tablet_id(_tablet.id());
-        txn_log->set_txn_id(_txn_id);
-        RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
-        op_compaction->set_compact_version(_tablet.metadata()->version());
-    }
+    auto txn_log = std::make_shared<TxnLog>();
+    auto op_compaction = txn_log->mutable_op_compaction();
+    txn_log->set_tablet_id(_tablet.id());
+    txn_log->set_txn_id(_txn_id);
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
+    op_compaction->set_compact_version(_tablet.metadata()->version());
     RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
     TEST_ERROR_POINT("HorizontalCompactionTask::execute::1");
     if (_context->skip_write_txnlog) {
         // return txn_log to caller later
         _context->txn_log = txn_log;
     } else {
-        SCOPED_RAW_TIMER(&_context->stats->txn_log_write_ns);
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
-        SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
         Tablet t(_tablet.tablet_manager(), _tablet.id());
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
+    LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
+              << ", statistics: " << _context->stats->to_json_stats() << ", table_id: " << _context->table_id
+              << ", partition_id: " << _context->partition_id;
+
     if (config::enable_tablet_write_log) {
-        SCOPED_RAW_TIMER(&_context->stats->tablet_write_log_ns);
         int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
         int64_t finish_time = UnixMillis();
         collect_sst_stats(writer.get(), txn_log.get());

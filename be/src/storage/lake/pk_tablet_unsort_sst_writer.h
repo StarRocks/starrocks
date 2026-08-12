@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "base/phmap/btree.h"
+#include "runtime/memory/counting_allocator.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/sstable/table_builder.h"
 
@@ -47,7 +48,7 @@ namespace starrocks::lake {
 // and is not released by a map spill. Writer memory is charged to the load-spill merge mem tracker.
 class PkTabletUnsortSSTWriter : public PkTabletSSTWriter {
 public:
-    using PkTabletSSTWriter::PkTabletSSTWriter;
+    PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id);
     ~PkTabletUnsortSSTWriter() override = default;
     Status append_sst_record(const Chunk& data, const std::vector<uint64_t>* rssid_rowids = nullptr,
                              const std::vector<uint32_t>* column_indexes = nullptr) override;
@@ -61,11 +62,6 @@ public:
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                             const std::shared_ptr<FileSystem>& fs) override;
     StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() override;
-    void collect_sst_stats(OlapWriterStatistics* stats) const override {
-        stats->unsort_sst_spill_ns += _spill_ns;
-        stats->unsort_sst_spill_count += static_cast<int64_t>(_intermediate_sst_total);
-        stats->unsort_sst_merge_ns += _merge_ns;
-    }
     bool has_file_info() const override { return _wf != nullptr; }
     std::vector<uint32_t> take_deleted_rowids() override { return std::move(_deleted_rowids); }
     MutableColumnPtr take_delete_keys() override { return std::move(_delete_keys); }
@@ -87,7 +83,9 @@ private:
         uint64_t order;
         uint32_t rowid;
     };
-    using Map = phmap::btree_map<std::string, Entry, std::less<>>;
+    using MapValue = std::pair<const std::string, Entry>;
+    using MapAllocator = STLCountingAllocator<MapValue>;
+    using Map = phmap::btree_map<std::string, Entry, std::less<>, MapAllocator>;
     // An intermediate SST spilled from `_map` when it got full. Its entries store both rowid and order
     // (order in the value's version field) so the final merge can pick the dedup winner across SSTs.
     struct IntermediateSst {
@@ -122,12 +120,9 @@ private:
     // per key and appending the losing rowids to `_deleted_rowids`.
     Status merge_intermediates_into(sstable::TableBuilder* builder);
 
-    // finish() attribution: how long spilling and the K-way merge took, and how many intermediate
-    // SSTs the merge had to consume (the merge's K).
-    int64_t _spill_ns = 0;
-    int64_t _merge_ns = 0;
-    size_t _intermediate_sst_total = 0;
-
+    // Bytes allocated for B-tree nodes. MapAllocator maintains this counter incrementally, so
+    // checking the spill threshold does not have to traverse the whole tree.
+    int64_t _map_node_bytes = 0;
     Map _map;
     std::vector<uint32_t> _deleted_rowids;
     // Encoded primary keys (del-file binary format) whose latest op is a DELETE, collected at flush and
@@ -136,7 +131,7 @@ private:
     MutableColumnPtr _delete_keys;
     // Heap allocations owned by non-SSO strings in `_map`. The std::string objects themselves are
     // stored in the B-tree nodes and are already included in `_map.bytes_used()`.
-    size_t _map_entry_bytes = 0;
+    size_t _keys_heap_size = 0;
     std::vector<IntermediateSst> _intermediate_ssts;
     // Running rowid within the current segment (== rows appended so far); reset per segment.
     uint32_t _next_rowid = 0;
