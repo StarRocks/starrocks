@@ -177,10 +177,12 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        uint32_t read_dict_data[read_count + 1];
         if (read_count == 0) {
             return Status::OK();
         }
+        // Reusable member rather than a VLA: read_count is page-sized and blows the stack.
+        _temp_dict_codes.resize(read_count + 1);
+        uint32_t* read_dict_data = _temp_dict_codes.data();
         auto decoded_num = _rle_batch_reader.GetBatch(read_dict_data, read_count);
         if (decoded_num < read_count) {
             return Status::InternalError("didn't get enough data from dict-decoder");
@@ -197,6 +199,8 @@ protected:
     virtual Status _do_next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                              Column* dst, const FilterData* filter) = 0;
     RleBatchDecoder<uint32_t> _rle_batch_reader;
+    // Scratch buffer for one batch of dictionary codes, reused across batches.
+    std::vector<uint32_t> _temp_dict_codes;
 
 private:
     size_t _dict_size_threshold = 0;
@@ -305,7 +309,9 @@ public:
                 cnt += !is_nulls[i];
             }
         } else {
-            T read_data[read_count + 1];
+            // Reusable member rather than a VLA: read_count is page-sized and blows the stack.
+            _temp_read_data.resize(read_count + 1);
+            T* read_data = _temp_read_data.data();
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), read_data, read_count);
             if (UNLIKELY(ret <= 0)) {
                 return Status::InternalError("DictDecoder GetBatchWithDict failed");
@@ -369,6 +375,8 @@ private:
 
     std::vector<T> _dict;
     std::vector<uint32_t> _indexes;
+    // Scratch buffer for one batch of decoded values, reused across batches.
+    std::vector<T> _temp_read_data;
 };
 
 class FixedSliceArray {
@@ -575,8 +583,11 @@ private:
                 return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
             }
 
-            uint32_t lengths[read_count + 1];
-            char* datas[read_count + 1];
+            // Reusable members rather than VLAs: read_count is page-sized and blows the stack.
+            _temp_lengths.resize(read_count + 1);
+            _temp_datas.resize(read_count + 1);
+            uint32_t* lengths = _temp_lengths.data();
+            char** datas = _temp_datas.data();
 
             for (size_t i = 0; i < read_count; ++i) {
                 datas[i] = _slices[i].data;
@@ -654,6 +665,9 @@ private:
     std::vector<uint32_t> _indexes;
     FixedSliceArray _slices;
     size_t _max_value_length = 0;
+    // Scratch buffers for one batch of slices, reused across batches.
+    std::vector<uint32_t> _temp_lengths;
+    std::vector<char*> _temp_datas;
 };
 
 } // namespace starrocks::parquet
