@@ -428,6 +428,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
 - 引入版本：v3.5
 
+### parquet_runtime_filter_push_down_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制是否在 Parquet Reader 内部对已解码的数据行求值 Join Runtime Filter 的布尔值，从而在物化 Lazy 列之前提前过滤掉不匹配的行。`true` 表示启用该行级下推，`false` 表示禁用，此时 Runtime Filter 仅用于 row group 及 page 统计信息裁剪，行级过滤改由下游的 Scan 算子完成。
+- 引入版本：-
+
 ### path_gc_check_step
 
 - 默认值：1000
@@ -723,6 +732,51 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
 - 引入版本：v3.4.0
+
+### enable_vector_index_cache_on_build
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：构建向量索引时，是否把刚构建出的索引一并写入由 `vector_query_cache_capacity` 控制的向量索引缓存。默认关闭：该缓存是按查询工作集容量规划的，如果允许导入和 Compaction 把新构建的索引不断写入缓存，会淘汰正在被查询使用的条目，换来的却是一批可能永远不会被查询的索引。查询路径仍会在首次读取索引时按需填充缓存。仅当索引构建与查询在同一节点上执行、且新写入的数据会被立即查询时，才建议开启该项，以省去首次从索引文件回读的开销。修改后对之后启动的索引构建生效。
+- 引入版本：v4.2.0
+
+### vector_index_cache_expire_sec
+
+- 默认值：900
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：未使用的向量索引缓存条目在过期前可保持空闲的时间。最后一个缓存 handle 释放时开始计时；缓存命中后，在对应 handle 再次释放时刷新计时。正在被查询 pin 住的条目不会被删除。IVF-PQ 的 list block 随其所属的索引条目一起释放，不维护独立 TTL。小于或等于 `0` 时关闭过期淘汰。运行时修改仅作用于之后释放的 handle，不会重写现有条目的过期时间。
+- 引入版本：v4.2.0
+
+### enable_vector_index_cache_async_load_on_miss
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：顶层向量索引缓存未命中时，是否让当前查询回退到暴力检索，同时在后台将索引加载到缓存中。同一索引的并发 miss 共享一个后台加载任务，并在索引就绪前继续使用暴力检索。设置为 `false` 时，缓存未命中会同步加载索引。仅当预期冷加载延迟高于暴力检索成本，并且缓存容量足以容纳查询工作集时，才建议开启。运行时修改对之后初始化的向量索引 reader 生效。
+- 引入版本：v4.2.0
+
+### vector_index_cache_async_load_threads
+
+- 默认值：8
+- 类型：Int
+- 单位：线程
+- 是否动态：否
+- 描述：向量索引缓存后台加载线程池的最大 worker 数。worker 按需创建，并在空闲 60 秒后退出。小于或等于 `0` 的值会被调整为 `1`。该配置在 StorageEnv 初始化时读取，修改后需要重启 BE/CN 才能生效。
+- 引入版本：v4.2.0
+
+### vector_index_cache_loading_wait_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：每个同步缓存调用方等待正在进行的向量索引加载完成的最长时间。等待超时后，该调用方会收到缓存未命中，使查询路径可以回退到暴力检索。已经开始的加载不会被取消，而是继续在后台执行。后续每个调用方都会按配置值重新开始自己的等待。小于或等于 `0` 时不等待。运行时修改对之后开始的等待生效。
+- 引入版本：v4.2.0
 
 ### vector_adaptive_ef_alpha
 

@@ -22,11 +22,16 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
@@ -34,6 +39,8 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rows_mapper.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
 #include "types/type_descriptor.h"
@@ -193,6 +200,39 @@ protected:
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    }
+
+    // Writes a real segment (key column c0 = start_key..start_key+num_rows-1, value column c1 constant 0)
+    // for |tablet_id| at |segment_name|, under |schema_pb| and the writer-time value of
+    // config::enable_full_sort_key_index. Returns the file size.
+    uint64_t write_int_key_segment(int64_t tablet_id, const TabletSchemaPB& schema_pb, const std::string& segment_name,
+                                   int64_t num_rows, int32_t start_key = 0) {
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        std::string path = _lp->segment_location(tablet_id, segment_name);
+        std::string dir = std::filesystem::path(path).parent_path().string();
+        CHECK_OK(fs::create_directories(dir));
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        auto wfile = fs.value()->new_writable_file(opts, path);
+        CHECK_OK(wfile.status());
+
+        SegmentWriterOptions writer_opts;
+        SegmentWriter writer(std::move(wfile.value()), /*segment_id=*/0, tablet_schema, writer_opts);
+        CHECK_OK(writer.init());
+
+        auto chunk_schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, num_rows);
+        auto cols = chunk->columns();
+        for (int64_t i = 0; i < num_rows; ++i) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(start_key + static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(0)));
+        }
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&file_size, &index_size, &footer_position));
+        return file_size;
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -1061,6 +1101,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
         EXPECT_EQ(txn_id, info.txn_id);
         EXPECT_EQ(tablet_id, info.tablet_id);
         EXPECT_EQ(version, info.version);
+        EXPECT_GE(info.subtask_id, 0);
     }
 
     block_promise.set_value();
@@ -1602,6 +1643,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     bool found_completed_profile = false;
     for (const auto& info : infos) {
         if (info.finish_time > 0 && info.runs > 0) {
+            EXPECT_EQ(0, info.subtask_id);
             EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
             EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);
@@ -4772,6 +4814,171 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
     }
 }
 
+// _collect_segment_key_bounds full sort key index integration: mirrors
+// tablet_splitter's build_segments_from_rowsets per-segment source selection --
+// has_full_sort_key_index_page() + ensure_full_sort_key_index_usable() ->
+// load_samples_from_short_key_index; else deprecated_sort_key_samples (metadata) ->
+// load_sort_key_samples; else coarse [min, max]. The Rowset objects here are already
+// constructed (unlike
+// build_segments_from_rowsets, which may construct one from synthetic reshard
+// metadata), so there is no schema-id-resolution abort risk to guard against in
+// this path -- opening a rowset's segments can only ever gain precision or, on
+// failure, silently fall back to the pre-existing metadata/coarse behavior.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_full_sort_key_index) {
+    // Case 1: a full-key segment (config::enable_full_sort_key_index = true at write
+    // time) with NO metadata samples yields samples decoded from its short key index --
+    // 250 rows, sampled every 100 rows -> [100, 200] -- identical to what an equivalent
+    // legacy segment yields from deprecated_sort_key_samples metadata (Case 2 below).
+    {
+        const bool old_enable = config::enable_full_sort_key_index;
+        config::enable_full_sort_key_index = true;
+        DeferOp restore([&] { config::enable_full_sort_key_index = old_enable; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        const int64_t num_rows = 250;
+        const std::string seg_name = "seg_full_key.dat";
+        const uint64_t seg_size = write_int_key_segment(tablet_id, metadata->schema(), seg_name, num_rows);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(seg_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(seg_size);
+        segment_meta->set_num_rows(num_rows);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(static_cast<int32_t>(num_rows - 1)));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_samples[0][0].value().get_int32());
+        EXPECT_EQ(200, result.value()[0].sort_key_samples[1][0].value().get_int32());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+    }
+
+    // Case 2: a legacy segment -- deprecated_sort_key_samples present in metadata --
+    // keeps sourcing from that metadata, matching Case 1's values exactly (proving the
+    // two source paths are interchangeable for callers), and does so WITHOUT opening the
+    // segment file at all (the sample-less perf gate skips the loader since the segment
+    // already carries metadata samples).
+    {
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(250);
+        rowset->set_data_size(2500);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("seg_never_written.dat"); // never written -- proves the loader is skipped
+        segment_meta->set_size(2500);
+        segment_meta->set_num_rows(250);
+        segment_meta->set_deprecated_sort_key_sample_row_interval(100);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(0));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(249));
+        segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(100));
+        segment_meta->add_deprecated_sort_key_samples()->CopyFrom(make_int_tuple(200));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(1, result.value().size());
+        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_samples[0][0].value().get_int32());
+        EXPECT_EQ(200, result.value()[0].sort_key_samples[1][0].value().get_int32());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+    }
+
+    // Case 3: a sample-less segment whose file is missing (Rowset::LoadedSegment::segment
+    // == nullptr, via experimental_lake_ignore_lost_segment=true) degrades to coarse
+    // bounds WITHOUT crashing, while a sibling real full-key segment in the SAME rowset
+    // still gets its samples decoded from the index.
+    {
+        const bool old_enable_full_key = config::enable_full_sort_key_index;
+        config::enable_full_sort_key_index = true;
+        DeferOp restore_full_key([&] { config::enable_full_sort_key_index = old_enable_full_key; });
+        const bool old_ignore_lost = config::experimental_lake_ignore_lost_segment;
+        config::experimental_lake_ignore_lost_segment = true;
+        DeferOp restore_ignore_lost([&] { config::experimental_lake_ignore_lost_segment = old_ignore_lost; });
+
+        int64_t tablet_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        const int64_t num_rows = 250;
+        const std::string present_seg_name = "seg_present.dat";
+        const uint64_t present_seg_size =
+                write_int_key_segment(tablet_id, metadata->schema(), present_seg_name, num_rows);
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(present_seg_size);
+
+        auto* sm_present = rowset->add_segment_metas();
+        sm_present->set_filename(present_seg_name);
+        sm_present->set_size(present_seg_size);
+        sm_present->set_num_rows(num_rows);
+
+        // Never written to disk; with experimental_lake_ignore_lost_segment=true this
+        // becomes a null LoadedSegment placeholder instead of a hard load error.
+        auto* sm_lost = rowset->add_segment_metas();
+        sm_lost->set_filename("seg_missing.dat");
+        sm_lost->set_size(100);
+        sm_lost->set_num_rows(10);
+        sm_lost->mutable_sort_key_min()->CopyFrom(make_int_tuple(1000));
+        sm_lost->mutable_sort_key_max()->CopyFrom(make_int_tuple(1009));
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id, 2));
+        auto meta = tablet.metadata();
+
+        std::vector<RowsetPtr> rowsets;
+        rowsets.push_back(std::make_shared<Rowset>(_tablet_mgr.get(), meta, 0, 0));
+
+        auto result = TabletParallelCompactionManager::_collect_segment_key_bounds(rowsets);
+        ASSERT_TRUE(result.ok());
+        ASSERT_EQ(2, result.value().size());
+
+        // segments[0]: the real, present full-key segment -- still gets samples.
+        ASSERT_EQ(2u, result.value()[0].sort_key_samples.size());
+        EXPECT_EQ(100, result.value()[0].sort_key_sample_row_interval);
+
+        // segments[1]: the lost segment -- coarse fallback, no crash.
+        EXPECT_TRUE(result.value()[1].sort_key_samples.empty());
+        EXPECT_EQ(0, result.value()[1].sort_key_sample_row_interval);
+        EXPECT_EQ(10, result.value()[1].num_rows);
+        EXPECT_EQ(1000, result.value()[1].min_key[0].value().get_int32());
+        EXPECT_EQ(1009, result.value()[1].max_key[0].value().get_int32());
+    }
+}
+
 TEST_F(TabletParallelCompactionManagerTest, test_calculate_range_split_boundaries) {
     // Case 1: basic - 3 overlapping segments, target 3 subtasks → 2 boundaries
     {
@@ -7140,45 +7347,44 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
 
 TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split) {
     int64_t tablet_id = 10256;
+    constexpr int kNumRowsets = 5;
+    constexpr int32_t kRowsPerRowset = 250;
+    constexpr int64_t kLogicalRowsetSize = 50 * 1024 * 1024;
 
     auto old_enable = config::enable_lake_compaction_range_split;
     config::enable_lake_compaction_range_split = true;
+    DeferOp restore_range_split([&]() { config::enable_lake_compaction_range_split = old_enable; });
 
     auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
     metadata->set_id(tablet_id);
-    metadata->set_version(5);
+    metadata->set_version(kNumRowsets + 1);
+    metadata->set_next_rowset_id(kNumRowsets);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < kNumRowsets; i++) {
+        const int32_t start_key = static_cast<int32_t>(i * kRowsPerRowset);
         auto* rowset = metadata->add_rowsets();
         rowset->set_id(i);
         rowset->set_overlapped(true);
-        rowset->set_num_rows(10000);
-        rowset->set_data_size(50 * 1024 * 1024);
+        rowset->set_num_rows(kRowsPerRowset);
+        // Keep the logical size large enough to create multiple range-split subtasks;
+        // the physical segment stays small so the UT remains fast.
+        rowset->set_data_size(kLogicalRowsetSize);
 
         std::string segment_name = fmt::format("rs_seg_{}.dat", i);
+        const uint64_t segment_size =
+                write_int_key_segment(tablet_id, metadata->schema(), segment_name, kRowsPerRowset, start_key);
         auto* segment_meta = rowset->add_segment_metas();
         segment_meta->set_filename(segment_name);
-        segment_meta->set_size(50 * 1024 * 1024);
-        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        segment_meta->set_num_rows(10000);
-
-        std::string path = _lp->segment_location(tablet_id, segment_name);
-        std::string dir = std::filesystem::path(path).parent_path().string();
-        CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystemFactory::CreateSharedFromString(path);
-        WritableFileOptions opts;
-        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        auto st = fs.value()->new_writable_file(opts, path);
-        CHECK_OK(st.status());
-        CHECK_OK(st.value()->append("dummy_segment_data"));
-        CHECK_OK(st.value()->close());
+        segment_meta->set_size(segment_size);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(start_key));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(start_key + kRowsPerRowset - 1));
+        segment_meta->set_num_rows(kRowsPerRowset);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
     int64_t txn_id = 20256;
-    int64_t version = 5;
+    int64_t version = kNumRowsets + 1;
 
     TabletParallelConfig pconfig;
     pconfig.set_max_parallel_per_tablet(3);
@@ -7192,15 +7398,55 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
     std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("rng_split_test").set_max_threads(4).build(&pool);
+    ThreadPoolBuilder("rng_split_test").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+    CancelableDefer unblock_pool([&]() { block_promise.set_value(); });
+    ASSERT_OK(pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    }));
+    start_promise.get_future().wait();
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
+    ASSERT_OK(st.status());
+    ASSERT_GT(st.value(), 0);
 
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->running_subtasks.size());
+        for (auto& entry : state->running_subtasks) {
+            entry.second.enqueue_time_ns = MonotonicNanos() - 1'000'000;
+        }
+    }
+
+    block_promise.set_value();
+    unblock_pool.cancel();
     pool->wait();
-    _manager->cleanup_tablet(tablet_id, txn_id);
+    ASSERT_TRUE(closure.wait_finish());
 
-    config::enable_lake_compaction_range_split = old_enable;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        ASSERT_EQ(st.value(), state->completed_subtasks.size());
+        for (const auto& context : state->completed_subtasks) {
+            ASSERT_NE(nullptr, context->stats);
+            EXPECT_EQ(1, context->runs.load(std::memory_order_relaxed));
+            EXPECT_EQ(1, context->stats->task_attempt_count);
+            EXPECT_GT(context->stats->queue_wait_ns, 0);
+            EXPECT_GT(context->stats->task_prepare_ns, 0);
+            EXPECT_GT(context->stats->task_execute_ns, 0);
+            EXPECT_GE(context->stats->task_total_ns, context->stats->task_prepare_ns + context->stats->task_execute_ns);
+            EXPECT_EQ(0, context->task_attempt_start_ns.load(std::memory_order_acquire));
+            EXPECT_EQ(0, context->task_execute_start_ns.load(std::memory_order_acquire));
+        }
+    }
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
 
     // Also test execute_subtask_range_split when state not found (lines 2517-2525)
     {

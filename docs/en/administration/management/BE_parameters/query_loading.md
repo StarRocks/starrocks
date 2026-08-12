@@ -440,6 +440,15 @@ This topic introduces the following types of BE configurations:
 - Description: A boolean value to control whether to enable the bloom filter of Parquet file to improve performance. `true` indicates enabling the bloom filter, and `false` indicates disabling it. You can also control this behavior on session level using the system variable `enable_parquet_reader_bloom_filter`. Bloom filters in Parquet are maintained **at the column level within each row group**. If a Parquet file contains bloom filters for certain columns, queries can use predicates on those columns to efficiently skip row groups.
 - Introduced in: v3.5
 
+### parquet_runtime_filter_push_down_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: A boolean value to control whether to evaluate join runtime filters against decoded rows inside the Parquet reader, so that non-matching rows are dropped before lazy columns are materialized. `true` indicates enabling this row-level pushdown, and `false` indicates disabling it, in which case runtime filters are only used for row group and page statistics pruning, and the row-level probe happens in the downstream scan operator instead.
+- Introduced in: -
+
 ### path_gc_check_step
 
 - Default: 1000
@@ -726,6 +735,51 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Total capacity of the SR-owned vector index cache, which holds HNSW whole-index entries and IVF-PQ per-list block entries (when `enable_vector_index_block_cache=true`) in a single LRU. Applied at BE startup and on every HTTP `/api/update_config` call. Accepts absolute bytes (e.g. `4294967296`), units (`4G`, `512M`), or a percentage of the BE process memory limit (`20%`). **Behavior change in v4.2.0:** prior versions accepted only an absolute byte count (default 512MB); upgrading without changing this config will resize the cache to 20% of BE memory.
 - Introduced in: v3.4.0
+
+### enable_vector_index_cache_on_build
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether building a vector index also inserts the index it just built into the vector index cache sized by `vector_query_cache_capacity`. Disabled by default, because the cache is sized for the query working set: letting loads and compactions push freshly built indexes into it evicts entries that running queries depend on, in exchange for warming indexes that may never be queried. The query path still populates the cache on demand the first time an index is read. Enable this only when index build and queries run on the same node and newly built data is queried immediately, to save that first read-back of the index file. A change takes effect for index builds started after it.
+- Introduced in: v4.2.0
+
+### vector_index_cache_expire_sec
+
+- Default: 900
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Idle time before an unused vector index cache entry expires. The timer starts when the last cache handle is released, and a cache hit refreshes it when that handle is later released. Entries pinned by running queries are not removed. IVF-PQ list blocks are released together with their owning index entry and do not have independent TTLs. Values less than or equal to `0` disable expiration. A runtime change applies to subsequent handle releases and does not rewrite existing entry deadlines.
+- Introduced in: v4.2.0
+
+### enable_vector_index_cache_async_load_on_miss
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a top-level vector index cache miss makes the current query fall back to brute-force search while the index is loaded into the cache in the background. Concurrent misses for the same index share one background load and continue to use brute-force search until the index is ready. When this item is `false`, a cache miss loads the index synchronously. Enable it only when the expected cold-load latency is higher than the brute-force search cost and the cache has enough capacity for the query working set. A runtime change affects vector index readers initialized after the change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_async_load_threads
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Maximum number of workers in the vector index cache background-load thread pool. Workers are created on demand and retire after being idle for 60 seconds. Values less than or equal to `0` are adjusted to `1`. This item is read when StorageEnv initializes and requires a BE/CN restart to change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_loading_wait_timeout_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time that each synchronous cache caller waits for an in-progress vector index load. When the wait times out, the caller receives a cache miss so the query path can fall back to brute-force search. The existing loader is not canceled and continues loading the index in the background. Each later caller starts its own wait with the configured timeout. Values less than or equal to `0` disable waiting. A runtime change applies to subsequent waits.
+- Introduced in: v4.2.0
 
 ### vector_adaptive_ef_alpha
 

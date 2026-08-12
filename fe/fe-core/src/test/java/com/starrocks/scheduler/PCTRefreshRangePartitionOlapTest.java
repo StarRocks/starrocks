@@ -392,4 +392,100 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
             Assertions.assertNotNull(execPlan);
         }
     }
+
+    @Test
+    public void testAutoRefreshPartitionsLimitExcludingPartitionsDoesNotConfirmFreshness() throws Exception {
+        String partitionTable = "CREATE TABLE range_limit_t1 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_limit_t1", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_limit_t1", "p2", "2024-01-05", "2024-01-06");
+        addRangePartition("range_limit_t1", "p3", "2024-01-06", "2024-01-07");
+        String[] sqls = {
+                "INSERT INTO range_limit_t1 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_limit_t1 partition(p2) VALUES (\"2024-01-05\",1);",
+                "INSERT INTO range_limit_t1 partition(p3) VALUES (\"2024-01-06\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv_limit_excl " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT dt1,sum(int1) from range_limit_t1 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv_limit_excl");
+        // auto_refresh_partitions_limit is rejected at CREATE time for MANUAL-refresh MVs
+        // (PropertyAnalyzer#analyzeAutoRefreshPartitionsLimit), so set it directly on the table
+        // property afterwards, mirroring PartitionBasedMvRefreshProcessorHiveTest
+        // #testAutoRefreshPartitionLimitWithHiveTable's precedent for exercising this property
+        // deterministically in tests (also sidesteps any background auto-refresh scheduling).
+        mv.getTableProperty().setAutoRefreshPartitionsLimit(1);
+
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        // Build and run the task run directly (like testMVBatchRefreshConfirmsFreshnessOnlyOnFinalRun)
+        // so we control processStartTime: refreshMV()/withMVRefreshTaskRun() never call
+        // setProcessStartTime, which would leave freshnessBaselineTime()'s fallback at 0 regardless
+        // of the bug and make this assertion pass vacuously.
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long processStartTime = 1718000000123L;
+        taskRun.getStatus().setProcessStartTime(processStartTime);
+        // A plain refresh with no explicit partition range is a "complete refresh" by
+        // MVRefreshParams' definition, but auto_refresh_partitions_limit=1 silently drops the
+        // two oldest changed partitions (p1, p2) from this batch; only p3 (the newest) actually
+        // gets refreshed.
+        taskRun.executeTaskRun();
+
+        // p1/p2 are still stale (never refreshed), so this refresh must NOT confirm whole-MV
+        // freshness. Without the fix, lastFreshnessConfirmedAt wrongly advances to this run's
+        // process start time because MVRefreshParams.isCompleteRefresh() only looks at the
+        // (absent) explicit range/list request, not at whether the limit excluded partitions
+        // from the batch.
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt(),
+                "lastFreshnessConfirmedAt must not advance when auto_refresh_partitions_limit " +
+                        "excluded changed partitions from a 'complete' refresh");
+    }
+
+    @Test
+    public void testAutoRefreshPartitionsLimitWithinBoundsConfirmsFreshness() throws Exception {
+        String partitionTable = "CREATE TABLE range_limit_t2 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_limit_t2", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_limit_t2", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_limit_t2 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_limit_t2 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv_limit_ok " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS SELECT dt1,sum(int1) from range_limit_t2 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv_limit_ok");
+        // Control: the limit is well above the 2 changed partitions, so it never trims anything.
+        // This batch really is complete, and freshness confirmation must still work.
+        mv.getTableProperty().setAutoRefreshPartitionsLimit(10);
+
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        long processStartTime = 1718000000456L;
+        taskRun.getStatus().setProcessStartTime(processStartTime);
+        taskRun.executeTaskRun();
+
+        Assertions.assertEquals(processStartTime, mv.getRefreshScheme().getLastFreshnessConfirmedAt(),
+                "lastFreshnessConfirmedAt must advance to this run's start time for a complete " +
+                        "refresh that did not exclude any partitions");
+    }
 }

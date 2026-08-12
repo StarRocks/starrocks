@@ -19,12 +19,15 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
@@ -33,6 +36,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/vertical_compaction_task.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/init_test_env.h"
@@ -186,6 +190,76 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
         ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     }
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
+}
+
+// Pins the cache-fill flags that reach SegmentReadOptions from the compaction read path:
+//  - fill_data_cache must follow the per-algorithm config, not a hardcoded value;
+//  - horizontal compaction must keep fill_metadata_cache on, so the read pass reuses the segments
+//    already opened by calculate_chunk_size() instead of re-reading every footer.
+// The two data-cache configs are deliberately set to opposite values so that a hardcoded flag on
+// either side would fail here rather than accidentally match the expectation.
+TEST_P(LakeDuplicateKeyCompactionTest, test_compaction_read_cache_options) {
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto write_txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, write_txn_id).status());
+        version++;
+    }
+
+    const bool horizontal = GetParam().algorithm == HORIZONTAL_COMPACTION;
+    const bool saved_horizontal_fill = config::lake_enable_horizontal_compaction_fill_data_cache;
+    const bool saved_vertical_fill = config::lake_enable_vertical_compaction_fill_data_cache;
+    config::lake_enable_horizontal_compaction_fill_data_cache = true;
+    config::lake_enable_vertical_compaction_fill_data_cache = false;
+    DeferOp restore_config([&]() {
+        config::lake_enable_horizontal_compaction_fill_data_cache = saved_horizontal_fill;
+        config::lake_enable_vertical_compaction_fill_data_cache = saved_vertical_fill;
+    });
+
+    bool seen = false;
+    bool fill_data_cache = !horizontal;
+    bool fill_metadata_cache = !horizontal;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        fill_data_cache = seg_options->lake_io_opts.fill_data_cache;
+        fill_metadata_cache = seg_options->lake_io_opts.fill_metadata_cache;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+
+    ASSERT_TRUE(seen);
+    EXPECT_EQ(horizontal, fill_data_cache);
+    EXPECT_EQ(horizontal, fill_metadata_cache);
 }
 
 TEST_P(LakeDuplicateKeyCompactionTest, test_skip_write_txnlog) {

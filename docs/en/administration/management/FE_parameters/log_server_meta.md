@@ -64,6 +64,15 @@ This topic introduces the following types of FE configurations:
 - Description: The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
 - Introduced in: -
 
+### `audit_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.audit.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `audit_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `audit_log_delete_age` OR falls outside the newest `audit_log_delete_count` files. This is primarily useful together with `audit_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
 ### `audit_log_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -98,6 +107,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the `slow_query` module and the `query` module. The `connection` module is supported from v3.0. Separate the module names with a comma (,) and a space.
+- Introduced in: -
+
+### `audit_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.audit.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `audit_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `audit_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`audit_log_roll_num`) limit, set `audit_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
 - Introduced in: -
 
 ### `audit_log_roll_interval`
@@ -147,6 +165,15 @@ This topic introduces the following types of FE configurations:
 - Description: Controls how long FE big query log files (`fe.big_query.log.*`) are retained before automatic deletion. The value is passed to Log4j's deletion policy as the IfLastModified age — any rotated big query log whose last-modified time is older than this value will be removed. Supports suffixes include `d` (day), `h` (hour), `m` (minute), and `s` (second). Example: `7d` (7 days), `10h` (10 hours), `60m` (60 minutes), and `120s` (120 seconds). This item works together with `big_query_log_roll_interval` and `big_query_log_roll_num` to determine which files are kept or purged.
 - Introduced in: v3.2.0
 
+### `big_query_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.big_query.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `big_query_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `big_query_log_delete_age` OR falls outside the newest `big_query_log_delete_count` files. This is primarily useful together with `big_query_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
 ### `big_query_log_dir`
 
 - Default: `Config.STARROCKS_HOME_DIR + "/log"`
@@ -164,6 +191,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: List of module name suffixes that enable per-module big query logging. Typical values are logical component names. For example, the default `query` produces `big_query.query`.
 - Introduced in: v3.2.0
+
+### `big_query_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.big_query.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `big_query_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `big_query_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`big_query_log_roll_num`) limit, set `big_query_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
+- Introduced in: -
 
 ### `big_query_log_roll_interval`
 
@@ -192,6 +228,15 @@ This topic introduces the following types of FE configurations:
 - Description: The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+### `dump_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.dump.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `dump_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `dump_log_delete_age` OR falls outside the newest `dump_log_delete_count` files. This is primarily useful together with `dump_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
 ### `dump_log_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -208,6 +253,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The modules for which StarRocks generates dump log entries. By default, StarRocks generates dump logs for the query module. Separate the module names with a comma (,) and a space.
+- Introduced in: -
+
+### `dump_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.dump.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `dump_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `dump_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`dump_log_roll_num`) limit, set `dump_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
 - Introduced in: -
 
 ### `dump_log_roll_interval`
@@ -284,6 +338,24 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the system replaces or hides sensitive SQL content before it is written to logs, query-detail records, and query profiles. Code paths that honor this configuration include ConnectProcessor.formatStmt (audit logs), StmtExecutor.addRunningQueryDetail (query details), SimpleExecutor.formatSQL (internal executor logs), and StmtExecutor.buildTopLevelProfile / processProfileAsync (the `Sql Statement` and `ExplainPlan` info-strings stored in a profile's `Summary` section). With the feature enabled, invalid SQLs may be replaced with a fixed desensitized message, credentials (user/password) are hidden, and the SQL formatter is required to produce a sanitized representation (it can also enable digest-style output). For the `ExplainPlan` field added by the `enable_explain_in_profile` session variable, this config also forces literal-digest rendering of the embedded `EXPLAIN COSTS` text, so the profile does not leak the literals that the persisted `Sql Statement` would have hidden. This reduces leakage of sensitive literals and credentials in audit/internal logs and profiles, but also means logs, query details, and profiles no longer contain the original full SQL text (which can affect replay or debugging).
 - Introduced in: -
 
+### `feature_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.features.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `feature_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `feature_log_delete_age` OR falls outside the newest `feature_log_delete_count` files. This is primarily useful together with `feature_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
+### `feature_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.features.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `feature_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `feature_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`feature_log_roll_num`) limit, set `feature_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
+- Introduced in: -
+
 ### `internal_log_delete_age`
 
 - Default: 7d
@@ -292,6 +364,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Specifies the retention period for FE internal log files (written to `internal_log_dir`). The value is a duration string. Supported suffixes: `d` (day), `h` (hour), `m` (minute), `s` (second). Examples: `7d` (7 days), `10h` (10 hours), `60m` (60 minutes), `120s` (120 seconds). This item is substituted into the log4j configuration as the `<IfLastModified age="..."/>` predicate used by the RollingFile Delete policy. Files whose last-modified time is earlier than this duration will be removed during log rollover. Increase this value to free disk space sooner, or decrease it to retain internal materialized view or statistics logs longer.
 - Introduced in: v3.2.4
+
+### `internal_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.internal.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `internal_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `internal_log_delete_age` OR falls outside the newest `internal_log_delete_count` files. This is primarily useful together with `internal_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
 
 ### `internal_log_dir`
 
@@ -319,6 +400,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: A list of module identifiers that will receive dedicated internal logging. For each entry X, Log4j creates a logger named `internal.<X>` with level INFO and additivity="false". Those loggers are routed to the internal appender (written to `fe.internal.log`) or to console when `sys_log_to_console` is enabled. Use short names or package fragments as needed — the exact logger name becomes `internal.` + the configured string. Internal log file rotation and retention follow `internal_log_dir`, `internal_log_roll_num`, `internal_log_delete_age`, `internal_log_roll_interval`, and `log_roll_size_mb`. Adding a module causes its runtime messages to be separated into the internal logger stream for easier debugging and audit.
 - Introduced in: v3.2.4
+
+### `internal_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.internal.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `internal_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `internal_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`internal_log_roll_num`) limit, set `internal_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
+- Introduced in: -
 
 ### `internal_log_roll_interval`
 
@@ -410,6 +500,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum size of a system log file or an audit log file.
 - Introduced in: -
 
+### `plan_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.plan.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `plan_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `plan_log_delete_age` OR falls outside the newest `plan_log_delete_count` files. This is primarily useful together with `plan_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
+### `plan_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.plan.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `plan_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `plan_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`plan_log_roll_num`) limit, set `plan_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
+- Introduced in: -
+
 ### `proc_profile_file_retained_days`
 
 - Default: 1
@@ -437,13 +545,22 @@ This topic introduces the following types of FE configurations:
 - Description: Controls how long FE profile log files are retained before they are eligible for deletion. The value is injected into Log4j's `<IfLastModified age="..."/>` policy (via `Log4jConfig`) and is applied together with rotation settings such as `profile_log_roll_interval` and `profile_log_roll_num`. Supported suffixes: `d` (day), `h` (hour), `m` (minute), `s` (second). For example: `7d` (7 days), `10h` (10 hours), `60m` (60 minutes), `120s` (120 seconds).
 - Introduced in: v3.2.5
 
+### `profile_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.profile.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `profile_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `profile_log_delete_age` OR falls outside the newest `profile_log_delete_count` files. This is primarily useful together with `profile_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
 ### `profile_log_dir`
 
 - Default: `Config.STARROCKS_HOME_DIR` + "/log"
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: Directory where FE profile logs are written. Log4jConfig uses this value to place profile-related appenders (creates files like `fe.profile.log` and `fe.features.log` under this directory). Rotation and retention for these files are governed by `profile_log_roll_size_mb`, `profile_log_roll_num` and `profile_log_delete_age`; the timestamp suffix format is controlled by `profile_log_roll_interval` (supports DAY or HOUR). Because the default directory is under `STARROCKS_HOME_DIR`, ensure the FE process has write and rotation/delete permissions on this directory.
+- Description: Directory where FE profile logs are written. Log4jConfig uses this value to place profile-related appenders (creates files like `fe.profile.log` under this directory). Rotation and retention for these files are governed by `profile_log_roll_size_mb`, `profile_log_roll_num` and `profile_log_delete_age`; the timestamp suffix format is controlled by `profile_log_roll_interval` (supports DAY or HOUR). Because the default directory is under `STARROCKS_HOME_DIR`, ensure the FE process has write and rotation/delete permissions on this directory.
 - Introduced in: v3.2.5
 
 ### `profile_log_latency_threshold_ms`
@@ -455,6 +572,15 @@ This topic introduces the following types of FE configurations:
 - Description: Minimum query latency (in milliseconds) for a profile to be written to `fe.profile.log`. Only queries whose execution time is greater than or equal to this value are logged. Set to 0 to log all profiles (no threshold). Use a positive value to reduce log volume by logging only slower queries.
 - Introduced in: -
 
+
+### `profile_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.profile.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `profile_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `profile_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`profile_log_roll_num`) limit, set `profile_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
+- Introduced in: -
 
 ### `profile_log_roll_interval`
 
@@ -556,6 +682,15 @@ This topic introduces the following types of FE configurations:
 - Description: The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+### `sys_log_delete_count`
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: A hard cap on the number of rolled `fe.log` and `fe.warn.log` archives retained on disk, enforced by Log4j's `Delete` action via an `IfAccumulatedFileCount` condition. A value less than or equal to `0` disables the cap (retention governed only by `sys_log_delete_age`). When set to a positive value, an archive is deleted when it is older than `sys_log_delete_age` OR falls outside the newest `sys_log_delete_count` files. This is primarily useful together with `sys_log_roll_file_index = nomax` to bound disk usage.
+- Introduced in: -
+
 ### `sys_log_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/log"
@@ -608,6 +743,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`.
+- Introduced in: -
+
+### `sys_log_roll_file_index`
+
+- Default: min
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.log` and `fe.warn.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `sys_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `sys_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`sys_log_roll_num`) limit, set `sys_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
 - Introduced in: -
 
 ### `sys_log_roll_interval`
@@ -1372,6 +1516,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
 
+### `enable_collect_partition_access_time`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to collect and expose the per-partition `LAST_ACCESS_TIME` (the last time a partition was scanned by a user query) in `SHOW PARTITIONS` and `information_schema.partitions_meta`. When disabled, the access time is neither recorded nor aggregated across FEs, and the `LAST_ACCESS_TIME` column shows `NULL`. This does not affect `LAST_UPDATE_TIME`.
+- Introduced in: v4.2.0
+
 ### `enable_show_materialized_views_include_all_task_runs`
 
 - Default: true
@@ -1465,14 +1618,23 @@ This topic introduces the following types of FE configurations:
 - Description: When StarRocks deserializes TaskRun history rows for `information_schema.task_runs`, a corrupted or invalid JSON row will normally cause deserialization to log a warning and throw a RuntimeException. If this item is set to `true`, the system will catch deserialization errors, skip the malformed record, and continue processing remaining rows instead of failing the query. This will make `information_schema.task_runs` queries tolerant of bad entries in the `_statistics_.task_run_history` table. Note that enabling it will silently drop corrupted history records (potential data loss) instead of surfacing an explicit error.
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
 
+### `leader_activation_drain_timeout_sec`
+
+- Default: 180
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Timeout for a follower activating as leader to wait for its metadata replay thread to drain and stop before the node starts writing the journal. If the replay thread does not stop within this time (for example, a replay applier pinned on a lock it cannot acquire), the FE process is terminated for a clean restart, because activating as leader while the replayer is still applying journal entries would double-apply and corrupt metadata. Catching up to the latest metadata happens separately during journal replay and is not bounded by this timeout.
+- Introduced in: v4.2.0
+
 ### `leader_demotion_drain_timeout_sec`
 
 - Default: 180
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Per-daemon timeout used during leader demotion to wait for each leader-only daemon worker thread to exit after being interrupted. If a worker is still alive when the timeout elapses, the FE process is terminated, because a stuck worker combined with a later re-election would run two workers against the same singleton state - strictly worse than a process restart. Increase this if you routinely see heartbeat/report/publish/tablet-scheduler daemons needing more than the default to drain.
-- Introduced in: v4.1
+- Description: Timeout used during leader demotion to seal and stop the journal writer and to wait for in-flight leader WAL applies to drain. If the journal writer cannot be sealed within this time, the demotion stage fails and the FE process is terminated for a clean restart, rather than let a stale leader's write slip past the WAL-apply fence. Increase this if sealing the journal writer or draining in-flight applies routinely needs more than the default during demotion.
+- Introduced in: v4.2.0
 
 ### `lock_checker_interval_second`
 

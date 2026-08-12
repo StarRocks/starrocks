@@ -337,10 +337,11 @@ public class DatabaseTransactionMgr {
                                    List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment,
-                                   boolean writeEditLog)
+                                   TransactionState.TxnPrepareMode txnPrepareMode)
             throws StarRocksException {
         Preconditions.checkNotNull(tabletCommitInfos, "tabletCommitInfos is null");
         Preconditions.checkNotNull(tabletFailInfos, "tabletFailInfos is null");
+        Preconditions.checkNotNull(txnPrepareMode, "txnPrepareMode is null");
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
@@ -400,7 +401,7 @@ public class DatabaseTransactionMgr {
 
             List<TransactionStateListener> stateListeners = populateTransactionStateListeners(copiedState, db);
             for (TransactionStateListener listener : stateListeners) {
-                listener.preCommit(copiedState, tabletCommitInfos, tabletFailInfos);
+                listener.prePrepared(copiedState, tabletCommitInfos, tabletFailInfos);
             }
             copiedState.beforeStateTransform(TransactionStatus.PREPARED);
 
@@ -408,7 +409,7 @@ public class DatabaseTransactionMgr {
             if (copiedState.getTransactionStatus() == TransactionStatus.PREPARE) {
                 // update transaction state version
                 copiedState.setTransactionStatus(TransactionStatus.PREPARED);
-                copiedState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs);
+                copiedState.setPreparedTimeAndTimeout(System.currentTimeMillis(), preparedTimeoutMs, txnPrepareMode);
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(copiedState);
                 }
@@ -418,7 +419,7 @@ public class DatabaseTransactionMgr {
                 return;
             }
 
-            if (writeEditLog) {
+            if (txnPrepareMode == TransactionState.TxnPrepareMode.EXPLICIT_TWO_PHASE) {
                 persistTxnStateInTxnLevelLock(copiedState, wal -> {
                     writeLock();
                     try {
@@ -497,6 +498,11 @@ public class DatabaseTransactionMgr {
             txnSpan.setAttribute("db", db.getFullName());
             txnSpan.addEvent("commit_start");
             txnSpan.setAttribute("tables", buildTableListString(db, transactionState));
+
+            List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
+            for (TransactionStateListener listener : stateListeners) {
+                listener.preCommit(transactionState);
+            }
 
             // before state transform
             transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
@@ -589,7 +595,8 @@ public class DatabaseTransactionMgr {
                                                 @Nullable TxnCommitAttachment txnCommitAttachment)
             throws StarRocksException {
         prepareTransaction(transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
-                tabletCommitInfos, tabletFailInfos, txnCommitAttachment, false);
+                tabletCommitInfos, tabletFailInfos, txnCommitAttachment,
+                TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
         return commitPreparedTransaction(transactionId);
     }
 
@@ -1257,6 +1264,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // Fold in the stats the BEs reported through their publish tasks before snapshotting,
+                // so the finishing thread is the only writer of the commit infos (see issue #77595).
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
                 boolean hasError = false;
                 Set<Long> droppedTableIds = Sets.newHashSet();
@@ -2393,6 +2403,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // See the sibling call in finishTransaction(): merge the publish tasks' reported stats
+                // here, under the txn write lock, so nothing mutates the commit infos while we copy.
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
 
                 finishSpan.addEvent("txnmgr_lock");

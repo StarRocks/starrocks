@@ -1230,18 +1230,34 @@ public class OlapTableSink extends DataSink {
         }
 
         int lowUsageIndex = -1;
+        // Only used when every healthy candidate is in DECOMMISSION state.
+        int decommissionIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
             boolean isHealthy = !replica.getLastWriteFail()
                     && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
-            
+
             // The isAlive() flag indicates node availability during shutdown sequences.
             // For single-replica configurations, we bypass node status checks to maintain
             // loading operation continuity despite shutdown transitions.
             if (replicas.size() > 1) {
                 isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
             }
-            
+
+            // A replica in DECOMMISSION state is scheduled for deletion, so it is the one most
+            // likely to disappear while the load is still running. It has to stay a write target
+            // to make up the write quorum, but it should not become the primary: when its tablet
+            // is dropped mid-load, LocalTabletsChannel tolerates the resulting "Fail to get
+            // tablet" error only for a Secondary replica, while for a Primary one it aborts the
+            // whole tablet_writer_open and fails the entire load. Keeping it as the last resort
+            // degrades a mid-load deletion to a per-replica failure that the write quorum absorbs.
+            if (replica.getState() == Replica.ReplicaState.DECOMMISSION) {
+                if (decommissionIndex == -1 && isHealthy) {
+                    decommissionIndex = i;
+                }
+                continue;
+            }
+
             if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
@@ -1252,7 +1268,7 @@ public class OlapTableSink extends DataSink {
                 lowUsageIndex = i;
             }
         }
-        return lowUsageIndex;
+        return lowUsageIndex != -1 ? lowUsageIndex : decommissionIndex;
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {

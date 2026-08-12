@@ -323,6 +323,39 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testInternalOnePhasePreparePreservesOriginalDeadline() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long transactionId = masterTransMgr.beginTransaction(
+                GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_internal_one_phase_deadline",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND,
+                Config.stream_load_default_timeout_second);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        TransactionState transactionState = masterDbTransMgr.getTransactionState(transactionId);
+        long originalDeadlineMs = transactionState.getPrepareTime() + transactionState.getTimeoutMs();
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+        try {
+            masterDbTransMgr.prepareTransaction(
+                    transactionId, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
+                    buildTabletCommitInfoList(), Lists.newArrayList(), null,
+                    TransactionState.TxnPrepareMode.INTERNAL_ONE_PHASE);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(
+                    GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+        }
+
+        transactionState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
+        assertEquals(originalDeadlineMs, transactionState.getTimeoutDeadlineMs());
+    }
+
+    @Test
     public void getLakeCompactionActiveTxnListTest() throws StarRocksException {
         TransactionState.TxnCoordinator feTransactionSource =
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe1");

@@ -263,6 +263,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
 - Introduced in: v3.2.0
 
+### `enable_batch_insert_histogram_statistics`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to batch inserts when collecting histograms for multiple columns. This parameter applies to both StarRocks tables and external tables. If this parameter is set to `false`, StarRocks inserts histogram statistics separately for each column.
+- Introduced in: -
+
 ### `enable_collect_full_statistic`
 
 - Default: true
@@ -512,6 +521,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of child expressions allowed in an expression.
+- Introduced in: -
+
+### `histogram_batch_insert_buffer_size`
+
+- Default: 20971520
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum SQL statement size buffered for a histogram statistics batch insert. This parameter applies to both StarRocks tables and external tables. StarRocks splits a multi-column insert into multiple statements when the buffered size would exceed this value. A single row larger than the limit is inserted separately.
 - Introduced in: -
 
 ### `histogram_buckets_size`

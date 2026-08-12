@@ -159,6 +159,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
@@ -290,7 +291,6 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
-    index/vector/empty_index_reader.cpp
     index/vector/vector_index_cache.cpp
     index/vector/vector_index_cache_metrics.cpp
     index/vector/vector_index_builder_factory.cpp

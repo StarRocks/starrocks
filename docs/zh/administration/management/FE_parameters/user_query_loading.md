@@ -263,6 +263,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在备份或恢复特定数据库时，是否启用异步物化视图的 BACKUP 和 RESTORE。如果此项设置为 `false`，StarRocks 将跳过备份异步物化视图。
 - 引入版本: v3.2.0
 
+### `enable_batch_insert_histogram_statistics`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 为多列收集直方图时，是否批量插入直方图统计信息。此参数同时适用于 StarRocks 表和外部表。如果设置为 `false`，StarRocks 将按列分别插入直方图统计信息。
+- 引入版本: -
+
 ### `enable_collect_full_statistic`
 
 - 默认值: true
@@ -511,6 +520,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 表达式中允许的最大子表达式数量。
+- 引入版本: -
+
+### `histogram_batch_insert_buffer_size`
+
+- 默认值: 20971520
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 直方图统计信息批量插入时缓冲的 SQL 语句最大大小。此参数同时适用于 StarRocks 表和外部表。当缓冲大小将超过此值时，StarRocks 会将多列插入拆分为多个语句。单行大小超过此限制时，该行会单独插入。
 - 引入版本: -
 
 ### `histogram_buckets_size`

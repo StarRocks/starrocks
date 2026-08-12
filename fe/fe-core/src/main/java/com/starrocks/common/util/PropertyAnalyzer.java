@@ -112,6 +112,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -752,7 +753,7 @@ public class PropertyAnalyzer {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
                         ". Only INCREMENTAL, PCT are supported.");

@@ -21,7 +21,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -225,7 +224,7 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     public List<Partition> getPartitions(Connection connection, Table table) {
-        return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+        return Lists.newArrayList(new Partition(table.getName(), System.currentTimeMillis()));
     }
 
     private static boolean isTimeWithTimezoneTypeName(String typeName) {

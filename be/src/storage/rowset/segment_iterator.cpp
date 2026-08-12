@@ -15,7 +15,6 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -51,13 +50,13 @@
 #include "gutil/stl_util.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
-#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
@@ -75,6 +74,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -119,14 +119,75 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     return 0;
 }
 
-static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
+// |is_full_sort_key| selects the row re-encode codec: true for a full-key segment
+// (|short_key_schema| is then the segment's full, untruncated sort-key schema), false
+// for the legacy truncated short-key prefix.
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema,
+                   bool is_full_sort_key) {
     DCHECK_GE(rhs_chunk.num_rows(), 1u);
 
     SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
-    std::string rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    std::string rhs_index_key;
+    if (is_full_sort_key) {
+        // |lhs_index_key| is a short-key-index boundary, written with the physical
+        // full_sort_key_encode overload (segment_writer), which NUL-truncates CHAR to its
+        // visible prefix. Re-encode the stored row with the same physical overload so CHAR
+        // bytes match the index exactly regardless of any NUL the page read carries.
+        // |short_key_schema| is already in sort-key order, so the physical column indexes
+        // are 0..num_fields-1.
+        std::vector<uint32_t> sort_key_idxes(short_key_schema.num_fields());
+        for (uint32_t i = 0; i < sort_key_idxes.size(); i++) {
+            sort_key_idxes[i] = i;
+        }
+        rhs_index_key = tuple.full_sort_key_encode(sort_key_idxes, 0);
+    } else {
+        rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
+    }
     auto rhs = Slice(rhs_index_key);
 
     return lhs_index_key.compare(rhs);
+}
+
+// Returns true iff, for the first |n| columns, |query_schema|'s field logical types are
+// byte-compatible with |segment_schema|'s (same type at the same position, so the same
+// composite codec produces order-preserving, comparable bytes). A drifted sort-key type
+// cannot be safely bracketed by the segment's own full sort key index.
+// Note: this only compares LogicalType, not DECIMAL precision/scale, so a same-logical-type
+// scale drift would pass this check; that is acceptable because a sort-key type change forces
+// a full rewrite (uniform segments), and the non-bypass path encodes under the segment's own
+// field anyway.
+static bool full_sort_key_types_compatible(const Schema& query_schema, const Schema& segment_schema, size_t n) {
+    if (n > query_schema.num_fields() || n > segment_schema.num_fields()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (query_schema.field(i)->type()->type() != segment_schema.field(i)->type()->type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Builds the coarse short-key-index search key bytes for |key| against a full-key
+// |segment|, encoded with the segment's OWN sort-key schema (so the bytes match the
+// segment's index even if the query's schema drifted). Returns std::nullopt if the
+// query's sort-key column types are not byte-compatible with the segment's own schema;
+// the caller must then bypass the coarse prune (use the full candidate range and let
+// the typed fine search, if any, decide).
+static std::optional<std::string> encode_full_sort_key_search_key(Segment* segment, const SeekTuple& key, bool lower) {
+    Schema segment_schema = ChunkHelper::get_full_sort_key_schema(segment->tablet_schema_share_ptr());
+    const size_t n = std::min<size_t>(key.columns(), segment->num_sort_key_columns());
+    if (!full_sort_key_types_compatible(key.schema(), segment_schema, n)) {
+        return std::nullopt;
+    }
+    std::vector<Datum> values;
+    values.reserve(key.columns());
+    for (size_t i = 0; i < key.columns(); i++) {
+        values.push_back(key.get(i));
+    }
+    SeekTuple segment_key(std::move(segment_schema), std::move(values));
+    return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
+                                            lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 }
 
 class SegmentIterator final : public ChunkIterator {
@@ -321,7 +382,6 @@ private:
 
 #ifdef WITH_TENANN
         tenann::PrimitiveSeqView query_view;
-        std::shared_ptr<tenann::IndexMeta> index_meta;
 #endif
 
         std::shared_ptr<VectorIndexReader> ann_reader;
@@ -392,7 +452,7 @@ private:
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                           rowid_t* rowid);
+                           rowid_t* rowid, bool is_full_sort_key);
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
@@ -514,8 +574,8 @@ private:
 
     IndexReadOptions _index_read_options(ColumnId cid) const;
 
-    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                  const std::map<std::string, std::string>& query_params, FileSystem* fs = nullptr);
+    Status _init_reader_from_file(FileInfo* vi_file, const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                  const std::map<std::string, std::string>& query_params);
     StatusOr<size_t> _predicate_evaluate(vector<rowid_t>* rowid);
 
     StatusOr<size_t> _predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid);
@@ -1184,45 +1244,34 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     return _scan_range;
 }
 
-inline Status SegmentIterator::_init_reader_from_file(const std::string& index_path,
+inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
                                                       const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                                      const std::map<std::string, std::string>& query_params,
-                                                      FileSystem* fs) {
+                                                      const std::map<std::string, std::string>& query_params) {
 #ifdef WITH_TENANN
     if (!_vector_index_ctx) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
-    _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-    auto create_st = VectorIndexReaderFactory::create_from_file(index_path, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, fs);
-    // .vi file not found — caller will set up brute-force fallback
-    if (create_st.is_not_found()) {
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache == nullptr) {
+        return Status::InternalError("StorageEnv vector index cache is not initialized");
+    }
+    DCHECK(_opts.stats != nullptr);
+
+    VectorIndexReaderFactory factory(*vector_index_cache);
+    VectorIndexReaderInitOptions options{
+            .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
+            .query_k = static_cast<int>(_vector_index_ctx->k),
+            .refine_distance = _vector_index_ctx->refine_distance,
+            .stats = *_opts.stats,
+    };
+    ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
+    if (result.state == VectorIndexReaderInitResult::kFallback) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
     }
-    RETURN_IF_ERROR(create_st);
-    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
-    // efSearch iff the user set one via query hint / session var; that disables
-    // adaptive scaling so user intent is honored. FE preserves the user-typed key
-    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
-    // valid), so the check must be case-insensitive.
-    bool user_set_ef = false;
-    for (const auto& entry : query_params) {
-        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
-            user_set_ef = true;
-            break;
-        }
-    }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
-                                                                 static_cast<size_t>(_segment->num_rows()),
-                                                                 _vector_index_ctx->k, user_set_ef);
-    // empty ann reader — caller will set up brute-force fallback
-    if (status.is_not_supported()) {
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-    return status;
+    DCHECK(result.reader != nullptr);
+    _vector_index_ctx->ann_reader = std::move(result.reader);
+    return Status::OK();
 #else
     return Status::OK();
 #endif
@@ -1327,9 +1376,17 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-        FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Hold the FileSystem by shared_ptr: the .vi reader built from it lands in the tenann
+        // index cache and outlives this iterator, so a raw Segment::file_system() would dangle.
+        FileInfo vi_file{.path = index_path};
+        if (_opts.belonged_to_cloud_native) {
+            vi_file.fs = _segment->shared_file_system();
+        }
         // Turns off use_vector_index on a runtime NotFound / not-supported.
-        RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->vector_index_load_ns);
+            RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
+        }
 #else
         _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif
@@ -1998,6 +2055,19 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // create delta column iterator
         // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
+        // The column is served from a Delta Column Group (.cols) for this query
+        // version (column-mode partial update overlay). A fast-path IDG index
+        // (.idx sidecar) is keyed by the BASE segment id and was built over the
+        // BASE column values; it does NOT describe the overlaid DCG values and
+        // is not rebuilt on a column-mode update. Probing it here would let the
+        // DCG column iterator surface the STALE base index via
+        // has_{original,ngram}_bloom_filter_index(), and the pruning gate would
+        // filter rows against values the column no longer holds -> silently
+        // wrong results. Drop the IDG context so the DCG column falls back to an
+        // unindexed (correct) scan, matching footer-index behavior (a footer
+        // index lives on the base ColumnReader, which the DCG reader does not
+        // inherit, so it is never consulted for DCG-overlaid columns).
+        iter_opts.idg_loader = nullptr;
         opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
@@ -2400,7 +2470,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         } else if (!upper->short_key.empty()) {
             RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
-                                            &upper_rowid));
+                                            &upper_rowid, upper->use_full_sort_key));
         }
 
         if (upper_rowid > 0) {
@@ -2411,7 +2481,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
             } else if (!lower->short_key.empty()) {
                 RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
-                                                upper_rowid, &lower_rowid));
+                                                upper_rowid, &lower_rowid, lower->use_full_sort_key));
             }
         }
 
@@ -2545,30 +2615,56 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
 Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
+    // Coarse prune via the short key index. For a full-key segment, encode the search
+    // key with the segment's OWN sort-key schema so the bytes match its index even if
+    // the query's schema drifted; if the query's sort-key types are not byte-compatible
+    // with the segment's, bypass the coarse prune entirely (start=0, keep the given
+    // |end|) rather than emit a mismatched bracket -- the typed binary search below
+    // (unchanged) still finds the exact answer over the full candidate range.
+    // Live read gate: this seek's producer and consumer are the same query with no time gap, so it is
+    // safe to read use_full_sort_key_index() directly (go-forward rollback: a newly-started query
+    // seeks off the legacy page whenever the read config is off or the full page is unusable). A true
+    // return guarantees the full decoder is published, so lower_bound_full/upper_bound_full are valid.
+    const bool use_full_sort_key = _segment->use_full_sort_key_index();
+    bool use_index = true;
     std::string index_key;
-    index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
-
-    uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
-    if (start_iter.valid()) {
-        // Because previous block may contain this key, so we should set rowid to
-        // last block's first row.
-        start_block_id = start_iter.ordinal();
-        if (start_block_id > 0) {
-            start_block_id--;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(_segment.get(), key, lower);
+        if (encoded.has_value()) {
+            index_key = std::move(encoded.value());
+        } else {
+            use_index = false;
         }
     } else {
-        // When we don't find a valid index item, which means all short key is
-        // smaller than input key, this means that this key may exist in the last
-        // row block. so we set the rowid to first row of last row block.
-        start_block_id = _segment->last_block();
+        index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
+                          : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
     }
-    rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
-    if (end_iter.valid()) {
-        end = end_iter.ordinal() * _segment->num_rows_per_block();
+    rowid_t start = 0;
+    if (use_index) {
+        uint32_t start_block_id;
+        auto start_iter = use_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
+        if (start_iter.valid()) {
+            // Because previous block may contain this key, so we should set rowid to
+            // last block's first row.
+            start_block_id = start_iter.ordinal();
+            if (start_block_id > 0) {
+                start_block_id--;
+            }
+        } else {
+            // When we don't find a valid index item, which means all short key is
+            // smaller than input key, this means that this key may exist in the last
+            // row block. so we set the rowid to first row of last row block.
+            start_block_id = _segment->last_block();
+        }
+        // Both pages share one block geometry (num_rows_per_block/num_items), so the block count and
+        // rows-per-block always come from the legacy decoder regardless of which page was seeked.
+        start = start_block_id * _segment->num_rows_per_block();
+
+        auto end_iter = use_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
+        if (end_iter.valid()) {
+            end = end_iter.ordinal() * _segment->num_rows_per_block();
+        }
     }
 
     // binary search to find the exact key
@@ -2603,9 +2699,19 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
 }
 
 Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                                        rowid_t* rowid) {
+                                        rowid_t* rowid, bool is_full_sort_key) {
+    // |index_key| was already encoded upstream with the codec the logical-split producer pinned into
+    // ShortKeyOption::use_full_sort_key (short_key_encode vs. full_sort_key_encode); |is_full_sort_key|
+    // is that pin. It selects BOTH the short key decoder and the row re-encode below -- never a fresh
+    // read-config read -- so a mid-flight config flip cannot desync the producer from this consumer.
+    if (is_full_sort_key && !_segment->ensure_full_sort_key_index_usable()) {
+        // The producer only pins FULL after a usability request succeeded; if the full page is
+        // unexpectedly unusable now, never reinterpret full-key bytes with the legacy decoder.
+        return Status::InternalError("full sort key index page is not usable for a full-key pinned boundary");
+    }
+
     uint32_t start_block_id;
-    auto start_iter = _segment->lower_bound(index_key);
+    auto start_iter = is_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
     if (start_iter.valid()) {
         // Because previous block may contain this key, so we should set rowid to
         // last block's first row.
@@ -2619,9 +2725,10 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
         // row block. so we set the rowid to first row of last row block.
         start_block_id = _segment->last_block();
     }
+    // Both pages share one block geometry, so rows-per-block always comes from the legacy decoder.
     rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = _segment->upper_bound(index_key);
+    auto end_iter = is_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * _segment->num_rows_per_block();
     }
@@ -2634,7 +2741,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) > 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) > 0) {
                 start = mid + 1;
             } else {
                 end = mid;
@@ -2646,7 +2753,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema) < 0) {
+            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) < 0) {
                 end = mid;
             } else {
                 start = mid + 1;
@@ -4345,6 +4452,9 @@ Status SegmentIterator::_apply_bitmap_index() {
             const ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            // Non-null => the column is served from a Delta Column Group (.cols)
+            // for this query version (column-mode partial update overlay).
+            const bool served_from_dcg = (segment_ptr != nullptr);
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
@@ -4360,7 +4470,20 @@ Status SegmentIterator::_apply_bitmap_index() {
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files
             // would be invisible to the pruning gate.
-            opts.idg_loader = _opts.idg_loader;
+            //
+            // But the fast-path IDG .idx is keyed by the BASE segment id and was
+            // built over the BASE column values. A column-mode partial update
+            // overlays new values into a DCG (.cols) WITHOUT rebuilding the
+            // index. Attaching the base .idx to a DCG-overlaid column would
+            // prune rows against values the column no longer holds -> silently
+            // wrong results. So only wire the IDG loader when the column is
+            // served from the base segment; for a DCG-overlaid column leave it
+            // unset so new_bitmap_index_iterator falls back to the (absent)
+            // footer bitmap index -> correct unindexed scan, matching the footer
+            // index behavior.
+            if (!served_from_dcg) {
+                opts.idg_loader = _opts.idg_loader;
+            }
             opts.tablet_id = _opts.tablet_id;
             opts.segment_id = _opts.rowset_id + segment_id();
             opts.query_version = _opts.version;
@@ -4883,9 +5006,23 @@ StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Seg
 }
 
 static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower) {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    auto start_iter = segment->lower_bound(index_key);
+    // Live read gate (physical split producer==consumer, no time gap): a true return guarantees the
+    // full decoder is published, so lower_bound_full is valid; read off => legacy page (rollback).
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: the query's sort-key types drifted from this segment's own
+            // schema and cannot be safely bracketed. Never emit a mismatched coarse
+            // bracket -- return the start of the full candidate range.
+            return 0;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto start_iter = use_full_sort_key ? segment->lower_bound_full(index_key) : segment->lower_bound(index_key);
     uint32_t start_block_id = 0;
     if (start_iter.valid()) {
         // Previous block may contain this key, so start from its first row.
@@ -4901,9 +5038,21 @@ static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple
 }
 
 static rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    auto end_iter = segment->upper_bound(index_key);
+    // Live read gate (physical split producer==consumer, no time gap); read off => legacy page.
+    const bool use_full_sort_key = segment->use_full_sort_key_index();
+    std::string index_key;
+    if (use_full_sort_key) {
+        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
+        if (!encoded.has_value()) {
+            // Bypass: never emit a mismatched coarse bracket -- return the full
+            // candidate range unmodified.
+            return end;
+        }
+        index_key = std::move(encoded.value());
+    } else {
+        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    }
+    auto end_iter = use_full_sort_key ? segment->upper_bound_full(index_key) : segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * segment->num_rows_per_block();
     }

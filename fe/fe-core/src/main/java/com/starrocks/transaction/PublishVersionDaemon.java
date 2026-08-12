@@ -117,8 +117,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // and modify transaction state on FE
     // for shared-nothing, task executor thread will be responsible for checking publish task
     // result and modify transaction state on FE
-    private ThreadPoolExecutor taskExecutor;
-    private ThreadPoolExecutor deleteTxnLogExecutor;
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    ThreadPoolExecutor taskExecutor;
+    ThreadPoolExecutor deleteTxnLogExecutor;
     // Guards ConfigRefreshDaemon listener registration. Executors are recreated on every
     // leader activation (after onStopped() nulls them), but listeners must be registered
     // only once per daemon instance — otherwise each demote/re-elect cycle leaks a listener.
@@ -261,7 +263,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return taskExecutor;
     }
 
-    private @NotNull ThreadPoolExecutor getDeleteTxnLogExecutor() {
+    @NotNull
+    ThreadPoolExecutor getDeleteTxnLogExecutor() {
         if (deleteTxnLogExecutor == null) {
             // Create a new thread for every task if there is no idle threads available.
             // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
@@ -1198,7 +1201,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
                 if (!tabletStats.isEmpty()) {
-                    partitionCommitInfo.getTabletStats().putAll(tabletStats);
+                    partitionCommitInfo.putAllTabletStats(tabletStats);
                 }
             }
             return true;
@@ -1314,19 +1317,23 @@ public class PublishVersionDaemon extends LeaderDaemon {
      * BE-side PublishVersionTask is idempotent (BE returns success when the requested
      * version is already visible), so dropping in-flight tasks is safe - the new leader
      * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
+     *
+     * shutdownNow() interrupts the publish/delete-txnlog workers, then awaitTermination
+     * waits (with no deadline) until they actually terminate, so isRunning is never cleared
+     * while a worker is alive. The executor references are then nulled so the next call to
+     * {@link #getTaskExecutor()} rebuilds a fresh pool on re-election.
      */
     @Override
     protected void onStopped() {
-        ThreadPoolExecutor t = taskExecutor;
-        if (t != null) {
-            t.shutdownNow();
-            taskExecutor = null;
-        }
-        ThreadPoolExecutor d = deleteTxnLogExecutor;
-        if (d != null) {
-            d.shutdownNow();
-            deleteTxnLogExecutor = null;
-        }
+        // Shut down both pools and wait until they actually terminate, so this worker does not clear
+        // isRunning (at the tail of loop()) until the publish / delete-txnlog workers are quiescent -
+        // the re-activation gate reads isRunning as the single quiescence signal. Then null the fields so
+        // the getters lazily rebuild fresh pools on re-election, and clear the leader-session dedup sets
+        // (the next leader resubmits from getReadyToPublishTransactions; BE publish is idempotent).
+        shutdownNowAndAwaitTermination("PublishVersionDaemon.taskExecutor", taskExecutor);
+        shutdownNowAndAwaitTermination("PublishVersionDaemon.deleteTxnLogExecutor", deleteTxnLogExecutor);
+        taskExecutor = null;
+        deleteTxnLogExecutor = null;
         if (publishingTransactionIds != null) {
             publishingTransactionIds.clear();
         }

@@ -443,6 +443,18 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
         }
+        // A column partial-update publish routes through UpdateManager::_handle_delete_files, which erases
+        // every del file via the memtable path and never reads op_write.del_ssts(). Building a tombstone
+        // sstable here would cost a full sort+SST write at import and then leave the file orphaned (it never
+        // reaches sstable_meta(), so only a full vacuum's orphan scan reclaims it), with no publish speedup
+        // in return. The del file itself is still written and carried normally.
+        // The condition mirrors the publish-side dispatch exactly: txn_meta (and with it the mode publish
+        // reads) is only emitted for a real partial update, so a full-column write keeps the optimization
+        // even when the load carries a column mode.
+        if (is_partial_update() && (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+                                    _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
+            _tablet_writer->set_skip_del_tombstone_sstable();
+        }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
             // Eager PK-index build (the unsort SST writer that a separate-sort-key spill load needs to
@@ -684,6 +696,10 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
 
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // A column addresses its bytes with uint32 offsets, so a chunk wider than that cannot be
+    // carried through to apply. Fail the load here, where the statement can still be retried with
+    // less data per batch, rather than let it commit and leave apply to fail on every retry.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(chunk, "load chunk", _tablet_id, _txn_id));
 
     // Fast-fail if writer has been cancelled.
     auto cancel_st = current_cancel_status();
@@ -907,6 +923,13 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 seg_delvec_pb->set_data(dv.save());
             }
         }
+    }
+    // Threshold-based pre-built tombstone sstables for the del files, parallel to dels_meta.
+    for (const auto& del_sst : _tablet_writer->del_ssts()) {
+        to_file_meta_pb(del_sst, op_write->add_del_ssts());
+    }
+    for (auto& del_sst_range : _tablet_writer->del_sst_ranges()) {
+        op_write->add_del_sst_ranges()->CopyFrom(del_sst_range);
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());

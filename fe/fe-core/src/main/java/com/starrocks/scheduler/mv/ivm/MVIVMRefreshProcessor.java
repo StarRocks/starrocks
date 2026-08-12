@@ -504,6 +504,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             long processStartTime = mvContext.getStatus().getProcessStartTime();
             newProperties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME,
                     mvRefreshParams.isCompleteRefresh() && processStartTime > 0
+                            && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
         // warehouse
@@ -593,8 +594,17 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-                mvContext.setExecPlan(execPlan);
+                boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
+                try {
+                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
+                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
+                    // required by the rewrite.
+                    ctx.setBypassAuthorizerCheck(true);
+                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                    mvContext.setExecPlan(execPlan);
+                } finally {
+                    ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
+                }
             }
             return insertStmt;
         } finally {

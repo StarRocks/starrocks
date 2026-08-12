@@ -1882,7 +1882,7 @@ public class SubqueryTest extends PlanTestBase {
                 "then (select type1 from tmp) > (select pretype from tmp) else null end end from tmp a;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "Project\n"
-                + "  |  <slot 32> : if(8 = abs(0), 'a', CAST(if(33: COUNT(1) > 0, 'season' > 'a.season', NULL) AS VARCHAR))");
+                + "  |  <slot 32> : if(8 = abs(0), 'a', CAST(if(33: COUNT(1) > 0, TRUE, NULL) AS VARCHAR))");
     }
 
     // we can enable this  test after support constant in sub-query

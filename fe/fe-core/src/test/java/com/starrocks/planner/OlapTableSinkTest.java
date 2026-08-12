@@ -1047,6 +1047,63 @@ public class OlapTableSinkTest {
     }
 
     @Test
+    public void testFindPrimaryReplicaSkipDecommission() throws StarRocksException {
+        Backend be1 = new Backend(2001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(2002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(2003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+
+        //be1 hosts the fewest primaries, so without the DECOMMISSION check it would be selected
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 0L);
+        bePrimaryMap.put(be2.getId(), 1L);
+        bePrimaryMap.put(be3.getId(), 2L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.a replica being decommissioned must not be selected while other candidates exist
+        Replica decommissioned = new Replica(55L, be1.getId(), Replica.ReplicaState.DECOMMISSION, 1, 0);
+        Replica normal1 = new Replica(66L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica normal2 = new Replica(77L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        decommissioned.setLastWriteFail(false);
+        normal1.setLastWriteFail(false);
+        normal2.setLastWriteFail(false);
+        List<Replica> replicaList = new ArrayList<>();
+        replicaList.add(decommissioned);
+        replicaList.add(normal1);
+        replicaList.add(normal2);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, replicaList);
+        Assertions.assertEquals(normal1.getId(), replicaList.get(lowUsageIndex1).getId());
+        Assertions.assertEquals(be2.getId(), replicaList.get(lowUsageIndex1).getBackendId());
+
+        //2.fall back to the decommissioned replica when it is the only candidate
+        List<Replica> onlyDecommissionedList = new ArrayList<>();
+        onlyDecommissionedList.add(decommissioned);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, onlyDecommissionedList);
+        Assertions.assertEquals(decommissioned.getId(), onlyDecommissionedList.get(lowUsageIndex2).getId());
+    }
+
+    @Test
     public void testCreateLocationWithSharedDataMode(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
         SystemInfoService sysInfoService = new SystemInfoService();
         MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
