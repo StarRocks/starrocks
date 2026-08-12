@@ -400,6 +400,14 @@ Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<
     // SegmentIterator::_apply_tablet_range) would either narrow to the wrong rows or throw comparing a
     // primary-key datum against a sort-key column. Withhold the range instead of publishing a value none
     // of them can use.
+    //
+    // No such tablet exists yet, which is why withholding the range loses nothing today: a
+    // range-distributed primary-key table must declare ORDER BY equal to its key columns
+    // (CreateTableAnalyzer), and OPTIMIZE -- the only clause that rewrites a sort key -- is rejected on
+    // range-distributed tables. Once that restriction is relaxed the range stops being the per-child
+    // restriction on a shared segment, and the parent tablet keeps serving reads until the de-share
+    // compaction has rewritten each child's data privately. Whatever relaxes the restriction owes that
+    // cutover; this guard only makes sure the undefined conversion can never reach a segment meanwhile.
     if (_tablet_schema != nullptr && _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
         _tablet_schema->has_separate_sort_key()) {
         return Status::OK();

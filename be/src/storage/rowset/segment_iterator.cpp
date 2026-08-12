@@ -2391,11 +2391,9 @@ Status SegmentIterator::_apply_tablet_range() {
     // scan_one_rebuild_unit) nothing catches it and the BE aborts, so every restart re-runs the same
     // publish and dies again.
     //
-    // Leave the scan range untouched instead. This does not lose a restriction that anything relies on
-    // today: a split child inherits a full copy of the parent's metadata, sstable_meta included, so its
-    // primary index already carries the siblings' keys and is over-inclusive either way; and reads that
-    // do need the restriction are served from the parent layout until the UNSHARE compaction has
-    // rewritten each child's data privately.
+    // Leave the scan range untouched instead. Lake tablets already withhold the range for this shape in
+    // Rowset::set_segment_tablet_range, which is where the reasoning for why nothing depends on it lives;
+    // this is the backstop for every other producer.
     //
     // Only primary-key tablets are affected. Every other key model encodes its range over the sort key
     // itself, so there the narrowing is both well-defined and load-bearing.
