@@ -53,11 +53,11 @@ inline bool agg_should_prefetch_table(const Table& table) {
     return table.bucket_count() * (sizeof(typename Table::value_type) + 1) >= agg_prefetch_min_bytes();
 }
 
-// Read once per chunk from config::agg_hash_map_prefetch_dist (default 16).
-// The macros below capture it into __prefetch_dist so each inner-loop
-// iteration is a register read, not an atomic load.
+// Read once per chunk from config::hash_map_prefetch_dist. The macros below
+// capture it into __prefetch_dist so each inner-loop iteration is a register
+// read, not an atomic load.
 inline size_t agg_hash_map_default_prefetch_dist() {
-    const int32_t v = config::agg_hash_map_prefetch_dist;
+    const int32_t v = config::hash_map_prefetch_dist;
     return v > 0 ? static_cast<size_t>(v) : 0;
 }
 
