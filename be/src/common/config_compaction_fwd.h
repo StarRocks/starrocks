@@ -258,13 +258,14 @@ CONF_mInt32(lake_compaction_chunk_size, "4096");
 CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 // Merge iterator pre-fills every child once before the merge can start. That prologue is
+// Merge iterator prefills every child once before the merge can start. That prefill is
 // serial, so a task with S inputs pays S round trips before producing a single row. When
-// enabled, the prologue reads all children in parallel and then commits them in the original
+// enabled, the prefill reads all children in parallel and then commits them in the original
 // order, which keeps the merge order and the error semantics identical to the serial path.
 // Only the reads are parallel; heap/state updates stay serial.
 CONF_mBool(enable_compaction_parallel_merge_init, "false");
 
-// Size of the thread pool that runs the parallel merge prologue. Only takes effect the first
+// Size of the thread pool that runs the parallel merge prefill. Only takes effect the first
 // time enable_compaction_parallel_merge_init drives a merge; the pool is built once.
 CONF_Int32(compaction_parallel_merge_init_threads, "16");
 
