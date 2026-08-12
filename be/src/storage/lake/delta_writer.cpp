@@ -443,6 +443,18 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
         }
+        // A column partial-update publish routes through UpdateManager::_handle_delete_files, which erases
+        // every del file via the memtable path and never reads op_write.del_ssts(). Building a tombstone
+        // sstable here would cost a full sort+SST write at import and then leave the file orphaned (it never
+        // reaches sstable_meta(), so only a full vacuum's orphan scan reclaims it), with no publish speedup
+        // in return. The del file itself is still written and carried normally.
+        // The condition mirrors the publish-side dispatch exactly: txn_meta (and with it the mode publish
+        // reads) is only emitted for a real partial update, so a full-column write keeps the optimization
+        // even when the load carries a column mode.
+        if (is_partial_update() && (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+                                    _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
+            _tablet_writer->set_skip_del_tombstone_sstable();
+        }
         RETURN_IF_ERROR(_tablet_writer->open());
         if (should_enable_load_spill()) {
             // Eager PK-index build (the unsort SST writer that a separate-sort-key spill load needs to

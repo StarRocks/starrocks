@@ -85,6 +85,12 @@ public:
     // Flushes the existing memtable first (so the ingested sstable becomes the newest layer), reverse-looks-up
     // each key's rss_rowid into |old_values| for the delete vector, then ingests the sstable stamped with
     // |del_rssid| and |version| (the sstable was written with entry version 0). Cloud-native only.
+    //
+    // Precondition: |keys| holds no repeated primary key -- one del file is one memtable flush, and
+    // MemTable::_sort aggregates duplicate primary keys away before re-sorting by the sort key. Unlike
+    // erase(), which resolves a repeat against the tombstone its first occurrence just wrote and so
+    // reports it once, this reverse-looks-up every position independently and would report the same
+    // rss_rowid once per occurrence, overshooting the delete vector's cardinality at publish.
     Status bulk_erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid,
                       const FileMetaPB& del_sst_meta, const PersistentIndexSstableRangePB& del_sst_range,
                       int64_t version);

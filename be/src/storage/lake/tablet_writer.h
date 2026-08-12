@@ -261,6 +261,14 @@ public:
     bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
     void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
 
+    // Set by DeltaWriter for the column partial-update modes, whose publish path
+    // (UpdateManager::_handle_delete_files) applies every del file with index.erase and never consults
+    // op_write.del_ssts(). A tombstone sstable built for such a load is therefore never ingested, so it
+    // never enters sstable_meta() and only a full vacuum's orphan scan reclaims it -- pure waste on both
+    // the write and the storage side. Skip the build instead of emitting a file nobody consumes.
+    bool skip_del_tombstone_sstable() const { return _skip_del_tombstone_sstable; }
+    void set_skip_del_tombstone_sstable() { _skip_del_tombstone_sstable = true; }
+
     void check_global_dict(SegmentWriter* segment_writer);
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
@@ -300,6 +308,7 @@ protected:
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
     bool _force_build_vector_index_inline = false;
+    bool _skip_del_tombstone_sstable = false;
 };
 
 } // namespace lake
