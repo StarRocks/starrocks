@@ -66,10 +66,15 @@ jobs:
           git pull || true
           ./lib/get_pr_info.sh
 
+  # Phase 3: accept the SHARED release branches too (branch-4.1 / branch-4.0) so a
+  # CD-native fix's backport on those lines can sync back to StarRocks. main is still
+  # accepted here but its reverse path stays disabled at the trigger (no dispatcher
+  # feeds BRANCH=main); CD-exclusive 4.3/4.2 are never dispatched (SR has no such line).
+  # The job body below is already fully ${{ inputs.BRANCH }}-parameterized.
   cd-repo-sync-main:
-    name: CD Repo Sync - main
+    name: CD Repo Sync
     runs-on: [self-hosted, sync, ubuntu]
-    if: inputs.BRANCH == 'main'
+    if: inputs.BRANCH == 'main' || inputs.BRANCH == 'branch-4.1' || inputs.BRANCH == 'branch-4.0'
     needs: pr-info
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
