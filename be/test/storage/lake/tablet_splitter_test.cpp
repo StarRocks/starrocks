@@ -2168,7 +2168,10 @@ static TuplePB make_bigint_null_tuple_pb(int64_t k1) {
 // range is at arity 2, but every rowset was written before the ADD and carries arity-1
 // sort_key_min/sort_key_max. |parent_bounds_arity1| reproduces an ALREADY corrupted tablet whose own
 // range bounds were never reprojected.
-static TabletMetadataPtr make_trailing_key_added_metadata(
+// Returns a MUTABLE handle (not TabletMetadataPtr, which is shared_ptr<const TabletMetadataPB>):
+// the tests below tweak the schema / segment metas after building. It converts implicitly wherever a
+// TabletMetadataPtr is expected.
+static std::shared_ptr<TabletMetadataPB> make_trailing_key_added_metadata(
         const std::vector<std::tuple<uint32_t, int64_t, int64_t, int64_t, int64_t>>& rowsets,
         bool parent_bounds_arity1 = false) {
     auto m = std::make_shared<TabletMetadataPB>();
