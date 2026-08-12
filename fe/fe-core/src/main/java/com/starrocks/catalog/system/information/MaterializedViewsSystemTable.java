@@ -37,12 +37,9 @@ import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
->>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

@@ -17,14 +17,8 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.qe.ShowMaterializedViewStatus;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.SimpleExecutor;
-import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
-import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
->>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
 import com.starrocks.thrift.TMaterializedViewStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
