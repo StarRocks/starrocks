@@ -1072,6 +1072,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
         (void)corrupted_tablet_meta_handler(corrupted_status, path);
         return corrupted_status;
     }
+    RETURN_IF(!metadata->has_id() || metadata->id() != tablet_id,
+              Status::Corruption(fmt::format("mismatched tablet id in bundle metadata {}. real={} expect={}", path,
+                                             metadata->has_id() ? metadata->id() : 0, tablet_id)));
     normalize_tablet_metadata_after_load(metadata.get());
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });

@@ -1443,6 +1443,46 @@ TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
     EXPECT_TRUE(handler_called) << "corrupted_tablet_meta_handler should have been called";
 }
 
+TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_rejects_mismatched_tablet_id) {
+    auto old_flag = config::lake_enable_protobuf_file_checksum;
+    DeferOp guard([old_flag]() { config::lake_enable_protobuf_file_checksum = old_flag; });
+    config::lake_enable_protobuf_file_checksum = false;
+
+    constexpr int64_t kTabletId = 101;
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    auto& metadata = metadatas[kTabletId];
+    metadata.set_id(kTabletId);
+    metadata.set_version(2);
+    metadata.mutable_schema()->set_id(10);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto path = _tablet_manager->bundle_tablet_metadata_location(kTabletId, 2);
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto content, read_file->read_all());
+    ASSIGN_OR_ABORT(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(path, content));
+    auto page_it = bundle_metadata->tablet_meta_pages().find(kTabletId);
+    ASSERT_NE(bundle_metadata->tablet_meta_pages().end(), page_it);
+    const auto& page = page_it->second;
+
+    TabletMetadataPB corrupted_metadata;
+    ASSERT_TRUE(corrupted_metadata.ParseFromArray(content.data() + page.offset(), page.size()));
+    corrupted_metadata.set_id(kTabletId + 1);
+    std::string corrupted_page;
+    ASSERT_TRUE(corrupted_metadata.SerializeToString(&corrupted_page));
+    ASSERT_EQ(page.size(), corrupted_page.size());
+    content.replace(page.offset(), page.size(), corrupted_page);
+
+    ASSERT_OK(fs->delete_file(path));
+    ASSIGN_OR_ABORT(auto write_file, fs->new_writable_file(path));
+    ASSERT_OK(write_file->append(content));
+    ASSERT_OK(write_file->close());
+    _tablet_manager->metacache()->prune();
+
+    auto result = _tablet_manager->get_single_tablet_metadata(kTabletId, 2);
+    ASSERT_TRUE(result.status().is_corruption()) << result.status();
+}
+
 // Bundle tablet metadata checksum: the footer carries a crc32 over the bundle header plus a
 // magic so the read path can tell the new checksummed layout from the legacy one. Verifies:
 //   - new format (flag on): footer magic present, header crc + per-page checksums populated, reads OK;
