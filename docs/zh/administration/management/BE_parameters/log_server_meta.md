@@ -47,6 +47,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：DiagnoseDaemon 处理 `STACK_TRACE` 请求时，两次堆栈诊断的最小时间间隔。若距离上次采集不足该间隔则跳过，以减少频繁堆栈抓取的 CPU 和日志开销；排查瞬时问题可适当调小。
 - 引入版本：v3.5.0
 
+### lake_compact_slow_log_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：输出 Lake Compaction 详细 Profile 慢日志的耗时阈值。普通 Compaction Attempt 或并行 Compaction Subtask 完成后，仅当本次 Attempt 或 Subtask 的耗时大于等于该值时，StarRocks 才会输出一条包含任务标识、状态和完整 JSON Profile 的 INFO 日志。设置为 `0` 表示记录每个已完成的 Attempt 或 Subtask；调大该值可减少 INFO 日志量。
+- 引入版本：-
+
 ### load_rpc_slow_log_frequency_threshold_seconds
 
 - 默认值：60
