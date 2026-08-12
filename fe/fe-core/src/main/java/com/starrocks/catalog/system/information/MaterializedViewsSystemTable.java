@@ -32,8 +32,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowMaterializedViewStatus;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -177,6 +180,14 @@ public class MaterializedViewsSystemTable extends SystemTable {
             TListMaterializedViewStatusResult result = query(params, context);
             return result.getMaterialized_views().stream().map(this::infoToScalar).collect(Collectors.toList());
         } catch (Exception e) {
+            // Propagate query_timeout (see ShowMaterializedViewStatus.listMaterializedViewStatus): when the
+            // outer query's time budget is exhausted the whole materialized_views query should time out
+            // rather than silently returning an empty/partial result.
+            if (SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
+                throw new StarRocksPlannerException(
+                        "querying information_schema.materialized_views exceeded query_timeout",
+                        ErrorType.INTERNAL_ERROR);
+            }
             LOG.warn("Failed to query materialized views", e);
             // Return empty result if query failed
             return Lists.newArrayList();

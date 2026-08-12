@@ -372,6 +372,11 @@ struct TGetTablesParams {
   // If not set, match default_catalog
   22: optional string catalog_name
   23: optional string table_name
+
+  // Remaining query_timeout (seconds) of the outer user query. Forwarded by the BE schema scanner so the
+  // FE side can bound internal reads (e.g. task_run_history for information_schema.materialized_views) by
+  // the user's query_timeout instead of statistic_collect_query_timeout when the request is not FE-evaluated.
+  24: optional i64 query_timeout
 }
 
 struct TTableStatus {

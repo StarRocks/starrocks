@@ -43,6 +43,8 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -996,6 +998,14 @@ public class ShowMaterializedViewStatus {
                                         .collect(Collectors.toSet())
                         ));
             } catch (Exception e) {
+                // If the outer user query has already exhausted its query_timeout budget, the internal
+                // task_run_history read hit that timeout: surface it as a timeout so the outer query exits,
+                // instead of silently falling back to unknown refresh status.
+                if (SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
+                    throw new StarRocksPlannerException(
+                            "querying information_schema.materialized_views exceeded query_timeout while "
+                                    + "reading task run history", ErrorType.INTERNAL_ERROR);
+                }
                 LOG.warn("Failed to list MV refreshed task run status, fallback to unknown status. db: {}",
                         dbName, e);
             }
