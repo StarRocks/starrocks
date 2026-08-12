@@ -16,9 +16,13 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <numeric>
+
 #include "column/chunk.h"
 #include "column/raw_data_visitor.h"
 #include "column/serde/column_array_serde.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
@@ -26,11 +30,14 @@
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/pk_tablet_unsort_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/primary_index.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sstable/comparator.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -164,13 +171,33 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
     } else {
         ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->del_location(_tablet_id, name)));
     }
-    size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
-    std::vector<uint8_t> content(sz);
+    const size_t del_size_bytes = serde::ColumnArraySerde::max_serialized_size(deletes);
+    std::vector<uint8_t> content(del_size_bytes);
     RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
+
+    // For a large del file, also emit a tombstone sstable so publish can ingest it directly instead of
+    // accumulating every tombstone in the persistent-index memtable. This avoids oversized memtables and
+    // repeated flushes across large del files; reverse lookup is independently parallelized in both erase
+    // paths. Use the eager-build byte threshold, but do not depend on the upsert-side eager writer being
+    // enabled: a pure delete has no upsert spill to enable it. Shared-data primary-key tablets always use the
+    // cloud-native persistent index, so publish can ingest this sstable unconditionally -- except in the
+    // column partial-update modes, whose publish path cannot (see skip_del_tombstone_sstable()). Built
+    // outside the lock (I/O heavy).
+    const int64_t eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+    const bool should_build_del_sst =
+            !deletes.empty() && !skip_del_tombstone_sstable() &&
+            (eager_build_threshold_bytes <= 0 || del_size_bytes >= static_cast<size_t>(eager_build_threshold_bytes));
+    FileInfo del_sst_info; // empty name => no tombstone sstable for this del file (publish uses memtable erase)
+    PersistentIndexSstableRangePB del_sst_range;
+    if (should_build_del_sst) {
+        RETURN_IF_ERROR(build_del_tombstone_sstable(deletes, &del_sst_info, &del_sst_range));
+    }
     {
-        // Use _dels_mutex to protect _dels concurrently append by multiple threads.
+        // Use _dels_mutex to protect _dels concurrently appended by multiple threads. Append the del file
+        // and its tombstone sstable together so _del_ssts stays index-aligned with _dels. Always append a
+        // del_ssts entry (an empty FileInfo when no sstable was built) to keep the parallel arrays aligned.
         std::lock_guard lg(_dels_mutex);
         _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
         // Keep _del_op_offsets and _del_num_rows positionally aligned with _dels. The tombstone
@@ -178,7 +205,56 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         // how op_offset is carried; it is later accounted toward the PK index rebuild-rows threshold.
         _del_op_offsets.emplace_back(op_offset);
         _del_num_rows.emplace_back(static_cast<int64_t>(deletes.size()));
+        _del_ssts.emplace_back(std::move(del_sst_info));
+        _del_sst_ranges.emplace_back(std::move(del_sst_range));
     }
+    return Status::OK();
+}
+
+Status HorizontalPkTabletWriter::build_del_tombstone_sstable(const Column& deletes, FileInfo* info,
+                                                             PersistentIndexSstableRangePB* range) const {
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema()->primary_key_encoding_type_or_error());
+    std::vector<ColumnId> pk_columns(tablet_schema()->num_key_columns());
+    std::iota(pk_columns.begin(), pk_columns.end(), 0);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema(), pk_columns);
+    size_t key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
+    Buffer<Slice> tomb_keys;
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(deletes, key_size, 0, deletes.size(), &tomb_keys));
+    // `deletes` is usually already PK-sorted (the memtable sorts by pk before splitting off deletes), but
+    // a separate-sort-key spilled delete emits sort-key order; TableBuilder requires ascending keys, so
+    // sort only when necessary.
+    std::vector<Slice> sorted;
+    const Slice* sst_keys = vkeys;
+    const auto* comparator = sstable::BytewiseComparator();
+    auto less = [comparator](const Slice& a, const Slice& b) { return comparator->Compare(a, b) < 0; };
+    if (!std::is_sorted(vkeys, vkeys + deletes.size(), less)) {
+        sorted.assign(vkeys, vkeys + deletes.size());
+        std::sort(sorted.begin(), sorted.end(), less);
+        sst_keys = sorted.data();
+    }
+    auto sst_name = gen_sst_filename();
+    WritableFileOptions sst_wopts;
+    std::string sst_encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        sst_wopts.encryption_info = pair.info;
+        sst_encryption_meta.swap(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> sst_wf;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(sst_wf,
+                         _fs->new_writable_file(sst_wopts, _location_provider->sst_location(_tablet_id, sst_name)));
+    } else {
+        ASSIGN_OR_RETURN(sst_wf, fs::new_writable_file(sst_wopts, _tablet_mgr->sst_location(_tablet_id, sst_name)));
+    }
+    // The entry version is 0 in the file and is stamped to the publish version at ingest via
+    // shared_version (see the tombstone projection in PersistentIndexSstable::multi_get).
+    uint64_t sst_filesize = 0;
+    RETURN_IF_ERROR(PersistentIndexSstable::build_tombstone_sstable(sst_keys, deletes.size(), /*version=*/0,
+                                                                    sst_wf.get(), &sst_filesize, range));
+    RETURN_IF_ERROR(sst_wf->close());
+    *info = FileInfo{std::move(sst_name), sst_filesize, std::move(sst_encryption_meta)};
     return Status::OK();
 }
 
@@ -272,6 +348,9 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
     RETURN_IF_ERROR(writer->open());
     if (enable_pk_index_eager_build()) {
         writer->force_set_enable_pk_index_eager_build();
+    }
+    if (skip_del_tombstone_sstable()) {
+        writer->set_skip_del_tombstone_sstable();
     }
     writer->set_auto_flush(auto_flush());
     return writer;

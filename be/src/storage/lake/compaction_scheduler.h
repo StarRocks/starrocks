@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "common/util/stack_trace_mutex.h"
 #include "compaction_task_context.h"
@@ -93,6 +94,10 @@ public:
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
+    // Cache a txn log that this node produced but handed to the aggregator to persist, so that the
+    // following publish does not have to read the combined txn log back from object storage.
+    void cache_txn_log(const CompactionTaskContext& context);
+
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
     const CompactRequest* _request;
@@ -119,6 +124,8 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    // Parallel subtask identifier. -1 means a regular, non-parallel task.
+    int32_t subtask_id = -1;
     std::string profile; // detailed execution info, such as io stats
 };
 
@@ -363,6 +370,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     context->enqueue_time_sec = ::time(nullptr);
+    context->enqueue_time_ns = MonotonicNanos();
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -371,8 +379,10 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     int64_t now = ::time(nullptr);
+    int64_t now_ns = MonotonicNanos();
     for (auto& context : contexts) {
         context->enqueue_time_sec = now;
+        context->enqueue_time_ns = now_ns;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }
