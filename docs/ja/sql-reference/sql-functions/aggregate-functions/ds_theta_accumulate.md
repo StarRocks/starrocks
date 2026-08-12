@@ -1,6 +1,6 @@
 # ds_theta_accumulate
 
-`expr` に対して Apache DataSketches Theta スケッチを構築し、シリアライズされたスケッチを `VARBINARY`（コンパクト形式）として返します。[ds_theta_combine](./ds_theta_combine.md) および [ds_theta_estimate](./ds_theta_estimate.md) と組み合わせてスケッチを永続化・再利用できます。
+`expr` に対して Apache DataSketches Theta スケッチを構築し、シリアライズされたスケッチを `VARBINARY`（コンパクト形式）として返します。[ds_theta_combine](./ds_theta_combine.md) および [ds_theta_estimate](../scalar-functions/ds_theta_estimate.md) と組み合わせてスケッチを永続化・再利用できます。
 
 出力は標準的な Apache DataSketches C++ コンパクトシリアライゼーションを使用するため、StarRocks が書き込んだスケッチはデフォルトのハッシュシードを使用する任意の Apache DataSketches 実装で読み取ることができ、その逆も可能です。
 

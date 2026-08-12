@@ -9,9 +9,9 @@ Aggregate function that unions serialized Apache DataSketches Theta sketches
 
 Input is a column of compact theta sketches from any source: built via
 [`ds_theta_accumulate`](./ds_theta_accumulate.md), produced by the pairwise
-scalar set ops [`ds_theta_union`](./ds_theta_union.md) /
-[`ds_theta_intersect`](./ds_theta_intersect.md) /
-[`ds_theta_a_not_b`](./ds_theta_a_not_b.md), or loaded externally as
+scalar set ops [`ds_theta_union`](../scalar-functions/ds_theta_union.md) /
+[`ds_theta_intersect`](../scalar-functions/ds_theta_intersect.md) /
+[`ds_theta_a_not_b`](../scalar-functions/ds_theta_a_not_b.md), or loaded externally as
 `VARBINARY` from Parquet/Iceberg.
 
 The on-wire format is the standard Apache DataSketches C++ compact theta

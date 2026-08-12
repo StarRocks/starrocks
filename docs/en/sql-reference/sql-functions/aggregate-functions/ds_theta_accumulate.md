@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 Builds an Apache DataSketches Theta sketch over `expr` and returns the sketch
 serialized as `VARBINARY` (compact form). Pair with [ds_theta_combine](./ds_theta_combine.md)
-and [ds_theta_estimate](./ds_theta_estimate.md) to materialize and reuse sketches.
+and [ds_theta_estimate](../scalar-functions/ds_theta_estimate.md) to materialize and reuse sketches.
 
 The output uses the standard Apache DataSketches C++ compact serialization, so
 sketches written by StarRocks can be consumed by any Apache DataSketches

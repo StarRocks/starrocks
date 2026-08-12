@@ -2,7 +2,7 @@
 
 2 つのシリアライズされた Apache DataSketches Theta スケッチに対するスカラーのペアごと和集合演算です。distinct count が `|A ∪ B|` に推定される単一のシリアライズされたコンパクトスケッチを返します。いずれかの入力が `NULL` の場合は `NULL` を返します。
 
-多数のスケッチに対する集計形式の和集合演算には [ds_theta_combine](./ds_theta_combine.md) を使用してください。
+多数のスケッチに対する集計形式の和集合演算には [ds_theta_combine](../aggregate-functions/ds_theta_combine.md) を使用してください。
 
 ## 構文
 
