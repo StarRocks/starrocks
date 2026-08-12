@@ -50,6 +50,14 @@ bool VectorIndexCacheMetrics::install(MetricRegistry* registry) {
                                    &vector_index_cache_dynamic_lookup_count) ||
         !registry->register_metric("vector_index_cache_dynamic_hit_count", &vector_index_cache_dynamic_hit_count) ||
         !registry->register_metric("vector_index_cache_dynamic_hit_ratio", &vector_index_cache_dynamic_hit_ratio) ||
+        !registry->register_metric("vector_index_cache_async_load_rejected", &vector_index_cache_async_load_rejected) ||
+        !registry->register_metric("vector_index_cache_async_load_failure", &vector_index_cache_async_load_failure) ||
+        !registry->register_metric("vector_index_cache_async_load_success", &vector_index_cache_async_load_success) ||
+        !registry->register_metric("vector_index_cache_async_load_ns", &vector_index_cache_async_load_ns) ||
+        !registry->register_metric("vector_index_cache_async_load_inflight", &vector_index_cache_async_load_inflight) ||
+        !registry->register_metric("vector_index_cache_async_load_queued", &vector_index_cache_async_load_queued) ||
+        !registry->register_metric("vector_index_cache_loading_wait_timeout",
+                                   &vector_index_cache_loading_wait_timeout) ||
         !registry->register_hook(kVectorIndexCacheMetricsHookName, [this] { refresh(); })) {
         hide();
         return false;
@@ -73,6 +81,13 @@ void VectorIndexCacheMetrics::hide() {
     vector_index_cache_dynamic_lookup_count.hide();
     vector_index_cache_dynamic_hit_count.hide();
     vector_index_cache_dynamic_hit_ratio.hide();
+    vector_index_cache_async_load_rejected.hide();
+    vector_index_cache_async_load_failure.hide();
+    vector_index_cache_async_load_success.hide();
+    vector_index_cache_async_load_ns.hide();
+    vector_index_cache_async_load_inflight.hide();
+    vector_index_cache_async_load_queued.hide();
+    vector_index_cache_loading_wait_timeout.hide();
 }
 
 void VectorIndexCacheMetrics::update(size_t capacity, size_t usage, uint64_t lookup_count, uint64_t hit_count) {

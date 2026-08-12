@@ -15,7 +15,6 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -61,7 +60,6 @@
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
-#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
@@ -79,6 +77,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -388,7 +387,6 @@ private:
 
 #ifdef WITH_TENANN
         tenann::PrimitiveSeqView query_view;
-        std::shared_ptr<tenann::IndexMeta> index_meta;
 #endif
 
         std::shared_ptr<VectorIndexReader> ann_reader;
@@ -1311,38 +1309,27 @@ inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
     if (!_vector_index_ctx) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
-    _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-    // create_from_file backfills vi_file->size on the cold path; init_searcher reuses it.
-    auto create_st = VectorIndexReaderFactory::create_from_file(vi_file, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, _opts.stats);
-    // .vi file not found — caller will set up brute-force fallback
-    if (create_st.is_not_found()) {
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache == nullptr) {
+        return Status::InternalError("StorageEnv vector index cache is not initialized");
+    }
+    DCHECK(_opts.stats != nullptr);
+
+    VectorIndexReaderFactory factory(*vector_index_cache);
+    VectorIndexReaderInitOptions options{
+            .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
+            .query_k = static_cast<int>(_vector_index_ctx->k),
+            .refine_distance = _vector_index_ctx->refine_distance,
+            .stats = *_opts.stats,
+    };
+    ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
+    if (result.state == VectorIndexReaderInitResult::kFallback) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
     }
-    RETURN_IF_ERROR(create_st);
-    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
-    // efSearch iff the user set one via query hint / session var; that disables
-    // adaptive scaling so user intent is honored. FE preserves the user-typed key
-    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
-    // valid), so the check must be case-insensitive.
-    bool user_set_ef = false;
-    for (const auto& entry : query_params) {
-        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
-            user_set_ef = true;
-            break;
-        }
-    }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), *vi_file,
-                                                                 static_cast<size_t>(_segment->num_rows()),
-                                                                 _vector_index_ctx->k, user_set_ef, _opts.stats);
-    // empty ann reader — caller will set up brute-force fallback
-    if (status.is_not_supported()) {
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-    return status;
+    DCHECK(result.reader != nullptr);
+    _vector_index_ctx->ann_reader = std::move(result.reader);
+    return Status::OK();
 #else
     return Status::OK();
 #endif
