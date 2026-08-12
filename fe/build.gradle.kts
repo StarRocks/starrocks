@@ -53,7 +53,7 @@ subprojects {
         set("dnsjava.version", "3.6.3")
         set("fastutil.version", "8.5.15")
         set("gcs.connector.version", "hadoop3-2.2.26")
-        set("grpc.version", "1.63.0")
+        set("grpc.version", "1.76.0")
         set("hadoop.version", "3.4.3")
         set("hbase.version", "2.6.2")
         set("hikaricp.version", "7.0.2")
@@ -73,11 +73,12 @@ subprojects {
         set("odps.version", "0.48.7-public")
         set("paimon.version", "1.3.1")
         set("parquet.version", "1.16.0")
+        set("ranger.version", "2.8.0")
         set("orc.version", "1.9.1")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
-        set("staros.version", "4.2-rc2")
+        set("staros.version", "4.2-rc3")
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
@@ -89,6 +90,11 @@ subprojects {
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
         implementation(platform("io.netty:netty-bom:${project.ext["io.netty.version"]}"))
+        // Mirrors the grpc-bom import in fe/pom.xml. Added by hand because
+        // build-support/sync_pom_to_gradle.py skips `<type>pom</type>` entries
+        // ("Skip BOMs ... as they are handled with platform()"), so an import-scope
+        // BOM cannot reach this file through the `dependency sync` markers below.
+        implementation(platform("io.grpc:grpc-bom:${project.ext["grpc.version"]}"))
         // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
         testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
@@ -158,11 +164,6 @@ subprojects {
             implementation("io.airlift:security:202")
             implementation("io.delta:delta-kernel-api:${project.ext["delta-kernel.version"]}")
             implementation("io.delta:delta-kernel-defaults:${project.ext["delta-kernel.version"]}")
-            implementation("io.grpc:grpc-api:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-core:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-netty-shaded:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-protobuf:${project.ext["grpc.version"]}")
-            implementation("io.grpc:grpc-stub:${project.ext["grpc.version"]}")
             implementation("io.netty:netty-all:${project.ext["io.netty.version"]}")
             implementation("io.netty:netty-handler:${project.ext["io.netty.version"]}")
             implementation("io.trino.hive:hive-apache:${project.ext["hive-apache.version"]}")
@@ -221,7 +222,8 @@ subprojects {
             implementation("org.apache.parquet:parquet-column:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-common:${project.ext["parquet.version"]}")
             implementation("org.apache.parquet:parquet-hadoop:${project.ext["parquet.version"]}")
-            implementation("org.apache.ranger:ranger-plugins-common:2.8.0")
+            implementation("org.apache.ranger:ranger-audit-dest-solr:${project.ext["ranger.version"]}")
+            implementation("org.apache.ranger:ranger-plugins-common:${project.ext["ranger.version"]}")
             implementation("org.apache.spark:spark-catalyst_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-core_2.12:${project.ext["spark.version"]}")
             implementation("org.apache.spark:spark-launcher_2.12:${project.ext["spark.version"]}")

@@ -15,7 +15,6 @@
 #include "segment_iterator.h"
 
 #include <algorithm>
-#include <boost/algorithm/string/predicate.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -25,6 +24,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
@@ -58,7 +58,6 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
-#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
@@ -76,6 +75,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -383,7 +383,6 @@ private:
 
 #ifdef WITH_TENANN
         tenann::PrimitiveSeqView query_view;
-        std::shared_ptr<tenann::IndexMeta> index_meta;
 #endif
 
         std::shared_ptr<VectorIndexReader> ann_reader;
@@ -576,8 +575,8 @@ private:
 
     IndexReadOptions _index_read_options(ColumnId cid) const;
 
-    Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                  const std::map<std::string, std::string>& query_params, FileSystem* fs = nullptr);
+    Status _init_reader_from_file(FileInfo* vi_file, const std::shared_ptr<TabletIndex>& tablet_index_meta,
+                                  const std::map<std::string, std::string>& query_params);
     StatusOr<size_t> _predicate_evaluate(vector<rowid_t>* rowid);
 
     StatusOr<size_t> _predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid);
@@ -1246,45 +1245,34 @@ StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
     return _scan_range;
 }
 
-inline Status SegmentIterator::_init_reader_from_file(const std::string& index_path,
+inline Status SegmentIterator::_init_reader_from_file(FileInfo* vi_file,
                                                       const std::shared_ptr<TabletIndex>& tablet_index_meta,
-                                                      const std::map<std::string, std::string>& query_params,
-                                                      FileSystem* fs) {
+                                                      const std::map<std::string, std::string>& query_params) {
 #ifdef WITH_TENANN
     if (!_vector_index_ctx) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index_meta, query_params))
-    _vector_index_ctx->index_meta = std::make_shared<tenann::IndexMeta>(std::move(meta));
-    auto create_st = VectorIndexReaderFactory::create_from_file(index_path, _vector_index_ctx->index_meta,
-                                                                &_vector_index_ctx->ann_reader, fs);
-    // .vi file not found — caller will set up brute-force fallback
-    if (create_st.is_not_found()) {
+    auto* vector_index_cache = StorageEnv::GetInstance()->vector_index_cache();
+    if (vector_index_cache == nullptr) {
+        return Status::InternalError("StorageEnv vector index cache is not initialized");
+    }
+    DCHECK(_opts.stats != nullptr);
+
+    VectorIndexReaderFactory factory(*vector_index_cache);
+    VectorIndexReaderInitOptions options{
+            .segment_num_rows = static_cast<size_t>(_segment->num_rows()),
+            .query_k = static_cast<int>(_vector_index_ctx->k),
+            .refine_distance = _vector_index_ctx->refine_distance,
+            .stats = *_opts.stats,
+    };
+    ASSIGN_OR_RETURN(auto result, factory.create_and_init(*vi_file, tablet_index_meta, query_params, options));
+    if (result.state == VectorIndexReaderInitResult::kFallback) {
         _vector_index_ctx->use_vector_index = false;
         return Status::OK();
     }
-    RETURN_IF_ERROR(create_st);
-    // Enable per-segment adaptive ef_search. query_params carries a user-explicit
-    // efSearch iff the user set one via query hint / session var; that disables
-    // adaptive scaling so user intent is honored. FE preserves the user-typed key
-    // casing for ann_params (e.g. "efsearch", "Efsearch", "EFSEARCH" are all
-    // valid), so the check must be case-insensitive.
-    bool user_set_ef = false;
-    for (const auto& entry : query_params) {
-        if (boost::iequals(entry.first, starrocks::index::vector::EF_SEARCH)) {
-            user_set_ef = true;
-            break;
-        }
-    }
-    Status status = _vector_index_ctx->ann_reader->init_searcher(*_vector_index_ctx->index_meta.get(), index_path, fs,
-                                                                 static_cast<size_t>(_segment->num_rows()),
-                                                                 _vector_index_ctx->k, user_set_ef);
-    // empty ann reader — caller will set up brute-force fallback
-    if (status.is_not_supported()) {
-        _vector_index_ctx->use_vector_index = false;
-        return Status::OK();
-    }
-    return status;
+    DCHECK(result.reader != nullptr);
+    _vector_index_ctx->ann_reader = std::move(result.reader);
+    return Status::OK();
 #else
     return Status::OK();
 #endif
@@ -1389,9 +1377,17 @@ Status SegmentIterator::_init_ann_reader() {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());
         }
-        FileSystem* vi_fs = _opts.belonged_to_cloud_native ? _segment->file_system() : nullptr;
+        // Hold the FileSystem by shared_ptr: the .vi reader built from it lands in the tenann
+        // index cache and outlives this iterator, so a raw Segment::file_system() would dangle.
+        FileInfo vi_file{.path = index_path};
+        if (_opts.belonged_to_cloud_native) {
+            vi_file.fs = _segment->shared_file_system();
+        }
         // Turns off use_vector_index on a runtime NotFound / not-supported.
-        RETURN_IF_ERROR(_init_reader_from_file(index_path, tablet_index_meta, _vector_index_ctx->query_params, vi_fs));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->vector_index_load_ns);
+            RETURN_IF_ERROR(_init_reader_from_file(&vi_file, tablet_index_meta, _vector_index_ctx->query_params));
+        }
 #else
         _vector_index_ctx->use_vector_index = false; // no TenANN
 #endif
@@ -1513,7 +1509,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
     // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
     // under a radius, returning fewer rows is legitimate.
-    if (pre_narrowed && _vector_index_ctx->vector_range < 0) {
+    if (pre_narrowed && _vector_index_ctx->vector_range < 0 && config::enable_vector_index_topk_underfill_fallback) {
         const size_t found = id2distance_map.size();
         const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
         if (found < want) {
@@ -2060,6 +2056,19 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // create delta column iterator
         // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
+        // The column is served from a Delta Column Group (.cols) for this query
+        // version (column-mode partial update overlay). A fast-path IDG index
+        // (.idx sidecar) is keyed by the BASE segment id and was built over the
+        // BASE column values; it does NOT describe the overlaid DCG values and
+        // is not rebuilt on a column-mode update. Probing it here would let the
+        // DCG column iterator surface the STALE base index via
+        // has_{original,ngram}_bloom_filter_index(), and the pruning gate would
+        // filter rows against values the column no longer holds -> silently
+        // wrong results. Drop the IDG context so the DCG column falls back to an
+        // unindexed (correct) scan, matching footer-index behavior (a footer
+        // index lives on the base ColumnReader, which the DCG reader does not
+        // inherit, so it is never consulted for DCG-overlaid columns).
+        iter_opts.idg_loader = nullptr;
         opts.encryption_info = dcg_encryption_info;
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();
@@ -2068,6 +2077,12 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
     return Status::OK();
 }
+
+// Fakes the "a global dictionary exists for the column, but this segment has no usable local
+// dictionary" state, which is otherwise reachable only through a real dictionary inconsistency
+// (a rewritten/compacted segment whose pages are not all dict-encoded). That state is what puts
+// `_switch_context` on its force-encode path.
+DEFINE_FAIL_POINT(segment_iterator_force_global_dict_encode);
 
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
@@ -2102,9 +2117,12 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
                 RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
             }
 
+            bool all_page_dict_encoded = _column_iterators[cid]->all_page_dict_encoded();
+            FAIL_POINT_TRIGGER_EXECUTE(segment_iterator_force_global_dict_encode, { all_page_dict_encoded = false; });
+
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid].get());
-                _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
+                _column_decoders[cid].set_all_page_dict_encoded(all_page_dict_encoded);
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
                     _column_decoders[cid].check_global_dict();
@@ -2112,7 +2130,7 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             }
 
             // turn off low cardinality if not all data pages are dict-encoded.
-            _predicate_need_rewrite[cid] &= _column_iterators[cid]->all_page_dict_encoded();
+            _predicate_need_rewrite[cid] &= all_page_dict_encoded;
         }
     }
     VLOG(2) << fmt::format("init_column_iterators schema={}", schema.to_string());
@@ -3592,13 +3610,20 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
         // Rebuilding final_chunk schema. filter_unused_columns will prune out useless columns in encode_schema
         Schema final_chunk_schema;
         DCHECK_GE(_encoded_schema.num_fields(), output_schema().num_fields());
+        // `output_schema()` is a subsequence of `_encoded_schema`, so the cursor into it must stop as
+        // soon as the last output field has been matched: any encoded field left over is a column
+        // pruned by filter_unused_columns, and continuing would index the output schema one past its
+        // end. `Schema::field()` only DCHECKs the index, so a RELEASE binary would dereference the
+        // out-of-bounds slot -- a null one faults at address 0.
+        const size_t num_output_fields = output_schema().num_fields();
         size_t output_schema_idx = 0;
-        for (size_t i = 0; i < _encoded_schema.num_fields(); ++i) {
+        for (size_t i = 0; i < _encoded_schema.num_fields() && output_schema_idx < num_output_fields; ++i) {
             if (_encoded_schema.field(i)->id() == output_schema().field(output_schema_idx)->id()) {
                 final_chunk_schema.append(_encoded_schema.field(i));
                 output_schema_idx++;
             }
         }
+        DCHECK_EQ(num_output_fields, final_chunk_schema.num_fields());
         ASSIGN_OR_RETURN(to->_final_chunk,
                          RuntimeChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
@@ -4444,6 +4469,9 @@ Status SegmentIterator::_apply_bitmap_index() {
             const ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
             ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
+            // Non-null => the column is served from a Delta Column Group (.cols)
+            // for this query version (column-mode partial update overlay).
+            const bool served_from_dcg = (segment_ptr != nullptr);
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
@@ -4459,7 +4487,20 @@ Status SegmentIterator::_apply_bitmap_index() {
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files
             // would be invisible to the pruning gate.
-            opts.idg_loader = _opts.idg_loader;
+            //
+            // But the fast-path IDG .idx is keyed by the BASE segment id and was
+            // built over the BASE column values. A column-mode partial update
+            // overlays new values into a DCG (.cols) WITHOUT rebuilding the
+            // index. Attaching the base .idx to a DCG-overlaid column would
+            // prune rows against values the column no longer holds -> silently
+            // wrong results. So only wire the IDG loader when the column is
+            // served from the base segment; for a DCG-overlaid column leave it
+            // unset so new_bitmap_index_iterator falls back to the (absent)
+            // footer bitmap index -> correct unindexed scan, matching the footer
+            // index behavior.
+            if (!served_from_dcg) {
+                opts.idg_loader = _opts.idg_loader;
+            }
             opts.tablet_id = _opts.tablet_id;
             opts.segment_id = _opts.rowset_id + segment_id();
             opts.query_version = _opts.version;

@@ -224,6 +224,11 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
+    // Use this instead of file_system() whenever the FileSystem must outlive this Segment.
+    // The .vi reader is stored inside the tenann index cache entry, which is not bound to
+    // the Segment/SegmentIterator that loaded it, so a raw FileSystem* would dangle there.
+    const std::shared_ptr<FileSystem>& shared_file_system() const { return _fs; }
+
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }

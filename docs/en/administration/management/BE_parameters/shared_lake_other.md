@@ -517,6 +517,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to allow the system to clear the corrupted metadata cache in a shared-data cluster.
 - Introduced in: v3.3
 
+### lake_enable_horizontal_compaction_fill_data_cache
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow horizontal compaction tasks to cache the input data they read on local disks in a shared-data cluster. Horizontal compaction reads each input segment exactly once and its input rowsets are replaced right after the task finishes, so caching that data mainly evicts query-hot data from the local cache. Set this item to `true` to restore the previous behavior of always caching.
+- Introduced in: v4.2
+
 ### lake_enable_vertical_compaction_fill_data_cache
 
 - Default: true

@@ -551,7 +551,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：No
-- 説明：FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用して、プロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` や `fe.features.log` のようなファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって管理されます。タイムスタンプのサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリへの書き込みおよびローテーション/削除の権限を持っていることを確認してください。
+- 説明：FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用して、プロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` のようなファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって管理されます。タイムスタンプのサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリへの書き込みおよびローテーション/削除の権限を持っていることを確認してください。
 - 導入時期：v3.2.5
 
 
@@ -1506,6 +1506,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：レプリケーションのレガシー互換性を有効にするかどうか。StarRocks は、以前のバージョンと新しいバージョンで異なる動作をする可能性があり、クロスクラスターデータ移行中に問題を引き起こすことがあります。したがって、データ移行前にターゲットクラスターでレガシー互換性を有効にし、データ移行完了後に無効にする必要があります。`true` はこのモードを有効にすることを示します。
 - 導入時期：v3.1.10, v3.2.6
+
+### `enable_collect_partition_access_time`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`SHOW PARTITIONS` および `information_schema.partitions_meta` で、パーティションごとの `LAST_ACCESS_TIME`（パーティションがユーザークエリによって最後にスキャンされた時刻）を収集して公開するかどうかを制御します。無効にすると、アクセス時刻は記録されず、FE 間で集約もされず、`LAST_ACCESS_TIME` 列は `NULL` を表示します。この項目は `LAST_UPDATE_TIME` には影響しません。
+- 導入時期：v4.2.0
 
 ### `enable_show_materialized_views_include_all_task_runs`
 

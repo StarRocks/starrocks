@@ -1,0 +1,38 @@
+-- name: test_partition_join_query_cache_lane_reset @sequential
+CREATE TABLE `fact` (
+  `dt` date NOT NULL,
+  `c3` int(11) NOT NULL,
+  `v1` int(11) NOT NULL,
+  `flag` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c3`)
+PARTITION BY RANGE(`dt`) (START ("2022-01-01") END ("2022-02-10") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(`c3`) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `dim` (
+  `c3` int(11) NOT NULL,
+  `w1` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c3`)
+DISTRIBUTED BY HASH(`c3`) BUCKETS 2
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into fact select date_add('2022-01-01', interval (i%40) day), i%1000, i%500, if((i%40)<20,1,0) from table(generate_series(1,50000)) t(i);
+-- result:
+-- !result
+insert into dim select i, i from table(generate_series(1,1000)) t(i);
+-- result:
+-- !result
+admin enable failpoint 'always_use_partition_join';
+-- result:
+-- !result
+select /*+SET_VAR(enable_query_cache=true,pipeline_dop=4,chunk_size=8)*/ sum(fact.v1) from fact join [broadcast] dim on fact.c3 = dim.c3 where fact.flag = 1;
+-- result:
+6237500
+-- !result
+CLEANUP {
+  admin disable failpoint 'always_use_partition_join';
+} END CLEANUP

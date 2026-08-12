@@ -80,16 +80,39 @@ TEST(LakeScanLazyMaterializationContextTest, CaptureRowsetsStoresVersion) {
     LakeScanLazyMaterializationContext ctx;
     ObjectPool pool;
     auto rowset = make_lake_rowset(2, &pool);
-    ctx.capture_rowsets(100, 42, as_base({rowset}));
+    ctx.capture_rowsets(100, 42, as_base({rowset}), {});
     EXPECT_EQ(42, ctx.get_rowsets_version(100));
+}
+
+TEST(LakeScanLazyMaterializationContextTest, CacheOptionsIsolatedPerTablet) {
+    LakeScanLazyMaterializationContext ctx;
+    ObjectPool pool;
+    ctx.capture_rowsets(
+            1, 10, as_base({make_lake_rowset(1, &pool)}),
+            {.use_page_cache = false, .fill_data_cache = false, .fill_metadata_cache = true, .skip_disk_cache = true});
+    ctx.capture_rowsets(
+            2, 20, as_base({make_lake_rowset(1, &pool)}),
+            {.use_page_cache = true, .fill_data_cache = true, .fill_metadata_cache = false, .skip_disk_cache = false});
+
+    auto tablet1_options = ctx.get_cache_options(1);
+    EXPECT_FALSE(tablet1_options.use_page_cache);
+    EXPECT_FALSE(tablet1_options.fill_data_cache);
+    EXPECT_TRUE(tablet1_options.fill_metadata_cache);
+    EXPECT_TRUE(tablet1_options.skip_disk_cache);
+
+    auto tablet2_options = ctx.get_cache_options(2);
+    EXPECT_TRUE(tablet2_options.use_page_cache);
+    EXPECT_TRUE(tablet2_options.fill_data_cache);
+    EXPECT_FALSE(tablet2_options.fill_metadata_cache);
+    EXPECT_FALSE(tablet2_options.skip_disk_cache);
 }
 
 TEST(LakeScanLazyMaterializationContextTest, VersionsIsolatedPerTablet) {
     LakeScanLazyMaterializationContext ctx;
     ObjectPool pool;
-    ctx.capture_rowsets(1, 10, as_base({make_lake_rowset(1, &pool)}));
-    ctx.capture_rowsets(2, 20, as_base({make_lake_rowset(1, &pool)}));
-    ctx.capture_rowsets(3, 30, as_base({make_lake_rowset(1, &pool)}));
+    ctx.capture_rowsets(1, 10, as_base({make_lake_rowset(1, &pool)}), {});
+    ctx.capture_rowsets(2, 20, as_base({make_lake_rowset(1, &pool)}), {});
+    ctx.capture_rowsets(3, 30, as_base({make_lake_rowset(1, &pool)}), {});
 
     EXPECT_EQ(10, ctx.get_rowsets_version(1));
     EXPECT_EQ(20, ctx.get_rowsets_version(2));
@@ -100,7 +123,7 @@ TEST(LakeScanLazyMaterializationContextTest, GetRowsetFirstSegment) {
     LakeScanLazyMaterializationContext ctx;
     ObjectPool pool;
     auto rowset = make_lake_rowset(2, &pool);
-    ctx.capture_rowsets(100, 1, as_base({rowset}));
+    ctx.capture_rowsets(100, 1, as_base({rowset}), {});
 
     int32_t segment_idx = -1;
     auto result = ctx.get_rowset(100, 0, &segment_idx);
@@ -120,7 +143,7 @@ TEST(LakeScanLazyMaterializationContextTest, GetRowsetSparseSegmentIdx) {
     ObjectPool pool;
     // rowset id=1000, kept segments segment_idx {1, 2} (low-key segment 0 dropped by the split).
     auto rs = make_lake_rowset_with_seg_idxs(1000, {1, 2}, &pool);
-    ctx.capture_rowsets(7, /*version=*/1, as_base({rs}));
+    ctx.capture_rowsets(7, /*version=*/1, as_base({rs}), {});
 
     int32_t seg_idx = -1;
     // rssid id+1 -> physical position 0.
@@ -150,7 +173,7 @@ TEST(LakeScanLazyMaterializationContextTest, GetRowsetMixedDenseAndSparse) {
     ObjectPool pool;
     auto dense = make_lake_rowset_with_seg_idxs(2000, {0, 1}, &pool);  // span [2000, 2002)
     auto sparse = make_lake_rowset_with_seg_idxs(3000, {2, 3}, &pool); // span [3000, 3004)
-    ctx.capture_rowsets(9, /*version=*/1, as_base({dense, sparse}));
+    ctx.capture_rowsets(9, /*version=*/1, as_base({dense, sparse}), {});
 
     int32_t seg_idx = -1;
     EXPECT_EQ(dense.get(), ctx.get_rowset(9, 2000, &seg_idx).get());

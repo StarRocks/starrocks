@@ -12,6 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/index/vector/empty_index_reader.h"
+#pragma once
 
-namespace starrocks {} // namespace starrocks
+#include <cstddef>
+#include <cstdint>
+
+#include "common/config_primary_key_fwd.h"
+
+namespace starrocks::lake {
+
+inline size_t get_pk_index_parallel_execution_min_rows() {
+    constexpr size_t kDefaultMinRowsPerTask = 16384;
+    const int64_t configured_min_rows = config::pk_index_parallel_execution_min_rows;
+    return configured_min_rows > 0 ? static_cast<size_t>(configured_min_rows) : kDefaultMinRowsPerTask;
+}
+
+} // namespace starrocks::lake

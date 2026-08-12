@@ -45,7 +45,7 @@ jobs:
 
   pr-info:
     name: Add PR Information
-    runs-on: [self-hosted, sync]
+    runs-on: [self-hosted, sync, ubuntu]
     env:
       PR_ID: ${{ inputs.PR_ID }}
       SYNC_PAT: ${{ secrets.SYNC_PAT }}
@@ -63,7 +63,7 @@ jobs:
 
   cd-repo-sync-main:
     name: CD Repo Sync - main
-    runs-on: [self-hosted, sync]
+    runs-on: [self-hosted, sync, ubuntu]
     if: inputs.BRANCH == 'main'
     needs: pr-info
     env:
@@ -152,7 +152,10 @@ jobs:
           PR_LABEL: sync,cd-sync,${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-cd-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(cd-sync #${{ inputs.PR_ID }})"
-          BODY: "Reverse sync of ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }} (commit ${{ inputs.COMMIT_ID }})."
+          # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
+          # (official template, all sections) via the file get_pr_info.py wrote in the
+          # pr-info job, plus any conflict info run_cherry_pick.sh prepended to it.
+          BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
         run: |

@@ -14,13 +14,13 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #ifdef WITH_TENANN
-#include <tenann/factory/ann_searcher_factory.h>
-#include <tenann/factory/index_factory.h>
+#include <tenann/common/error.h>
 
-#include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #endif
 
@@ -51,16 +51,18 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
-#include "storage/index/vector/tenann/tenann_index_utils.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -78,6 +80,7 @@
 #include "storage_primitive/predicate_tree/predicate_tree.h"
 #include "storage_primitive/roaring2range.h"
 #include "storage_primitive/schema_helper.h"
+#include "storage_primitive/storage_stats.h"
 #include "storage_primitive/vector_search_option.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
@@ -94,14 +97,29 @@ protected:
         CHECK_OK(fs::remove_all(test_vector_index_dir));
         CHECK_OK(fs::create_directories(test_vector_index_dir));
         ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(test_vector_index_dir));
+#ifdef WITH_TENANN
+        _cache_tracker = std::make_unique<MemTracker>(-1, "vector_index_search_test");
+        _reader_cache = std::make_unique<VectorIndexCache>(/*capacity=*/64 * 1024 * 1024, _cache_tracker.get());
+#endif
     }
 
-    void TearDown() override { fs::remove_all(test_vector_index_dir); }
+    void TearDown() override {
+#ifdef WITH_TENANN
+        _reader_cache.reset();
+        _cache_tracker.reset();
+#endif
+        fs::remove_all(test_vector_index_dir);
+    }
 
     std::shared_ptr<FileSystem> _fs;
     const std::string test_vector_index_dir = "vector_search_test";
     const std::string vector_index_name = "vector_index.vi";
     const std::string empty_index_name = "empty_index.vi";
+
+#ifdef WITH_TENANN
+    std::unique_ptr<MemTracker> _cache_tracker;
+    std::unique_ptr<VectorIndexCache> _reader_cache;
+#endif
 
     std::shared_ptr<TabletIndex> prepare_tablet_index() {
         std::shared_ptr<TabletIndex> tablet_index = std::make_shared<TabletIndex>();
@@ -191,17 +209,13 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 #ifdef WITH_TENANN
     try {
         const auto& empty_meta = std::map<std::string, std::string>{};
-        auto status = get_vector_meta(tablet_index, empty_meta);
-
-        CHECK_OK(status);
-        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
-
-        std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
-
-        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
-
-        ASSERT_TRUE(!init_status.is_not_supported());
+        FileInfo vi_file{.path = index_path};
+        VectorIndexReaderFactory factory(*_reader_cache);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
+        ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_result.state);
+        ASSERT_NE(nullptr, init_result.reader);
+        auto ann_reader = std::move(init_result.reader);
 
         constexpr int kTopK = 1;
         Status st;
@@ -249,14 +263,13 @@ TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
 #ifdef WITH_TENANN
     try {
         const auto& empty_meta = std::map<std::string, std::string>{};
-        auto status = get_vector_meta(tablet_index, empty_meta);
-        CHECK_OK(status);
-        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
-
-        std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
-        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
-        ASSERT_TRUE(!init_status.is_not_supported());
+        FileInfo vi_file{.path = index_path};
+        VectorIndexReaderFactory factory(*_reader_cache);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto init_result, factory.create_and_init(vi_file, tablet_index, empty_meta, {.stats = stats}));
+        ASSERT_EQ(VectorIndexReaderInitResult::kReady, init_result.state);
+        ASSERT_NE(nullptr, init_result.reader);
+        auto ann_reader = std::move(init_result.reader);
 
         constexpr int kTopK = 1;
         std::vector<int64_t> result_ids(kTopK);
@@ -280,9 +293,8 @@ TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
 }
 
 // IVFPQ + threshold not met: VectorIndexWriter::finish() short-circuits and no .vi
-// file is produced. Reader-side, VectorIndexReaderFactory::create_from_file surfaces
-// the missing file as NotFound; the segment_iterator brute-force fallback (added by
-// the read PR) handles that case at scan time.
+// file is produced. Reader-side, VectorIndexReaderFactory::create_and_init maps the
+// missing file to the segment_iterator brute-force fallback.
 TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
     config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();
@@ -316,11 +328,15 @@ TEST_F(VectorIndexSearchTest, test_select_empty_mark) {
 namespace {
 constexpr std::string_view kTestPayload = "0123456789ABCDEF";
 constexpr int64_t kTestPayloadSize = static_cast<int64_t>(kTestPayload.size());
-constexpr std::string_view kTestFilename = "memory_index.vi";
+constexpr std::string_view kTestFilename = "/memory_index.vi";
 
 std::unique_ptr<VectorIndexFileReader> make_reader(std::string_view payload, std::string_view name = kTestFilename) {
-    auto raf = new_random_access_file_from_memory(name, payload);
-    return std::make_unique<VectorIndexFileReader>(std::move(raf), static_cast<int64_t>(payload.size()));
+    auto fs = std::make_shared<MemoryFileSystem>();
+    CHECK_OK(fs->append_file(std::string(name), Slice(payload)));
+    auto reader = VectorIndexFileReader::open(
+            FileInfo{.path = std::string(name), .size = static_cast<int64_t>(payload.size()), .fs = std::move(fs)});
+    CHECK_OK(reader.status());
+    return std::move(reader).value();
 }
 } // namespace
 
@@ -364,9 +380,9 @@ TEST_F(VectorIndexSearchTest, vector_index_file_reader_seek_then_read) {
 }
 
 TEST_F(VectorIndexSearchTest, vector_index_file_reader_get_size_and_filename) {
-    auto reader = make_reader(kTestPayload, "abc.vi");
+    auto reader = make_reader(kTestPayload, "/abc.vi");
     EXPECT_EQ(reader->GetSize(), kTestPayloadSize);
-    EXPECT_EQ(reader->filename(), "abc.vi");
+    EXPECT_EQ(reader->filename(), "/abc.vi");
 }
 
 TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_minus_one) {
@@ -383,11 +399,10 @@ TEST_F(VectorIndexSearchTest, vector_index_file_reader_read_past_eof_returns_min
     EXPECT_EQ(m, -1);
 }
 
-// TenANNReader::init_searcher(meta, path, fs) should delegate to the legacy
-// init_searcher(meta, path) when fs is nullptr. Build a real HNSW index on
-// local disk, then invoke the FS-aware overload with fs=nullptr and confirm
-// the call reaches the legacy success path (returns OK, NOT NotSupported).
-TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_legacy) {
+// create_and_init must read from the local filesystem when vi_file.fs is null.
+// Build a real HNSW index on local disk, pass a FileInfo without a FileSystem,
+// and confirm the call reaches the local success path (returns OK, NOT NotSupported).
+TEST_F(VectorIndexSearchTest, factory_create_and_init_null_fs_uses_injected_cache) {
     auto tablet_index = prepare_tablet_index();
     tablet_index->add_common_properties("index_type", "hnsw");
     tablet_index->add_common_properties("dim", "3");
@@ -401,17 +416,170 @@ TEST_F(VectorIndexSearchTest, tenann_reader_init_searcher_null_fs_delegates_to_l
     auto ann_path = test_vector_index_dir + "/null_fs_delegate_hnsw.vi";
     write_vector_index(ann_path, tablet_index);
 
+    auto* saved_cache = tenann::GetGlobalIndexCache();
+    tenann::SetGlobalIndexCache(nullptr);
+    DeferOp restore_cache([&] { tenann::SetGlobalIndexCache(saved_cache); });
+
     try {
         const auto empty_query_params = std::map<std::string, std::string>{};
-        ASSIGN_OR_ABORT(auto ann_meta, get_vector_meta(tablet_index, empty_query_params));
-
-        TenANNReader tenann_reader;
-        // fs=nullptr branch dispatches to the legacy init_searcher(meta, path) overload.
-        Status status = tenann_reader.init_searcher(ann_meta, ann_path, /*fs=*/nullptr);
-        EXPECT_TRUE(status.ok()) << status;
+        FileInfo vi_file{.path = ann_path};
+        VectorIndexReaderFactory factory(*_reader_cache);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto result,
+                        factory.create_and_init(vi_file, tablet_index, empty_query_params, {.stats = stats}));
+        EXPECT_EQ(VectorIndexReaderInitResult::kReady, result.state);
+        EXPECT_NE(nullptr, result.reader);
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
+}
+
+TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/profile_stats_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+
+    MemTracker cache_tracker(-1, "vector_index_profile_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    VectorIndexReaderFactory factory(cache);
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = false;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    OlapReaderStatistics cold_stats;
+    FileInfo cold_vi_file{.path = index_path, .fs = _fs};
+    ASSIGN_OR_ABORT(auto cold_result, factory.create_and_init(cold_vi_file, tablet_index, empty_query_params,
+                                                              VectorIndexReaderInitOptions{.stats = cold_stats}));
+    ASSERT_EQ(VectorIndexReaderInitResult::kReady, cold_result.state);
+    ASSERT_NE(nullptr, cold_result.reader);
+    EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, cold_stats.vector_index_cache_miss_count);
+    EXPECT_GT(cold_stats.vector_index_cache_lookup_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_file_open_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_read_file_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_init_index_ns, 0);
+    EXPECT_GT(cold_stats.vector_index_searcher_init_ns, 0);
+
+    OlapReaderStatistics warm_stats;
+    FileInfo warm_vi_file{.path = index_path, .fs = _fs};
+    ASSIGN_OR_ABORT(auto warm_result, factory.create_and_init(warm_vi_file, tablet_index, empty_query_params,
+                                                              VectorIndexReaderInitOptions{.stats = warm_stats}));
+    ASSERT_EQ(VectorIndexReaderInitResult::kReady, warm_result.state);
+    ASSERT_NE(nullptr, warm_result.reader);
+    EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(0, warm_stats.vector_index_cache_miss_count);
+    EXPECT_GT(warm_stats.vector_index_cache_lookup_ns, 0);
+    EXPECT_EQ(0, warm_stats.vector_index_file_open_ns);
+    EXPECT_EQ(0, warm_stats.vector_index_read_file_ns);
+    EXPECT_EQ(0, warm_stats.vector_index_init_index_ns);
+    EXPECT_GT(warm_stats.vector_index_searcher_init_ns, 0);
+}
+
+TEST_F(VectorIndexSearchTest, async_cache_miss_falls_back_then_next_reader_uses_loaded_index) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/async_cache_miss_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+
+    MemTracker cache_tracker(-1, "vector_index_async_query_test");
+    VectorIndexCache cache(/*capacity=*/64 * 1024 * 1024, &cache_tracker);
+    ASSERT_OK(cache.init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+
+    VectorIndexReaderFactory factory(cache);
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = true;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    OlapReaderStatistics cold_stats;
+    FileInfo cold_vi_file{.path = index_path, .fs = _fs};
+    ASSIGN_OR_ABORT(auto cold_result, factory.create_and_init(cold_vi_file, tablet_index, empty_query_params,
+                                                              VectorIndexReaderInitOptions{.stats = cold_stats}));
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, cold_result.state);
+    EXPECT_EQ(nullptr, cold_result.reader);
+    EXPECT_EQ(0, cold_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(1, cold_stats.vector_index_cache_miss_count);
+
+    bool cache_ready = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < deadline) {
+        auto probe = cache.ProbeForQuery(tenann::CacheKey(index_path));
+        if (probe.state == VectorIndexCacheProbeState::kReady) {
+            cache_ready = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    ASSERT_TRUE(cache_ready) << "background vector index load did not publish READY";
+
+    OlapReaderStatistics warm_stats;
+    FileInfo warm_vi_file{.path = index_path, .fs = _fs};
+    ASSIGN_OR_ABORT(auto warm_result, factory.create_and_init(warm_vi_file, tablet_index, empty_query_params,
+                                                              VectorIndexReaderInitOptions{.stats = warm_stats}));
+    EXPECT_EQ(VectorIndexReaderInitResult::kReady, warm_result.state);
+    EXPECT_NE(nullptr, warm_result.reader);
+    EXPECT_EQ(1, warm_stats.vector_index_cache_hit_count);
+    EXPECT_EQ(0, warm_stats.vector_index_cache_miss_count);
+    EXPECT_EQ(0, warm_stats.vector_index_file_open_ns);
+}
+
+TEST_F(VectorIndexSearchTest, async_ineligible_queries_load_index_synchronously) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_search_properties("efsearch", "40");
+
+    const auto index_path = test_vector_index_dir + "/async_ineligible_hnsw.vi";
+    write_vector_index(index_path, tablet_index);
+    const auto empty_query_params = std::map<std::string, std::string>{};
+
+    const bool saved_async_load = config::enable_vector_index_cache_async_load_on_miss;
+    config::enable_vector_index_cache_async_load_on_miss = true;
+    DeferOp restore_config([&] { config::enable_vector_index_cache_async_load_on_miss = saved_async_load; });
+
+    auto verify_sync_load = [&](size_t capacity, bool refine_distance) {
+        MemTracker cache_tracker(-1, "vector_index_async_ineligible_test");
+        VectorIndexCache cache(capacity, &cache_tracker);
+        ASSERT_OK(cache.init_async_load_pool(/*num_threads=*/1, /*max_queue_size=*/4096));
+        VectorIndexReaderFactory factory(cache);
+
+        OlapReaderStatistics stats;
+        FileInfo vi_file{.path = index_path, .fs = _fs};
+        ASSIGN_OR_ABORT(auto result,
+                        factory.create_and_init(
+                                vi_file, tablet_index, empty_query_params,
+                                VectorIndexReaderInitOptions{.refine_distance = refine_distance, .stats = stats}));
+        EXPECT_EQ(VectorIndexReaderInitResult::kReady, result.state);
+        EXPECT_NE(nullptr, result.reader);
+        EXPECT_EQ(1, stats.vector_index_cache_miss_count);
+        EXPECT_EQ(VectorIndexCacheProbeState::kReady, cache.ProbeForQuery(tenann::CacheKey(index_path)).state);
+    };
+
+    verify_sync_load(/*capacity=*/0, /*refine_distance=*/false);
+    verify_sync_load(/*capacity=*/64 * 1024 * 1024, /*refine_distance=*/true);
 }
 
 #endif // WITH_TENANN
@@ -558,8 +726,8 @@ protected:
 // vector_index_storage_type is unset (the writer in OSS only sets STANDALONE when
 // a .vi was produced and never explicitly emits NONE), so Segment::skip_vector_index()
 // is false and _prepare_vector_index is a no-op. Instead, _init_ann_reader tries to
-// open the .vi file via VectorIndexReaderFactory::create_from_file, gets NotFound
-// at runtime, and routes through _setup_brute_force_fallback. The footer-hint
+// open the .vi file via VectorIndexReaderFactory::create_and_init, gets a fallback
+// result at runtime, and routes through _setup_brute_force_fallback. The footer-hint
 // short-circuit in _prepare_vector_index is intentionally untested here — covering
 // it would require a writer that emits VECTOR_INDEX_STORAGE_NONE in the footer.
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
@@ -1711,6 +1879,7 @@ protected:
         int min_filter_col = 4;           // every returned row must satisfy filter_col >= this
         double k_factor = 1.0;            // multiplies k; fractional values can truncate k to 0 (must clamp to 1)
         bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
+        bool shared_data = false;         // use the cloud-native .vi path and Segment FileSystem
         bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
         bool tag_global_dict = false;     // activate a global dictionary on tag (cid 3) so _rewrite_predicates
                                           // rewrites a delete predicate on tag into a global-dict-code predicate
@@ -1723,6 +1892,8 @@ protected:
     struct ResidualCaseResult {
         std::vector<int64_t> ids;
         std::vector<float> distances; // appended ANN distance column values, when present
+        int64_t load_ns = -1;
+        int64_t vector_stage_ns = -1;
         int64_t search_ns = -1;
         int64_t raw_rows_read = -1;
         int64_t del_pruned = -1;   // rows the delete-predicate zone-map prune skipped from row-level eval
@@ -1790,7 +1961,10 @@ protected:
         static std::atomic<int64_t> rid_seq{2};
         RowsetId rid;
         rid.init(rid_seq.fetch_add(1));
-        std::string vi_path = IndexDescriptor::vector_index_file_path(kDir, rid.to_string(), 0, kIndexId);
+        constexpr int64_t kOwnerTabletId = 12345;
+        std::string vi_path =
+                cfg.shared_data ? lake::gen_vector_index_path_from_segment_path(seg_file, kOwnerTabletId, kIndexId)
+                                : IndexDescriptor::vector_index_file_path(kDir, rid.to_string(), 0, kIndexId);
         if (cfg.build_vi) {
             auto tablet_index = std::make_shared<TabletIndex>();
             TabletIndexPB ipb;
@@ -1825,6 +1999,10 @@ protected:
         seg_opts.tablet_schema = rschema;
         seg_opts.rowset_path = kDir;
         seg_opts.rowsetid = rid;
+        if (cfg.shared_data) {
+            seg_opts.belonged_to_cloud_native = true;
+            seg_opts.segment_vector_index_uid = kOwnerTabletId;
+        }
 
         auto vs = std::make_shared<VectorSearchOption>();
         vs->use_vector_index = true;
@@ -1935,6 +2113,8 @@ protected:
         }
         it->close();
         result->ids = got;
+        result->load_ns = stats.vector_index_load_ns;
+        result->vector_stage_ns = stats.get_row_ranges_by_vector_index_timer;
         // vector_search_timer accumulates ONLY inside the ANN search block; it stays exactly 0 when the
         // cardinality short-circuit skipped the search (a deterministic marker, not a timing assertion).
         result->search_ns = stats.vector_search_timer;
@@ -1961,6 +2141,15 @@ TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
     std::unique_ptr<ColumnPredicate> pred;
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+}
+
+TEST_F(VectorResidualPrefilterTest, shared_data_ann_uses_segment_filesystem) {
+    ResidualCaseConfig cfg;
+    cfg.shared_data = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
 }
 
@@ -2130,6 +2319,8 @@ TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize
     ResidualCaseResult res;
     run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/true);
     EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.load_ns, 0);
+    EXPECT_GT(res.vector_stage_ns, 0);
 }
 
 // `filter_col >= <value>` variant of make_ge4_tree, for the short-circuit cardinality cases.

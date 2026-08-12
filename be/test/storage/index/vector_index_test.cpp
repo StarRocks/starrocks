@@ -31,8 +31,10 @@
 #include "fs/fs_memory.h"
 #include "gutil/walltime.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -183,6 +185,82 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
 // in segment_iterator); vacuum sees no vector_index_id recorded in segment_meta and
 // has nothing to delete.
 #ifdef WITH_TENANN
+
+namespace {
+
+// Owns a private VectorIndexCache and installs it as the tenann global cache, so
+// build-path assertions don't depend on whatever other tests in this binary left
+// in the global slot.
+class ScopedGlobalIndexCache {
+public:
+    ScopedGlobalIndexCache()
+            : _tracker(std::make_unique<MemTracker>(-1, "vector_index_build_cache_test")),
+              _cache(std::make_unique<VectorIndexCache>(size_t{1} << 30, _tracker.get())),
+              _saved(tenann::GetGlobalIndexCache()) {
+        tenann::SetGlobalIndexCache(_cache.get());
+    }
+
+    ~ScopedGlobalIndexCache() {
+        tenann::SetGlobalIndexCache(_saved);
+        _cache.reset();
+    }
+
+    // The probe handle is released here, before ~VectorIndexCache runs.
+    bool cached(const std::string& path) const {
+        tenann::IndexCacheHandle handle;
+        return _cache->Lookup(tenann::CacheKey(path), &handle);
+    }
+
+private:
+    std::unique_ptr<MemTracker> _tracker;
+    std::unique_ptr<VectorIndexCache> _cache;
+    tenann::IndexCache* _saved;
+};
+
+// index_build_threshold=0 forces the builder to run on the 11 rows append_test_data writes.
+void configure_hnsw(const std::shared_ptr<TabletIndex>& index) {
+    index->add_common_properties("index_type", "hnsw");
+    index->add_common_properties("dim", "3");
+    index->add_common_properties("is_vector_normed", "false");
+    index->add_common_properties("metric_type", "l2_distance");
+    index->add_common_properties("index_build_threshold", "0");
+    index->add_index_properties("efconstruction", "40");
+    index->add_index_properties("m", "16");
+    index->add_search_properties("efsearch", "40");
+}
+
+} // namespace
+
+// Default: the build path must leave the cache alone, so a load or compaction cannot
+// evict the query working set with indexes nobody has queried yet.
+TEST_F(VectorIndexWriterTest, build_leaves_index_cache_empty_by_default) {
+    ScopedGlobalIndexCache cache;
+    config::enable_vector_index_cache_on_build = false;
+
+    auto tablet_index = prepare_tablet_index();
+    configure_hnsw(tablet_index);
+
+    auto index_path = test_vector_index_dir + "/" + vector_index_name;
+    write_vector_index(index_path, tablet_index);
+
+    EXPECT_FALSE(cache.cached(index_path));
+}
+
+// Opted in: the freshly built index is inserted under its file path -- the same key
+// TenANNReader::init_searcher looks up -- so the first query after build is a warm hit.
+TEST_F(VectorIndexWriterTest, build_populates_index_cache_when_enabled) {
+    ScopedGlobalIndexCache cache;
+    config::enable_vector_index_cache_on_build = true;
+    DeferOp restore([] { config::enable_vector_index_cache_on_build = false; });
+
+    auto tablet_index = prepare_tablet_index();
+    configure_hnsw(tablet_index);
+
+    auto index_path = test_vector_index_dir + "/" + vector_index_name;
+    write_vector_index(index_path, tablet_index);
+
+    EXPECT_TRUE(cache.cached(index_path));
+}
 
 // --- B1 quantizer property tests ---
 // These tests intentionally avoid asserting on individual parsed-meta fields

@@ -198,7 +198,7 @@ AS
 
 **distribution_desc**（选填）
 
-异步物化视图的分桶方式，包括哈希分桶和随机分桶（自 3.1 版本起）。如不指定该参数，StarRocks 使用随机分桶方式，并自动设置分桶数量。
+异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下启用 `enable_range_distribution` 时，省略该参数会选择 Range 分布。否则，`refresh_mode` 非 `INCREMENTAL` 的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。`refresh_mode` 为 `INCREMENTAL` 的物化视图使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
 
 :::info
 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
@@ -461,6 +461,14 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
   - 不能将传统物化视图（即类型为 `PCT` 的视图）更改为 `INCREMENTAL` 刷新模式。如需更改，必须重建该物化视图。
   - 当将物化视图从 `INCREMENTAL` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
 - `refresh_mode` 为 `INCREMENTAL` 的物化视图不支持指定分区刷新。`INCREMENTAL` 类型的物化视图，如果尝试指定分区刷新，会抛出异常。
+
+#### 分布方式
+
+`refresh_mode` 为 `INCREMENTAL` 的物化视图遵循以下分布规则：
+
+- 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
+- Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
+- 如果显式指定哈希分布或随机分布，StarRocks 会将其归一化为基于目标表全部 Key 列的哈希分布，并保留显式指定的分桶数量。
 
 #### 支持的增量算子
 

@@ -260,6 +260,9 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
+| RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
+| RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
+| RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
 
 ### Exchange Operator
 
