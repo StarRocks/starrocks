@@ -1050,9 +1050,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //     straight off the raw TabletSchemaPB would instead see it empty and wrongly reject
     //     every such split (silent identical-fallback, no actual pre-split).
     auto tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(old_tablet_metadata->schema()).first;
-    const std::vector<ColumnId> sort_key_idxes = tablet_schema->sort_key_idxes();
-    if (sort_key_idxes.empty()) {
-        return Status::InvalidArgument("tablet has no sort key columns; external-boundaries path requires a sort key");
+    const std::vector<ColumnId> range_key_idxes = TabletRangeHelper::range_key_idxes(*tablet_schema);
+    if (range_key_idxes.empty()) {
+        return Status::InvalidArgument("tablet has no range key columns; external-boundaries path requires range keys");
     }
     // Precompute sort-key column metadata once (constant per call); the per-tuple
     // validation runs 2K times (K boundaries × {lower, upper}).
@@ -1063,17 +1063,17 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
         bool is_decimal;
     };
     std::vector<SortKeyColumnMeta> sort_key_meta;
-    sort_key_meta.reserve(sort_key_idxes.size());
-    for (ColumnId column_index : sort_key_idxes) {
+    sort_key_meta.reserve(range_key_idxes.size());
+    for (ColumnId column_index : range_key_idxes) {
         const TabletColumn& column = tablet_schema->column(column_index);
         const LogicalType type = column.type();
         const bool is_decimal = (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_field_type(type));
         sort_key_meta.push_back({type, column.precision(), column.scale(), is_decimal});
     }
     auto validate_tuple_against_schema = [&](const TuplePB& tuple, int range_index, std::string_view side) -> Status {
-        if (tuple.values_size() != static_cast<int>(sort_key_idxes.size())) {
-            return Status::InvalidArgument(fmt::format("new_tablet_ranges[{}].{}: tuple arity {} != sort_key arity {}",
-                                                       range_index, side, tuple.values_size(), sort_key_idxes.size()));
+        if (tuple.values_size() != static_cast<int>(range_key_idxes.size())) {
+            return Status::InvalidArgument(fmt::format("new_tablet_ranges[{}].{}: tuple arity {} != range-key arity {}",
+                                                       range_index, side, tuple.values_size(), range_key_idxes.size()));
         }
         for (int j = 0; j < tuple.values_size(); ++j) {
             const auto& variant = tuple.values(j);
@@ -1190,6 +1190,23 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     //    no rowsets. Runs AFTER FE-input validation so empty tablets via external boundaries
     //    cannot accept semantically-invalid ranges either.
     if (old_tablet_metadata->rowsets_size() == 0) {
+        return Status::OK();
+    }
+
+    // For ORDER BY != PK, segment min/max and sampling metadata are in sort-key
+    // space and cannot estimate a PK-space child distribution. Correctness only
+    // requires every inherited rowset to remain shared until UNSHARE. Use uniform
+    // weights for transitional FE statistics and avoid comparing the two domains.
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && tablet_schema->has_separate_sort_key()) {
+        RangeSplitResult uniform_result;
+        uniform_result.range_source_stats.resize(external_ranges.size());
+        const auto anchor = build_rowset_anchor(*old_tablet_metadata, tablet_manager);
+        for (size_t i = 0; i < uniform_result.range_source_stats.size(); ++i) {
+            for (const auto& anchor_entry : anchor) {
+                uniform_result.range_source_stats[i][anchor_entry.first] = {1, 1};
+            }
+        }
+        apply_rowset_anchor(anchor, uniform_result, split_ranges);
         return Status::OK();
     }
 
@@ -1430,6 +1447,8 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
 
     std::unordered_map<int64_t, MutableTabletMetadataPtr> new_metadatas;
     new_metadatas.reserve(splitting_tablet.new_tablet_ids_size());
+    const bool can_prune_by_segment_sort_bounds =
+            !TabletSchema::create(old_tablet_metadata->schema())->has_separate_sort_key();
 
     // The full set of new-tablet ranges, used by per-segment ownership to test
     // overlap/containment of each segment against every sibling's range.
@@ -1454,7 +1473,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
     std::vector<bool> rowset_prunable(rowset_count, false);
     for (int rowset_index = 0; rowset_index < rowset_count; ++rowset_index) {
         const auto& source_rowset = old_tablet_metadata->rowsets(rowset_index);
-        if (!can_prune_rowset_segments(source_rowset)) continue;
+        if (!can_prune_by_segment_sort_bounds || !can_prune_rowset_segments(source_rowset)) continue;
         auto ownership_or = compute_rowset_segment_ownership(source_rowset, parsed_new_tablet_ranges);
         if (ownership_or.ok()) {
             rowset_ownership[rowset_index] = std::move(ownership_or.value());
@@ -1923,10 +1942,10 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
                      tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
 
-    // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the
-    // K-1 boundaries externally (external boundaries / external boundaries); BE computes
-    // per-rowset stats only. When unset, fall back to the existing
-    // data-driven boundary search via get_tablet_split_ranges.
+    // Dispatch on FE-supplied new_tablet_ranges. When set, FE has computed the K-1 boundaries
+    // externally and BE computes per-rowset stats only. Otherwise ORDER BY != PK tablets sample
+    // their cloud-native PK-index SSTs; tablets whose physical order is the range key keep using
+    // the segment-driven boundary search.
     //
     // Symmetric identical-fallback: either path's non-OK Status routes through
     // make_identical_new_tablet_metadata to produce a single identical new
@@ -1935,7 +1954,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     std::vector<TabletRangeInfo> split_ranges;
     // colocate_column_count is carried at the txn level (single split job = single txn) since
     // every SplittingTabletInfoPB in the same job would carry the same value. See lake_types.proto.
-    // external-boundaries path skips boundary computation entirely (FE-supplied), so it does not consume the
+    // External-boundaries path skips boundary computation entirely (FE-supplied), so it does not consume the
     // colocate_column_count signal.
     const bool is_external_boundaries = splitting_tablet.new_tablet_ranges_size() > 0;
     // For external boundaries, FE supplies two parallel lists (new_tablet_ids and new_tablet_ranges);
