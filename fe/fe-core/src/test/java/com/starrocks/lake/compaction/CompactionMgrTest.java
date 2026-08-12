@@ -208,6 +208,18 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testTriggerUnshareCompactionHasHighestPriority() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = compactionManager.triggerUnshareCompaction(partition);
+
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, statistics.getPriority());
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>());
+        Assertions.assertEquals(1, compactionList.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, compactionList.get(0).getPriority());
+    }
+
+    @Test
     public void testExistCompaction() {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();

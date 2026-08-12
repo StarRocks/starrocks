@@ -37,6 +37,12 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _tablet_schema(std::move(tablet_schema)) {}
 
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_context->is_unshare) {
+        // UNSHARE rewrites shared data files only. Rebuilding/major-compacting the
+        // cloud-native PK index in the same transaction adds substantial I/O and is
+        // unnecessary for the atomic query-layout cutover.
+        return Status::OK();
+    }
     if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
         SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
         auto metadata = _tablet.metadata();

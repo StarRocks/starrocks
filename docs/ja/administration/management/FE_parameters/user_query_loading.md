@@ -998,6 +998,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、CREATE TABLE を参照してください。
 - 導入時期：v4.0
 
+### `tablet_reshard_enable_pk_order_by`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：範囲分散されたクラウドネイティブ主キーテーブルで、主キーと異なる `ORDER BY` キーを使用できるようにするかどうか。この実験的なパスには File Bundling が必要で、すべての BE を対応バージョンへアップグレードした後にのみ有効化できます。第 1 フェーズでは tablet split、移行中の publish、UNSHARE compaction における DCG または IDG メタデータをサポートせず、いずれかが存在する場合は処理を拒否します。
+- 導入時期：-
+
+### `tablet_reshard_orderby_max_split_count`
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 分割に完全な UNSHARE 再書き込みが伴う場合、つまり `ORDER BY` キーが主キーと異なる range 分散主キーテーブルの場合に、1 つのソース tablet が分割できる新しい tablet の最大数。この種の分割では親 tablet の共有セグメントに範囲フィルタを適用できないため、すべての子 tablet が丸ごと書き直されます。ファンアウトが大きいほど読み取り増幅が大きくなります。この値はさらに `tablet_reshard_max_split_count` によって制限されます。1 以下の値はこの追加の制限を無効にします。
+- 導入バージョン: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 分割に完全な UNSHARE 再書き込みが伴う場合に、1 つの分割ジョブが処理できるソース tablet の最大数。1 回の UNSHARE compaction が書き直すデータ量を制限し、それによってパーティション唯一の compaction スロットを占有して size-tiered compaction を妨げる時間を制限します。最も大きい tablet から選択されます。0 以下の値は、その warehouse の計算ノード数を意味します。
+- 導入バージョン: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- デフォルト: 180
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 分割に完全な UNSHARE 再書き込みが伴うテーブルについて、直前の tablet reshard ジョブが完了してから次の自動分割がトリガーされるまでの待機時間。この待機時間により、compaction スロットが占有されている間に蓄積した小さなファイルを size-tiered compaction が処理できます。0 以下の値は待機を無効にします。
+- 導入バージョン: -
+
 ### `enable_pipeline_routine_load`
 
 - デフォルト：false

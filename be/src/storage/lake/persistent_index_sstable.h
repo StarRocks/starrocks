@@ -81,6 +81,11 @@ public:
     // Sample keys from the table for parallel compaction task splitting.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
 
+    // Sample actual data keys rather than index-block separator keys. The latter may be shortened by
+    // FindShortestSeparator and are suitable as opaque seek boundaries, but are not guaranteed to decode
+    // as complete primary keys. Tablet split uses this API because its boundaries must be persisted as PK tuples.
+    Status sample_data_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }

@@ -649,6 +649,10 @@ message TxnInfoPB {
     // W == 1 empty fast-path to a partition that is empty at W > 1 (e.g. a repeat online rewrite of an
     // empty range partition). When false, the source op_write MUST exist and is loaded as before.
     optional bool shadow_rewrite_source_empty = 14;
+    // Marks the partition-wide compaction that removes split-shared segments. This is copied from the
+    // persisted compaction transaction attachment so aggregate publish can omit the query-only parent
+    // metadata even after an FE leader failover (when the in-memory compaction job no longer exists).
+    optional bool unshare_compaction = 15;
 }
 
 message SplittingTabletInfoPB {

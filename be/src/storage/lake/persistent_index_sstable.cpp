@@ -30,6 +30,7 @@
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/comparator.h"
+#include "storage/sstable/iterator.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
 
@@ -329,6 +330,27 @@ Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_
         return Status::InvalidArgument("SSTable is not initialized");
     }
     return _sst->sample_keys(keys, sample_interval_bytes);
+}
+
+Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    std::vector<std::string> separators;
+    RETURN_IF_ERROR(_sst->sample_keys(&separators, sample_interval_bytes));
+
+    sstable::ReadOptions options;
+    options.fill_cache = false;
+    std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
+    for (const auto& separator : separators) {
+        iterator->Seek(Slice(separator));
+        if (!iterator->Valid()) {
+            RETURN_IF_ERROR(iterator->status());
+            continue;
+        }
+        keys->emplace_back(iterator->key().to_string());
+    }
+    return iterator->status();
 }
 
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(

@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <sstream>
 #include <utility>
@@ -337,7 +339,7 @@ TabletParallelCompactionManager::TabletParallelCompactionManager(TabletManager* 
 TabletParallelCompactionManager::~TabletParallelCompactionManager() = default;
 
 StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_for_compaction(
-        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction) {
+        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction, bool is_unshare) {
     // Get tablet metadata
     ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(tablet_id, version));
     const auto& metadata = tablet.metadata();
@@ -358,7 +360,7 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
             << " first_10_rowset_ids=[" << JoinInts(first_rowset_ids, ",") << "]";
 
     // Get all rowsets to compact using standard pick_rowsets()
-    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction));
+    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction, is_unshare));
     auto all_rowsets_or = policy->pick_rowsets();
     if (!all_rowsets_or.ok() || all_rowsets_or.value().empty()) {
         return Status::NotFound(strings::Substitute(
@@ -443,6 +445,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::split_rowse
 StatusOr<std::shared_ptr<TabletParallelCompactionState>>
 TabletParallelCompactionManager::create_and_register_tablet_state(int64_t tablet_id, int64_t txn_id, int64_t version,
                                                                   int32_t max_parallel, int64_t max_bytes,
+                                                                  bool is_unshare,
                                                                   std::shared_ptr<CompactionTaskCallback> callback,
                                                                   const ReleaseTokenFunc& release_token) {
     std::string state_key = make_state_key(tablet_id, txn_id);
@@ -461,6 +464,7 @@ TabletParallelCompactionManager::create_and_register_tablet_state(int64_t tablet
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_unshare = is_unshare;
     state->max_parallel = max_parallel;
     state->max_bytes_per_subtask = max_bytes;
     state->callback = std::move(callback);
@@ -636,7 +640,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks(
 StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
-        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token) {
+        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -683,7 +687,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     }
 
     // Step 1: Pick rowsets for compaction
-    ASSIGN_OR_RETURN(auto all_rowsets, pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction));
+    ASSIGN_OR_RETURN(auto all_rowsets,
+                     pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction, is_unshare));
     size_t total_rowsets_count = all_rowsets.size();
 
     // Use the unified grouping algorithm that supports both large rowset splitting
@@ -691,7 +696,13 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     // are segment-based and do not depend on primary index, so this works for all table
     // types (PK, duplicate key, unique key, aggregate key).
     // Step 2: Create subtask groups (handles both large rowset split and small rowset grouping)
-    auto subtask_groups = _create_subtask_groups(tablet_id, std::move(all_rowsets), max_parallel, max_bytes);
+    auto subtask_groups = is_unshare
+                                  ? _create_unshare_subtask_groups(tablet_id, all_rowsets, max_parallel, max_bytes)
+                                  : _create_subtask_groups(tablet_id, std::move(all_rowsets), max_parallel, max_bytes);
+
+    if (is_unshare && !subtask_groups.empty()) {
+        RETURN_IF_ERROR(_validate_unshare_group_coverage(all_rowsets, subtask_groups));
+    }
 
     if (subtask_groups.empty()) {
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " txn=" << txn_id
@@ -703,8 +714,9 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
             << " subtask groups from " << total_rowsets_count << " rowsets";
 
     // Step 3: Create and register tablet state
-    ASSIGN_OR_RETURN(auto state_ptr, create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel,
-                                                                      max_bytes, std::move(callback), release_token));
+    ASSIGN_OR_RETURN(auto state_ptr,
+                     create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel, max_bytes, is_unshare,
+                                                      std::move(callback), release_token));
 
     // Step 4: Submit subtasks
     return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
@@ -966,6 +978,23 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                   [](const std::unique_ptr<CompactionTaskContext>& a, const std::unique_ptr<CompactionTaskContext>& b) {
                       return a->subtask_id < b->subtask_id;
                   });
+
+        if (state->is_unshare) {
+            if (state->expected_unshare_subtask_count <= 0 ||
+                static_cast<int32_t>(state->completed_subtasks.size()) != state->expected_unshare_subtask_count) {
+                return Status::InternalError(strings::Substitute(
+                        "Incomplete parallel UNSHARE: tablet_id=$0, txn_id=$1, completed=$2, expected=$3", tablet_id,
+                        txn_id, state->completed_subtasks.size(), state->expected_unshare_subtask_count));
+            }
+            for (const auto& ctx : state->completed_subtasks) {
+                if (!ctx->status.ok() || ctx->txn_log == nullptr || !ctx->txn_log->has_op_compaction()) {
+                    return Status::InternalError(strings::Substitute(
+                            "Parallel UNSHARE subtask failed: tablet_id=$0, txn_id=$1, subtask_id=$2, status=$3",
+                            tablet_id, txn_id, ctx->subtask_id,
+                            ctx->status.ok() ? "missing compaction txn log" : ctx->status.to_string()));
+                }
+            }
+        }
 
         // Build a map from subtask_id to status for quick lookup
         std::unordered_map<int32_t, bool> subtask_success_map;
@@ -1391,7 +1420,9 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
 
     // Execute SST compaction once after all subtasks complete.
     // Store results in OpParallelCompaction (not in individual subtask OpCompactions).
-    RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel));
+    if (!state->is_unshare) {
+        RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel));
+    }
 
     return merged_log;
 }
@@ -1454,7 +1485,8 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     // and can be merged later in on_subtask_complete
     // Pass subtask_id so that rows_mapper files use subtask-specific filenames
     auto context = CompactionTaskContext::create_for_subtask(txn_id, tablet_id, version, force_base_compaction,
-                                                             true /* skip_write_txnlog */, state->callback, subtask_id);
+                                                             true /* skip_write_txnlog */, state->callback, subtask_id,
+                                                             state->is_unshare);
 
     auto start_time = ::time(nullptr);
     auto start_time_ns = MonotonicNanos();
@@ -1863,6 +1895,184 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_group_small_rowsets(
     return groups;
 }
 
+std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_unshare_subtask_groups(
+        int64_t tablet_id, const std::vector<RowsetPtr>& rowsets, int32_t max_parallel, int64_t max_bytes_per_subtask) {
+    if (rowsets.empty() || max_parallel <= 1 || max_bytes_per_subtask <= 0) {
+        return {};
+    }
+
+    int64_t total_bytes = 0;
+    int32_t max_physical_parts = 0;
+    for (const auto& rowset : rowsets) {
+        total_bytes += rowset->data_size();
+        // Segment-range compaction keeps at least two segments in each part. A
+        // one-part rowset is represented by a NORMAL group and is still rewritten.
+        max_physical_parts += std::max<int32_t>(1, rowset->num_segments() / 2);
+    }
+    int32_t target_parts = static_cast<int32_t>((total_bytes + max_bytes_per_subtask - 1) / max_bytes_per_subtask);
+    target_parts = std::min({max_parallel, max_physical_parts, target_parts});
+    if (target_parts <= 1) {
+        VLOG(1) << "Parallel UNSHARE fallback: tablet=" << tablet_id << ", rowsets=" << rowsets.size()
+                << ", bytes=" << total_bytes << ", max_parallel=" << max_parallel;
+        return {};
+    }
+
+    std::vector<SubtaskGroup> groups;
+    if (static_cast<int32_t>(rowsets.size()) >= target_parts) {
+        // There are enough rowsets to parallelize without splitting a rowset. Keep
+        // metadata order and form exactly target_parts whole-rowset groups.
+        int64_t remaining_bytes = total_bytes;
+        int32_t remaining_groups = target_parts;
+        SubtaskGroup current;
+        current.type = SubtaskType::NORMAL;
+        for (size_t i = 0; i < rowsets.size(); ++i) {
+            const auto& rowset = rowsets[i];
+            current.rowsets.push_back(rowset);
+            current.total_bytes += rowset->data_size();
+            remaining_bytes -= rowset->data_size();
+
+            const size_t remaining_rowsets = rowsets.size() - i - 1;
+            const int64_t target_bytes =
+                    remaining_groups > 0 ? (current.total_bytes + remaining_bytes) / remaining_groups : 0;
+            if (remaining_groups > 1 && remaining_rowsets >= static_cast<size_t>(remaining_groups - 1) &&
+                current.total_bytes >= target_bytes) {
+                groups.push_back(std::move(current));
+                current = SubtaskGroup();
+                current.type = SubtaskType::NORMAL;
+                --remaining_groups;
+            }
+        }
+        if (!current.rowsets.empty()) {
+            groups.push_back(std::move(current));
+        }
+    } else {
+        // Start with one part per rowset, then give extra slots to the rowset
+        // with the largest remaining bytes per part.
+        std::vector<int32_t> part_counts(rowsets.size(), 1);
+        int32_t assigned_parts = static_cast<int32_t>(rowsets.size());
+        while (assigned_parts < target_parts) {
+            size_t best = rowsets.size();
+            double best_score = -1;
+            for (size_t i = 0; i < rowsets.size(); ++i) {
+                int32_t max_parts = std::max<int32_t>(1, rowsets[i]->num_segments() / 2);
+                if (part_counts[i] >= max_parts) {
+                    continue;
+                }
+                double score = static_cast<double>(rowsets[i]->data_size()) / part_counts[i];
+                if (score > best_score) {
+                    best = i;
+                    best_score = score;
+                }
+            }
+            if (best == rowsets.size()) {
+                break;
+            }
+            ++part_counts[best];
+            ++assigned_parts;
+        }
+
+        for (size_t i = 0; i < rowsets.size(); ++i) {
+            const auto& rowset = rowsets[i];
+            const int32_t part_count = part_counts[i];
+            if (part_count == 1) {
+                SubtaskGroup group;
+                group.type = SubtaskType::NORMAL;
+                group.rowsets.push_back(rowset);
+                group.total_bytes = rowset->data_size();
+                groups.push_back(std::move(group));
+                continue;
+            }
+
+            const int32_t total_segments = rowset->num_segments();
+            int32_t segment_start = 0;
+            for (int32_t part = 0; part < part_count; ++part) {
+                int32_t remaining_segments = total_segments - segment_start;
+                int32_t remaining_parts = part_count - part;
+                int32_t segments_in_part = (remaining_segments + remaining_parts - 1) / remaining_parts;
+                int32_t segment_end = segment_start + segments_in_part;
+
+                SubtaskGroup group;
+                group.type = SubtaskType::LARGE_ROWSET_PART;
+                group.large_rowset = rowset;
+                group.large_rowset_id = rowset->id();
+                group.segment_start = segment_start;
+                group.segment_end = segment_end;
+                group.total_bytes =
+                        part + 1 == part_count
+                                ? rowset->data_size() - (rowset->data_size() * segment_start / total_segments)
+                                : rowset->data_size() * segments_in_part / total_segments;
+                groups.push_back(std::move(group));
+                segment_start = segment_end;
+            }
+        }
+    }
+
+    VLOG(1) << "Parallel UNSHARE: tablet=" << tablet_id << " created " << groups.size() << " physical subtasks for "
+            << rowsets.size() << " shared rowsets, bytes=" << total_bytes;
+    return groups;
+}
+
+Status TabletParallelCompactionManager::_validate_unshare_group_coverage(const std::vector<RowsetPtr>& rowsets,
+                                                                         const std::vector<SubtaskGroup>& groups) {
+    struct Coverage {
+        int32_t segment_count = 0;
+        bool whole_rowset = false;
+        std::vector<std::pair<int32_t, int32_t>> segment_ranges;
+    };
+    std::unordered_map<uint32_t, Coverage> coverage;
+    for (const auto& rowset : rowsets) {
+        if (!coverage.emplace(rowset->id(), Coverage{rowset->num_segments(), false, {}}).second) {
+            return Status::InternalError(fmt::format("duplicate UNSHARE input rowset {}", rowset->id()));
+        }
+    }
+
+    for (const auto& group : groups) {
+        if (group.type == SubtaskType::RANGE_SPLIT) {
+            return Status::InternalError("parallel UNSHARE must not use sort-key range subtasks");
+        }
+        if (group.type == SubtaskType::NORMAL) {
+            for (const auto& rowset : group.rowsets) {
+                auto it = coverage.find(rowset->id());
+                if (it == coverage.end() || it->second.whole_rowset || !it->second.segment_ranges.empty()) {
+                    return Status::InternalError(
+                            fmt::format("UNSHARE rowset {} is missing or covered more than once", rowset->id()));
+                }
+                it->second.whole_rowset = true;
+            }
+            continue;
+        }
+
+        auto it = coverage.find(group.large_rowset_id);
+        if (it == coverage.end() || group.large_rowset == nullptr ||
+            group.large_rowset->id() != group.large_rowset_id || it->second.whole_rowset || group.segment_start < 0 ||
+            group.segment_start >= group.segment_end || group.segment_end > it->second.segment_count) {
+            return Status::InternalError(
+                    fmt::format("invalid UNSHARE segment coverage for rowset {}", group.large_rowset_id));
+        }
+        it->second.segment_ranges.emplace_back(group.segment_start, group.segment_end);
+    }
+
+    for (auto& [rowset_id, item] : coverage) {
+        if (item.whole_rowset) {
+            continue;
+        }
+        std::sort(item.segment_ranges.begin(), item.segment_ranges.end());
+        int32_t next_segment = 0;
+        for (const auto& [begin, end] : item.segment_ranges) {
+            if (begin != next_segment) {
+                return Status::InternalError(fmt::format(
+                        "parallel UNSHARE rowset {} has a gap/overlap before segment {}", rowset_id, begin));
+            }
+            next_segment = end;
+        }
+        if (next_segment != item.segment_count) {
+            return Status::InternalError(fmt::format("parallel UNSHARE rowset {} covers {} of {} segments", rowset_id,
+                                                     next_segment, item.segment_count));
+        }
+    }
+    return Status::OK();
+}
+
 std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_groups(int64_t tablet_id,
                                                                                   std::vector<RowsetPtr> rowsets,
                                                                                   int32_t max_parallel,
@@ -2006,6 +2216,11 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // the original rowset, dropping segments that never got a subtask.
     int32_t total_groups = static_cast<int32_t>(groups.size());
     int32_t tokens_acquired = 0;
+
+    if (state_ptr->is_unshare) {
+        std::lock_guard<std::mutex> lock(state_ptr->mutex);
+        state_ptr->expected_unshare_subtask_count = total_groups;
+    }
 
     for (int32_t i = 0; i < total_groups; i++) {
         if (!acquire_token()) {
@@ -2239,7 +2454,8 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
 
     // Create compaction context
     auto context = CompactionTaskContext::create_for_subtask(txn_id, tablet_id, version, force_base_compaction,
-                                                             true /* skip_write_txnlog */, state->callback, subtask_id);
+                                                             true /* skip_write_txnlog */, state->callback, subtask_id,
+                                                             state->is_unshare);
 
     auto start_time = ::time(nullptr);
     auto start_time_ns = MonotonicNanos();
@@ -2688,7 +2904,8 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     }
 
     auto context = CompactionTaskContext::create_for_subtask(txn_id, tablet_id, version, force_base_compaction,
-                                                             true /* skip_write_txnlog */, state->callback, subtask_id);
+                                                             true /* skip_write_txnlog */, state->callback, subtask_id,
+                                                             state->is_unshare);
 
     auto start_time = ::time(nullptr);
     auto start_time_ns = MonotonicNanos();

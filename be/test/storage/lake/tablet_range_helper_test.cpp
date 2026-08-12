@@ -17,8 +17,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
@@ -186,15 +189,52 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_OK(res.status());
     ASSERT_FALSE(res.value().seek_key.empty());
 
-    // Case 2: different order -> Should return InternalError
+    // Case 2: ORDER BY differs from PK. Range boundaries remain encoded in PK order.
     schema_pb.clear_sort_key_idxes();
     schema_pb.add_sort_key_idxes(1);
-    schema_pb.add_sort_key_idxes(0);
-    auto tablet_schema_wrong = TabletSchema::create(schema_pb);
-    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema_wrong);
-    ASSERT_FALSE(res2.ok());
-    ASSERT_TRUE(res2.status().is_internal_error());
-    ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
+    auto tablet_schema_separate_sort = TabletSchema::create(schema_pb);
+    auto res2 = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema_separate_sort);
+    ASSERT_OK(res2.status());
+    EXPECT_EQ(res.value().seek_key, res2.value().seek_key);
+}
+
+TEST(TabletRangeHelperTest, test_primary_key_range_filter_with_separate_sort_key) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    const std::array<std::string, 3> column_names = {"c0", "c1", "c2"};
+    for (int i = 0; i < 3; ++i) {
+        auto* column = schema_pb.add_column();
+        column->set_name(column_names[i]);
+        column->set_type("INT");
+        column->set_is_key(i < 2);
+        column->set_is_nullable(false);
+    }
+    schema_pb.add_sort_key_idxes(2);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range;
+    range.mutable_lower_bound()->CopyFrom(make_int_tuple_pb(2));
+    *range.mutable_lower_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_lower_bound_included(true);
+    range.mutable_upper_bound()->CopyFrom(make_int_tuple_pb(4));
+    *range.mutable_upper_bound()->add_values() = make_int_tuple_pb(0).values(0);
+    range.set_upper_bound_included(false);
+
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4);
+    const std::vector<std::pair<int32_t, int32_t>> keys = {{1, 9}, {2, 0}, {3, 5}, {4, 0}};
+    for (const auto& [c0, c1] : keys) {
+        chunk->get_column_by_index(0)->append_datum(Datum(c0));
+        chunk->get_column_by_index(1)->append_datum(Datum(c1));
+        chunk->get_column_by_index(2)->append_datum(Datum(100));
+    }
+
+    ASSIGN_OR_ABORT(auto filter, TabletRangeHelper::create_primary_key_range_filter(range, tablet_schema, *chunk));
+    ASSERT_EQ(4, filter.size());
+    EXPECT_EQ(0, filter[0]);
+    EXPECT_EQ(1, filter[1]);
+    EXPECT_EQ(1, filter[2]);
+    EXPECT_EQ(0, filter[3]);
 }
 
 // NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).

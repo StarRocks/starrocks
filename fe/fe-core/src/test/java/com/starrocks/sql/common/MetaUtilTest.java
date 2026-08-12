@@ -212,4 +212,22 @@ public class MetaUtilTest {
         Assertions.assertTrue(thrown.getMessage().contains("9999"));
         Assertions.assertTrue(thrown.getMessage().contains("t1"));
     }
+
+    @Test
+    public void testPrimaryKeyRangeColumnsAreIndependentFromSortKey() {
+        Column pk = new Column("pk", IntegerType.INT, true);
+        pk.setIsKey(true);
+        Column orderBy = new Column("ts", IntegerType.INT, false);
+        MaterializedIndexMeta meta = mock(MaterializedIndexMeta.class);
+        when(meta.getSchema()).thenReturn(Lists.newArrayList(pk, orderBy));
+        when(meta.getKeysType()).thenReturn(KeysType.PRIMARY_KEYS);
+        when(meta.getSortKeyIdxes()).thenReturn(Lists.newArrayList(1));
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexMetaByMetaId(1000L)).thenReturn(meta);
+
+        Assertions.assertTrue(MetaUtils.hasSeparateSortKey(table, 1000L));
+        Assertions.assertEquals(List.of(pk), MetaUtils.getRangeDistributionColumns(table, 1000L));
+        Assertions.assertEquals(List.of(orderBy), MetaUtils.getPhysicalSortKeyColumns(table, 1000L));
+    }
 }
