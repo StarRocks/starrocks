@@ -41,7 +41,6 @@ public:
     void handle(HttpRequest* req) override;
     void free_handler_ctx(void* handler_ctx) override;
 
-    bool always_require_auth() const override { return true; }
     RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
 
 #ifdef BE_TEST

@@ -287,7 +287,7 @@ A slow object-store read can occupy one HTTP worker, and a slow client can retai
 
 ## Authentication and Data Handling
 
-The endpoint requires authenticated `OPERATE` privilege regardless of the global `enable_http_auth` setting. Introduce an always-authenticated handler policy for this endpoint; authentication-service failure is fail-closed. The current FE `checkAuth` protocol reports both bad credentials and insufficient privilege as `NOT_AUTHORIZED`, so this design does not promise to distinguish those two cases at the HTTP layer.
+The endpoint declares `OPERATE`; enforcement remains controlled by the global `enable_http_auth` setting. When HTTP authentication is disabled, the verifier bypasses rejection exactly as the historical endpoint did. When it is enabled, the shared verifier enforces authentication and `OPERATE`; authentication-service failure is fail-closed. The current FE `checkAuth` protocol reports both bad credentials and insufficient privilege as `NOT_AUTHORIZED`, so this design does not promise to distinguish those two cases at the HTTP layer.
 
 Because BE HTTP does not itself provide TLS, the endpoint must be reached through a TLS-terminating management proxy or a trusted management network. It is not a tenant-level data API.
 
@@ -312,7 +312,7 @@ After authentication dispatches to the action, every application error uses a st
 }
 ```
 
-Authentication and authorization fail before the action runs and retain the shared BE HTTP authentication response format. This API does not fork that global protocol merely to make its envelope match application errors.
+When HTTP authentication is enabled, authentication and authorization fail before the action runs and retain the shared BE HTTP authentication response format. This API does not fork that global protocol merely to make its envelope match application errors.
 
 | HTTP status | Code | Meaning |
 |---:|---|---|
@@ -324,7 +324,7 @@ Authentication and authorization fail before the action runs and retain the shar
 | 500 | `CORRUPT_METADATA` | File structure, checksum, protobuf, page identity, version, or schema restoration is invalid. |
 | 500 | `SERIALIZATION_FAILED` | Valid logical metadata could not be converted to bounded JSON. |
 
-Authentication completes before any storage access. All application-level fallible work completes before a success response begins, so the endpoint never embeds an error object in an HTTP 200 response. A disconnect after response start is an ordinary transport failure; it cannot be replaced with another HTTP status.
+When HTTP authentication is enabled, it completes before any storage access. All application-level fallible work completes before a success response begins, so the endpoint never embeds an error object in an HTTP 200 response. A disconnect after response start is an ordinary transport failure; it cannot be replaced with another HTTP status.
 
 ## Observability and Audit
 
@@ -355,7 +355,7 @@ This is a small shared HTTP-layer change, not an expansion of the diagnostic API
 
 Responsibilities:
 
-- enforce mandatory authentication and `OPERATE`;
+- declare `OPERATE` and use the shared config-gated HTTP authentication gate;
 - parse the strict request contract;
 - acquire the end-to-end admission lease;
 - run bounded diagnostic work synchronously;
@@ -436,7 +436,7 @@ The endpoint is read-only. It does not list, write, delete, synthesize, populate
 - Reject missing values, whitespace, signs, zero, negatives, hexadecimal input, overflow, duplicates, and unknown parameters before storage access.
 - Reject `version=1&is_bundle=true`.
 - Prove a query parameter cannot shadow `TabletId` from the URI.
-- Verify missing credentials, invalid credentials, missing `OPERATE`, and an unavailable auth service never access storage; authorization denials use 401 and auth-service failures use 503.
+- With `enable_http_auth=true`, verify missing credentials, invalid credentials, missing `OPERATE`, and an unavailable auth service never access storage; authorization denials use 401 and auth-service failures use 503.
 
 ### Storage-layout tests
 

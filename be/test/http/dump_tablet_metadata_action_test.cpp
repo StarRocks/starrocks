@@ -742,6 +742,9 @@ protected:
             _auth_calls.fetch_add(1, std::memory_order_relaxed);
             _last_privilege.store(static_cast<int>(privilege), std::memory_order_relaxed);
             _last_always_require_auth.store(always_require_auth, std::memory_order_relaxed);
+            if (!always_require_auth && !config::enable_http_auth) {
+                return std::nullopt;
+            }
             if (!_reject_auth.load(std::memory_order_relaxed)) {
                 return std::nullopt;
             }
@@ -864,7 +867,7 @@ TEST_F(DumpTabletMetadataHttpIntegrationTest, RealRouteAndQueryParsingEnforceThe
     EXPECT_EQ(kTabletId, document["metadata"]["id"].GetInt64());
     EXPECT_EQ(kVersion, document["metadata"]["version"].GetInt64());
     EXPECT_EQ(1, _auth_calls.load(std::memory_order_relaxed));
-    EXPECT_TRUE(_last_always_require_auth.load(std::memory_order_relaxed));
+    EXPECT_FALSE(_last_always_require_auth.load(std::memory_order_relaxed));
     EXPECT_EQ(static_cast<int>(HttpHandler::RequiredPrivilege::OPERATE),
               _last_privilege.load(std::memory_order_relaxed));
     EXPECT_GT(_provider->calls(), 0);
@@ -902,26 +905,32 @@ TEST_F(DumpTabletMetadataHttpIntegrationTest, RealRouteAndQueryParsingEnforceThe
     EXPECT_EQ(0, _provider->calls());
 }
 
-TEST_F(DumpTabletMetadataHttpIntegrationTest, ForcedOperateAuthRejectsBeforeActionOrStorage) {
+TEST_F(DumpTabletMetadataHttpIntegrationTest, OperateAuthUsesTheGlobalEnableHttpAuthGate) {
     ASSERT_FALSE(config::enable_http_auth);
     _reject_auth.store(true, std::memory_order_relaxed);
+    _provider->reset_calls();
+    auto bypassed_or = get("/api/cloudnative/dump_tablet_metadata/11979?version=23&is_bundle=false");
+    ASSERT_TRUE(bypassed_or.ok()) << bypassed_or.status();
+    auto bypassed = std::move(bypassed_or).value();
+    EXPECT_EQ(200, bypassed.status);
+    EXPECT_EQ(1, _auth_calls.load(std::memory_order_relaxed));
+    EXPECT_FALSE(_last_always_require_auth.load(std::memory_order_relaxed));
+    EXPECT_EQ(static_cast<int>(HttpHandler::RequiredPrivilege::OPERATE),
+              _last_privilege.load(std::memory_order_relaxed));
+    EXPECT_GT(_provider->calls(), 0);
+
+    config::enable_http_auth = true;
     _provider->reset_calls();
     auto rejected_or = get("/api/cloudnative/dump_tablet_metadata/11979?version=23&is_bundle=false");
     ASSERT_TRUE(rejected_or.ok()) << rejected_or.status();
     auto rejected = std::move(rejected_or).value();
     EXPECT_EQ(401, rejected.status);
     EXPECT_EQ(R"({"code":"AUTH_REJECTED","message":"denied by test verifier"})", rejected.body);
-    EXPECT_EQ(1, _auth_calls.load(std::memory_order_relaxed));
-    EXPECT_TRUE(_last_always_require_auth.load(std::memory_order_relaxed));
+    EXPECT_EQ(2, _auth_calls.load(std::memory_order_relaxed));
+    EXPECT_FALSE(_last_always_require_auth.load(std::memory_order_relaxed));
     EXPECT_EQ(static_cast<int>(HttpHandler::RequiredPrivilege::OPERATE),
               _last_privilege.load(std::memory_order_relaxed));
     EXPECT_EQ(0, _provider->calls());
-
-    _reject_auth.store(false, std::memory_order_relaxed);
-    auto admitted_or = get("/api/cloudnative/dump_tablet_metadata/11979?version=23&is_bundle=false");
-    ASSERT_TRUE(admitted_or.ok()) << admitted_or.status();
-    EXPECT_EQ(200, admitted_or->status);
-    EXPECT_GT(_provider->calls(), 0);
 }
 
 TEST_F(DumpTabletMetadataHttpIntegrationTest, PermitLivesUntilRealUndrainedResponseConnectionIsFreed) {
