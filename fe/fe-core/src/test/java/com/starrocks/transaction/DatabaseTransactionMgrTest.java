@@ -712,11 +712,173 @@ public class DatabaseTransactionMgrTest {
         DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
         Deencapsulation.setField(mgr, "runningTxnNums", maxRunningTxnNumPerDb);
         ExceptionChecker.expectThrowsNoException(
-                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK,
+                        Lists.newArrayList()));
         ExceptionChecker.expectThrowsNoException(
-                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                        Lists.newArrayList()));
         ExceptionChecker.expectThrows(RunningTxnExceedException.class,
-                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+                () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        Lists.newArrayList()));
+    }
+
+    private static void addRunningTxn(DatabaseTransactionMgr mgr, long txnId, String label,
+                                      TransactionState.LoadJobSourceType sourceType, List<Long> tableIdList) {
+        TransactionState txn = new TransactionState(0, tableIdList, txnId, label, null, sourceType,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"), -1, 3600000L);
+        txn.setTransactionStatus(TransactionStatus.PREPARE);
+        Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", txn);
+    }
+
+    @Test
+    public void testCheckRunningTxnExceedLimitPerTable() {
+        int savedDb = Config.max_running_txn_num_per_db;
+        int savedTable = Config.max_running_txn_num_per_table;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            Config.max_running_txn_num_per_table = 2;
+            DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+            long tableA = 100L;
+            long tableB = 200L;
+            // Seed two running (non-final) txns that touch tableA, driving it to the per-table limit.
+            addRunningTxn(mgr, 5001L, "p2_a1", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(tableA));
+            addRunningTxn(mgr, 5002L, "p2_a2", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(tableA));
+            assertEquals(2, mgr.getRunningTxnNumOfTable(tableA));
+            // An exempt (lake-compaction) running txn on tableB must NOT count toward its per-table total.
+            addRunningTxn(mgr, 5003L, "p2_b_compact", TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                    Lists.newArrayList(tableB));
+            assertEquals(0, mgr.getRunningTxnNumOfTable(tableB));
+            // A routine-load running txn on tableB must likewise NOT count toward its per-table total.
+            addRunningTxn(mgr, 5004L, "p2_b_routine", TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK,
+                    Lists.newArrayList(tableB));
+            assertEquals(0, mgr.getRunningTxnNumOfTable(tableB));
+
+            // Under the per-DB limit, but tableA is at its per-table limit -> a load touching tableA is rejected.
+            ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+            // A multi-table load is rejected if ANY member table is over limit.
+            ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableB, tableA)));
+            // A load touching only the idle tableB still succeeds -> isolation holds.
+            ExceptionChecker.expectThrowsNoException(
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableB)));
+
+            // Disabled (0) restores pre-feature behavior: tableA no longer blocked.
+            Config.max_running_txn_num_per_table = 0;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+
+            // Exempt source types are never blocked by the per-table limit even when over.
+            Config.max_running_txn_num_per_table = 2;
+            ExceptionChecker.expectThrowsNoException(
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                            Lists.newArrayList(tableA)));
+        } finally {
+            Config.max_running_txn_num_per_db = savedDb;
+            Config.max_running_txn_num_per_table = savedTable;
+        }
+    }
+
+    @Test
+    public void testRunningTxnNumOfTableTracksRunningSet() {
+        DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+        long tableA = 111L;
+        long tableB = 222L;
+        // Multi-table running txn counts against every table it touches.
+        TransactionState running = new TransactionState(0, Lists.newArrayList(tableA, tableB), 1001L, "label_p2_a",
+                null, TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"), -1, 3600000L);
+        running.setTransactionStatus(TransactionStatus.PREPARE);
+        Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", running);
+        assertEquals(1, mgr.getRunningTxnNumOfTable(tableA));
+        assertEquals(1, mgr.getRunningTxnNumOfTable(tableB));
+
+        // Reaching a final status removes the txn from the running set, so the on-demand count drops to 0.
+        running.setTransactionStatus(TransactionStatus.ABORTED);
+        Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", running);
+        assertEquals(0, mgr.getRunningTxnNumOfTable(tableA));
+        assertEquals(0, mgr.getRunningTxnNumOfTable(tableB));
+    }
+
+    @Test
+    public void testPerTableLimitBoundaryAcceptsBelowCap() {
+        int savedDb = Config.max_running_txn_num_per_db;
+        int savedTable = Config.max_running_txn_num_per_table;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            Config.max_running_txn_num_per_table = 2;
+            DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+            long tableA = 300L;
+            // One running txn is one below the cap of 2, so a new load touching tableA must still be ACCEPTED.
+            // Pins the accept side of the boundary: guards against an off-by-one that rejects at cap - 1.
+            addRunningTxn(mgr, 5101L, "p2_bound_1", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(tableA));
+            assertEquals(1, mgr.getRunningTxnNumOfTable(tableA));
+            ExceptionChecker.expectThrowsNoException(
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+            // A second running txn drives tableA to the cap, so the next load touching it must be REJECTED.
+            addRunningTxn(mgr, 5102L, "p2_bound_2", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(tableA));
+            assertEquals(2, mgr.getRunningTxnNumOfTable(tableA));
+            ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+        } finally {
+            Config.max_running_txn_num_per_db = savedDb;
+            Config.max_running_txn_num_per_table = savedTable;
+        }
+    }
+
+    @Test
+    public void testPerTableLimitOfOneAllowsFirstTxn() {
+        int savedDb = Config.max_running_txn_num_per_db;
+        int savedTable = Config.max_running_txn_num_per_table;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            Config.max_running_txn_num_per_table = 1;
+            DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+            long tableA = 400L;
+            // With a cap of 1 and nothing running, the first load touching tableA must be ACCEPTED.
+            // At cap = 1 an off-by-one that rejects at cap - 1 would reject every load to every table.
+            ExceptionChecker.expectThrowsNoException(
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+            // Once one txn is running, tableA is at its cap, so the next load touching it must be REJECTED.
+            addRunningTxn(mgr, 5201L, "p2_one", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(tableA));
+            ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+        } finally {
+            Config.max_running_txn_num_per_db = savedDb;
+            Config.max_running_txn_num_per_table = savedTable;
+        }
+    }
+
+    @Test
+    public void testCountReflectsTablesAttachedAfterBegin() {
+        // The on-demand scan (rather than a maintained counter) is what lets a table attached AFTER the
+        // transaction is already running still count. Pin that design property: register a txn with an empty
+        // table list, then attach a table, and confirm the count reflects it immediately with no re-upsert.
+        DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+        long tableA = 500L;
+        TransactionState txn = new TransactionState(0, Lists.newArrayList(), 6001L, "p2_late", null,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localhost"), -1, 3600000L);
+        txn.setTransactionStatus(TransactionStatus.PREPARE);
+        Deencapsulation.invoke(mgr, "unprotectUpsertTransactionState", txn);
+        // Empty table list at registration: nothing counts yet.
+        assertEquals(0, mgr.getRunningTxnNumOfTable(tableA));
+        // Attach the table after the txn is already in the running set (as explicit BEGIN...COMMIT does).
+        txn.addTableIdList(tableA);
+        assertEquals(1, mgr.getRunningTxnNumOfTable(tableA));
     }
 
     @Test
