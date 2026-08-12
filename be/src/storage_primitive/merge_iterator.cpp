@@ -204,7 +204,7 @@ protected:
 
     virtual Status fill(size_t child) = 0;
 
-    // `fill()` split in two so the prologue can overlap the reads. `fill_read` only touches
+    // `fill()` split in two so the initial prefill can overlap the reads. `fill_read` only touches
     // this child's own iterator and chunk, so different children may run it concurrently;
     // `fill_commit` mutates shared merge state (heap / per-child slots) and must stay serial
     // and in child order, otherwise the merge would consume a different order than the serial
@@ -216,7 +216,7 @@ protected:
 
     std::vector<ChunkIteratorPtr> _children;
     std::vector<ChunkPtr> _chunk_pool;
-    // Status of each child's prologue read, produced by fill_read and consumed by fill_commit.
+    // Status of each child's prefill read, produced by fill_read and consumed by fill_commit.
     std::vector<Status> _prefill_st;
     size_t _merged_rows = 0;
     bool _inited = false;
@@ -240,10 +240,10 @@ inline Status MergeIterator::init() {
             RETURN_IF_ERROR(fill(i));
         }
     }
-    // A prologue this slow is a real stall -- every child is read before the merge emits a row --
+    // A prefill this slow is a real stall -- every child is read before the merge emits a row --
     // so it is worth a line, and it is rare enough not to be noise.
     int64_t cost_ms = (MonotonicNanos() - start_ns) / 1000000;
-    LOG_IF(INFO, cost_ms >= 1000) << "slow merge iterator prologue: children=" << _children.size()
+    LOG_IF(INFO, cost_ms >= 1000) << "slow merge iterator prefill: children=" << _children.size()
                                   << ", parallel=" << parallel << ", cost=" << cost_ms << "ms";
     _inited = true;
     return Status::OK();
@@ -251,7 +251,7 @@ inline Status MergeIterator::init() {
 
 namespace {
 
-// The prologue borrows no existing pool on purpose: the compaction workers are the callers here,
+// The prefill borrows no existing pool on purpose: the compaction workers are the callers here,
 // and the ingestion pools serve latency-sensitive writes, so either choice would make this
 // contend with unrelated work. Built once, lazily, so a BE that never enables the config never
 // pays for it.
@@ -276,13 +276,13 @@ ThreadPool* merge_prefill_pool() {
 
 // A prefill task may itself drive a nested merge iterator. Letting the nested level submit into
 // the same bounded pool and then block on it would deadlock once the pool is saturated, so a
-// nested prologue always runs serially.
+// nested prefill always runs serially.
 thread_local bool tls_in_merge_prefill = false;
 
 } // namespace
 
 // Reads every child concurrently, then commits them serially in child order. The commit order is
-// what makes this equivalent to the serial prologue: the heap and the per-child slots see the same
+// what makes this equivalent to the serial prefill: the heap and the per-child slots see the same
 // sequence of updates, and a child that fails still surfaces its error at the same point the
 // serial path would.
 inline Status MergeIterator::parallel_prefill() {
