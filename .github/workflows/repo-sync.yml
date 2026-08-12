@@ -73,9 +73,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
       GH_TOKEN: ${{ secrets.SYNC_PAT }}
-      # Auto-load the shared retry() (written by "harden git network") into
-      # every run step's bash, so network git ops can call `retry` directly.
-      BASH_ENV: ${{ runner.temp }}/gitretry.sh
     steps:
       - name: clean
         run: |
@@ -101,6 +98,10 @@ jobs:
           cat > "$RUNNER_TEMP/gitretry.sh" <<'EOF'
           retry(){ local n=1; until "$@"; do [ $n -ge 5 ] && { echo "::error::gave up: $*"; return 1; }; echo "::warning::retry $n: $*"; sleep $((n*20)); n=$((n+1)); done; }
           EOF
+          # Export BASH_ENV so every SUBSEQUENT step's bash auto-sources retry().
+          # Set here (not job-level env:) because the runner context / $RUNNER_TEMP
+          # is not available when job-level env is evaluated.
+          echo "BASH_ENV=$RUNNER_TEMP/gitretry.sh" >> "$GITHUB_ENV"
 
       - name: Clean Branches
         env:
@@ -285,9 +286,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
       GH_TOKEN: ${{ secrets.SYNC_PAT }}
-      # Auto-load the shared retry() (written by "harden git network") into
-      # every run step's bash, so network git ops can call `retry` directly.
-      BASH_ENV: ${{ runner.temp }}/gitretry.sh
     steps:
       - name: clean
         run: |
@@ -313,6 +311,10 @@ jobs:
           cat > "$RUNNER_TEMP/gitretry.sh" <<'EOF'
           retry(){ local n=1; until "$@"; do [ $n -ge 5 ] && { echo "::error::gave up: $*"; return 1; }; echo "::warning::retry $n: $*"; sleep $((n*20)); n=$((n+1)); done; }
           EOF
+          # Export BASH_ENV so every SUBSEQUENT step's bash auto-sources retry().
+          # Set here (not job-level env:) because the runner context / $RUNNER_TEMP
+          # is not available when job-level env is evaluated.
+          echo "BASH_ENV=$RUNNER_TEMP/gitretry.sh" >> "$GITHUB_ENV"
 
       - name: Clean Branches
         env:
