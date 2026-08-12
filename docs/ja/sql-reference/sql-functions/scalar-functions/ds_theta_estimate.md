@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "シリアライズされた Apache DataSketches Theta スケッチが要約する近似的な distinct count を返します。"
+---
+
 # ds_theta_estimate
 
 スカラー関数。シリアライズされた Apache DataSketches Theta スケッチ（`VARBINARY`、コンパクト形式）が要約する近似的な distinct count を返します。入力 1 行につき 1 行を返します。

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "将列值累积到 Apache DataSketches Theta 草图中，以 VARBINARY 格式返回序列化的紧凑草图。"
+---
+
 # ds_theta_accumulate
 
 将值累积到 Apache DataSketches Theta 草图中，并返回序列化的草图作为 `VARBINARY`（紧凑格式）。与 [ds_theta_combine](./ds_theta_combine.md) 和 [ds_theta_estimate](../scalar-functions/ds_theta_estimate.md) 配合使用，可持久化并复用草图。

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "2 つの Apache DataSketches Theta スケッチの積集合を計算し、distinct count が |A∩B| と推定されるシリアライズされたコンパクトスケッチを返します。"
+---
+
 # ds_theta_intersect
 
 2 つのシリアライズされた Apache DataSketches Theta スケッチに対するスカラーのペアごと積集合演算です。distinct count が `|A ∩ B|` に推定される単一のシリアライズされたコンパクトスケッチを返します。いずれかの入力が `NULL` の場合は `NULL` を返します。

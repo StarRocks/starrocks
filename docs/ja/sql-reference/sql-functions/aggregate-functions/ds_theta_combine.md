@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "複数行のシリアライズされた Apache DataSketches Theta スケッチを単一の和集合コンパクトスケッチにマージし、VARBINARY として返します。"
+---
+
 # ds_theta_combine
 
 集計関数。行をまたいでシリアライズされた Apache DataSketches Theta スケッチ（`VARBINARY`）を和集合でマージし、単一のシリアライズされたコンパクトスケッチを返します。

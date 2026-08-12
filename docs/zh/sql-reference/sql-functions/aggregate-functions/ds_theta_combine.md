@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "跨行合并序列化的 Apache DataSketches Theta 草图，返回单个联合紧凑草图（VARBINARY）。"
+---
+
 # ds_theta_combine
 
 聚合函数。跨行合并序列化的 Apache DataSketches Theta 草图（`VARBINARY`），返回单个序列化的紧凑草图。

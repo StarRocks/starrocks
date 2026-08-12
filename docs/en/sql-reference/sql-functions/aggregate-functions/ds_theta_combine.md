@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Merges serialized Apache DataSketches Theta sketches across rows into a single unioned compact sketch returned as VARBINARY."
 ---
 
 # ds_theta_combine

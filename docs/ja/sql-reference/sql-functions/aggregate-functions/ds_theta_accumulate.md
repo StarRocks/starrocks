@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "列の値から Apache DataSketches Theta スケッチを構築し、シリアライズされたコンパクトスケッチを VARBINARY として返します。"
+---
+
 # ds_theta_accumulate
 
 `expr` に対して Apache DataSketches Theta スケッチを構築し、シリアライズされたスケッチを `VARBINARY`（コンパクト形式）として返します。[ds_theta_combine](./ds_theta_combine.md) および [ds_theta_estimate](../scalar-functions/ds_theta_estimate.md) と組み合わせてスケッチを永続化・再利用できます。

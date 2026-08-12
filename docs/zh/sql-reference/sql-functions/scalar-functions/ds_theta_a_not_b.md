@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "对两个 Apache DataSketches Theta 草图执行集合差运算，返回不同值估计为 |A\\B| 的序列化紧凑草图。"
+---
+
 # ds_theta_a_not_b
 
 对两个序列化的 Apache DataSketches Theta 草图执行标量集合差运算。返回一个序列化的紧凑草图，其不同值估计为 `|A \ B|`（在 A 中但不在 B 中的元素）。如果任一输入为 `NULL`，则返回 `NULL`。

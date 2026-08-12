@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the approximate distinct count summarized by a serialized Apache DataSketches Theta sketch."
 ---
 
 # ds_theta_estimate
