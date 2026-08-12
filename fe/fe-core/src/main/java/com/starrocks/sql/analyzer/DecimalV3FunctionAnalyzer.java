@@ -462,13 +462,19 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         Function newFn = fn;
-        if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName) || DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName)) {
+        // The widening rewriting has something to do only when the aggregated argument is itself a decimal.
+        // count(array<decimal(10,2)>) reaches this method only because argumentTypeContainDecimalV3 also
+        // matches an ARRAY whose *item* type is decimal, and there is no decimal to widen. Leave the resolved
+        // builtin alone, exactly as count(array<int>) does - it never enters this method at all.
+        boolean sameTypeAgg = DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName);
+        boolean widerTypeAgg = DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3();
+        if (sameTypeAgg || widerTypeAgg) {
             Type commonType = InvalidType.INVALID;
             if (FunctionSet.HISTOGRAM.equals(fnName) || FunctionSet.HISTOGRAM_HLL_NDV.equals(fnName)) {
                 commonType = VarcharType.VARCHAR;
-            } else if (DECIMAL_AGG_FUNCTION_SAME_TYPE.contains(fnName)) {
+            } else if (sameTypeAgg) {
                 commonType = argumentTypes[0];
-            } else if (DECIMAL_AGG_FUNCTION_WIDER_TYPE.contains(fnName) && argumentTypes[0].isDecimalV3()) {
+            } else {
                 ScalarType argScalarType = (ScalarType) argumentTypes[0];
                 int precision;
                 if (argScalarType.isDecimal256()) {
@@ -485,6 +491,12 @@ public class DecimalV3FunctionAnalyzer {
                 commonType = TypeFactory.createDecimalV3Type(commonPrimitiveType, precision, scale);
 
             }
+
+            // The entry condition is exactly the union of the cases above, so one of them always assigned a
+            // type; for the same-type case its validity comes from the builtin having matched at all. An
+            // INVALID one used to reach the plan and surface much later as "slot type shouldn't be invalid".
+            Preconditions.checkState(commonType.isValid(),
+                    "decimalv3 rewriting produced no common type for %s", fnName);
 
             Type argType = argumentTypes[0];
             // stddev/variance always use decimal128(38,9) to computing result.
