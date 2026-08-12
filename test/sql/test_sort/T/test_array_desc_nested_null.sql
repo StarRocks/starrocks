@@ -45,6 +45,12 @@ SELECT id FROM t_arr ORDER BY arr DESC;
 SELECT id FROM t_arr ORDER BY arr DESC LIMIT 3;
 set enable_spill = false;
 
+-- array_agg and group_concat sort their input through the same path
+SELECT array_agg(id ORDER BY arr) FROM t_arr;
+SELECT array_agg(id ORDER BY arr DESC) FROM t_arr;
+SELECT array_agg(id ORDER BY arr DESC NULLS FIRST) FROM t_arr;
+SELECT group_concat(cast(id as string) ORDER BY arr DESC SEPARATOR ',') FROM t_arr;
+
 -- A NULL nested in a STRUCT is compared the same way
 CREATE TABLE t_struct (
     id INT,

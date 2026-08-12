@@ -157,6 +157,22 @@ SELECT id FROM t_arr ORDER BY arr DESC LIMIT 3;
 set enable_spill = false;
 -- result:
 -- !result
+SELECT array_agg(id ORDER BY arr) FROM t_arr;
+-- result:
+[1,5,7,4,3,2,6,8]
+-- !result
+SELECT array_agg(id ORDER BY arr DESC) FROM t_arr;
+-- result:
+[8,6,2,3,4,7,5,1]
+-- !result
+SELECT array_agg(id ORDER BY arr DESC NULLS FIRST) FROM t_arr;
+-- result:
+[7,5,1,8,6,2,3,4]
+-- !result
+SELECT group_concat(cast(id as string) ORDER BY arr DESC SEPARATOR ',') FROM t_arr;
+-- result:
+8,6,2,3,4,7,5,1
+-- !result
 CREATE TABLE t_struct (
     id INT,
     s STRUCT<a INT, b INT>
