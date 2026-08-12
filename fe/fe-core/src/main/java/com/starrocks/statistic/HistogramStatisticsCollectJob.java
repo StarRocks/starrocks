@@ -214,7 +214,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             long rowSize;
             try {
                 List<TStatisticData> mcv = queryStatisticSync(
-                        buildCollectMCV(db, table, mcvSize, columnName, sampleRatio), context, analyzeStatus);
+                        buildCollectMCV(db, table, mcvSize, columnName, columnType, sampleRatio), context, analyzeStatus);
                 Map<String, String> mostCommonValues = buildMostCommonValues(mcv, sampleRatio);
 
                 String histogramQuery = buildBatchedHistogramQuery(
