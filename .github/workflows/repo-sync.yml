@@ -73,6 +73,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
       GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      # Auto-load the shared retry() (written by "harden git network") into
+      # every run step's bash, so network git ops can call `retry` directly.
+      BASH_ENV: ${{ runner.temp }}/gitretry.sh
     steps:
       - name: clean
         run: |
@@ -84,6 +87,20 @@ jobs:
           shopt -s dotglob
           cp -rf /var/lib/celerdata-enterprise/* ${{ github.workspace }}
           shopt -u dotglob
+
+      - name: harden git network
+        # Sync runners hit intermittent github.com blackouts (curl 92 HTTP/2
+        # CANCEL / early EOF / connection timed out). HTTP/1.1 avoids the
+        # HTTP/2 CANCEL class; the buffers/low-speed settings tolerate slow
+        # transfers. Also writes the shared retry() consumed via BASH_ENV.
+        run: |
+          git config --global http.version HTTP/1.1
+          git config --global http.postBuffer 1048576000
+          git config --global http.lowSpeedLimit 1000
+          git config --global http.lowSpeedTime 300
+          cat > "$RUNNER_TEMP/gitretry.sh" <<'EOF'
+          retry(){ local n=1; until "$@"; do [ $n -ge 5 ] && { echo "::error::gave up: $*"; return 1; }; echo "::warning::retry $n: $*"; sleep $((n*20)); n=$((n+1)); done; }
+          EOF
 
       - name: Clean Branches
         env:
@@ -101,25 +118,25 @@ jobs:
         run: |
           source_repo_dir=${source_repo#*/}
           cp -rf /var/local/env/ci-source-code/${source_repo_dir} ${source_repo_dir}
-          cd ${source_repo_dir} && git pull
+          cd ${source_repo_dir} && retry git pull
           git checkout ${source_branch}
           git remote set-url origin https://${github_token}@github.com/${{ github.repository }}.git
-          git push origin ${source_branch}:${destination_branch}
+          retry git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
         run: |
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
-          git pull
+          retry git pull
 
       - name: pr branch
         run: |
-          git pull
+          retry git pull
           git checkout ${{ inputs.BRANCH }}
           pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
-          git push -u origin ${pr_branch}
+          retry git push -u origin ${pr_branch}
 
       - name: previous check
         id: previous-check
@@ -148,7 +165,7 @@ jobs:
         # reorderings.
         run: |
           cd ${{ github.workspace }}
-          git fetch origin ${{ inputs.BRANCH }}
+          retry git fetch origin ${{ inputs.BRANCH }}
           git reset --hard origin/${{ inputs.BRANCH }}
 
       - name: cherry pick
@@ -162,7 +179,7 @@ jobs:
           # (fresh main, descendant of M0 since main only advances), and
           # cherry-pick adds X on top → local = M1+X is a descendant of M0.
           # So this is a fast-forward push.
-          git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          retry git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
         id: create_pr
@@ -229,7 +246,7 @@ jobs:
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
             cp -rf /var/lib/elastic-service ./elastic-service
           fi
-          cd elastic-service && git pull
+          cd elastic-service && retry git pull
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
@@ -268,6 +285,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
       GH_TOKEN: ${{ secrets.SYNC_PAT }}
+      # Auto-load the shared retry() (written by "harden git network") into
+      # every run step's bash, so network git ops can call `retry` directly.
+      BASH_ENV: ${{ runner.temp }}/gitretry.sh
     steps:
       - name: clean
         run: |
@@ -279,6 +299,20 @@ jobs:
           shopt -s dotglob
           cp -rf /var/lib/celerdata-enterprise/* ${{ github.workspace }}
           shopt -u dotglob
+
+      - name: harden git network
+        # Sync runners hit intermittent github.com blackouts (curl 92 HTTP/2
+        # CANCEL / early EOF / connection timed out). HTTP/1.1 avoids the
+        # HTTP/2 CANCEL class; the buffers/low-speed settings tolerate slow
+        # transfers. Also writes the shared retry() consumed via BASH_ENV.
+        run: |
+          git config --global http.version HTTP/1.1
+          git config --global http.postBuffer 1048576000
+          git config --global http.lowSpeedLimit 1000
+          git config --global http.lowSpeedTime 300
+          cat > "$RUNNER_TEMP/gitretry.sh" <<'EOF'
+          retry(){ local n=1; until "$@"; do [ $n -ge 5 ] && { echo "::error::gave up: $*"; return 1; }; echo "::warning::retry $n: $*"; sleep $((n*20)); n=$((n+1)); done; }
+          EOF
 
       - name: Clean Branches
         env:
@@ -296,25 +330,25 @@ jobs:
         run: |
           source_repo_dir=${source_repo#*/}
           cp -rf /var/local/env/ci-source-code/${source_repo_dir} ${source_repo_dir}
-          cd ${source_repo_dir} && git pull
+          cd ${source_repo_dir} && retry git pull
           git checkout ${source_branch}
           git remote set-url origin https://${github_token}@github.com/${{ github.repository }}.git
-          git push origin ${source_branch}:${destination_branch}
+          retry git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
         run: |
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
-          git pull
+          retry git pull
 
       - name: pr branch
         run: |
-          git pull
+          retry git pull
           git checkout ${{ inputs.BRANCH }}
           pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
-          git push -u origin ${pr_branch}
+          retry git push -u origin ${pr_branch}
 
       - name: previous check
         id: previous-check
@@ -343,7 +377,7 @@ jobs:
         # reorderings.
         run: |
           cd ${{ github.workspace }}
-          git fetch origin ${{ inputs.BRANCH }}
+          retry git fetch origin ${{ inputs.BRANCH }}
           git reset --hard origin/${{ inputs.BRANCH }}
 
       - name: cherry pick
@@ -357,7 +391,7 @@ jobs:
           # (fresh main, descendant of M0 since main only advances), and
           # cherry-pick adds X on top → local = M1+X is a descendant of M0.
           # So this is a fast-forward push.
-          git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          retry git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
 
       - name: Create pull request
         id: create_pr
@@ -424,7 +458,7 @@ jobs:
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
             cp -rf /var/lib/elastic-service ./elastic-service
           fi
-          cd elastic-service && git pull
+          cd elastic-service && retry git pull
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
