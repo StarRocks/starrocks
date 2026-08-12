@@ -205,16 +205,16 @@ class ReflectionMVDefaults(ReflectionViewDefaults):
     # SHOW CREATE MATERIALIZED VIEW also prints effective values that tables_config leaves out
     # on purpose (e.g. replicated_storage), and those have no entry in _DEFAULT_PROPERTIES, so
     # merging them in would warn about an unmanaged database value on every autogenerate.
-    _DDL_ONLY_PROPERTIES: frozenset = frozenset({
+    _DDL_ONLY_PROPERTY_KEYS: frozenset = frozenset({
         'colocate_with',
     })
 
     @classmethod
-    def ddl_only_properties(cls) -> frozenset:
+    def ddl_only_property_keys(cls) -> frozenset:
         """Property names (lowercase) to take from the MV ddl instead of tables_config.
-        See ``_DDL_ONLY_PROPERTIES``.
+        See ``_DDL_ONLY_PROPERTY_KEYS``.
         """
-        return cls._DDL_ONLY_PROPERTIES
+        return cls._DDL_ONLY_PROPERTY_KEYS
 
     @classmethod
     def apply(cls, *, name: str, definition: str, comment: Union[str, None] = None, security: Union[str, None] = None) -> ReflectedMVState:

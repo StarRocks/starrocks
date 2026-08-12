@@ -16,7 +16,7 @@
 
 information_schema.tables_config does not report every property for an MV (notably
 colocate_with), so those properties are read from the CREATE MATERIALIZED VIEW ddl
-instead. See ReflectionMVDefaults._DDL_ONLY_PROPERTIES.
+instead. See ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS.
 """
 
 import json

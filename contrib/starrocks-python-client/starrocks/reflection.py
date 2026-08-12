@@ -732,7 +732,7 @@ class StarRocksTableDefinitionParser(object):
 
         This matters because no single source reports every property of a materialized view:
         information_schema.tables_config is authoritative for what it does report, but omits
-        some properties (see ReflectionMVDefaults._DDL_ONLY_PROPERTIES) that are only available
+        some properties (see ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS) that are only available
         from the CREATE MATERIALIZED VIEW ddl. Which properties are trusted from which source is
         decided when they are parsed, not here.
         """
@@ -787,13 +787,13 @@ class StarRocksTableDefinitionParser(object):
 
         # NOTE: properties come from information_schema.tables_config, except for the few that
         # tables_config does not report for MVs. Only those are taken from the DDL here;
-        # parse_mv() merges tables_config on top. See ReflectionMVDefaults._DDL_ONLY_PROPERTIES.
+        # parse_mv() merges tables_config on top. See ReflectionMVDefaults._DDL_ONLY_PROPERTY_KEYS.
         properties_match = self._MV_PROPERTIES_PATTERN.search(clauses_str)
         if properties_match:
             ddl_properties = self._parse_properties(properties_match.group(1))
             ddl_only_properties = {
                 key: value for key, value in ddl_properties.items()
-                if key.lower() in ReflectionMVDefaults.ddl_only_properties()
+                if key.lower() in ReflectionMVDefaults.ddl_only_property_keys()
             }
             if ddl_only_properties:
                 logger.debug("mv: %r, ddl-only properties: %s", mv_name, ddl_only_properties)
