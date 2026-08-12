@@ -7468,4 +7468,106 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     }
 }
 
+// stop() settles tablets whose subtasks the shutting-down thread pool dropped without ever running them:
+// ThreadPool::shutdown() removes queued tasks and FunctionRunnable::cancel() is a no-op, so they never
+// report back. Nothing else can complete such a tablet -- its scheduler context was destroyed when it was
+// handed off to the subtasks -- so without this pass the compact RPC would hang until it timed out.
+TEST_F(TabletParallelCompactionManagerTest, test_abort_pending_states_completes_dropped_subtasks) {
+    int64_t tablet_id = 10007;
+    int64_t txn_id = 20007;
+    int64_t version = 11;
+
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.input_rowset_ids = {0, 1, 2, 3, 4};
+        info0.input_bytes = 5 * 1024 * 1024;
+        info0.start_time = ::time(nullptr);
+        state->running_subtasks[0] = std::move(info0);
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.input_rowset_ids = {5, 6, 7, 8, 9};
+        info1.input_bytes = 5 * 1024 * 1024;
+        info1.start_time = ::time(nullptr);
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+    for (int i = 0; i < 10; i++) {
+        state->compacting_rowsets[i] = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    // Subtask 0 reports back; subtask 1 is the one the pool dropped, so it stays in running_subtasks and
+    // the tablet cannot reach completion on its own.
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+    ASSERT_FALSE(closure.is_finished());
+
+    _manager->abort_pending_states();
+
+    // The RPC is completed instead of being left hanging. It completes with a failure -- the dropped
+    // subtask produced no result to merge -- which is the point: the caller learns rather than waits.
+    EXPECT_TRUE(closure.is_finished());
+
+    // Completion is claimed once, so a second settling pass must not complete the same tablet again:
+    // finish_task() has already released the request and response that a second call would touch.
+    auto txn_logs_after_first = response.txn_logs_size();
+    _manager->abort_pending_states();
+    EXPECT_EQ(txn_logs_after_first, response.txn_logs_size());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// abort() walks the scheduler's own context list first, but a handed-off tablet is no longer on it: that
+// context was destroyed when the subtasks took over. The manager is then the only place still holding the
+// txn's callback, which is what lets an abort reach subtasks that are already running.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_callbacks_for_txn) {
+    int64_t tablet_id = 10008;
+    int64_t txn_id = 20008;
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = 11;
+    state->max_parallel = 2;
+    state->callback = callback;
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    auto callbacks = _manager->collect_callbacks_for_txn(txn_id);
+    ASSERT_EQ(1, callbacks.size());
+    EXPECT_EQ(callback.get(), callbacks[0].get());
+
+    // Another txn's abort must not pick up this tablet's callback.
+    EXPECT_TRUE(_manager->collect_callbacks_for_txn(txn_id + 1).empty());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
 } // namespace starrocks::lake
