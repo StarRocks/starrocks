@@ -466,74 +466,6 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
     EXPECT_EQ(1, child.num_dels());
 }
 
-// classify_rowset_range_overlap: the envelope is [min over sort_key_min, max over sort_key_max]
-// across the rowset's segments, and it is compared against the sibling's range. Because the envelope
-// is a superset of the rowset's real keys, kNo is a sound "owns nothing" proof; anything we cannot
-// decide must degrade to kUnknown so the caller keeps the legacy apportionment.
-namespace {
-
-// One segment covering the closed key span [lo, hi] (int sort key), matching co_range()'s type.
-void add_segment_span(RowsetMetadataPB* rowset, int lo, int hi) {
-    auto write_int = [](TuplePB* tuple_pb, int v) {
-        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(v));
-        VariantTuple t;
-        t.append(variant);
-        t.to_proto(tuple_pb);
-    };
-    auto* sm = rowset->add_segment_metas();
-    write_int(sm->mutable_sort_key_min(), lo);
-    write_int(sm->mutable_sort_key_max(), hi);
-}
-
-} // namespace
-
-TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
-    // A single-key rowset (min == max) lands in exactly one of a set of disjoint ranges.
-    RowsetMetadataPB one_key;
-    add_segment_span(&one_key, 42, 42);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(one_key, co_range(40, 50)));
-    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(std::nullopt, 40)));
-    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(50, std::nullopt)));
-
-    // Boundary cases: lower bound is inclusive, upper bound is exclusive.
-    RowsetMetadataPB at_lower;
-    add_segment_span(&at_lower, 40, 40);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(at_lower, co_range(40, 50)));
-    RowsetMetadataPB at_upper;
-    add_segment_span(&at_upper, 50, 50);
-    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(at_upper, co_range(40, 50)));
-
-    // A span straddling the range overlaps it.
-    RowsetMetadataPB straddling;
-    add_segment_span(&straddling, 10, 90);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(straddling, co_range(40, 50)));
-
-    // The envelope spans every segment, so a rowset with keys on both sides overlaps the middle.
-    RowsetMetadataPB two_segments;
-    add_segment_span(&two_segments, 1, 2);
-    add_segment_span(&two_segments, 98, 99);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(two_segments, co_range(40, 50)));
-
-    // (-inf, +inf) contains everything.
-    RowsetMetadataPB any;
-    add_segment_span(&any, 7, 7);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(any, co_range(std::nullopt, std::nullopt)));
-
-    // Undecidable inputs -> kUnknown (legacy apportionment).
-    RowsetMetadataPB no_segments;
-    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(no_segments, co_range(40, 50)));
-
-    RowsetMetadataPB bounds_missing;
-    bounds_missing.add_segment_metas()->set_filename("no_bounds.dat");
-    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(bounds_missing, co_range(40, 50)));
-
-    // One segment without bounds poisons the whole envelope.
-    RowsetMetadataPB partial_bounds;
-    add_segment_span(&partial_bounds, 42, 42);
-    partial_bounds.add_segment_metas()->set_filename("no_bounds.dat");
-    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
-}
-
 // A sibling that MAY own the rowset's rows must never be apportioned an empty rowset: both txn log
 // appliers drop a rowset whose num_rows is 0 (NonPrimaryKeyTxnLogApplier::apply_write_log requires
 // num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::apply_write_log returns early on
@@ -691,6 +623,74 @@ bool ranges_pb_equal(const TabletRangePB& a, const TabletRangePB& b) {
 }
 
 } // namespace
+
+// classify_rowset_range_overlap: the envelope is [min over sort_key_min, max over sort_key_max]
+// across the rowset's segments, and it is compared against the sibling's range. Because the envelope
+// is a superset of the rowset's real keys, kNo is a sound "owns nothing" proof; anything we cannot
+// decide must degrade to kUnknown so the caller keeps the legacy apportionment.
+namespace {
+
+// One segment covering the closed key span [lo, hi] (int sort key), matching co_range()'s type.
+void add_segment_span(RowsetMetadataPB* rowset, int lo, int hi) {
+    auto write_int = [](TuplePB* tuple_pb, int v) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(v));
+        VariantTuple t;
+        t.append(variant);
+        t.to_proto(tuple_pb);
+    };
+    auto* sm = rowset->add_segment_metas();
+    write_int(sm->mutable_sort_key_min(), lo);
+    write_int(sm->mutable_sort_key_max(), hi);
+}
+
+} // namespace
+
+TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
+    // A single-key rowset (min == max) lands in exactly one of a set of disjoint ranges.
+    RowsetMetadataPB one_key;
+    add_segment_span(&one_key, 42, 42);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(one_key, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(std::nullopt, 40)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(50, std::nullopt)));
+
+    // Boundary cases: lower bound is inclusive, upper bound is exclusive.
+    RowsetMetadataPB at_lower;
+    add_segment_span(&at_lower, 40, 40);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(at_lower, co_range(40, 50)));
+    RowsetMetadataPB at_upper;
+    add_segment_span(&at_upper, 50, 50);
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(at_upper, co_range(40, 50)));
+
+    // A span straddling the range overlaps it.
+    RowsetMetadataPB straddling;
+    add_segment_span(&straddling, 10, 90);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(straddling, co_range(40, 50)));
+
+    // The envelope spans every segment, so a rowset with keys on both sides overlaps the middle.
+    RowsetMetadataPB two_segments;
+    add_segment_span(&two_segments, 1, 2);
+    add_segment_span(&two_segments, 98, 99);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(two_segments, co_range(40, 50)));
+
+    // (-inf, +inf) contains everything.
+    RowsetMetadataPB any;
+    add_segment_span(&any, 7, 7);
+    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(any, co_range(std::nullopt, std::nullopt)));
+
+    // Undecidable inputs -> kUnknown (legacy apportionment).
+    RowsetMetadataPB no_segments;
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(no_segments, co_range(40, 50)));
+
+    RowsetMetadataPB bounds_missing;
+    bounds_missing.add_segment_metas()->set_filename("no_bounds.dat");
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(bounds_missing, co_range(40, 50)));
+
+    // One segment without bounds poisons the whole envelope.
+    RowsetMetadataPB partial_bounds;
+    add_segment_span(&partial_bounds, 42, 42);
+    partial_bounds.add_segment_metas()->set_filename("no_bounds.dat");
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
+}
 
 // ranges_are_contiguous --------------------------------------------------------
 
