@@ -47,6 +47,7 @@ import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
@@ -630,12 +631,35 @@ public class StarOSAgent {
                                    ComputeResource computeResource)
         throws DdlException {
         return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
-                computeResource);
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    /**
+     * Create shards that join {@code metaGroupId} at creation. Joining at creation has the same
+     * effect as the later {@code updateMetaGroup} join for these shards: each is appended to the
+     * meta group's anonymous group of its bucket position, so the very first placement already
+     * honors the colocation constraint and no shard migration is needed after the data is loaded.
+     */
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long metaGroupId, ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                metaGroupId, computeResource);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                    List<Long> groupIds, @Nullable List<Long> matchShardIds,
                                    @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupIds, matchShardIds, properties,
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties, long metaGroupId,
                                    ComputeResource computeResource)
         throws DdlException {
         Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
@@ -670,7 +694,7 @@ public class StarOSAgent {
                 }
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = client.createShard(serviceId, createShardInfoList, metaGroupId);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
