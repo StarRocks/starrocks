@@ -64,14 +64,14 @@ public class AuthPlugin {
 
                     String jwksUrl = authStringJSON.optString(JWTAuthenticationProvider.JWT_JWKS_URL,
                             Config.jwt_jwks_url);
-                    String principalFiled = authStringJSON.optString(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD,
+                    String principalField = authStringJSON.optString(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD,
                             Config.jwt_principal_field);
                     String requiredIssuer = authStringJSON.optString(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER,
                             String.join(",", Config.jwt_required_issuer));
                     String requiredAudience = authStringJSON.optString(JWTAuthenticationProvider.JWT_REQUIRED_AUDIENCE,
                             String.join(",", Config.jwt_required_audience));
 
-                    return new JWTAuthenticationProvider(jwksUrl, principalFiled,
+                    return new JWTAuthenticationProvider(jwksUrl, principalField,
                             COMMA_SPLIT.split(requiredIssuer.trim()), COMMA_SPLIT.split(requiredAudience.trim()));
                 }
 
