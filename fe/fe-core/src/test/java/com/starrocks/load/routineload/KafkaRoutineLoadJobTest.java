@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LoadException;
@@ -162,6 +163,18 @@ public class KafkaRoutineLoadJobTest {
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList4);
         Assertions.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
+
+        // 7 partitions, 4 BEs, and the alive node limit is ignored.
+        Config.routine_load_task_ignore_node_num = true;
+        try {
+            routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                    1L, "127.0.0.1:9020", "topic1");
+            Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList4);
+            Assertions.assertEquals(Config.max_routine_load_task_concurrent_num,
+                    routineLoadJob.calculateCurrentConcurrentTaskNum());
+        } finally {
+            Config.routine_load_task_ignore_node_num = false;
+        }
     }
 
     @Test 
