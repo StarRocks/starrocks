@@ -149,15 +149,10 @@ class CompactionScheduler {
         // Compaction task finished with Status::MemoryLimitExceeded error.
         void memory_limit_exceeded();
 
-        // A compaction task that ran on a BORROWED token finished: applies the same concurrency feedback as
-        // the two methods above, but does not credit a token back to the pool because the lender returns
-        // the one it is holding itself. Crediting here as well would inflate the pool by one token.
-        //
-        // Note this is not simply "the same minus one _free++": on the memory-limit path the token is
-        // normally converted into a reserved slot rather than returned, and only the floor case hands it
-        // back -- that hand-back is what has to be skipped. On the success path the restore branch's
-        // increment un-reserves a slot rather than returning the borrowed token, so it is kept.
-        void release_borrowed_token(bool mem_limit_exceeded);
+        // Puts a token back without recording a task outcome, for a holder that is handing its token over
+        // instead of having finished work with it. Unlike no_memory_limit_exceeded() this does not count a
+        // success towards restoring reserved concurrency: nothing completed, so there is nothing to judge.
+        void return_token();
 
         int16_t concurrency() const;
 
@@ -260,7 +255,9 @@ private:
 
     void thread_task(int id);
 
-    Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
+    // |token_given_up| is set when the worker's limiter token was taken over by parallel subtasks
+    // (or could not be reclaimed), meaning the caller must not credit a token back.
+    Status do_compaction(std::unique_ptr<CompactionTaskContext> context, bool* token_given_up);
 
     void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
@@ -282,7 +279,7 @@ private:
     // i.e. on a resident worker where the planning IO is safe. Returns true only if subtasks were
     // submitted, in which case they own the tablet's completion and |context| has been unlinked and
     // destroyed; returns false to have the caller compact the tablet serially with the same context.
-    bool try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context);
+    bool try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context, bool* token_given_up);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {
@@ -317,25 +314,9 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
     }
 }
 
-inline void CompactionScheduler::Limiter::release_borrowed_token(bool mem_limit_exceeded) {
+inline void CompactionScheduler::Limiter::return_token() {
     std::lock_guard l(_mtx);
-    if (mem_limit_exceeded) {
-        _success = 0;
-        if (_reserved + 1 < _total) { // Cannot reduce the concurrency to zero.
-            _reserved++;
-            LOG(INFO) << "Decreased maximum compaction concurrency to " << (_total - _reserved);
-        }
-        // At the floor memory_limit_exceeded() would hand the token back instead of reserving it; the
-        // lender hands this one back, so there is nothing left to do.
-    } else {
-        if (_reserved > 0 && ++_success == kConcurrencyRestoreTimes) {
-            --_reserved;
-            // Un-reserves a slot. This is not the borrowed token being returned.
-            ++_free;
-            _success = 0;
-            LOG(INFO) << "Increased maximum compaction concurrency to " << (_total - _reserved);
-        }
-    }
+    _free++;
 }
 
 inline int16_t CompactionScheduler::Limiter::concurrency() const {

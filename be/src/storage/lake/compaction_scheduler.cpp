@@ -462,8 +462,13 @@ void CompactionScheduler::thread_task(int id) {
         }
 
         if (context != nullptr) {
-            auto st = do_compaction(std::move(context));
-            if (st.is_mem_limit_exceeded()) {
+            // do_compaction() may hand this tablet to parallel subtasks, which take over the token; it then
+            // reports that this worker is no longer holding one and there is nothing here to credit back.
+            bool token_given_up = false;
+            auto st = do_compaction(std::move(context), &token_given_up);
+            if (token_given_up) {
+                // Deliberately no credit: the token belongs to whoever took it over.
+            } else if (st.is_mem_limit_exceeded()) {
                 _limiter.memory_limit_exceeded();
             } else {
                 _limiter.no_memory_limit_exceeded();
@@ -485,7 +490,11 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
 // and |context| has been unlinked and destroyed -- the caller must not touch it, nor the callback, again.
 // Returns false if parallel compaction does not apply (or planning failed), leaving |context| untouched so
 // the caller can compact the tablet serially with it.
-bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context) {
+//
+// Sets |*token_given_up| when this worker no longer holds its limiter token, so that thread_task() does not
+// credit back a token it does not have.
+bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context,
+                                                   bool* token_given_up) {
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;
 
@@ -504,30 +513,38 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
         return false;
     }
 
-    // This worker already holds one of the limiter's tokens for as long as do_compaction() runs, and
-    // thread_task() credits it back when we return. Lend that token to the subtasks so planning needs
-    // max_parallel_per_tablet tokens instead of one more than that: the subtasks are acquired
-    // all-or-nothing, so needing an extra one means a single other compaction running anywhere on the CN
-    // is enough to fail the acquisition and quietly downgrade every tablet to serial compaction --
-    // with the defaults (3 subtasks, compact_threads=4) that is almost always.
+    // This worker holds one of the limiter's tokens for as long as do_compaction() runs. Hand it back
+    // before planning, for two reasons:
     //
-    // Both flags only ever go false->true, so the lent token is handed out at most once and repaid at
-    // most once; it can never be lent again after being repaid.
-    auto lent_out = std::make_shared<std::atomic<bool>>(false);
-    auto repaid = std::make_shared<std::atomic<bool>>(false);
-    AcquireTokenFunc acquire_token = [this, lent_out]() {
-        if (!lent_out->exchange(true)) {
-            return true; // hand out the token this worker is already holding
-        }
-        return _limiter.acquire();
-    };
-    ReleaseTokenFunc release_token = [this, lent_out, repaid](bool mem_limit_exceeded) {
-        if (lent_out->load() && !repaid->exchange(true)) {
-            // Repays the lent token. Record this task's concurrency feedback, but leave the token itself
-            // to thread_task(), which credits it back after do_compaction() returns.
-            _limiter.release_borrowed_token(mem_limit_exceeded);
+    //  - the subtasks are reserved all-or-nothing, so holding onto it would make parallel compaction need
+    //    max_parallel_per_tablet + 1 free tokens; with the defaults (3 subtasks, compact_threads=4) a
+    //    single other compaction anywhere on the CN would then be enough to quietly downgrade every
+    //    tablet to serial compaction;
+    //  - keeping it and settling up later cannot work: a handed-off do_compaction() returns while the
+    //    subtasks are still running, so thread_task() would credit the token back and leave a phantom
+    //    free token -- letting compactions exceed the configured (or memory-reduced) concurrency for as
+    //    long as the subtasks run.
+    //
+    // The subtasks now simply acquire and release tokens like any other task. What is left is telling
+    // thread_task() not to credit a token it no longer holds, which |token_returned| below does.
+    _limiter.return_token();
+    bool handed_off = false;
+    DeferOp settle_token([&]() {
+        if (handed_off) {
+            // The subtasks hold the tokens now and release them as they finish; this worker has none.
+            *token_given_up = true;
             return;
         }
+        // Not handing off after all: this worker compacts the tablet serially, so take a token back for
+        // thread_task() to credit. If none is free -- someone claimed it while we were planning -- carry on
+        // without one rather than blocking, and tell thread_task() not to credit what we do not hold.
+        if (!_limiter.acquire()) {
+            *token_given_up = true;
+        }
+    });
+
+    AcquireTokenFunc acquire_token = [this]() { return _limiter.acquire(); };
+    ReleaseTokenFunc release_token = [this](bool mem_limit_exceeded) {
         if (mem_limit_exceeded) {
             _limiter.memory_limit_exceeded();
         } else {
@@ -560,9 +577,8 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
 
     if (!result.ok() || result.value() <= 0) {
         if (!result.ok()) {
-            // Planning pre-acquires one limiter token per subtask, and this worker is already holding one
-            // of the compact_threads tokens, so a busy scheduler can leave too few for the whole set. That
-            // is a silent downgrade to serial compaction, so say it once per occurrence class.
+            // Planning reserves one limiter token per subtask, all or nothing, so a busy scheduler can
+            // leave too few for the whole set. That is a silent downgrade to serial compaction.
             LOG_IF(WARNING, result.status().is_resource_busy())
                     << "Not enough compaction limiter tokens to run tablet " << tablet_id
                     << " in parallel out of a concurrency of " << _limiter.concurrency()
@@ -587,10 +603,11 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
         context->RemoveFromList();
     }
     context.reset();
+    handed_off = true;
     return true;
 }
 
-Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
+Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context, bool* token_given_up) {
     const auto start_time = ::time(nullptr);
     const auto start_time_ns = MonotonicNanos();
     const auto tablet_id = context->tablet_id;
@@ -619,7 +636,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     // bthread it aborts the CN (issue #76882). Done before _tablet_mgr->compact() because that would
     // otherwise load the tablet and pick rowsets only for the work to be thrown away.
     if (context->parallel_requested && _parallel_mgr != nullptr) {
-        auto handed_off = try_hand_off_to_parallel(context);
+        auto handed_off = try_hand_off_to_parallel(context, token_given_up);
         if (handed_off) {
             // The subtasks own this tablet's single finish_task() from here on, so `context` must not
             // complete it. It has already been unlinked and destroyed; nothing below may touch it.
