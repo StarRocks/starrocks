@@ -3345,10 +3345,13 @@ public class PlanFragmentBuilder {
             }
 
             ExecGroup execGroup = execGroups.newExecGroup();
+<<<<<<< HEAD
             if (optExpr.getOp() instanceof PhysicalUnionOperator) {
                 setOperationFragment.mergeQueryGlobalDicts(
                         ((PhysicalUnionOperator) optExpr.getOp()).getGlobalDicts());
             }
+=======
+>>>>>>> 0a8bc95 ([BugFix] Keep Set operators out of colocate exec groups to avoid a hang (backport #77025) (#77062))
             for (int i = 0; i < optExpr.arity(); ++i) {
                 PlanFragment inputFragment = inputFragments.get(i);
                 context.getFragments().remove(inputFragment);
