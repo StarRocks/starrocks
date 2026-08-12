@@ -24,6 +24,7 @@
 #include "common/thread/threadpool.h"
 #include "compute_env/global_dict/parser.h"
 #include "connector/connector_registry.h"
+#include "connector/hive/hive_connector.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
@@ -31,6 +32,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec_primitive/pipeline/scan/footer_prefetch_state.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -167,6 +169,26 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
 
     scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
                                                                        runtime_state(), dop, std::move(buffer_limiter));
+
+    // Install the footer prefetcher (Parquet connector scans only). Built here because the node
+    // holds the scan ranges, dop, runtime state, and the freshly created factory. Disabled scans /
+    // non-Hive providers / no warmable cache yield an empty plan.
+    if (config::enable_connector_footer_prefetch) {
+        if (auto* hive_provider = dynamic_cast<connector::HiveDataSourceProvider*>(_data_source_provider.get())) {
+            connector::FooterPrefetchPlan plan =
+                    hive_provider->build_footer_prefetch_items(runtime_state(), _scan_ranges);
+            // Install on cache warmability, not on having initial items: in the pipeline engine the
+            // scan ranges arrive as morsels (and incrementally), so _scan_ranges is empty here. The
+            // state starts empty and is fed by append_footer_prefetch_ranges -- initial ranges after
+            // prepare_all_pipelines, plus incremental batches per RPC.
+            if (plan.metacache_on || plan.datacache_populate_on) {
+                const int lead_distance = static_cast<int>(dop) * config::connector_footer_prefetch_max_inflight *
+                                          config::connector_footer_prefetch_lead_multiplier;
+                scan_op->set_footer_prefetch_state(std::make_shared<pipeline::FooterPrefetchState>(
+                        std::move(plan.items), lead_distance, plan.metacache_on, plan.datacache_populate_on));
+            }
+        }
+    }
 
     // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
