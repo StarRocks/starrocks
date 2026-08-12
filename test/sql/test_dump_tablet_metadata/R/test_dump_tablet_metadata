@@ -1,4 +1,9 @@
 -- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
+shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata_contract.py
+-- result:
+0
+response_envelope_contract=PASS
+-- !result
 CREATE DATABASE db_${uuid0};
 -- result:
 -- !result

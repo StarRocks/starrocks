@@ -137,8 +137,17 @@ def verify_exact(base_url, tablet_id, version, is_bundle):
     if headers.get("X-Content-Type-Options") != "nosniff":
         raise RuntimeError("unexpected content type options")
     document = json.loads(body)
-    if set(document) != {"metadata"}:
+    document_fields = set(document)
+    if "metadata" not in document_fields or not document_fields.issubset({"metadata", "redacted_fields"}):
         raise RuntimeError("unexpected metadata envelope")
+    if "redacted_fields" in document:
+        redacted_fields = document["redacted_fields"]
+        if (
+            not isinstance(redacted_fields, list)
+            or not redacted_fields
+            or any(not isinstance(field, str) or "encryption_meta" not in field for field in redacted_fields)
+        ):
+            raise RuntimeError("unexpected redacted fields")
     metadata = document["metadata"]
     if metadata.get("id") != tablet_id or metadata.get("version") != version:
         raise RuntimeError("metadata id or version mismatch")
