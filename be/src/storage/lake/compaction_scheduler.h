@@ -245,6 +245,11 @@ public:
 
     void stop();
 
+    // Lets a test play the part of a competing worker and take limiter tokens out of circulation, so that
+    // the "token claimed by someone else while we were planning" path can be driven deterministically.
+    bool acquire_token_for_test() { return _limiter.acquire(); }
+    void return_token_for_test() { _limiter.return_token(); }
+
 private:
     friend class CompactionTaskCallback;
 

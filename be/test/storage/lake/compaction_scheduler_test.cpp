@@ -725,4 +725,70 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_reg
     }
 }
 
+// Planning hands the worker's limiter token back before it starts, so another worker can claim it. Compacting
+// the tablet anyway would run it outside the limiter, next to whoever took the token; it has to be
+// rescheduled for a worker that holds one instead -- and still complete its RPC exactly once.
+TEST_F(LakeCompactionSchedulerTest, test_parallel_planning_token_loss_reschedules) {
+    // Single worker, single token: the token freed for planning cannot go anywhere but to the drain below.
+    _compaction_scheduler.update_compact_threads(1);
+
+    std::atomic<bool> drained_once{false};
+    std::atomic<int> tokens_held{0};
+    std::atomic<int> reschedules{0};
+    auto give_tokens_back = [&]() {
+        for (int i = tokens_held.exchange(0); i > 0; i--) {
+            _compaction_scheduler.return_token_for_test();
+        }
+    };
+
+    auto* sync_point = SyncPoint::GetInstance();
+    // Reached after the worker returned its token and before planning: act as the competing worker and take
+    // every free token. Planning then fails to reserve its all-or-nothing set, and the reclaim that follows
+    // finds nothing left either.
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks", [&](void* /*arg*/) {
+        if (drained_once.exchange(true)) {
+            return;
+        }
+        while (_compaction_scheduler.acquire_token_for_test()) {
+            tokens_held.fetch_add(1);
+        }
+    });
+    // The reclaim failed and the tablet is about to be rescheduled. Release the tokens: with none free, no
+    // worker could ever pick it up again.
+    sync_point->SetCallBack("CompactionScheduler::try_hand_off_to_parallel:token_lost", [&](void* /*arg*/) {
+        reschedules.fetch_add(1);
+        give_tokens_back();
+    });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
+        sync_point->ClearCallBack("CompactionScheduler::try_hand_off_to_parallel:token_lost");
+        sync_point->DisableProcessing();
+        give_tokens_back();
+    });
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(_tablet_metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(1);
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    // Hangs here if a rescheduled tablet is dropped instead of being compacted by the next worker.
+    latch->wait();
+
+    // Disabling the parallel path on the retry is what bounds this: only planning returns a token mid-flight,
+    // so a rescheduled tablet cannot lose one again and bounce forever.
+    EXPECT_LE(reschedules.load(), 1);
+    EXPECT_EQ(1, response.compact_stats_size());
+}
+
 } // namespace starrocks::lake

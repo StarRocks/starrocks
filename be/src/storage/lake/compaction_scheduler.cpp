@@ -497,7 +497,9 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
 // the caller can compact the tablet serially with it.
 //
 // Sets |*token_given_up| when this worker no longer holds its limiter token, so that thread_task() does not
-// credit back a token it does not have.
+// credit back a token it does not have. Returning false with |*token_given_up| set is the third outcome:
+// planning failed and the token was claimed by another worker meanwhile, so the caller must reschedule the
+// tablet instead of compacting it outside the limiter.
 bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context,
                                                    bool* token_given_up) {
     const auto tablet_id = context->tablet_id;
@@ -541,10 +543,18 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             return;
         }
         // Not handing off after all: this worker compacts the tablet serially, so take a token back for
-        // thread_task() to credit. If none is free -- someone claimed it while we were planning -- carry on
-        // without one rather than blocking, and tell thread_task() not to credit what we do not hold.
+        // thread_task() to credit. If none is free -- another worker claimed it while we were planning --
+        // do not compact without one: that work would run outside the limiter, right next to whoever took
+        // the token, and several planning fallbacks at once would then exceed the configured (or
+        // memory-reduced) concurrency, which is the memory pressure the limiter exists to prevent. Leave
+        // |*token_given_up| set; do_compaction() reads it as "reschedule this tablet".
         if (!_limiter.acquire()) {
             *token_given_up = true;
+            // Take the parallel path off the table for the retry. Returning the token mid-flight is the
+            // only thing that can strand a worker without one, so a serial retry cannot land here again --
+            // which is what bounds this to a single reschedule.
+            context->parallel_requested = false;
+            TEST_SYNC_POINT("CompactionScheduler::try_hand_off_to_parallel:token_lost");
         }
     });
 
@@ -649,6 +659,18 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         if (handed_off) {
             // The subtasks own this tablet's single finish_task() from here on, so `context` must not
             // complete it. It has already been unlinked and destroyed; nothing below may touch it.
+            return Status::OK();
+        }
+        if (*token_given_up) {
+            // Planning gave this worker's limiter token back and another worker claimed it before we could
+            // take it over again. Reschedule rather than compact outside the limiter -- the retry has the
+            // parallel path disabled, so it cannot end up here a second time.
+            LOG(WARNING) << "Lost the compaction limiter token while planning parallel compaction, "
+                            "rescheduling tablet "
+                         << tablet_id << " version=" << version << " txn_id=" << txn_id;
+            context->progress.update(0);
+            context->start_time.store(0, std::memory_order_relaxed);
+            _task_queues.put_by_txn_id(txn_id, context);
             return Status::OK();
         }
         // Not applicable, or planning failed: fall through and compact this tablet serially with the very
