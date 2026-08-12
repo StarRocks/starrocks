@@ -535,6 +535,17 @@ public class AnalyzeExprTest {
         analyzeFail("select ngram_search('abc', 'a')");
         analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
         analyzeFail("select ngram_search(th,th,4) from tall;");
+        // non-constant gram_num is still rejected
+        analyzeFail("select ngram_search(ta, ta, tc) from tall;");
+        // gram_num must be a positive integer constant: a constant expression of some other type is
+        // not enough. The BE reads it as a raw INT const column (including from the ngram bloom
+        // filter path in the storage layer), so a JSON/NULL constant used to crash the BE.
+        analyzeFail("select ngram_search(ta, 'aabaa', json_query(cast(4 as json), '$.a')) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', null) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', cast(null as int)) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', 0) from tall;");
+        analyzeFail("select ngram_search(ta, 'aabaa', -1) from tall;");
+        analyzeSuccess("select ngram_search(ta, 'aabaa', cast(4 as int)) from tall;");
     }
 
 }
