@@ -1984,4 +1984,57 @@ public class SharedDataStorageVolumeMgrTest {
                 "Storage volume " + storageVolumeName + " has a credential that cannot be used",
                 () -> svm.updateStorageVolume(storageVolumeName, null, null, new HashMap<>(), "new comment"));
     }
+
+    @Test
+    public void testVolumeWithUnusableCredentialCanStillBeListedAndDropped() throws DdlException, MetaNotFoundException {
+        // The point of the whole change: a volume stored with a credential that can no longer be
+        // rebuilt used to make every DDL path fail, including DROP, so it was stuck in the cluster
+        // for good and SHOW STORAGE VOLUMES stayed broken for every other volume too. Listing it and
+        // dropping it have to work; using it is what the guards refuse.
+        String storageVolumeName = "unusable_sv";
+        FileStoreInfo unusable = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        List<FileStoreInfo> fileStores = new ArrayList<>();
+        fileStores.add(unusable);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                return fileStores.stream().filter(fs -> fs.getFsName().equals(fsName)).findFirst().orElse(null);
+            }
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() {
+                return fileStores;
+            }
+
+            @Mock
+            public void removeFileStoreByName(String fsName) {
+                fileStores.removeIf(fs -> fs.getFsName().equals(fsName));
+            }
+        };
+
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+
+        // SHOW STORAGE VOLUMES lists it instead of failing on it.
+        Assertions.assertTrue(svm.listStorageVolumeNames().contains(storageVolumeName));
+        // DESC reaches it, and it reports itself as unusable rather than throwing.
+        Assertions.assertFalse(svm.getStorageVolumeByName(storageVolumeName).isCredentialUsable());
+        // DROP removes it.
+        svm.removeStorageVolume(storageVolumeName);
+        Assertions.assertFalse(svm.exists(storageVolumeName));
+    }
 }
