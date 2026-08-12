@@ -1341,6 +1341,11 @@ CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
+// Evaluate join runtime filters against decoded rows inside the parquet reader, so
+// non-matching rows are dropped before lazy columns are materialized. When disabled,
+// runtime filters are only used for row group / page statistics pruning and the
+// row-level probe happens in the downstream scan operator instead.
+CONF_mBool(parquet_runtime_filter_push_down_enable, "true");
 
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
@@ -1481,6 +1486,8 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+// Minimum elapsed time in milliseconds for logging a completed lake compaction attempt or parallel subtask profile.
+CONF_mInt64(lake_compact_slow_log_ms, "5000");
 
 // Maximum data volume (bytes) per parallel compaction subtask.
 // If total picked rowsets data size is less than this threshold, parallel compaction
@@ -1881,6 +1888,11 @@ CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 // the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
 CONF_mString(vector_query_cache_capacity, "20%");
 
+// Idle time before an unused vector index cache entry expires. The timer starts
+// when the last cache handle is released. IVF-PQ list blocks are released with
+// their owning index entry instead of expiring independently. <= 0 disables TTL.
+CONF_mInt32(vector_index_cache_expire_sec, "900");
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
@@ -2010,6 +2022,14 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// Whether horizontal compaction fills the local data cache with the input segments it reads.
+// Unlike vertical compaction, which scans the input once per column group, horizontal compaction
+// reads every input byte exactly once and the input rowsets are replaced right afterwards, so
+// caching them mostly evicts query-hot data and adds an inline local-disk write on each cache miss.
+// Defaults to false, matching the other full-scan background paths under storage/lake (schema
+// change, tablet merge, ADD INDEX). Set to true to restore the previous always-fill behavior.
+CONF_mBool(lake_enable_horizontal_compaction_fill_data_cache, "false");
 
 // If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
 // If set to false, skip LIST and use approximate tablet size (base_size=0).
@@ -2154,6 +2174,22 @@ CONF_mBool(lake_enable_alter_struct, "true");
 // Enable caching index blocks for IVF-family vector indexes
 CONF_mBool(enable_vector_index_block_cache, "true");
 
+// On a top-level vector index cache miss, let the current query fall back to
+// brute-force search and load the index into the cache in the background.
+// A runtime update affects readers initialized after the update.
+CONF_mBool(enable_vector_index_cache_async_load_on_miss, "false");
+
+// Maximum number of workers in the vector index cache background-load pool.
+// Workers are created on demand and retire after being idle. Read once when
+// StorageEnv initializes the pool.
+CONF_Int32(vector_index_cache_async_load_threads, "8");
+
+// Maximum time each synchronous cache caller waits for an in-progress vector
+// index load. On timeout the caller returns a cache miss so query paths can
+// fall back to brute-force search; the existing loader keeps running. <= 0
+// disables waiting. A runtime update affects later waits.
+CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
+
 // Whether index build also populates the vector index cache with the index it
 // just built. Off by default: the cache is sized for the query working set, and
 // letting loads/compactions push freshly built indexes into it evicts entries
@@ -2193,6 +2229,13 @@ CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 // Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
 // ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
 CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// When a filtered top-k vector index search returns fewer rows than the candidate bitmap can supply,
+// rescore the candidates exactly to fill the result up to k. Disabled by default because the exact
+// rescan can be expensive. This count gate does not apply to range searches, where fewer results can
+// legitimately mean that no more candidates satisfy the requested radius. A runtime update applies
+// to subsequent searches.
+CONF_mBool(enable_vector_index_topk_underfill_fallback, "false");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

@@ -66,7 +66,13 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                     LOG.info("Client closed connection: {} remote={}", ctx.getConnectionId(),
                             ctx.getMysqlChannel().getRemoteHostPortString());
                     if (Config.mysql_service_kill_after_disconnect) {
-                        killRunningQuery();
+                        // Hand the kill to a worker, the same way a request is handed over below.
+                        // Cancelling takes the coordinator's lock, and the query's own thread holds
+                        // that lock for the whole of fragment deployment - up to
+                        // brpc_send_plan_fragment_timeout_ms. Running the kill here would park one
+                        // of the few shared XNIO I/O threads for that long, and every other
+                        // connection served by that thread stops being read in the meantime.
+                        channel.getWorker().execute(this::killRunningQuery);
                     } else {
                         tryCleanup();
                     }

@@ -169,6 +169,7 @@ private:
 
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
+    std::atomic<int64_t> _last_expire_cache_check_millis{0};
     std::atomic<int64_t> _last_clear_expired_cache_millis{0};
 
     // DelVector related states

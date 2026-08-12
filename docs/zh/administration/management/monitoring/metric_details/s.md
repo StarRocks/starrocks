@@ -233,11 +233,35 @@ description: "Alphabetical s"
 - 类型：瞬时
 - 描述：分配给每个内存池的资源组数量。
 
+## `starrocks_be_pipe_connector_scan_expected_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：外表 Scan 执行器当前应运行的工作线程数，为所有资源组之和。该值随配置变更和资源组调整立即生效，与 `starrocks_be_pipe_connector_scan_worker_threads` 对比即可判断执行器是否满编。
+
+## `starrocks_be_pipe_connector_scan_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：外表 Scan 执行器中实际存活的工作线程数，为所有资源组之和。该值低于 `starrocks_be_pipe_connector_scan_expected_worker_threads` 说明工作线程已丢失且未被补充，消费 Scan 任务的能力低于配置值；高于该值属正常的短暂现象，因为执行器缩容后工作线程要等下一次被唤醒才会退出。
+
 ## `starrocks_be_pipe_prepare_pool_queue_len`
 
 - 单位：计数
 - 类型：瞬时
 - 描述：管道准备线程池任务队列长度的瞬时值。
+
+## `starrocks_be_pipe_scan_expected_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：内表 Scan 执行器当前应运行的工作线程数，为所有资源组之和。该值随配置变更和资源组调整立即生效，与 `starrocks_be_pipe_scan_worker_threads` 对比即可判断执行器是否满编。
+
+## `starrocks_be_pipe_scan_worker_threads`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：内表 Scan 执行器中实际存活的工作线程数，为所有资源组之和。该值低于 `starrocks_be_pipe_scan_expected_worker_threads` 说明工作线程已丢失且未被补充，消费 Scan 任务的能力低于配置值；高于该值属正常的短暂现象，因为执行器缩容后工作线程要等下一次被唤醒才会退出。
 
 ## `starrocks_be_priority_exec_state_report_active_threads`
 

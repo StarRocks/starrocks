@@ -51,7 +51,6 @@ set(EXEC_FILES
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
-        ./exec/analytor_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -425,6 +424,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test SchemaScannerBuiltin ${TEST_LINK_LIBS})
+target_link_be_test_cxa_throw_wrap(starrocks_dw_test)
 STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 
