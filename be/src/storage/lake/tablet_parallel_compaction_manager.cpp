@@ -827,6 +827,57 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     }
 }
 
+void TabletParallelCompactionManager::abort_pending_states() {
+    // Must run only after the thread pool has shut down: ThreadPool::shutdown() drops subtasks that were
+    // queued but never started and "cancels" them through FunctionRunnable's no-op cancel(), so those
+    // subtasks never call on_subtask_complete(). Their tablet's own context was already destroyed at the
+    // hand-off, which leaves nobody able to drain the state or complete the tablet -- the compact RPC would
+    // hang until its deadline. Checking `_stopped` before planning narrows that window but cannot close it:
+    // stop() can begin right after the check and still drop a subtask submitted a moment later.
+    //
+    // By this point no subtask can be running or about to start, so this is the one place where the
+    // remaining states can be settled without racing anyone.
+    std::vector<std::shared_ptr<TabletParallelCompactionState>> states;
+    {
+        std::lock_guard<std::mutex> lock(_states_mutex);
+        states.reserve(_tablet_states.size());
+        for (const auto& entry : _tablet_states) {
+            if (entry.second != nullptr) {
+                states.push_back(entry.second);
+            }
+        }
+    }
+
+    for (const auto& state : states) {
+        bool claimed = false;
+        std::shared_ptr<CompactionTaskCallback> callback;
+        int64_t tablet_id = 0;
+        int64_t txn_id = 0;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            tablet_id = state->tablet_id;
+            txn_id = state->txn_id;
+            if (state->total_subtasks_created == 0) {
+                // Nothing was ever submitted for this tablet, so its context is still in the scheduler's
+                // task queue and abort_all() takes care of it.
+                continue;
+            }
+            // Those subtasks were dropped and will never report back.
+            state->running_subtasks.clear();
+            state->submission_done = true;
+            claimed = state->claim_completion();
+            callback = state->callback;
+        }
+        if (claimed && callback) {
+            LOG(WARNING) << "Completing parallel compaction on shutdown, its subtasks were dropped. tablet_id="
+                         << tablet_id << ", txn_id=" << txn_id;
+            // Reports whatever the finished subtasks produced; an incomplete set fails the merge, so the
+            // RPC finishes with an error instead of hanging.
+            finalize_tablet_completion(tablet_id, txn_id, state, callback);
+        }
+    }
+}
+
 std::vector<std::shared_ptr<CompactionTaskCallback>> TabletParallelCompactionManager::collect_callbacks_for_txn(
         int64_t txn_id) const {
     std::vector<std::shared_ptr<CompactionTaskCallback>> callbacks;

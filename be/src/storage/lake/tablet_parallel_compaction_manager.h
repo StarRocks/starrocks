@@ -234,6 +234,12 @@ public:
     void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
                              std::unique_ptr<CompactionTaskContext> context);
 
+    // Settles every tablet still being compacted in parallel, for shutdown. MUST be called only after the
+    // compaction thread pool has shut down, because it assumes no subtask can still run: shutdown() drops
+    // queued subtasks through a no-op cancel(), and their tablet's context is already gone, so without this
+    // nothing would ever complete those tablets and the compact RPC would hang.
+    void abort_pending_states();
+
     // Collects the request callbacks of every tablet currently being compacted in parallel under |txn_id|.
     // CompactionScheduler::abort() needs this because a tablet handed off to subtasks has no node in
     // CompactionScheduler::_contexts between the hand-off and the merged context being appended, so a walk

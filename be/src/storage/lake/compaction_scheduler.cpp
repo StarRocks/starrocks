@@ -273,6 +273,11 @@ void CompactionScheduler::stop() {
     if (changed) {
         _threads->shutdown();
         abort_all();
+        // Tablets handed off to parallel subtasks are not in _task_queues, so abort_all() cannot reach
+        // them. Any whose subtasks were dropped by the shutdown above would otherwise never complete.
+        if (_parallel_mgr != nullptr) {
+            _parallel_mgr->abort_pending_states();
+        }
     }
 }
 
