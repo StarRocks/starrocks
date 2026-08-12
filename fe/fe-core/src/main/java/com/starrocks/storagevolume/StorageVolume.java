@@ -230,8 +230,14 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
+        // Build from a preprocessed copy, exactly as the constructors do: an AZBLOB credential takes
+        // its container from the locations, params deliberately never carries it, and building from
+        // the raw map would fall through to the HDFS provider and refuse an ALTER of a perfectly
+        // usable volume. The derived container stays out of what is stored.
+        Map<String, String> configurationParams = new HashMap<>(newParams);
+        preprocessAuthenticationIfNeeded(configurationParams);
         CloudConfiguration newConfiguration =
-                CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         if (!isValidCloudConfiguration(svt, newConfiguration)) {
             throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
@@ -377,9 +383,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
      * and Chinese CREATE STORAGE VOLUME pages used to offer it and were corrected together with this
      * change. Supporting it needs a token file field in the file store, not a lenient check here.
      *
-     * <p>The AWS web identity profile loses just as much - it is stored as an assume role or a
-     * default credential - but volumes relying on it exist in the wild, so turning that into an
-     * error belongs in its own change.
+     * <p>The AWS web identity profile used to lose just as much, being stored as an assume role or a
+     * default credential, but #77638 has since given it a credential case of its own, so it now
+     * round-trips and needs nothing from this check. What stays lossy on S3 is the session token,
+     * refused above.
      *
      * <p>The restored parameters go through the same {@link #preprocessAuthenticationIfNeeded}
      * derivation as the incoming ones, otherwise fields derived from the locations rather than the
@@ -684,7 +691,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        // Same derivation as the constructors, for the same reason: params does not carry the AZBLOB
+        // container, so rebuilding from the raw map would fall through to the HDFS provider and mark
+        // a usable volume unusable on every image or edit-log reload - which the guards would then
+        // act on after each FE restart.
+        Map<String, String> configurationParams = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
         credentialUsable = isValidCloudConfiguration(svt, cloudConfiguration);
     }
 }

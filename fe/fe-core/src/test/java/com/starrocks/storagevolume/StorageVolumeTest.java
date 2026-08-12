@@ -74,6 +74,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET;
@@ -544,6 +545,33 @@ public class StorageVolumeTest {
                 StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
                         storageParams, true, ""));
         Assertions.assertTrue(e.getMessage().contains(AZURE_ADLS2_OAUTH2_TOKEN_FILE), e.getMessage());
+    }
+
+    @Test
+    public void testAzblobSasVolumeSurvivesAlterAndReload() throws Exception {
+        // The container comes from the locations, and params never carries it, so any path that
+        // rebuilds the configuration from the raw params alone falls through to the HDFS provider and
+        // makes a usable SAS volume look broken. Two such paths are exercised here: an ALTER, which
+        // would have been refused outright, and a metadata reload, after which every guard would have
+        // rejected the volume on each FE restart.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+        Assertions.assertTrue(sv.isCredentialUsable());
+
+        Map<String, String> rotated = new HashMap<>();
+        rotated.put(AZURE_BLOB_SAS_TOKEN, "rotated_sas_token");
+        sv.setCloudConfiguration(rotated);
+        Assertions.assertTrue(sv.isCredentialUsable());
+        Assertions.assertEquals(FileStoreType.AZBLOB, sv.toFileStoreInfo().getFsType());
+        // The derived container must not leak into what gets stored.
+        Assertions.assertFalse(sv.getProperties().containsKey(AZURE_BLOB_CONTAINER));
+
+        // A reload rebuilds from the stored params; the volume has to come back usable.
+        sv.gsonPostProcess();
+        Assertions.assertTrue(sv.isCredentialUsable());
     }
 
     @Test
