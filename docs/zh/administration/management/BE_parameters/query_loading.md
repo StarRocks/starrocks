@@ -814,6 +814,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：带残余标量过滤条件的向量查询从过滤式 HNSW 遍历切换为精确计算的选择率阈值。如果匹配行数不超过 Segment 总行数的该比例，StarRocks 会直接对过滤后的候选项计算距离。设置为 `0` 可禁用该比例判断；候选数量不大于查询 `k` 时的独立短路仍然生效。
 - 引入版本：-
 
+### enable_vector_index_topk_underfill_fallback
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在带预过滤条件的 top-k 向量索引检索返回行数小于 `min(k, 匹配候选数)` 时，回退到精确暴力计算。设置为 `true` 时，StarRocks 会对匹配候选项重新进行精确计算，使结果数尽量补足到 `k`；设置为 `false` 时，直接返回向量索引结果，不触发这一基于结果数量的回退。此参数仅作用于带预过滤条件的 top-k 检索，不作用于范围检索，因为范围检索返回较少结果可能表示没有更多候选项满足指定半径。
+- 引入版本：-
+
 ### vector_index_build_flush_threshold_rows
 
 - 默认值：262144

@@ -817,6 +817,15 @@ This topic introduces the following types of BE configurations:
 - Description: Selectivity threshold for routing a vector query with residual scalar filters to exact scoring instead of a filtered HNSW traversal. If the matched rows are no more than this fraction of the Segment, StarRocks scores the filtered candidates directly. Set to `0` to disable this ratio check. The separate short circuit for a candidate count no greater than the query `k` remains enabled.
 - Introduced in: -
 
+### enable_vector_index_topk_underfill_fallback
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to fall back to exact brute-force scoring when a filtered top-k vector index search returns fewer rows than `min(k, matched candidate count)`. When this parameter is `true`, StarRocks rescans the matched candidates exactly to fill the result up to `k`. When it is `false`, StarRocks returns the vector index result without this count-based fallback. This parameter applies only to pre-filtered top-k searches; it does not apply to range searches, where fewer results can legitimately mean that no more candidates satisfy the requested radius.
+- Introduced in: -
+
 ### vector_index_build_flush_threshold_rows
 
 - Default: 262144
