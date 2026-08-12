@@ -19,6 +19,11 @@
 
 #include <memory>
 
+<<<<<<< HEAD
+=======
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/time/time.h"
+>>>>>>> 73f24e17f5 ([Enhancement] Add full-chain lake compaction task profiles (#77475))
 #include "common/status.h"
 #include "compaction_task_context.h"
 #include "gutil/macros.h"
@@ -119,6 +124,8 @@ struct CompactionTaskInfo {
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
+    // Parallel subtask identifier. -1 means a regular, non-parallel task.
+    int32_t subtask_id = -1;
     std::string profile; // detailed execution info, such as io stats
 };
 
@@ -363,6 +370,7 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     context->enqueue_time_sec = ::time(nullptr);
+    context->enqueue_time_ns = MonotonicNanos();
     _internal_task_queues[idx]->put(std::move(context));
 }
 
@@ -371,8 +379,10 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
     std::lock_guard<std::mutex> lock(_task_queues_mutex);
     int idx = _task_queue_safe_index(txn_id);
     int64_t now = ::time(nullptr);
+    int64_t now_ns = MonotonicNanos();
     for (auto& context : contexts) {
         context->enqueue_time_sec = now;
+        context->enqueue_time_ns = now_ns;
         _internal_task_queues[idx]->put(std::move(context));
     }
 }

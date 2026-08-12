@@ -50,6 +50,15 @@ This topic introduces the following types of BE configurations:
 - Description: Controls the minimum time gap between successive stack-trace diagnostics performed by DiagnoseDaemon for `STACK_TRACE` requests. When a diagnose request arrives, the daemon skips collecting and logging stack traces if the last collection happened less than `diagnose_stack_trace_interval_ms` milliseconds ago. Increase this value to reduce CPU overhead and log volume from frequent stack dumps; decrease it to capture more frequent traces to debug transient issues (for example, in load fail-point simulations of long `TabletsChannel::add_chunk` blocking).
 - Introduced in: v3.5.0
 
+### lake_compact_slow_log_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold for emitting detailed lake compaction profile logs. After a regular compaction attempt or parallel compaction subtask finishes, StarRocks writes an INFO log containing the task identifiers, status, and full JSON profile only when the elapsed time of that attempt or subtask is greater than or equal to this value. Set this parameter to `0` to log every completed attempt or subtask. Increase it to reduce INFO log volume.
+- Introduced in: -
+
 ### lake_replication_slow_log_ms
 
 - Default: 30000

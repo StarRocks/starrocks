@@ -111,8 +111,21 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     EXPECT_EQ(1, tasks[0].runs);
     EXPECT_EQ(100, tasks[0].progress);
     EXPECT_FALSE(tasks[0].skipped);
+    EXPECT_EQ(-1, tasks[0].subtask_id);
 
     bthread_join(tid, nullptr);
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_list_tasks_hides_parallel_merged_context) {
+    auto context = std::make_unique<CompactionTaskContext>(100, 101, 1, false, false, nullptr);
+    context->is_parallel_merged = true;
+    _compaction_scheduler._contexts.Append(context.get());
+
+    std::vector<CompactionTaskInfo> tasks;
+    _compaction_scheduler.list_tasks(&tasks);
+    EXPECT_TRUE(tasks.empty());
+
+    context->RemoveFromList();
 }
 
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
