@@ -322,7 +322,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
     ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
 
-    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    auto cb = ::google::protobuf::NewCallback(notify, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
     latch->wait();
 
