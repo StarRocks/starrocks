@@ -544,6 +544,12 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         // don't wait rebuild pk index to finish because migration task does not support increment migration
         // and needs to be completed as soon as possible
 
+        res = SnapshotManager::instance()->restore_inverted_index_directories(schema_hash_path);
+        if (!res.ok()) {
+            need_remove_new_path = true;
+            break;
+        }
+
         // create_tablet_from_meta_snapshot does not reset rowset_seg_id in snapshot_meta. The GC progress for
         // the old tablet maybe conflict in rowset_seg_id with the new one. But it is safe because the rowset_seg_id
         // conflict in GC progress will only affect the delvector/dcg cache (delete the cache) for the new tablet but
