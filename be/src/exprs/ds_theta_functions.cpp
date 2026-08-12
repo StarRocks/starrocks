@@ -155,8 +155,8 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_a_not_b(FunctionContext* context,
                 continue;
             }
             if (b_slice.size == 0) {
-                // X \ ∅ = X
-                append_compact(wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size), builder);
+                // X \ ∅ = X: pass input bytes through directly
+                builder.append(a_slice);
                 continue;
             }
             theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
