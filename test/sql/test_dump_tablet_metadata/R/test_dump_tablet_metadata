@@ -1,0 +1,37 @@
+-- name: test_dump_tablet_metadata_exact_reads @cloud @sequential
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE standalone_meta (k INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num"="1", "file_bundling"="false",
+           "light_weight_tablet_creation"="true");
+-- result:
+-- !result
+CREATE TABLE bundled_meta (k INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num"="1", "file_bundling"="true",
+           "light_weight_tablet_creation"="true");
+-- result:
+-- !result
+INSERT INTO standalone_meta VALUES (1);
+-- result:
+-- !result
+INSERT INTO bundled_meta VALUES (1);
+-- result:
+-- !result
+shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py "${mysql_cmd}" db_${uuid0} standalone_meta bundled_meta
+-- result:
+0
+standalone_exact=PASS
+bundle_exact=PASS
+wrong_format_status=404
+unknown_parameter_status=400
+missing_version_status=400
+-- !result
+CLEANUP {
+    DROP DATABASE IF EXISTS ${db[0]} FORCE;
+} END CLEANUP
