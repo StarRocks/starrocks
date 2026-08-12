@@ -53,7 +53,7 @@ subprojects {
         set("dnsjava.version", "3.6.3")
         set("fastutil.version", "8.5.15")
         set("gcs.connector.version", "hadoop3-2.2.26")
-        set("grpc.version", "1.75.0")
+        set("grpc.version", "1.76.0")
         set("hadoop.version", "3.4.3")
         set("hbase.version", "2.6.2")
         set("hikaricp.version", "7.0.2")
