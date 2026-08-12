@@ -104,7 +104,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit:
 - Is mutable: Yes
-- Description: Whether to enable compaction for Flat JSON data.
+- Description: Whether compaction reads flattened JSON sub-columns directly when every input segment stores the JSON column flattened, skipping the reassemble-whole-JSON and re-parse round trip. This only affects how compaction reads its input. Compaction itself always runs, and whether the merged output is flattened is governed by the Flat JSON configuration, regardless of this item.
 - Introduced in: v3.3.3
 
 ### enable_json_flat
