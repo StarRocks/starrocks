@@ -964,6 +964,15 @@ This topic introduces the following types of FE configurations:
 - Description: The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables.
 - Introduced in: -
 
+### `explain_dict_column_size`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of low-cardinality dictionary-optimized columns listed in the `dict_col` field of each scan node in `EXPLAIN VERBOSE` output. When a scan node has more applied dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than or equal to `0` are treated as `0`, which truncates the list entirely. This item affects only the `EXPLAIN VERBOSE` output and does not change how dictionary optimization is applied to queries.
+- Introduced in: v4.2.0
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - Default: 60

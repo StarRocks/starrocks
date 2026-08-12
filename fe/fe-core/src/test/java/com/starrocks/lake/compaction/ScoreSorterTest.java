@@ -54,6 +54,34 @@ public class ScoreSorterTest {
     }
 
     @Test
+    public void testMaxScoreDominatesAvg() {
+        // Partition 3: debt spread over every tablet -> high avg, moderate max.
+        List<PartitionStatisticsSnapshot> statisticsList = new ArrayList<>();
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(60.0, 60.0, 60.0, 60.0, 60.0)));
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
+
+        // Partition 4: debt concentrated in one tablet -> low avg, highest max. It must sort
+        // first, matching ScoreSelector's max-based admission, or it starves on a saturated
+        // cluster even though it is the partition every max-score view reports on top.
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.0, 1.0, 1.0, 1.0, 384.0)));
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
+
+        // Partition 5: same max as partition 4, higher avg -> avg breaks the tie in its favor.
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 5));
+        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(50.0, 50.0, 50.0, 50.0, 384.0)));
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
+
+        ScoreSorter sorter = new ScoreSorter();
+        List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
+        Assertions.assertEquals(3, sortedList.size());
+        Assertions.assertEquals(5, sortedList.get(0).getPartition().getPartitionId());
+        Assertions.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
+        Assertions.assertEquals(3, sortedList.get(2).getPartition().getPartitionId());
+    }
+
+    @Test
     public void testPriority() {
         // no priority
         {

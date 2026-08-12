@@ -688,6 +688,15 @@ if [[ -d $TP_SOURCE_DIR/$JEMALLOC_SOURCE ]] ; then
         apply_patch -p0 $TP_PATCH_DIR/jemalloc_nodump.patch
         touch $PATCHED_MARK
     fi
+    # Patches added after PATCHED_MARK was introduced carry their own mark: a
+    # source directory unpacked by an older revision already has PATCHED_MARK,
+    # so the block above never runs there and the build would keep the unpatched
+    # sources. Replaying that block instead is not an option, apply_patch passes
+    # -N and stops on the patches which are already applied.
+    if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+        apply_patch -p0 $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
+        touch $PATCHED_MARK.usable_size_minimal_tsd
+    fi
     cd -
     echo "Finished patching $JEMALLOC_SOURCE"
 fi
@@ -783,11 +792,11 @@ fi
 # patch opentelemetry
 if [[ -d $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$OPENTELEMETRY_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.2.0" ]; then
+    if [ ! -f $PATCHED_MARK ] && [ $OPENTELEMETRY_SOURCE = "opentelemetry-cpp-1.9.1" ]; then
         # thrift 0.24.0 dropped <boost/numeric/conversion/cast.hpp> from
         # TTransportException.h, which used to drag in <unistd.h>. The jaeger
         # exporter calls ::close via THRIFT_CLOSESOCKET, so include it directly.
-        apply_patch -p1 $TP_PATCH_DIR/opentelemetry-cpp-1.2.0-thrift-0.24-unistd.patch
+        apply_patch -p1 $TP_PATCH_DIR/opentelemetry-cpp-1.9.1-thrift-0.24-unistd.patch
         touch $PATCHED_MARK
     fi
     echo "Finished patching $OPENTELEMETRY_SOURCE"

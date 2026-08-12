@@ -87,6 +87,7 @@ struct SubtaskInfo {
     std::vector<uint32_t> input_rowset_ids;
     int64_t input_bytes = 0;
     int64_t start_time = 0;
+    int64_t enqueue_time_ns = 0;
     // Pointer to the running context (valid only during execution)
     // Used to get real-time progress and status in list_tasks()
     CompactionTaskContext* context = nullptr;

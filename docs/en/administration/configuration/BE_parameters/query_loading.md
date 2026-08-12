@@ -754,6 +754,33 @@ This topic introduces the following types of BE configurations:
 - Description: Idle time before an unused vector index cache entry expires. The timer starts when the last cache handle is released, and a cache hit refreshes it when that handle is later released. Entries pinned by running queries are not removed. IVF-PQ list blocks are released together with their owning index entry and do not have independent TTLs. Values less than or equal to `0` disable expiration. A runtime change applies to subsequent handle releases and does not rewrite existing entry deadlines.
 - Introduced in: v4.2.0
 
+### enable_vector_index_cache_async_load_on_miss
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a top-level vector index cache miss makes the current query fall back to brute-force search while the index is loaded into the cache in the background. Concurrent misses for the same index share one background load and continue to use brute-force search until the index is ready. When this item is `false`, a cache miss loads the index synchronously. Enable it only when the expected cold-load latency is higher than the brute-force search cost and the cache has enough capacity for the query working set. A runtime change affects vector index readers initialized after the change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_async_load_threads
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Maximum number of workers in the vector index cache background-load thread pool. Workers are created on demand and retire after being idle for 60 seconds. Values less than or equal to `0` are adjusted to `1`. This item is read when StorageEnv initializes and requires a BE/CN restart to change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_loading_wait_timeout_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time that each synchronous cache caller waits for an in-progress vector index load. When the wait times out, the caller receives a cache miss so the query path can fall back to brute-force search. The existing loader is not canceled and continues loading the index in the background. Each later caller starts its own wait with the configured timeout. Values less than or equal to `0` disable waiting. A runtime change applies to subsequent waits.
+- Introduced in: v4.2.0
+
 ### vector_adaptive_ef_alpha
 
 - Default: 1.0
@@ -788,6 +815,15 @@ This topic introduces the following types of BE configurations:
 - Unit: Ratio
 - Is mutable: Yes
 - Description: Selectivity threshold for routing a vector query with residual scalar filters to exact scoring instead of a filtered HNSW traversal. If the matched rows are no more than this fraction of the Segment, StarRocks scores the filtered candidates directly. Set to `0` to disable this ratio check. The separate short circuit for a candidate count no greater than the query `k` remains enabled.
+- Introduced in: -
+
+### enable_vector_index_topk_underfill_fallback
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to fall back to exact brute-force scoring when a filtered top-k vector index search returns fewer rows than `min(k, matched candidate count)`. When this parameter is `true`, StarRocks rescans the matched candidates exactly to fill the result up to `k`. When it is `false`, StarRocks returns the vector index result without this count-based fallback. This parameter applies only to pre-filtered top-k searches; it does not apply to range searches, where fewer results can legitimately mean that no more candidates satisfy the requested radius.
 - Introduced in: -
 
 ### vector_index_build_flush_threshold_rows
