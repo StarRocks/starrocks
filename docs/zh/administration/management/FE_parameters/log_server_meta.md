@@ -443,7 +443,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: FE profile 日志的写入目录。Log4jConfig 使用此值放置与 profile 相关的 appender（在此目录下创建 `fe.profile.log` 和 `fe.features.log` 等文件）。这些文件的轮转和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认目录位于 `STARROCKS_HOME_DIR` 下，请确保 FE 进程对此目录具有写入和轮转/删除权限。
+- 描述: FE profile 日志的写入目录。Log4jConfig 使用此值放置与 profile 相关的 appender（在此目录下创建 `fe.profile.log` 等文件）。这些文件的轮转和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认目录位于 `STARROCKS_HOME_DIR` 下，请确保 FE 进程对此目录具有写入和轮转/删除权限。
 - 引入版本: v3.2.5
 
 ### `profile_log_latency_threshold_ms`
