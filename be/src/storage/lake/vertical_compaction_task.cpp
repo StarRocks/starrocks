@@ -373,8 +373,8 @@ Status VerticalCompactionTask::compact_column_group(
                         size_t chunk_index = static_cast<size_t>(std::distance(column_group.begin(), it));
                         pk_chunk.append_column(chunk->get_column_by_index(chunk_index), static_cast<SlotId>(pk_column));
                     }
-                    ASSIGN_OR_RETURN(filter, TabletRangeHelper::create_primary_key_range_filter(_tablet.metadata()->range(),
-                                                                                                _tablet_schema, pk_chunk));
+                    ASSIGN_OR_RETURN(filter, TabletRangeHelper::create_primary_key_range_filter(
+                                                     _tablet.metadata()->range(), _tablet_schema, pk_chunk));
                 }
                 if (source_masks->size() != filter.size()) {
                     return Status::InternalError(
