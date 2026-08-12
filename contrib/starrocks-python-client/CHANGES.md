@@ -7,6 +7,8 @@ Version history
   the schema in which the transient view used to canonicalize view/MV definitions is created.
   Lets a locked-down migration user be granted the required privileges on a single schema
   (e.g. the same one as `version_table_schema`) instead of on every schema that holds a view.
+- Coalesce multiple `ADD`/`DROP COLUMN` autogenerate operations on a table into a single `ALTER TABLE` statement via the `combine_column_alters` rewriter, avoiding StarRocks in-progress schema-change failures (#XXXXX by @chris-celerdata)
+- Add opt-in `starrocks_wait_for_schema_change` to block until a column schema-change job reaches a terminal state (#XXXXX by @chris-celerdata)
 
 **1.3.4**
 
