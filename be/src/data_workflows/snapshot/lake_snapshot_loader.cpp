@@ -26,6 +26,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet.h"
+#include "storage/protobuf_file.h"
 #include "storage/storage_env.h"
 
 namespace starrocks {
@@ -307,9 +308,14 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
             raw::stl_string_resize_uninitialized(&read_buf, size);
             RETURN_IF_ERROR(rf->read_at_fully(0, read_buf.data(), size));
             std::shared_ptr<starrocks::TabletMetadata> meta = std::make_shared<starrocks::TabletMetadata>();
-            bool parsed = meta->ParseFromArray(read_buf.data(), static_cast<int>(size));
-            if (!parsed) {
-                return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
+            // The backup copied the metadata file byte-for-byte, so the blob carries whatever on-disk
+            // format the source cluster wrote: the checksummed header when
+            // lake_enable_protobuf_file_checksum was on, plain protobuf otherwise. Auto-detect both.
+            auto st = ProtobufFileWithHeader::load_from_buffer(meta.get(), read_buf, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                               /*allow_plain_protobuf_fallback=*/true);
+            if (!st.ok()) {
+                return Status::Corruption(
+                        fmt::format("failed to parse tablet meta {}: {}", full_remote_file, st.message()));
             }
             meta->set_id(restore_info.tablet_id());
             // The snapshot blob is parsed directly (it never went through a load path), so a backup taken
