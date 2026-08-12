@@ -47,6 +47,7 @@
 #include "storage/seek_tuple.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
