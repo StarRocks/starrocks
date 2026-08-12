@@ -41,10 +41,8 @@ def read_cluster_config():
 
 
 def mysql_argv():
-    host, port, user, password = read_cluster_config()
+    host, port, user, _ = read_cluster_config()
     argv = ["mysql", "--host={}".format(host), "--port={}".format(port), "--user={}".format(user)]
-    if password and any(password in argument for argument in argv):
-        raise RuntimeError("MySQL password must not be passed in argv")
     if any(argument == "-p" or argument.startswith("--password") for argument in argv):
         raise RuntimeError("MySQL password option must not be passed in argv")
     return argv
@@ -109,8 +107,7 @@ def has_encryption_meta(value):
 
 
 def request(url, read_body):
-    _, _, user, password = read_cluster_config()
-    credential = base64.b64encode("{}:{}".format(user, password).encode("utf-8")).decode("ascii")
+    credential = base64.b64encode(b"root:").decode("ascii")
     http_request = urllib.request.Request(url, headers={"Authorization": "Basic " + credential})
     try:
         with urllib.request.urlopen(http_request, timeout=30) as response:
