@@ -36,6 +36,7 @@ import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
@@ -228,6 +229,19 @@ public class MvUtils {
                 getAllTables(child, tables);
             }
         }
+    }
+
+    /**
+     * True when any scan below root reads a table pinned to an explicit time-travel version, i.e. a
+     * {@code FOR VERSION/TIMESTAMP AS OF} clause (a snapshot id, tag or branch name). An ordinary read
+     * carries a {@link com.starrocks.common.tvr.TvrTableSnapshot} of the table's current version instead,
+     * so only a query period produces a delta range on a freshly transformed plan.
+     */
+    public static boolean containsTimeTravelScan(OptExpression root) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            return ((LogicalScanOperator) root.getOp()).getTvrVersionRange() instanceof TvrTableDelta;
+        }
+        return root.getInputs().stream().anyMatch(MvUtils::containsTimeTravelScan);
     }
 
     public static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {
