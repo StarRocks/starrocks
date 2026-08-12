@@ -2637,12 +2637,149 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNull(actual.getHistogram());
     }
 
+    @Test
+    public void testConvertTzUsesExactRangeForConstantTimezones() {
+        final String fromTz = "UTC";
+        final String toTz = "Asia/Shanghai";
+        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
+        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+        final double maxOffsetSec = 26.0 * 3600.0;
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minValue)
+                        .setMaxValue(maxValue)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+        final double expectedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
+        final double expectedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
+
+        Assertions.assertEquals(expectedMin, actual.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actual.getMaxValue(), 0.001);
+        // Exact conversion must be tighter than the conservative ±26h widen.
+        Assertions.assertTrue(actual.getMinValue() > minValue - maxOffsetSec);
+        Assertions.assertTrue(actual.getMaxValue() < maxValue + maxOffsetSec);
+        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testConvertTzReordersExactRangeWhenOffsetFlipsEndpoints() {
+        // Negative overall shift (Shanghai -> UTC): both endpoints move earlier.
+        // Result min/max must still be ordered via min()/max() of the converted endpoints.
+        final String fromTz = "Asia/Shanghai";
+        final String toTz = "UTC";
+        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
+        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minValue)
+                        .setMaxValue(maxValue)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar(fromTz),
+                        ConstantOperator.createVarchar(toTz)));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+        final double convertedMin = convertTzDateTimeValue(minValue, fromTz, toTz);
+        final double convertedMax = convertTzDateTimeValue(maxValue, fromTz, toTz);
+
+        Assertions.assertEquals(Math.min(convertedMin, convertedMax), actual.getMinValue(), 0.001);
+        Assertions.assertEquals(Math.max(convertedMin, convertedMax), actual.getMaxValue(), 0.001);
+        Assertions.assertTrue(actual.getMinValue() <= actual.getMaxValue());
+    }
+
+    @Test
+    public void testConvertTzFallsBackToWidenedRangeWhenTimezoneInvalid() {
+        final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
+        final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
+        final double maxOffsetSec = 26.0 * 3600.0;
+
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(minValue)
+                        .setMaxValue(maxValue)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("Not/AZone"),
+                        ConstantOperator.createVarchar("UTC")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(minValue - maxOffsetSec, actual.getMinValue(), 0.001);
+        Assertions.assertEquals(maxValue + maxOffsetSec, actual.getMaxValue(), 0.001);
+        Assertions.assertNull(actual.getHistogram());
+    }
+
+    @Test
+    public void testConvertTzKeepsWidenedRangeWhenChildRangeIsInfinite() {
+        final double maxOffsetSec = 26.0 * 3600.0;
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(dtCol, ColumnStatistic.builder()
+                        .setMinValue(Double.NEGATIVE_INFINITY)
+                        .setMaxValue(Double.POSITIVE_INFINITY)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(2)
+                        .build())
+                .build();
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+                Lists.newArrayList(
+                        dtCol,
+                        ConstantOperator.createVarchar("UTC"),
+                        ConstantOperator.createVarchar("Asia/Shanghai")));
+
+        final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
+
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY - maxOffsetSec, actual.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY + maxOffsetSec, actual.getMaxValue(), 0.001);
+        Assertions.assertEquals(2, actual.getDistinctValuesCount(), 0.001);
+    }
+
     private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
         final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
                 ConstantOperator.createVarchar(datetime).castTo(DateType.DATETIME).get(),
                 ConstantOperator.createVarchar(fromTz),
                 ConstantOperator.createVarchar(toTz));
         return converted.castTo(VarcharType.VARCHAR).get().getVarchar();
+    }
+
+    private static double convertTzDateTimeValue(double dateTimeValue, String fromTz, String toTz) {
+        final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
+                ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) dateTimeValue)),
+                ConstantOperator.createVarchar(fromTz),
+                ConstantOperator.createVarchar(toTz));
+        return Utils.getLongFromDateTime(converted.getDatetime());
     }
 
     @Test

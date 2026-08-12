@@ -1053,6 +1053,54 @@ public class ExpressionStatisticCalculator {
 
         }
 
+        private OptionalDouble convertTzDateTime(double dateTimeStat, ConstantOperator fromTz, ConstantOperator toTz) {
+            try {
+                ConstantOperator input = ConstantOperator.createDatetime(Utils.getDatetimeFromLong((long) dateTimeStat));
+                ConstantOperator converted = ScalarOperatorFunctions.convert_tz(input, fromTz, toTz);
+                return OptionalDouble.of(Utils.getLongFromDateTime(converted.getDatetime()));
+            } catch (Exception e) {
+                return OptionalDouble.empty();
+            }
+        }
+
+        private ColumnStatistic calcConvertTzStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            // Timezone offsets differ by at most 26 hours
+            // (see ExtractRangePredicateFromScalarApplyRule).
+            ColumnStatistic childStat = inputs.get(0);
+            ColumnStatistic fromTzStat = inputs.get(1);
+            ColumnStatistic toTzStat = inputs.get(2);
+            final double maxOffset = 26.0 * 3600.0;
+
+            final double distinctValues = Math.min(rowCount,
+                    childStat.getDistinctValuesCount()
+                            * fromTzStat.getDistinctValuesCount()
+                            * toTzStat.getDistinctValuesCount());
+
+            double minValue = childStat.getMinValue() - maxOffset;
+            double maxValue = childStat.getMaxValue() + maxOffset;
+
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            if (fromTz.isPresent() && toTz.isPresent()
+                    && !childStat.hasNaNValue() && !childStat.isInfiniteRange()) {
+                OptionalDouble convertedMin = convertTzDateTime(childStat.getMinValue(), fromTz.get(), toTz.get());
+                OptionalDouble convertedMax = convertTzDateTime(childStat.getMaxValue(), fromTz.get(), toTz.get());
+                if (convertedMin.isPresent() && convertedMax.isPresent()) {
+                    minValue = Math.min(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                    maxValue = Math.max(convertedMin.getAsDouble(), convertedMax.getAsDouble());
+                }
+            }
+
+            return ColumnStatistic.builder()
+                    .setMinValue(minValue)
+                    .setMaxValue(maxValue)
+                    .setNullsFraction(childStat.getNullsFraction())
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .setHistogram(transformHistogramForConvertTz(callOperator, childStat).orElse(null))
+                    .build();
+        }
+
         private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
             double nullsFraction = inputs.stream()
                     .mapToDouble(ColumnStatistic::getNullsFraction)
@@ -1300,26 +1348,7 @@ public class ExpressionStatisticCalculator {
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.CONVERT_TZ:
-                    // Timezone offsets differ by at most 26 hours
-                    // (see ExtractRangePredicateFromScalarApplyRule).
-                    ColumnStatistic childStat = childColumnStatisticList.get(0);
-                    ColumnStatistic fromTzStat = childColumnStatisticList.get(1);
-                    ColumnStatistic toTzStat = childColumnStatisticList.get(2);
-                    final double maxOffset = 26.0 * 3600.0;
-
-                    distinctValues = Math.min(rowCount,
-                            childStat.getDistinctValuesCount()
-                                    * fromTzStat.getDistinctValuesCount()
-                                    * toTzStat.getDistinctValuesCount());
-
-                    return ColumnStatistic.builder()
-                            .setMinValue(childStat.getMinValue() - maxOffset)
-                            .setMaxValue(childStat.getMaxValue() + maxOffset)
-                            .setNullsFraction(childStat.getNullsFraction())
-                            .setAverageRowSize(callOperator.getType().getTypeSize())
-                            .setDistinctValuesCount(distinctValues)
-                            .setHistogram(transformHistogramForConvertTz(callOperator, childStat).orElse(null))
-                            .build();
+                    return calcConvertTzStats(childColumnStatisticList, callOperator);
                 case FunctionSet.COALESCE:
                     return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
