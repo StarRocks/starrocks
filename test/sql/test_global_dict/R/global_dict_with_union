@@ -1411,6 +1411,15 @@ FROM (
 -- result:
 test_table_2	test_table_1	6	f	a	6
 -- !result
+SELECT max(upper(source)), sum(length(source)), max(upper(value)), sum(length(value))
+FROM (
+    SELECT 'test_table_1' as source, value FROM test_table_1
+    UNION ALL
+    SELECT 'test_table_2' as source, value FROM test_table_2
+) T;
+-- result:
+TEST_TABLE_2	72	F	6
+-- !result
 ADMIN SET FRONTEND CONFIG ('push_down_non_grouped_aggregate_below_union' = 'false');
 -- result:
 -- !result
