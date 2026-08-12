@@ -67,19 +67,27 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
-  # Decision-10 phase B shadow: checkbox x AI-affected reconciliation, DRY-RUN.
-  # Runs on [self-hosted, ubuntu, ai] — that pool has BOTH /var/lib/ci-tool AND
-  # `claude` + the github-bugfix-versions plugin (see bugfix-version-index.yml).
-  # `claude` returns this [BugFix]'s affected release lines (branches still
-  # carrying the bug); backport_reconcile.py then prints the matrix (window /
-  # affected / checked / auto / notify) and posts NOTHING. continue-on-error so
-  # it can never affect the merge. Needs ci-tool #4934 on the runner.
+  # At-merge backport reconciliation (AI-主导 for native / AI-only-auto for synced).
+  # Runs on [self-hosted, ubuntu, ai] — that pool has /var/lib/ci-tool AND `claude`.
+  # bin/backport_reconcile.sh asks `claude` (LOCAL git + gh only, NO plugin / code_kb)
+  # for this [BugFix]'s affected release lines (branches still carrying the bug), then
+  # backport_reconcile.py reconciles them and either PRINTS (dry-run) or posts
+  # @Mergifyio (real). continue-on-error so it can never affect the merge.
+  #
+  # Phase 2 (at-merge go-live) — TWO independent switches, both default OFF, so merging
+  # this PR activates NOTHING until an operator sets a repo variable:
+  #   * native PRs  -> AI-主导 (--ai-lead): auto = window ∩ affected; checkbox divergence
+  #                    -> notify FYI. REAL only when vars.RECONCILE_NATIVE_REAL == 'true'.
+  #   * synced PRs  -> AI-only-auto (--synced). REAL only when vars.RECONCILE_SYNCED_REAL.
+  # Recommended flip order: NATIVE first (its checkbox-divergence notify surfaces any AI
+  # reachability false-negative pre-merge), SYNCED last (boxless -> a false-negative there
+  # is a SILENT dropped backport, no advisory net). See design doc §验证 (76782).
   backport-reconcile:
     name: Backport Reconcile
     runs-on: [ self-hosted, ubuntu, ai ]
-    # model-2: reverse-synced PRs (label `sync`) are now INCLUDED (previously excluded).
-    # They have no author checkbox -> AI-only-auto. Native PRs keep the checkbox x AI
-    # matrix. cherry-pick/backport PRs are still excluded (they are the backports).
+    # model-2: reverse-synced PRs (label `sync`) are INCLUDED (previously excluded).
+    # They have no author checkbox -> AI-only-auto. Native PRs -> AI-主导 (checkbox x AI).
+    # cherry-pick/backport PRs are still excluded (they are the backports).
     if: >
       github.event.pull_request.merged == true &&
       github.base_ref == 'main' &&
@@ -92,13 +100,13 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
       GITHUB_TOKEN: ${{ secrets.PAT }}
-      # reverse-synced PR (label `sync`) -> AI-only-auto; native PR -> checkbox x AI
+      # reverse-synced PR (label `sync`) -> AI-only-auto; native PR -> AI-主导 (checkbox x AI)
       IS_SYNCED: ${{ contains(github.event.pull_request.labels.*.name, 'sync') }}
-      # SWITCH (default OFF): only 'true' makes synced PRs run REAL (auto @Mergifyio).
-      # Otherwise synced PRs stay dry-run. Native PRs are always dry-run (phase B shadow).
-      SYNCED_REAL: ${{ vars.RECONCILE_SYNCED_REAL }}
+      # SWITCHES (both default OFF -> dry-run shadow; 'true' -> REAL auto @Mergifyio):
+      NATIVE_REAL: ${{ vars.RECONCILE_NATIVE_REAL }}   # native [BugFix] AI-主导 go-live
+      SYNCED_REAL: ${{ vars.RECONCILE_SYNCED_REAL }}   # synced PR AI-only-auto go-live (flip last)
     steps:
-      - name: reconcile (native=dry-run shadow; synced=AI-only-auto)
+      - name: reconcile (native=AI-主导; synced=AI-only-auto; each switch-gated)
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${IS_SYNCED}" == "true" ]]; then
@@ -106,7 +114,9 @@ jobs:
             echo "reverse-synced PR -> AI-only-auto (${MODE})"
             ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --synced ${MODE}
           else
-            ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
+            if [[ "${NATIVE_REAL}" == "true" ]]; then MODE="--no-dry-run"; else MODE="--dry-run"; fi
+            echo "native PR -> AI-主导 (${MODE})"
+            ./bin/backport_reconcile.sh --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --ai-lead ${MODE}
           fi
 
   thirdparty-filter:
