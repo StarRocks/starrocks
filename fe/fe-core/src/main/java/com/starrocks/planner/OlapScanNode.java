@@ -76,6 +76,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -108,6 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -1730,6 +1732,29 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             TTableSampleOptions sampleOptions = new TTableSampleOptions();
             sample.toThrift(sampleOptions);
             scanNode.setSample_options(sampleOptions);
+        }
+
+        // See the note on TNormalOlapScanNode.vector_search_options: the ANN spec is the only
+        // place the query vector and the folded distance bound survive, so it must be in the key.
+        if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+            TVectorSearchOptions annOptions = vectorSearchOptions.toThrift();
+            // Per-query state, not semantics -- drop it so equivalent plans still share entries.
+            annOptions.unsetVector_slot_id();
+            annOptions.unsetVector_distance_column_name();
+            // ann_params, k_factor and pq_refine_factor reach the backend through TQueryOptions, not
+            // through this struct: OlapChunkSource overwrites query_params/k_factor/pq_refine_factor
+            // from RuntimeState::query_options() after reading the plan, so whatever the plan carries
+            // in those three fields is discarded. They are not cosmetic -- an explicit efSearch in
+            // ann_params turns off the per-segment adaptive scaling and k_factor changes how many
+            // candidates the index returns, so two sessions differing only in them get different
+            // rows out of the same plan. Copying the session's values in here puts them in the
+            // digest without a new thrift field, and only for plans that actually use ANN, so no
+            // other query's digest moves.
+            SessionVariable sessionVariable = normalizer.getExecPlan().getConnectContext().getSessionVariable();
+            annOptions.setQuery_params(sessionVariable.getAnnParams());
+            annOptions.setK_factor(sessionVariable.getKFactor());
+            annOptions.setPq_refine_factor(sessionVariable.getPqRefineFactor());
+            scanNode.setVector_search_options(normalizer.normalizeThrift(annOptions));
         }
 
         planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
