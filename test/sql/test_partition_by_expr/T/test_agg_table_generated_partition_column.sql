@@ -9,7 +9,6 @@ partition by date_trunc('week', event_day)
 distributed by hash(city) buckets 3
 properties("replication_num" = "1");
 -- the generated partition column must stay invisible to users
-show create table agg_week;
 desc agg_week;
 insert into agg_week values
 ('2026-07-13 01:00:00', 'sh', 1, 10),
@@ -29,6 +28,18 @@ insert into agg_week values
 ('2026-08-03 00:00:00', 'sh', 32, 160);
 select event_day, city, pv, uv from agg_week order by event_day, city;
 select count(*), sum(pv), max(uv) from agg_week;
+
+-- name: test_agg_table_generated_partition_column_ddl @native
+create table agg_week_ddl (
+  event_day datetime not null,
+  city varchar(64) not null,
+  pv bigint sum
+) aggregate key(event_day, city)
+partition by date_trunc('week', event_day)
+distributed by hash(city) buckets 3
+properties("replication_num" = "1");
+-- SHOW CREATE TABLE must round trip the partition expression and never expose the generated column
+show create table agg_week_ddl;
 
 -- name: test_agg_table_generated_partition_column_prune
 create table agg_week_prune (

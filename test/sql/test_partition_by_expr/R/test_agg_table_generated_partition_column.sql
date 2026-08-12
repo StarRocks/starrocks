@@ -10,24 +10,6 @@ distributed by hash(city) buckets 3
 properties("replication_num" = "1");
 -- result:
 -- !result
-show create table agg_week;
--- result:
-agg_week	CREATE TABLE `agg_week` (
-  `event_day` datetime NOT NULL COMMENT "",
-  `city` varchar(64) NOT NULL COMMENT "",
-  `pv` bigint(20) SUM NULL COMMENT "",
-  `uv` bigint(20) MAX NULL COMMENT ""
-) ENGINE=OLAP 
-AGGREGATE KEY(`event_day`, `city`)
-PARTITION BY (date_trunc('week', event_day))
-DISTRIBUTED BY HASH(`city`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
--- !result
 desc agg_week;
 -- result:
 event_day	datetime	NO	true	None	
@@ -79,6 +61,34 @@ select event_day, city, pv, uv from agg_week order by event_day, city;
 select count(*), sum(pv), max(uv) from agg_week;
 -- result:
 6	99	320
+-- !result
+-- name: test_agg_table_generated_partition_column_ddl @native
+create table agg_week_ddl (
+  event_day datetime not null,
+  city varchar(64) not null,
+  pv bigint sum
+) aggregate key(event_day, city)
+partition by date_trunc('week', event_day)
+distributed by hash(city) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+show create table agg_week_ddl;
+-- result:
+agg_week_ddl	CREATE TABLE `agg_week_ddl` (
+  `event_day` datetime NOT NULL COMMENT "",
+  `city` varchar(64) NOT NULL COMMENT "",
+  `pv` bigint(20) SUM NULL COMMENT ""
+) ENGINE=OLAP 
+AGGREGATE KEY(`event_day`, `city`)
+PARTITION BY (date_trunc('week', event_day))
+DISTRIBUTED BY HASH(`city`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
 -- name: test_agg_table_generated_partition_column_prune
 create table agg_week_prune (
