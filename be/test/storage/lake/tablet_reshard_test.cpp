@@ -8673,10 +8673,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     // ctx[0] keeps its original offset (0); no stacking.
     EXPECT_EQ(0, sst_a->rssid_offset());
 
-    // Recover ctx[1].rssid_offset from the rowset mapping. compute_rssid_offset
-    // can be negative (base.next_rowset_id - append.min_id) when ctx[1]'s input
-    // rowset ids are already higher than ctx[0]'s, which is legal and exercises
-    // the accumulation arithmetic under signed offsets.
+    // Recover ctx[1].rssid_offset from the rowset mapping. Here ctx[1]'s input rowset
+    // ids already sit above ctx[0]'s next_rowset_id, so compute_rssid_offset clamps the
+    // shift to 0 (it never shifts down) and the accumulation is 3 + 0. Deriving the
+    // offset from the output rather than hard-coding it keeps the accumulation assertion
+    // meaningful regardless of the clamp.
     bool found_ctx1 = false;
     int32_t ctx1_offset = 0;
     for (const auto& rs : merged->rowsets()) {
@@ -8695,6 +8696,118 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_stacked_rssid_offs
     // should be projected by +ctx1_offset.
     const uint32_t sst_b_high = static_cast<uint32_t>(sst_b->max_rss_rowid() >> 32);
     EXPECT_EQ(static_cast<uint32_t>(5 + ctx1_offset), sst_b_high);
+}
+
+// Merging a cold sibling with a hot one whose rowset id space has run far ahead must not
+// fail the publish. Regression for "Segment id overflow during tablet merge".
+//
+// The id layout below is taken verbatim from a wedged production partition: writes into a
+// range-distributed table are range-routed, so the hot range's tablet reached rowset id 860
+// / next_rowset_id 861 while the cold sibling still had a single compacted rowset at id 11 /
+// next_rowset_id 12. compute_rssid_offset used to answer 12 - 798 = -786 for the hot tablet,
+// and add_rowset applies that shift to two fields that reference rowsets which no longer
+// exist and therefore sit below the live minimum: max_compact_input_rowset_id (797) and
+// del_files[].origin_rowset_id (766, inherited from a compaction input). 766 - 786 = -20
+// tripped map_rssid's `mapped < 0` branch and failed the whole reshard publish; the FE then
+// retried it forever and the table stayed unwritable.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_overflow) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t cold_tablet = next_id();
+    const int64_t hot_tablet = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(cold_tablet);
+    prepare_tablet_dirs(hot_tablet);
+    prepare_tablet_dirs(merged_tablet);
+
+    // ctx[0]: the cold sibling. Everything it ever wrote has been compacted into rowset 11,
+    // whose inputs (<= 10) are gone.
+    auto cold_meta = std::make_shared<TabletMetadataPB>();
+    cold_meta->set_id(cold_tablet);
+    cold_meta->set_version(base_version);
+    cold_meta->set_next_rowset_id(12);
+    set_primary_key_schema(cold_meta.get(), 1001);
+    add_rowset(cold_meta.get(), /*rowset_id=*/11, /*max_compact_input_rowset_id=*/10,
+               /*del_origin_rowset_id=*/11);
+
+    // ctx[1]: the hot sibling. min live id 798, and rowset 803 is a compaction output that
+    // inherited a del file from input rowset 766 -- 32 ids below its own live minimum.
+    auto hot_meta = std::make_shared<TabletMetadataPB>();
+    hot_meta->set_id(hot_tablet);
+    hot_meta->set_version(base_version);
+    hot_meta->set_next_rowset_id(861);
+    set_primary_key_schema(hot_meta.get(), 1001);
+    add_rowset(hot_meta.get(), /*rowset_id=*/798, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/798);
+    add_rowset(hot_meta.get(), /*rowset_id=*/803, /*max_compact_input_rowset_id=*/797,
+               /*del_origin_rowset_id=*/766);
+    add_rowset(hot_meta.get(), /*rowset_id=*/860, /*max_compact_input_rowset_id=*/859,
+               /*del_origin_rowset_id=*/860);
+
+    ASSERT_OK(put_tablet_metadata(cold_meta));
+    ASSERT_OK(put_tablet_metadata(hot_meta));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(cold_tablet);
+    merging_tablet.add_old_tablet_ids(hot_tablet);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    // Before the fix this returned InvalidArgument("Segment id overflow during tablet merge").
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // No dedup is possible (every rowset carries its own uid), so all four survive.
+    ASSERT_EQ(4, merged->rowsets_size());
+
+    std::map<uint32_t, const RowsetMetadataPB*> by_id;
+    for (const auto& rowset : merged->rowsets()) {
+        by_id[rowset.id()] = &rowset;
+    }
+
+    // The hot tablet's shift clamps to 0, so its ids pass through untouched. Leaving them in
+    // place is collision-free precisely because they all sit above the cold tablet's ceiling.
+    ASSERT_TRUE(by_id.count(11)) << "cold sibling's rowset must keep id 11";
+    ASSERT_TRUE(by_id.count(798)) << "hot sibling's rowsets must keep their ids";
+    ASSERT_TRUE(by_id.count(803));
+    ASSERT_TRUE(by_id.count(860));
+
+    // The two dead-reference fields are shifted by the same offset as the live ids, so with a
+    // zero shift they survive verbatim -- and, critically, non-negative.
+    const auto* compaction_output = by_id[803];
+    EXPECT_EQ(797u, compaction_output->max_compact_input_rowset_id());
+    ASSERT_EQ(1, compaction_output->del_files_size());
+    EXPECT_EQ(766u, compaction_output->del_files(0).origin_rowset_id());
+
+    // Dead references carried by the hot sibling must not be shifted into the COLD sibling's
+    // live id space. Under the old -786 shift, rowset 803's max_compact_input_rowset_id (797)
+    // landed exactly on 11 -- the cold sibling's live rowset -- which misleads the rowset
+    // ordering in LakePrimaryKeyRecover::sort_rowsets. (The cold sibling's own rowset 11
+    // legitimately references itself, so only the hot sibling's rowsets are checked here.)
+    for (const auto& rowset : merged->rowsets()) {
+        if (rowset.id() < 798) continue; // cold sibling's rowset
+        EXPECT_NE(11u, rowset.max_compact_input_rowset_id())
+                << "hot sibling's compaction input ref collided with the cold sibling's live rowset id";
+        for (const auto& del_file : rowset.del_files()) {
+            EXPECT_NE(11u, del_file.origin_rowset_id())
+                    << "hot sibling's del file origin collided with the cold sibling's live rowset id";
+        }
+    }
+
+    // Future writes must not reuse an occupied id.
+    EXPECT_GE(merged->next_rowset_id(), 861u);
 }
 
 // Merge of two PK parents that both have cloud-native persistent index enabled.

@@ -243,6 +243,30 @@ void union_delvec(DelVector* target, DelVector& source, int64_t version) {
     target->init(version, all_dels.data(), all_dels.size());
 }
 
+// Shift that lifts |append_metadata|'s rowset id space above |base_metadata|'s watermark, so the
+// two can be concatenated without colliding. Derived from the LIVE rowsets' minimum id, which is
+// the lowest id add_rowset will map through TabletMergeContext::map_rssid... almost: add_rowset
+// also maps two fields that reference rowsets which no longer exist, and therefore sit BELOW that
+// minimum -- max_compact_input_rowset_id (the compaction inputs, erased by apply_opcompaction) and
+// del_files[].origin_rowset_id (the input rowset a compaction-inherited del file came from).
+//
+// Clamped at 0 so the shift is never negative. A negative shift is otherwise reachable whenever the
+// merge inputs' id spaces have diverged -- writes into a range-distributed table are range-routed,
+// so a hot range burns through rowset ids while a cold sibling stays low, and merging them asks for
+// a large downward shift of the hot tablet. Under such a shift the two dead-reference fields above
+// map below zero and map_rssid fails the whole publish with "Segment id overflow during tablet
+// merge"; the FE then retries that publish forever and the table is left permanently unwritable.
+//
+// Declining to shift down is collision-free by construction: the caller only reaches the negative
+// case when min_id already exceeds the cumulative ceiling, i.e. when every one of this metadata's
+// rowset ids is already strictly above every id projected from an earlier merge input. The cost is
+// a sparser id space in the merged output (next_rowset_id inherits the max of the inputs instead of
+// being repacked), which update_next_rowset_id recomputes and which the uint32 id space absorbs.
+//
+// Deliberately NOT fixed by folding the dead references into the min_id scan: that keeps the tight
+// packing but only holds for the fields enumerated here, so a future field referencing an older
+// rssid would silently reintroduce the failure. A non-negative shift can never map any uint32 rssid
+// below zero, whatever the field.
 int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata, const TabletMetadataPB& append_metadata) {
     uint32_t min_id = std::numeric_limits<uint32_t>::max();
     for (const auto& rowset : append_metadata.rowsets()) {
@@ -251,7 +275,7 @@ int64_t compute_rssid_offset(const TabletMetadataPB& base_metadata, const Tablet
     if (min_id == std::numeric_limits<uint32_t>::max()) {
         return 0;
     }
-    return static_cast<int64_t>(base_metadata.next_rowset_id()) - min_id;
+    return std::max<int64_t>(0, static_cast<int64_t>(base_metadata.next_rowset_id()) - min_id);
 }
 
 // Duplicate detection for merge: two rowsets are the same logical rowset across
@@ -2619,12 +2643,11 @@ void reassign_fileset_ids_for_ordered_runs(google::protobuf::RepeatedPtrField<Pe
 // reference, clamped to the uint32_t key space the per-ctx
 // disagreement-key vector indexes by. Both bounds are inclusive.
 //
-// The signed arithmetic matters because compute_rssid_offset can
-// produce a negative ctx.rssid_offset() when ctx[N>0]'s input rowset
-// ids exceed ctx[0]'s next_rowset_id (legal — exercised by
-// test_tablet_merging_accumulates_stacked_rssid_offset). Casting a
-// negative low to uint32_t directly would wrap to a huge value and
-// silently miss in-range disagreement keys.
+// The signed arithmetic matters because |source_rssid_offset| is the
+// sstable's OWN stored rssid_offset, which can be negative in metadata
+// written before compute_rssid_offset was clamped to a non-negative
+// shift. Casting a negative low to uint32_t directly would wrap to a
+// huge value and silently miss in-range disagreement keys.
 struct ClampedLiftedRange {
     uint32_t lower = 0;
     uint32_t upper = 0;
