@@ -2864,6 +2864,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String histogram_collect_bucket_ndv_mode = "none";
 
+    @ConfField(mutable = true, comment = "Whether to batch insert histogram statistics for multiple columns")
+    public static boolean enable_batch_insert_histogram_statistics = true;
+
+    @ConfField(mutable = true, comment = "Maximum buffered SQL size in bytes for one histogram statistics batch insert")
+    public static long histogram_batch_insert_buffer_size = 20L * 1024 * 1024;
+
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
 
@@ -3250,6 +3256,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = false)
     public static int iceberg_commit_queue_max_size = 1000;
+
+    /**
+     * `remove_orphan_files` only accepts an `older_than` earlier than `current time - this value` (in
+     * seconds). A later `older_than` is rejected, because deleting files that recent can remove data a
+     * concurrent write has not committed yet and leave the table unreadable.
+     * <p>
+     * Only an explicit `older_than` is bounded; omitting it keeps the procedure's own 7 day default.
+     * <p>
+     * Default: 86400 (24 hours)
+     */
+    @ConfField(mutable = true)
+    public static long iceberg_remove_orphan_files_min_retention_seconds = 24L * 60L * 60L;
 
     /**
      * paimon metadata cache preheat, default false
@@ -4969,4 +4987,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
             "Default false for security. Set true to allow internal service calls.")
     public static boolean http_request_allow_private_in_allowlist = false;
+
+    @ConfField(mutable = true, comment = "The maximum number of low-cardinality dictionary-optimized columns listed " +
+            "in the dict_col field of each scan node in EXPLAIN VERBOSE output. When a scan node has more applied " +
+            "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
+            "or equal to 0 are treated as 0, which truncates the list entirely.")
+    public static int explain_dict_column_size = 5;
 }

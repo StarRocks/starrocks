@@ -23,6 +23,7 @@
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "storage_primitive/vector_chunk_iterator.h"
@@ -228,6 +229,139 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
 }
 
 // NOLINTNEXTLINE
+// The read-ahead path must be indistinguishable from the serial one: the same rows, in the same
+// order, with the same source masks, whatever the buffer depth. Children are given a small chunk
+// size so the merge runs dry on them repeatedly and exercises the refill path, not just the
+// initial prefill.
+class MergePipelineEquivalenceTest : public MergeIteratorTest {
+protected:
+    void SetUp() override {
+        MergeIteratorTest::SetUp();
+        _saved_parallel = config::enable_compaction_parallel_merge_init;
+        _saved_buffers = config::compaction_merge_child_buffers;
+    }
+    void TearDown() override {
+        config::enable_compaction_parallel_merge_init = _saved_parallel;
+        config::compaction_merge_child_buffers = _saved_buffers;
+        MergeIteratorTest::TearDown();
+    }
+
+    // Five inputs whose key ranges overlap in different ways: fully disjoint, interleaved, and
+    // duplicated across inputs, so the merge switches between them instead of draining one.
+    std::vector<std::vector<int32_t>> inputs() const {
+        std::vector<std::vector<int32_t>> vs(5);
+        for (int i = 0; i < 200; i++) {
+            vs[0].push_back(i * 4);
+            vs[1].push_back(i * 4 + 1);
+            vs[2].push_back(i * 2);
+            vs[3].push_back(i);
+            vs[4].push_back(500 + i);
+        }
+        return vs;
+    }
+
+    struct Output {
+        std::vector<int32_t> rows;
+        std::vector<uint16_t> sources;
+    };
+
+    Output run_heap(bool parallel, int buffers) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7); // force many refills
+            subs.push_back(sub);
+        }
+        auto iter = new_heap_merge_iterator(subs);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    Output run_mask(bool parallel, int buffers, const std::vector<uint16_t>& sources) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        std::vector<RowSourceMask> masks;
+        masks.reserve(sources.size());
+        for (uint16_t s : sources) {
+            masks.emplace_back(RowSourceMask(s, false));
+        }
+        // A fresh id per call: the buffer is backed by a file named after it, and this runs many
+        // times in one test.
+        RowSourceMaskBuffer mask_buffer(_next_mask_id++, config::storage_root_path);
+        EXPECT_TRUE(mask_buffer.write(masks).ok());
+        EXPECT_TRUE(mask_buffer.flush().ok());
+        EXPECT_TRUE(mask_buffer.flip_to_read().ok());
+
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7);
+            subs.push_back(sub);
+        }
+        auto iter = new_mask_merge_iterator(subs, &mask_buffer);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    static Output drain(const ChunkIteratorPtr& iter) {
+        Output out;
+        std::vector<RowSourceMask> masks;
+        ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+        while (iter->get_next(chunk.get(), &masks).ok()) {
+            ColumnPtr& c = chunk->get_column_by_index(0);
+            for (size_t i = 0; i < c->size(); i++) {
+                out.rows.push_back(c->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+        for (auto& m : masks) {
+            out.sources.push_back(m.get_source_num());
+        }
+        return out;
+    }
+
+    bool _saved_parallel = false;
+    int32_t _saved_buffers = 1;
+    int64_t _next_mask_id = 1000;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergePipelineEquivalenceTest, heap_merge_read_ahead_matches_serial) {
+    const Output baseline = run_heap(false, 1);
+    ASSERT_FALSE(baseline.rows.empty());
+    ASSERT_TRUE(std::is_sorted(baseline.rows.begin(), baseline.rows.end()));
+
+    for (int buffers : {1, 2, 3, 8}) {
+        for (bool parallel : {false, true}) {
+            const Output got = run_heap(parallel, buffers);
+            EXPECT_EQ(baseline.rows, got.rows) << "parallel=" << parallel << " buffers=" << buffers;
+            EXPECT_EQ(baseline.sources, got.sources) << "parallel=" << parallel << " buffers=" << buffers;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergePipelineEquivalenceTest, mask_merge_read_ahead_matches_serial) {
+    // Vertical compaction feeds the mask merge the sources the key group produced, so build them
+    // the same way.
+    const std::vector<uint16_t> sources = run_heap(false, 1).sources;
+    ASSERT_FALSE(sources.empty());
+
+    const Output baseline = run_mask(false, 1, sources);
+    ASSERT_FALSE(baseline.rows.empty());
+
+    for (int buffers : {1, 2, 3, 8}) {
+        for (bool parallel : {false, true}) {
+            const Output got = run_mask(parallel, buffers, sources);
+            EXPECT_EQ(baseline.rows, got.rows) << "parallel=" << parallel << " buffers=" << buffers;
+        }
+    }
+}
+
 TEST_F(MergeIteratorTest, mask_merge) {
     std::vector<int32_t> v1{1, 1, 2, 3, 4, 5};
     std::vector<int32_t> v2{10, 11, 13, 15, 15, 16, 17};

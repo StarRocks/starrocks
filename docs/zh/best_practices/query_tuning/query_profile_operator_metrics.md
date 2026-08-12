@@ -248,6 +248,9 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | SubmitTaskTime | 任务提交所花费的时间。 |
 | PeakIOTasks | I/O 任务的峰值数量。 |
 | PeakScanTaskQueueSize | I/O 任务队列的峰值大小。 |
+| RuntimeFilterEvalTime | 在 Parquet Reader 内部对已解码数据行求值 Join Runtime Filter 所花费的时间。 |
+| RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
+| RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
 
 ### Exchange Operator
 

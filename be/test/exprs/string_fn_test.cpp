@@ -15,6 +15,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <random>
 
@@ -3405,6 +3406,44 @@ PARALLEL_TEST(VecStringFunctionsTest, strposTest) {
 
     for (size_t i = 0; i < haystacks.size(); ++i) {
         ASSERT_EQ(expected[i], v->get_data()[i]) << "Failed for input: " << haystacks[i] << ", " << needles[i];
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, strposInstanceIntMinTest) {
+    // std::abs(INT32_MIN) is undefined and returns INT32_MIN again, so the old
+    // `int abs_instance = std::abs(instance_value)` stayed negative, passed the
+    // `abs_instance <= positions.size()` bounds check, and then indexed
+    // positions[positions.size() - abs_instance] -- a size_t subtraction that ADDS 2^31.
+    // With 4-byte elements that reads 2^33 bytes past the vector.
+    //
+    // The boundary either side of the occurrence count is asserted too: a fix that merely
+    // stops the crash but shifts the comparison by one would still pass on INT32_MIN alone.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto haystack = BinaryColumn::create();
+    auto needle = BinaryColumn::create();
+    auto instance = Int32Column::create();
+
+    // "aaa" contains "a" at 1, 2 and 3.
+    std::vector<int32_t> instances = {std::numeric_limits<int32_t>::min(), -4, -3, -1, 1, 3,
+                                      std::numeric_limits<int32_t>::max()};
+    std::vector<int64_t> expected = {0, 0, 1, 3, 1, 3, 0};
+
+    for (int32_t inst : instances) {
+        haystack->append("aaa");
+        needle->append("a");
+        instance->append(inst);
+    }
+    columns.emplace_back(haystack);
+    columns.emplace_back(needle);
+    columns.emplace_back(instance);
+
+    ColumnPtr result = StringFunctions::strpos_instance(ctx.get(), columns).value();
+    ASSERT_EQ(instances.size(), result->size());
+    auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+    for (size_t i = 0; i < instances.size(); ++i) {
+        ASSERT_EQ(expected[i], v->get_data()[i]) << "Failed for instance " << instances[i];
     }
 }
 

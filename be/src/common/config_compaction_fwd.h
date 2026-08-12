@@ -145,6 +145,9 @@ CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 
+// Minimum elapsed time in milliseconds for logging a completed lake compaction attempt or parallel subtask profile.
+CONF_mInt64(lake_compact_slow_log_ms, "5000");
+
 // Maximum data volume (bytes) per parallel compaction subtask.
 // If total picked rowsets data size is less than this threshold, parallel compaction
 // will be skipped and fallback to normal compaction flow.
