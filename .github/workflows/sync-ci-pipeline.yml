@@ -75,6 +75,7 @@ jobs:
       output1: ${{ steps.changes-info.outputs.be }}
       output2: ${{ steps.changes-info.outputs.thirdparty }}
       output3: ${{ steps.changes-info.outputs.fe }}
+      linux_matrix: ${{ steps.distro.outputs.linux_matrix }}
     steps:
       - uses: dorny/paths-filter@v2
         id: changes
@@ -122,6 +123,23 @@ jobs:
           echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
           echo "fe=${{ steps.changes.outputs.fe }}" >> $GITHUB_OUTPUT
 
+      - name: Decide distros by version
+        id: distro
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # rocky9 replaces centos7 from 4.2 onward (CentOS 7 EOL):
+          #   main / >= 4.2 -> rocky9 + ubuntu
+          #   < 4.2         -> centos7 + ubuntu
+          # Mirrors ci-pipeline.yml (main uses rocky9) and StarRocks 39ad6c7.
+          if [[ "${BASE_REF}" == "main" ]]; then
+            el=rocky9
+          else
+            ver=${BASE_REF#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+            if (( major > 4 || (major == 4 && minor >= 2) )); then el=rocky9; else el=centos7; fi
+          fi
+          echo "linux_matrix=[\"${el}\", \"ubuntu\"]" >> $GITHUB_OUTPUT
+
       - name: LABEL THIRDPARTY
         if: steps.changes-info.outputs.thirdparty == 'true'
         uses: actions-ecosystem/action-add-labels@v1
@@ -137,7 +155,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [ centos7, ubuntu ]
+        linux: ${{ fromJSON(needs.code-checker.outputs.linux_matrix) }}
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
