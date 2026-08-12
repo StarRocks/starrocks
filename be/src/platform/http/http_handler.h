@@ -44,6 +44,10 @@ public:
     // health probe, Prometheus metrics) should override and return false.
     virtual bool need_auth() const { return true; }
 
+    // Require authentication even when the global HTTP-auth flag is disabled.
+    // Default false preserves the existing configuration-gated behavior.
+    virtual bool always_require_auth() const { return false; }
+
     // Additional role/privilege required on top of identity AuthN, evaluated by FE
     // via the `required_privilege` field of the checkAuth RPC. Mirrors the thrift
     // `TPrivilegeRequirement` enum without dragging the thrift header into this base.

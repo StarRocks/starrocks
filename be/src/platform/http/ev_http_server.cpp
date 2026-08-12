@@ -437,19 +437,28 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         return 0;
     }
 
-    // Basic-Auth check (gated by `config::enable_http_auth` inside the injected verifier).
+    // Basic-Auth check (gated by `config::enable_http_auth` inside the injected verifier,
+    // unless this handler explicitly requires authentication).
     // Done before handler->on_header so handlers don't get a chance to read the body.
     // The HTTP primitives stay format-agnostic: the verifier shapes the failure response
     // (status, headers, body) and the server just dispatches it.
-    if (handler->need_auth() && _auth_verifier) {
-        auto failure = _auth_verifier(request.get(), handler->required_privilege());
-        if (failure.has_value()) {
-            evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
-            if (!failure->www_authenticate.empty()) {
-                evhttp_add_header(evhttp_request_get_output_headers(ev_req), "WWW-Authenticate",
-                                  failure->www_authenticate.c_str());
+    const bool always_require_auth = handler->always_require_auth();
+    if (handler->need_auth() || always_require_auth) {
+        if (_auth_verifier) {
+            auto failure = _auth_verifier(request.get(), handler->required_privilege(), always_require_auth);
+            if (failure.has_value()) {
+                evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
+                if (!failure->www_authenticate.empty()) {
+                    evhttp_add_header(evhttp_request_get_output_headers(ev_req), "WWW-Authenticate",
+                                      failure->www_authenticate.c_str());
+                }
+                HttpChannel::send_reply_json(request.get(), failure->http_status, failure->body);
+                return 0;
             }
-            HttpChannel::send_reply_json(request.get(), failure->http_status, failure->body);
+        } else if (always_require_auth) {
+            evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
+            HttpChannel::send_reply_json(request.get(), HttpStatus::SERVICE_UNAVAILABLE,
+                                         "{\"status\":\"FAILED\",\"code\":\"1\",\"message\":\"auth verifier unavailable\"}");
             return 0;
         }
     }
@@ -486,30 +495,37 @@ HttpHandler* EvHttpServer::_find_handler(HttpRequest* req) {
     auto& path = req->raw_path();
 
     HttpHandler* handler = nullptr;
+    std::map<std::string, std::string> route_params;
+
+    auto retrieve = [&](PathTrie<HttpHandler*>* handlers) {
+        if (handlers->retrieve(path, &handler, &route_params)) {
+            req->set_route_params(std::move(route_params));
+        }
+    };
 
     pthread_rwlock_rdlock(&_rw_lock);
     switch (req->method()) {
     case GET:
-        _get_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_get_handlers);
         // Static file handler is a fallback handler
         if (handler == nullptr) {
             handler = _static_file_handler;
         }
         break;
     case PUT:
-        _put_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_put_handlers);
         break;
     case POST:
-        _post_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_post_handlers);
         break;
     case DELETE:
-        _delete_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_delete_handlers);
         break;
     case HEAD:
-        _head_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_head_handlers);
         break;
     case OPTIONS:
-        _options_handlers.retrieve(path, &handler, req->params());
+        retrieve(&_options_handlers);
         break;
     default:
         LOG(WARNING) << "unknown HTTP method, method=" << req->method();

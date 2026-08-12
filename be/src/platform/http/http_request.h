@@ -22,6 +22,7 @@
 #include <boost/algorithm/string.hpp>
 #include <map>
 #include <string>
+#include <string_view>
 
 #include "base/string/string_util.h"
 #include "platform/http/http_headers.h"
@@ -65,6 +66,11 @@ public:
     std::map<std::string, std::string>* params() { return &_params; }
 
     const std::map<std::string, std::string>& query_params() const { return _query_params; }
+    size_t query_param_count(std::string_view key) const;
+
+    const std::string& route_param(const std::string& key) const;
+    const std::map<std::string, std::string>& route_params() const { return _route_params; }
+    void set_route_params(std::map<std::string, std::string> route_params);
 
     std::string get_request_body();
 
@@ -95,6 +101,8 @@ private:
     StringCaseUnorderedMap<std::string> _headers;
     std::map<std::string, std::string> _params;
     std::map<std::string, std::string> _query_params;
+    std::map<std::string, size_t> _query_param_counts;
+    std::map<std::string, std::string> _route_params;
 
     struct evhttp_request* _ev_req = nullptr;
     HttpHandler* _handler = nullptr;

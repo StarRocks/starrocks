@@ -54,7 +54,8 @@ public:
     // server proceeds to dispatch to the handler; returning a populated AuthVerifyFailure
     // causes the server to short-circuit with that response. Service layer injects an
     // implementation that talks to FE.
-    using AuthVerifier = std::function<std::optional<AuthVerifyFailure>(HttpRequest*, HttpHandler::RequiredPrivilege)>;
+    using AuthVerifier =
+            std::function<std::optional<AuthVerifyFailure>(HttpRequest*, HttpHandler::RequiredPrivilege, bool always_require_auth)>;
 
     EvHttpServer(int port, int num_workers = 1);
     EvHttpServer(std::string host, int port, int num_workers = 1);

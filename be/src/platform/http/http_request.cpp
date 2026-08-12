@@ -68,6 +68,7 @@ int HttpRequest::init_from_evhttp() {
         return res;
     }
     for (auto param = params.tqh_first; param != nullptr; param = param->next.tqe_next) {
+        ++_query_param_counts[param->key];
         _query_params.emplace(param->key, param->value);
     }
     _params.insert(_query_params.begin(), _query_params.end());
@@ -107,6 +108,24 @@ const std::string& HttpRequest::param(const std::string& key) const {
         return s_empty;
     }
     return iter->second;
+}
+
+size_t HttpRequest::query_param_count(std::string_view key) const {
+    auto iter = _query_param_counts.find(std::string(key));
+    return iter == _query_param_counts.end() ? 0 : iter->second;
+}
+
+const std::string& HttpRequest::route_param(const std::string& key) const {
+    auto iter = _route_params.find(key);
+    if (iter == _route_params.end()) {
+        return s_empty;
+    }
+    return iter->second;
+}
+
+void HttpRequest::set_route_params(std::map<std::string, std::string> route_params) {
+    _route_params = std::move(route_params);
+    _params.insert(_route_params.begin(), _route_params.end());
 }
 
 void HttpRequest::add_output_header(const char* key, const char* value) {
