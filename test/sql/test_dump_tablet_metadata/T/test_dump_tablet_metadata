@@ -12,7 +12,7 @@ PROPERTIES("replication_num"="1", "file_bundling"="true",
            "light_weight_tablet_creation"="true");
 INSERT INTO standalone_meta VALUES (1);
 INSERT INTO bundled_meta VALUES (1);
-shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py "${mysql_cmd}" db_${uuid0} standalone_meta bundled_meta
+shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py db_${uuid0} standalone_meta bundled_meta
 CLEANUP {
     DROP DATABASE IF EXISTS ${db[0]} FORCE;
 } END CLEANUP

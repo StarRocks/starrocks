@@ -23,7 +23,7 @@ INSERT INTO standalone_meta VALUES (1);
 INSERT INTO bundled_meta VALUES (1);
 -- result:
 -- !result
-shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py "${mysql_cmd}" db_${uuid0} standalone_meta bundled_meta
+shell: python3 ${root_path}/sql/test_dump_tablet_metadata/T/verify_dump_tablet_metadata.py db_${uuid0} standalone_meta bundled_meta
 -- result:
 0
 standalone_exact=PASS

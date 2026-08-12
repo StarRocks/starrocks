@@ -2,22 +2,67 @@
 """Verify exact standalone and bundle tablet-metadata diagnostic reads."""
 
 import base64
+import configparser
 import csv
+import functools
 import io
 import json
-import shlex
+import os
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 
 
-def query_rows(mysql_cmd, sql):
+@functools.lru_cache(maxsize=1)
+def read_cluster_config():
+    config_path = os.environ.get("config_path")
+    if not config_path:
+        raise RuntimeError("SQL test config path is not set")
+
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        with open(config_path, encoding="utf-8") as config_file:
+            parser.read_file(config_file)
+    except (OSError, configparser.Error):
+        raise RuntimeError("unable to read SQL test config") from None
+
+    host = parser.get("cluster", "host", fallback="").strip()
+    port = parser.get("cluster", "port", fallback="").strip()
+    user = parser.get("cluster", "user", fallback="").strip()
+    password = parser.get("cluster", "password", fallback="")
+    try:
+        valid_port = 0 < int(port) <= 65535
+    except ValueError:
+        valid_port = False
+    if not host or not user or not valid_port:
+        raise RuntimeError("invalid SQL test cluster config")
+    return host, port, user, password
+
+
+def mysql_argv():
+    host, port, user, password = read_cluster_config()
+    argv = ["mysql", "--host={}".format(host), "--port={}".format(port), "--user={}".format(user)]
+    if password and any(password in argument for argument in argv):
+        raise RuntimeError("MySQL password must not be passed in argv")
+    if any(argument == "-p" or argument.startswith("--password") for argument in argv):
+        raise RuntimeError("MySQL password option must not be passed in argv")
+    return argv
+
+
+def query_rows(sql):
+    _, _, _, password = read_cluster_config()
+    mysql_env = os.environ.copy()
+    if password:
+        mysql_env["MYSQL_PWD"] = password
+    else:
+        mysql_env.pop("MYSQL_PWD", None)
     result = subprocess.run(
-        shlex.split(mysql_cmd) + ["--batch", "--raw", "-e", sql],
+        mysql_argv() + ["--batch", "--raw", "--execute", sql],
         check=True,
         capture_output=True,
         text=True,
+        env=mysql_env,
     )
     return list(csv.DictReader(io.StringIO(result.stdout), delimiter="\t"))
 
@@ -28,8 +73,8 @@ def first_value(rows, field, description):
     return rows[0][field]
 
 
-def find_compute_node(mysql_cmd):
-    for row in query_rows(mysql_cmd, "SHOW COMPUTE NODES"):
+def find_compute_node():
+    for row in query_rows("SHOW COMPUTE NODES"):
         alive = row.get("Alive", "").lower()
         if alive in ("true", "1"):
             host = row.get("IP") or row.get("Host")
@@ -39,14 +84,14 @@ def find_compute_node(mysql_cmd):
     raise RuntimeError("no alive compute node with HTTP endpoint")
 
 
-def table_info(mysql_cmd, database, table):
+def table_info(database, table):
     tablet = first_value(
-        query_rows(mysql_cmd, "SHOW TABLETS FROM {}.{} LIMIT 1".format(database, table)),
+        query_rows("SHOW TABLETS FROM {}.{} LIMIT 1".format(database, table)),
         "TabletId",
         "SHOW TABLETS",
     )
     version = first_value(
-        query_rows(mysql_cmd, "SHOW PARTITIONS FROM {}.{}".format(database, table)),
+        query_rows("SHOW PARTITIONS FROM {}.{}".format(database, table)),
         "VisibleVersion",
         "SHOW PARTITIONS",
     )
@@ -63,21 +108,28 @@ def has_encryption_meta(value):
     return False
 
 
-def request(url):
-    credential = base64.b64encode(b"root:").decode("ascii")
+def request(url, read_body):
+    _, _, user, password = read_cluster_config()
+    credential = base64.b64encode("{}:{}".format(user, password).encode("utf-8")).decode("ascii")
     http_request = urllib.request.Request(url, headers={"Authorization": "Basic " + credential})
     try:
         with urllib.request.urlopen(http_request, timeout=30) as response:
-            return response.status, response.headers, response.read()
+            body = response.read() if read_body else None
+            return response.status, response.headers, body
     except urllib.error.HTTPError as error:
-        return error.code, error.headers, error.read()
+        try:
+            body = error.read() if read_body else None
+            return error.code, error.headers, body
+        finally:
+            error.close()
 
 
 def verify_exact(base_url, tablet_id, version, is_bundle):
     status, headers, body = request(
         "{}/api/cloudnative/dump_tablet_metadata/{}?version={}&is_bundle={}".format(
             base_url, tablet_id, version, str(is_bundle).lower()
-        )
+        ),
+        True,
     )
     if status != 200:
         raise RuntimeError("exact metadata read failed")
@@ -98,18 +150,25 @@ def verify_exact(base_url, tablet_id, version, is_bundle):
 
 
 def require_status(url, expected):
-    status, _, _ = request(url)
+    status, _, _ = request(url, False)
     if status != expected:
         raise RuntimeError("unexpected diagnostic status")
     return status
 
 
 def main():
-    mysql_cmd, database, standalone_table, bundled_table = sys.argv[1:5]
-    host, port = find_compute_node(mysql_cmd)
+    if len(sys.argv) != 4:
+        print(
+            "usage: verify_dump_tablet_metadata.py DATABASE STANDALONE_TABLE BUNDLED_TABLE",
+            file=sys.stderr,
+        )
+        return 2
+
+    database, standalone_table, bundled_table = sys.argv[1:]
+    host, port = find_compute_node()
     base_url = "http://{}:{}".format(host, port)
-    standalone_id, standalone_version = table_info(mysql_cmd, database, standalone_table)
-    bundled_id, bundled_version = table_info(mysql_cmd, database, bundled_table)
+    standalone_id, standalone_version = table_info(database, standalone_table)
+    bundled_id, bundled_version = table_info(database, bundled_table)
 
     verify_exact(base_url, standalone_id, standalone_version, False)
     verify_exact(base_url, bundled_id, bundled_version, True)
@@ -135,7 +194,8 @@ def main():
     print("wrong_format_status={}".format(wrong_format))
     print("unknown_parameter_status={}".format(unknown_parameter))
     print("missing_version_status={}".format(missing_version))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
