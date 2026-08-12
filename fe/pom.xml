@@ -70,7 +70,7 @@ under the License.
         <hikaricp.version>7.0.2</hikaricp.version>
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
-        <grpc.version>1.63.0</grpc.version>
+        <grpc.version>1.76.0</grpc.version>
         <io.netty.version>4.1.136.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
@@ -1360,34 +1360,17 @@ under the License.
                 <version>${odps.version}</version>
             </dependency>
 
+            <!-- Import the gRPC BOM instead of pinning artifacts individually. Individual
+                 <dependency> entries only govern the artifacts they name, so io.grpc artifacts
+                 that arrive transitively are left unmanaged: arrow flight-core brings in
+                 io.grpc:grpc-netty at its own version, which then runs against a grpc-core
+                 pinned here. The BOM covers direct and transitive io.grpc artifacts alike. -->
             <dependency>
                 <groupId>io.grpc</groupId>
-                <artifactId>grpc-api</artifactId>
+                <artifactId>grpc-bom</artifactId>
                 <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-netty-shaded</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-protobuf</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-stub</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-core</artifactId>
-                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <dependency>
