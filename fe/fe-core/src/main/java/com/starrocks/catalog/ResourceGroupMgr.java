@@ -936,7 +936,7 @@ public class ResourceGroupMgr implements Writable {
         // guarantees all three indexes (byName, byId, byClassifier) are mutually consistent.
         // Writers publish them atomically by replacing the single ResourceGroupSnapshot field.
         ResourceGroupSnapshot snap = this.snapshot;
-        ResourceGroup sqrg        = this.shortQueryResourceGroup;
+        ResourceGroup sqrg        = snap.shortQueryResourceGroup;
 
         Map<String, ResourceGroup>         rgSnapshot  = snap.byName;
         Map<Long, ResourceGroup>           idSnapshot  = snap.byId;
