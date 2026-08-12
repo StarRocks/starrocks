@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "base/concurrency/concurrent_limiter.h"
 #include "gutil/macros.h"
 #include "platform/http/http_handler.h"
@@ -41,6 +43,10 @@ public:
 
     bool always_require_auth() const override { return true; }
     RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
+#ifdef BE_TEST
+    static void overwrite_handler_ctx_ids_for_test(void* handler_ctx, int64_t tablet_id, int64_t version);
+#endif
 
 private:
     TabletManager* _tablet_manager;

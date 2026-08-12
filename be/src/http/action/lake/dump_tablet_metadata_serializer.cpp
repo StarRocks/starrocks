@@ -28,19 +28,17 @@
 #include <vector>
 
 #include "gen_cpp/lake_types.pb.h"
+#include "http/action/lake/dump_tablet_metadata_serializer_internal.h"
 
 namespace starrocks::lake {
-namespace {
+namespace dump_tablet_metadata_internal {
 
-using RedactedFieldNames = std::set<std::string>;
-
-void redact_encryption_metadata(google::protobuf::Message* message, RedactedFieldNames* redacted_fields) {
+void redact_encryption_metadata(google::protobuf::Message* message, std::set<std::string>* redacted_fields) {
     const auto* reflection = message->GetReflection();
     std::vector<const google::protobuf::FieldDescriptor*> present_fields;
     reflection->ListFields(*message, &present_fields);
     for (const auto* field : present_fields) {
-        if (field->type() == google::protobuf::FieldDescriptor::TYPE_BYTES &&
-            field->name().find("encryption_meta") != std::string::npos) {
+        if (field->name().find("encryption_meta") != std::string::npos) {
             reflection->ClearField(message, field);
             redacted_fields->insert(field->full_name());
             continue;
@@ -58,6 +56,12 @@ void redact_encryption_metadata(google::protobuf::Message* message, RedactedFiel
         }
     }
 }
+
+} // namespace dump_tablet_metadata_internal
+
+namespace {
+
+using RedactedFieldNames = std::set<std::string>;
 
 class CappedJsonOutputStream final : public google::protobuf::io::ZeroCopyOutputStream {
 public:
@@ -124,7 +128,7 @@ StatusOr<DumpTabletMetadataJson> serialize_dump_tablet_metadata(const TabletMeta
                                                                 size_t max_response_bytes) {
     TabletMetadataPB redacted_metadata = metadata;
     RedactedFieldNames redacted_fields;
-    redact_encryption_metadata(&redacted_metadata, &redacted_fields);
+    dump_tablet_metadata_internal::redact_encryption_metadata(&redacted_metadata, &redacted_fields);
 
     CappedJsonOutputStream sink(max_response_bytes);
     if (!sink.Append("{\"metadata\":")) {

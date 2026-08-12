@@ -161,6 +161,7 @@ void send_pipeline_error(HttpRequest* req, const Status& status, PipelineStage s
 } // namespace
 
 int DumpTabletMetadataAction::on_header(HttpRequest* req) {
+    const auto start = std::chrono::steady_clock::now();
     const auto& query = req->query_params();
     int64_t tablet_id = 0;
     int64_t version = 0;
@@ -183,8 +184,10 @@ int DumpTabletMetadataAction::on_header(HttpRequest* req) {
                                                   : TabletMetadataStorageFormat::kStandalone;
     if (!context->admission.set_limiter(&_limiter)) {
         send_json(req, HttpStatus::SERVICE_UNAVAILABLE, kBusyBody);
+        const auto elapsed_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
         LOG(INFO) << "dump_tablet_metadata tablet_id=" << tablet_id << " version=" << version
-                  << " result=DIAGNOSTIC_BUSY busy=true";
+                  << " result=DIAGNOSTIC_BUSY elapsed_ms=" << elapsed_ms << " busy=true";
         return -1;
     }
 
@@ -199,6 +202,8 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
         send_json(req, HttpStatus::BAD_REQUEST, kInvalidArgumentBody);
         return;
     }
+    const int64_t tablet_id = context->tablet_id;
+    const int64_t version = context->version;
 
     TabletManager* tablet_manager = _tablet_manager;
     if (tablet_manager == nullptr) {
@@ -212,12 +217,21 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
     }
     const auto elapsed_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-    LOG(INFO) << "dump_tablet_metadata tablet_id=" << context->tablet_id << " version=" << context->version
-              << " result=" << result_code << " elapsed_ms=" << elapsed_ms << " busy=false";
+    LOG(INFO) << "dump_tablet_metadata tablet_id=" << tablet_id << " version=" << version << " result=" << result_code
+              << " elapsed_ms=" << elapsed_ms << " busy=false";
 }
 
 void DumpTabletMetadataAction::free_handler_ctx(void* handler_ctx) {
     delete static_cast<DumpTabletMetadataRequestContext*>(handler_ctx);
 }
+
+#ifdef BE_TEST
+void DumpTabletMetadataAction::overwrite_handler_ctx_ids_for_test(void* handler_ctx, int64_t tablet_id,
+                                                                  int64_t version) {
+    auto* context = static_cast<DumpTabletMetadataRequestContext*>(handler_ctx);
+    context->tablet_id = tablet_id;
+    context->version = version;
+}
+#endif
 
 } // namespace starrocks::lake
