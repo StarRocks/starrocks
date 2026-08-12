@@ -289,6 +289,30 @@ public class MaterializedViewAnalyzer {
         return col;
     }
 
+    /**
+     * Whether the incremental mv's {@code ORDER BY} becomes a sort key of its own instead of being merged
+     * into the primary key. Never for a range-distributed mv: there the sort key defines the tablet
+     * boundaries and the storage engine requires it to equal the primary key.
+     */
+    private static boolean isIvmSortKeyIndependent(CreateMaterializedViewStatement statement,
+                                                   ConnectContext context) {
+        if (statement.getRowIdStrategy() == null || CollectionUtils.isEmpty(statement.getOrderByElements())) {
+            return false;
+        }
+        return !usesRangeDistribution(statement, AnalyzerUtils.isEnableRangeDistribution(context));
+    }
+
+    /**
+     * Whether an incremental mv ends up range-distributed: RANGE has no SQL syntax, so it is either
+     * selected for an omitted clause or injected by internal DDL reconstruction.
+     */
+    private static boolean usesRangeDistribution(CreateMaterializedViewStatement statement,
+                                                 boolean enableRangeDistribution) {
+        DistributionDesc distributionDesc = statement.getDistributionDesc();
+        return distributionDesc instanceof RangeDistributionDesc
+                || (distributionDesc == null && enableRangeDistribution);
+    }
+
     /** Move/prepend {@code __ROW_ID__} to the head of the sort-keys list. */
     private static List<String> prependRowIdToKeys(List<String> existing) {
         List<String> result = Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID);
@@ -429,13 +453,15 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<ColWithComment> colWithComments = statement.getColWithComments();
             List<String> keyCols = statement.getSortKeys();
-            if (statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
+            boolean isSortKeyIndependent = isIvmSortKeyIndependent(statement, context);
+            statement.setSortKeyIndependent(isSortKeyIndependent);
+            if (!isSortKeyIndependent && statement.getRowIdStrategy() == RowIdStrategy.AUTO_INCREMENT) {
                 // AUTO_INCREMENT __ROW_ID__ is the PK; force it to be the leading sort key.
                 keyCols = prependRowIdToKeys(keyCols);
                 statement.setSortKeys(keyCols);
             }
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
-                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols);
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyCols, isSortKeyIndependent);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
@@ -597,7 +623,8 @@ public class MaterializedViewAnalyzer {
                                                                        RowIdStrategy rowIdStrategy,
                                                                        QueryStatement queryStatement,
                                                                        List<ColWithComment> colWithComments,
-                                                                       List<String> keyCols) {
+                                                                       List<String> keyCols,
+                                                                       boolean isSortKeyIndependent) {
             // note: PRIMARY_KEYS uses REPLACE aggregate type for now
             AggregateType aggregateType = keysType == KeysType.DUP_KEYS ?
                     AggregateType.NONE : AggregateType.REPLACE;
@@ -691,18 +718,21 @@ public class MaterializedViewAnalyzer {
                 }
             }
 
+            // Key columns must lead the schema, so an independent sort key is validated but keeps its query
+            // position; the index meta refers to those columns by position instead.
+            List<String> leadingColumns = isSortKeyIndependent
+                    ? Lists.newArrayList(IvmOpUtils.COLUMN_ROW_ID) : keyCols;
+            if (isSortKeyIndependent) {
+                for (String columnName : keyCols) {
+                    checkSortKeyColumn(columnMap, columnName);
+                }
+            }
+
             List<Pair<Column, Integer>> reorderedColumns = new ArrayList<>();
             Set<String> usedColumns = new LinkedHashSet<>();
-            for (String columnName : keyCols) {
-                Pair<Column, Integer> columnPair = columnMap.get(columnName);
-                if (columnPair == null || columnPair.first == null) {
-                    throw new SemanticException("Sort key not exists: " + columnName);
-                }
+            for (String columnName : leadingColumns) {
+                Pair<Column, Integer> columnPair = checkSortKeyColumn(columnMap, columnName);
                 Column keyColumn = columnPair.first;
-                Type keyColType = keyColumn.getType();
-                if (!keyColType.canBeMVKey()) {
-                    throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
-                }
                 keyColumn.setIsKey(true);
                 keyColumn.setAggregationType(null, true);
 
@@ -717,6 +747,19 @@ public class MaterializedViewAnalyzer {
                 }
             }
             return reorderedColumns;
+        }
+
+        private static Pair<Column, Integer> checkSortKeyColumn(Map<String, Pair<Column, Integer>> columnMap,
+                                                               String columnName) {
+            Pair<Column, Integer> columnPair = columnMap.get(columnName);
+            if (columnPair == null || columnPair.first == null) {
+                throw new SemanticException("Sort key not exists: " + columnName);
+            }
+            Type keyColType = columnPair.first.getType();
+            if (!keyColType.canBeMVKey()) {
+                throw new SemanticException("Type %s cannot be sort key: %s", keyColType, columnName);
+            }
+            return columnPair;
         }
 
         private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
@@ -1412,10 +1455,8 @@ public class MaterializedViewAnalyzer {
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
             }
-            // RANGE has no SQL syntax. It is either selected for an omitted clause or injected by
-            // internal DDL reconstruction, and must not be normalized back to HASH.
-            if (distributionDesc instanceof RangeDistributionDesc
-                    || (distributionDesc == null && enableRangeDistribution)) {
+            // RANGE must not be normalized back to HASH.
+            if (usesRangeDistribution(statement, enableRangeDistribution)) {
                 RangeDistributionDesc result = new RangeDistributionDesc();
                 statement.setDistributionDesc(result);
                 return result;

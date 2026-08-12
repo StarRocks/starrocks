@@ -479,6 +479,14 @@ Materialized views whose `refresh_mode` is `INCREMENTAL` follow these distributi
 - Range distribution has no user-facing `DISTRIBUTED BY RANGE` syntax and cannot be specified explicitly.
 - If you explicitly specify hash or random distribution, StarRocks normalizes it to hash distribution over all target key columns. An explicitly specified bucket count is preserved.
 
+#### Sort Key
+
+A materialized view whose `refresh_mode` is `INCREMENTAL` is a Primary Key table keyed by an internal row-id column, so `ORDER BY` defines a sort key of its own instead of becoming part of the primary key.
+
+- On a hash- or random-distributed materialized view, the sort key is the `ORDER BY` columns.
+- On a range-distributed materialized view, the sort key defines the tablet boundaries and must equal the primary key, so the `ORDER BY` columns are part of the primary key instead.
+- If you omit `ORDER BY`, the materialized view is sorted by its primary key.
+
 #### Supported Incremental Operators
 
 Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.

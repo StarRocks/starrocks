@@ -3242,6 +3242,32 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * The sort key column positions for the index meta, or null to let the storage sort by the key columns.
+     * Only an mv marked by {@code MaterializedViewAnalyzer#isIvmSortKeyIndependent} has a sort key of its
+     * own; passing one for any other mv would change how the storage derives range boundaries.
+     */
+    private static List<Integer> independentSortKeyIdxes(CreateMaterializedViewStatement stmt,
+                                                         List<Column> baseSchema) {
+        if (!stmt.isSortKeyIndependent()) {
+            return null;
+        }
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        for (String sortKey : stmt.getSortKeys()) {
+            int idx = -1;
+            for (int i = 0; i < baseSchema.size(); i++) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(sortKey)) {
+                    idx = i;
+                    break;
+                }
+            }
+            // The analyzer already resolved every sort key against the schema it built.
+            Preconditions.checkState(idx >= 0, "sort key column %s not found in mv schema", sortKey);
+            sortKeyIdxes.add(idx);
+        }
+        return sortKeyIdxes;
+    }
+
     // TODO(murphy) refactor it into MVManager
     @Override
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
@@ -3425,7 +3451,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
         materializedView.setIndexMeta(baseIndexMetaId, mvName, baseSchema, schemaVersion, schemaHash,
-                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
+                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType(), null,
+                independentSortKeyIdxes(stmt, baseSchema));
 
         // Assign unique ids for columns after index meta is set up, so that getBaseSchema() returns
         // the actual columns. The initUniqueId() call in the MV constructor is a no-op because it

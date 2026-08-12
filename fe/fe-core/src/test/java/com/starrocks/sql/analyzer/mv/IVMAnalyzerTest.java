@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1303,6 +1304,87 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         Analyzer.analyze(r.get().queryStatement(), connectContext);
         String sql = AstToSQLBuilder.buildSimple(r.get().queryStatement());
         assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID), "rewritten query must project __ROW_ID__, got: " + sql);
+    }
+
+    /**
+     * An incremental mv is keyed by {@code __ROW_ID__} alone, so its {@code ORDER BY} becomes a sort key of
+     * its own instead of widening the primary key.
+     */
+    @Test
+    public void testIncrementalSortKeyIsIndependentOfPrimaryKey() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
+        try {
+            connectContext.getSessionVariable().setEnableRangeDistribution(false);
+
+            // Aggregate (QUERY_COMPUTED) and non-aggregate (AUTO_INCREMENT) mvs both keep __ROW_ID__ as the
+            // only key column, and both carry ORDER BY (id) as a sort key.
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_agg",
+                    "DISTRIBUTED BY HASH(id) BUCKETS 3 "), () -> assertIndependentSortKey("mv_sort_key_agg", "id"));
+
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_nonagg "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        assertIndependentSortKey("mv_sort_key_nonagg", "id");
+                        assertActiveRoundTripKeepsSchema("mv_sort_key_nonagg");
+                    });
+
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_absent "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_absent");
+                        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv));
+                        assertNull(sortKeyIdxes(mv), "an mv sorted by its key columns needs no sort key");
+                    });
+
+            // A non-incremental mv is a duplicate-key table: its sort key IS its key columns.
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_sort_key_pct "
+                    + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL ORDER BY (id) "
+                    + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`",
+                    () -> {
+                        MaterializedView mv = getMv("test", "mv_sort_key_pct");
+                        assertEquals(List.of("id"), keyColumnNames(mv));
+                        assertNull(sortKeyIdxes(mv));
+                    });
+
+            // Range distribution needs the sort key to equal the primary key, so ORDER BY keeps being
+            // merged into the key columns there.
+            connectContext.getSessionVariable().setEnableRangeDistribution(true);
+            starRocksAssert.withMaterializedView(incrementalMvDdl("mv_sort_key_range", ""), () -> {
+                MaterializedView mv = getMv("test", "mv_sort_key_range");
+                assertTrue(mv.getDefaultDistributionInfo() instanceof RangeDistributionInfo);
+                assertTrue(keyColumnNames(mv).contains("id"),
+                        "a range-distributed mv keeps ORDER BY in its key columns, got: " + keyColumnNames(mv));
+                assertNull(sortKeyIdxes(mv));
+            });
+        } finally {
+            connectContext.getSessionVariable().setEnableRangeDistribution(previous);
+        }
+    }
+
+    private void assertIndependentSortKey(String mvName, String sortKeyColumn) {
+        MaterializedView mv = getMv("test", mvName);
+        assertEquals(List.of(IvmOpUtils.COLUMN_ROW_ID), keyColumnNames(mv),
+                "__ROW_ID__ must be the only key column");
+        assertEquals(0, mv.getBaseSchema().indexOf(mv.getColumn(IvmOpUtils.COLUMN_ROW_ID)),
+                "the key column must lead the schema");
+
+        List<Integer> sortKeyIdxes = sortKeyIdxes(mv);
+        assertNotNull(sortKeyIdxes, "ORDER BY must be stored as a sort key of its own");
+        assertEquals(List.of(sortKeyColumn), sortKeyIdxes.stream()
+                .map(idx -> mv.getBaseSchema().get(idx).getName()).collect(Collectors.toList()));
+    }
+
+    private static List<String> keyColumnNames(MaterializedView mv) {
+        return mv.getBaseSchema().stream().filter(Column::isKey).map(Column::getName)
+                .collect(Collectors.toList());
+    }
+
+    private static List<Integer> sortKeyIdxes(MaterializedView mv) {
+        return mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId()).getSortKeyIdxes();
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -66,6 +66,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private final List<OrderByElement> orderByElements;
     // It will be set based on `orderByElements` in analyze
     private List<String> sortKeys;
+    // Set by the analyzer: this mv's sort key is not its key columns, so the index meta must carry the
+    // sort key column positions explicitly.
+    private boolean isSortKeyIndependent;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
@@ -233,6 +236,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setSortKeys(List<String> sortKeys) {
         this.sortKeys = sortKeys;
+    }
+
+    public boolean isSortKeyIndependent() {
+        return isSortKeyIndependent;
+    }
+
+    public void setSortKeyIndependent(boolean isSortKeyIndependent) {
+        this.isSortKeyIndependent = isSortKeyIndependent;
     }
 
     public List<String> getSortKeys() {
