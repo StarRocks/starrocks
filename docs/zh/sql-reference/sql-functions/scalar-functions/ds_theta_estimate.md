@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "返回由序列化的 Apache DataSketches Theta 草图汇总的近似不同值计数。"
+---
+
 # ds_theta_estimate
 
 标量函数。返回由序列化 Apache DataSketches Theta 草图（`VARBINARY`，紧凑格式）汇总的近似不同值计数。逐行输入、逐行输出。

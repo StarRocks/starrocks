@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "2 つの Apache DataSketches Theta スケッチの差集合を計算し、distinct count が |A\\B| と推定されるシリアライズされたコンパクトスケッチを返します。"
+---
+
 # ds_theta_a_not_b
 
 2 つのシリアライズされた Apache DataSketches Theta スケッチに対するスカラーの差集合演算です。distinct count が `|A \ B|`（A に含まれるが B に含まれない要素）に推定されるシリアライズされたコンパクトスケッチを返します。いずれかの入力が `NULL` の場合は `NULL` を返します。
