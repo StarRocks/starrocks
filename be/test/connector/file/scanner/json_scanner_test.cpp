@@ -2102,10 +2102,10 @@ TEST_F(JsonScannerTest, test_source_metadata_fill) {
 }
 
 // Helper: build a schema-inference scanner (schema_only=true) from a local file.
-static std::unique_ptr<JsonScanner> make_schema_scanner(RuntimeState* state, ObjectPool* pool,
-                                                        RuntimeProfile* profile, ScannerCounter* counter,
-                                                        const std::string& path, int64_t sample_rows = 100,
-                                                        bool sample_types = true, const std::string& json_root = "",
+static std::unique_ptr<JsonScanner> make_schema_scanner(RuntimeState* state, ObjectPool* pool, RuntimeProfile* profile,
+                                                        ScannerCounter* counter, const std::string& path,
+                                                        int64_t sample_rows = 100, bool sample_types = true,
+                                                        const std::string& json_root = "",
                                                         bool strip_outer_array = false) {
     TBrokerScanRangeParams* params = pool->add(new TBrokerScanRangeParams());
     params->strict_mode = false;

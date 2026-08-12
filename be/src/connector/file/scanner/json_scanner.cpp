@@ -386,8 +386,8 @@ Status JsonScanner::get_schema(std::vector<SlotDescriptor>* schema) {
             }
         } else {
             // iterate returns simdjson_result<document>; implicit conversion throws on error.
-            simdjson::ondemand::document doc = simdjson_parser.iterate(
-                    buf.get(), static_cast<size_t>(bytes_read), static_cast<size_t>(capacity));
+            simdjson::ondemand::document doc =
+                    simdjson_parser.iterate(buf.get(), static_cast<size_t>(bytes_read), static_cast<size_t>(capacity));
             simdjson::ondemand::array arr = doc.get_array();
             int64_t rows_sampled = 0;
             for (simdjson::ondemand::value elem : arr) {
