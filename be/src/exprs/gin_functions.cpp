@@ -30,8 +30,12 @@ Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext:
         return Status::OK();
     }
 
+    // Defence in depth: the FE analyzer already requires a string literal here. get_const_value()
+    // casts the constant's data column straight to a BinaryColumn, so a non-constant or NULL
+    // argument would be a wild read rather than an error.
+    RETURN_IF(!context->is_notnull_constant_column(0),
+              Status::InvalidArgument("Tokenize function requires a non-null constant string parameter"));
     auto column = context->get_constant_column(0);
-    RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
     auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
 
     lucene::analysis::Analyzer* analyzer;
