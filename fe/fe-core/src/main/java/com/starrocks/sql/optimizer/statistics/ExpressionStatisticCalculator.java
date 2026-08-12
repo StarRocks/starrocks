@@ -1097,7 +1097,8 @@ public class ExpressionStatisticCalculator {
                     .setNullsFraction(childStat.getNullsFraction())
                     .setAverageRowSize(callOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
-                    .setHistogram(transformHistogramForConvertTz(callOperator, childStat).orElse(null))
+                    .setHistogram(transformHistogramForConvertTz(callOperator, childStat, minValue, maxValue)
+                            .orElse(null))
                     .build();
         }
 
@@ -1517,7 +1518,8 @@ public class ExpressionStatisticCalculator {
         }
 
         private Optional<Histogram> transformHistogramForConvertTz(CallOperator callOperator,
-                                                                  ColumnStatistic childStats) {
+                                                                  ColumnStatistic childStats,
+                                                                  double minValue, double maxValue) {
             Histogram hist = childStats == null ? null : childStats.getHistogram();
             if (hist == null || hist.getMCV().isEmpty()) {
                 return Optional.empty();
@@ -1552,8 +1554,26 @@ public class ExpressionStatisticCalculator {
                 newMcv.merge(keyString.get().getVarchar(), entry.getValue(), Long::sum);
             }
 
-            // MCV only: convert_tz is not a uniform bucket shift under DST.
-            return Optional.of(new Histogram(Collections.emptyList(), newMcv));
+            // Exact per-key MCV transform; keep one covering bucket for the non-MCV mass
+            // (same idea as HistogramStatisticsCollectJob.buildCollectSingleBucket in stats collection).
+            return Optional.of(buildSingleBucketHistogram(minValue, maxValue, rowCount, newMcv));
+        }
+
+        /**
+         * Build an MCV histogram with a single covering bucket for the remaining non-MCV rows.
+         * Mirrors the stats-collection fallback that stores one bucket over [min, max] with
+         * count = totalRows - sum(MCV) when a full multi-bucket histogram is unavailable.
+         */
+        private Histogram buildSingleBucketHistogram(double minValue, double maxValue,
+                                                     double totalRows, Map<String, Long> mcv) {
+            if (Double.isInfinite(minValue) || Double.isInfinite(maxValue)
+                    || Double.isNaN(minValue) || Double.isNaN(maxValue)) {
+                return new Histogram(Collections.emptyList(), mcv);
+            }
+            long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
+            long nonMcvRows = Math.max(0L, Math.round(totalRows) - mcvRows);
+            List<Bucket> buckets = List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L));
+            return new Histogram(buckets, mcv);
         }
 
         /**

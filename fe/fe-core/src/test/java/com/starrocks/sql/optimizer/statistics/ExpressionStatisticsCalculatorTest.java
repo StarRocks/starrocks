@@ -2513,7 +2513,12 @@ public class ExpressionStatisticsCalculatorTest {
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
         Assertions.assertNotNull(actual.getHistogram());
-        Assertions.assertTrue(actual.getHistogram().getBuckets().isEmpty());
+        Assertions.assertEquals(1, actual.getHistogram().getBuckets().size());
+        final Bucket bucket = actual.getHistogram().getBuckets().get(0);
+        Assertions.assertEquals(actual.getMinValue(), bucket.getLower(), 0.001);
+        Assertions.assertEquals(actual.getMaxValue(), bucket.getUpper(), 0.001);
+        Assertions.assertEquals(700L, bucket.getCount()); // 1000 - (100 + 200)
+        Assertions.assertEquals(0L, bucket.getUpperRepeats());
         final Map<String, Long> mcv = actual.getHistogram().getMCV();
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));
