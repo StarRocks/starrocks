@@ -14,7 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include "common/runtime_profile.h"
 #include "exec/aggregate/agg_hash_variant.h"
+#include "exec/aggregate/agg_profile.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -43,6 +46,121 @@ TEST(HashVariantResolverTest, unary_assert) {
 
     EXPECT_EQ(TYPE_RESULT(AggrPhase1, TYPE_FLOAT, true), AggHashMapVariant::Type::phase1_slice);
     EXPECT_EQ(TYPE_RESULT(AggrPhase2, TYPE_FLOAT, true), AggHashMapVariant::Type::phase2_slice);
+}
+
+// ----------------------------------------------------------------------------
+// Reserve / supports_reserve / reserve_bytes_estimate (FE-NDV reserve support)
+// ----------------------------------------------------------------------------
+
+// reserve(n) on a flat numeric map grows capacity to cover n keys (>= n at 7/8 load).
+TEST(AggHashMapReserveTest, reserve_grows_capacity) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&dummy, AggHashMapVariant::Type::phase2_int64, &stat);
+    const size_t before = variant.capacity();
+    const size_t n = 1u << 20; // 1M
+    variant.reserve(n);
+    EXPECT_GE(variant.capacity(), n);
+    EXPECT_GT(variant.capacity(), before);
+}
+
+// reserve on a fixed-size map (uint8/int8/int16 -> SmallFixedSizeHashMap) is a no-op:
+// these never rehash, so the capacity must not move.
+TEST(AggHashMapReserveTest, fixed_map_reserve_is_noop) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&dummy, AggHashMapVariant::Type::phase2_int8, &stat);
+    const size_t before = variant.capacity();
+    variant.reserve(1u << 20);
+    EXPECT_EQ(variant.capacity(), before);
+}
+
+// supports_reserve mirrors reserve(): every phmap-backed map is reservable; only the
+// SmallFixedSizeHashMap variants (uint8/int8/int16, hard-coded full keyspace) are not.
+// In particular the compressed-key (cx) and fixed-size-slice (fx) variants the optimizer
+// picks for single numeric / multi-column keys once min-max stats are known are reservable
+// -- exactly the case that engages the FE NDV estimate.
+TEST(AggHashMapReserveTest, supports_reserve_covers_all_non_fixed) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+    auto supports = [&](AggHashMapVariant::Type type) {
+        AggHashMapVariant variant;
+        variant.init(&dummy, type, &stat);
+        return variant.supports_reserve();
+    };
+
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_int32));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_int64));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_null_int64));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_decimal128));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_slice));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_string));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_null_string));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_slice_two_level));
+    // compressed-key and fixed-size-slice variants (stats-driven) are reservable too.
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_slice_cx4));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase2_slice_fx8));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase1_slice_cx8));
+    EXPECT_TRUE(supports(AggHashMapVariant::Type::phase1_slice_fx16));
+
+    // Only the small fixed-size-array maps cannot reserve.
+    EXPECT_FALSE(supports(AggHashMapVariant::Type::phase2_uint8));
+    EXPECT_FALSE(supports(AggHashMapVariant::Type::phase2_int8));
+    EXPECT_FALSE(supports(AggHashMapVariant::Type::phase2_int16));
+}
+
+// reserve() actually grows the bucket array for the compressed-key / fixed-size-slice
+// maps -- the variants the optimizer picks for a single numeric key once min-max stats
+// are known, i.e. exactly the case that carries the FE NDV estimate.
+TEST(AggHashMapReserveTest, reserve_grows_compressed_and_fixed_slice) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+    const size_t n = 1u << 20; // 1M
+    for (auto type : {AggHashMapVariant::Type::phase2_slice_cx4, AggHashMapVariant::Type::phase2_slice_fx8,
+                      AggHashMapVariant::Type::phase1_slice_cx8, AggHashMapVariant::Type::phase1_slice_fx16}) {
+        AggHashMapVariant variant;
+        variant.init(&dummy, type, &stat);
+        const size_t before = variant.capacity();
+        variant.reserve(n);
+        EXPECT_GE(variant.capacity(), n);
+        EXPECT_GT(variant.capacity(), before);
+    }
+}
+
+// parallel (two-level) reserve(n) is a TOTAL target across submaps, not per-submap.
+TEST(AggHashMapReserveTest, two_level_reserve_is_total) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&dummy, AggHashMapVariant::Type::phase2_slice_two_level, &stat);
+    const size_t n = 1u << 20;
+    variant.reserve(n);
+    EXPECT_GE(variant.capacity(), n);
+}
+
+// reserve_bytes_estimate is monotonic in count for reservable maps and 0 for fixed.
+TEST(AggHashMapReserveTest, reserve_bytes_estimate) {
+    RuntimeState dummy;
+    RuntimeProfile profile("dummy");
+    AggStatistics stat(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&dummy, AggHashMapVariant::Type::phase2_int64, &stat);
+    EXPECT_GT(variant.reserve_bytes_estimate(1000), variant.reserve_bytes_estimate(100));
+
+    AggHashMapVariant fixed;
+    fixed.init(&dummy, AggHashMapVariant::Type::phase2_int8, &stat);
+    EXPECT_EQ(fixed.reserve_bytes_estimate(1000), 0u);
 }
 
 } // namespace starrocks

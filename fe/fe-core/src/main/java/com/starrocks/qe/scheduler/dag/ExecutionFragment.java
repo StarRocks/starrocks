@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanFragment;
@@ -162,6 +163,22 @@ public class ExecutionFragment {
             rf.setBucketSeqToDriverSeq(bucketSeqAssignment.bucketSeqToDriverSeq);
             rf.setBucketSeqToPartition(bucketSeqAssignment.bucketSeqToPartition);
             bucketSeqAssignment.bucketProperties.ifPresent(rf::setBucketProperties);
+        }
+    }
+
+    // Shard the group-by NDV reserve estimate by this fragment's instance count, known
+    // only here once instances are assigned. Applies only when the fragment input is
+    // hash-shuffled on the grouping key (AggregationNode gates on the partition type), so
+    // each instance reserves its own key shard instead of the full cluster-wide NDV.
+    public void scaleAggReserveEstimateByInstanceCount() {
+        int numInstances = instances.size();
+        if (numInstances <= 1) {
+            return;
+        }
+        for (PlanNode node : planFragment.collectNodes()) {
+            if (node instanceof AggregationNode) {
+                ((AggregationNode) node).scaleReserveEstimateByInstances(planFragment.getDataPartition(), numInstances);
+            }
         }
     }
 
