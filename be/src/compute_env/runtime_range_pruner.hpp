@@ -56,6 +56,12 @@ struct RuntimeColumnPredicateBuilder {
             if (!probe_expr->is_slotref()) {
                 if (!probe_expr->is_monotonic()) return preds;
 
+                // Skip index filtering if the column referenced by the expr is dict encoded.
+                if (global_dictmaps != nullptr &&
+                    global_dictmaps->find(parser->column_id(*slot)) != global_dictmaps->end()) {
+                    return preds;
+                }
+
                 const auto* filter = down_cast<const MinMaxRuntimeFilter<mapping_type>*>(rf->get_min_max_filter());
                 if (filter == nullptr || filter->is_empty_range() || rf->has_null()) return preds;
 
@@ -338,9 +344,13 @@ inline auto RuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMa
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     auto* desc = _unarrived_runtime_filters[idx];
+    // Slot-ref probes dispatch on the slot type: a dict encoded column's probe expr is typed
+    // as dict code, while dict decoding lives in the string-type branch.
+    const LogicalType dispatch_type =
+            desc->probe_expr_ctx()->root()->is_slotref() ? slot_desc->type().type : desc->probe_expr_type();
     return type_dispatch_predicate<StatusOr<PredicatesRawPtrs>>(
-            desc->probe_expr_type(), false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser, desc,
-            slot_desc, _driver_sequence, pool);
+            dispatch_type, false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser, desc, slot_desc,
+            _driver_sequence, pool);
 }
 
 inline void RuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {

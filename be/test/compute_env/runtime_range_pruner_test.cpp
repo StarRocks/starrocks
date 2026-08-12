@@ -168,6 +168,102 @@ TEST_F(RuntimeRangePrunerTest, monotonic_expr_builds_two_column_expr_predicates)
     runtime_filter_desc->close(&_runtime_state);
 }
 
+// The predicates built for a dict encoded column must carry decoded strings, not dict codes.
+TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
+    SlotDescriptor slot(0, "c0", TypeDescriptor::create_varchar_type(10));
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
+
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc,
+                          _gen_runtime_filter_desc(ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(0, true)));
+
+    MinMaxRuntimeFilter<TYPE_INT> rf;
+    rf.insert(100);
+    rf.insert(200);
+    runtime_filter_desc->set_runtime_filter(&rf);
+
+    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    ColumnIdToGlobalDictMap dict_maps;
+    dict_maps[0] = &dict;
+
+    UnarrivedRuntimeFilterList unarrived_runtime_filters;
+    unarrived_runtime_filters.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrived_runtime_filters);
+
+    std::vector<std::string> predicate_strings;
+    ASSERT_OK(pruner.update_range_if_arrived(
+            &dict_maps,
+            [&](auto, const PredicateList& predicates) {
+                for (const auto* predicate : predicates) {
+                    predicate_strings.emplace_back(predicate->debug_string());
+                }
+                return Status::OK();
+            },
+            false, 200000));
+    ASSERT_EQ(2, predicate_strings.size());
+    EXPECT_NE(predicate_strings[0].find("apple"), std::string::npos) << predicate_strings[0];
+    EXPECT_NE(predicate_strings[1].find("melon"), std::string::npos) << predicate_strings[1];
+}
+
+// No index filtering for a monotonic expr over a dict encoded column.
+TEST_F(RuntimeRangePrunerTest, monotonic_expr_on_dict_column_falls_back) {
+    SlotDescriptor slot(0, "c0", TypeDescriptor::create_varchar_type(10));
+    std::vector<SlotDescriptor*> slot_descs{&slot};
+    ConnectorPredicateParser predicate_parser(&slot_descs);
+
+    TExprNode add_node;
+    add_node.node_type = TExprNodeType::ARITHMETIC_EXPR;
+    add_node.num_children = 2;
+    add_node.type = TYPE_INT_DESC.to_thrift();
+    add_node.__set_opcode(TExprOpcode::ADD);
+    add_node.__set_child_type(TPrimitiveType::INT);
+    add_node.__set_is_nullable(true);
+    add_node.__set_is_monotonic(true);
+
+    TExpr slot_expr = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(0, true);
+    TExprNode literal_node;
+    literal_node.node_type = TExprNodeType::INT_LITERAL;
+    literal_node.num_children = 0;
+    literal_node.type = TYPE_INT_DESC.to_thrift();
+    literal_node.__set_is_nullable(false);
+    TIntLiteral literal;
+    literal.value = 1;
+    literal_node.__set_int_literal(literal);
+
+    TExpr probe_expr;
+    probe_expr.nodes.emplace_back(add_node);
+    probe_expr.nodes.emplace_back(slot_expr.nodes[0]);
+    probe_expr.nodes.emplace_back(literal_node);
+    ASSIGN_OR_ASSERT_FAIL(auto runtime_filter_desc, _gen_runtime_filter_desc(probe_expr));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->prepare(&_runtime_state));
+    ASSERT_OK(runtime_filter_desc->probe_expr_ctx()->open(&_runtime_state));
+
+    MinMaxRuntimeFilter<TYPE_INT> rf;
+    rf.insert(100);
+    rf.insert(200);
+    runtime_filter_desc->set_runtime_filter(&rf);
+
+    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    ColumnIdToGlobalDictMap dict_maps;
+    dict_maps[0] = &dict;
+
+    UnarrivedRuntimeFilterList unarrived_runtime_filters;
+    unarrived_runtime_filters.add_unarrived_rf(runtime_filter_desc.get(), &slot, 1);
+    RuntimeScanRangePruner pruner(&predicate_parser, unarrived_runtime_filters);
+
+    size_t updater_called = 0;
+    ASSERT_OK(pruner.update_range_if_arrived(
+            &dict_maps,
+            [&](auto, const PredicateList& predicates) {
+                updater_called += predicates.size();
+                return Status::OK();
+            },
+            false, 200000));
+    ASSERT_EQ(0, updater_called);
+
+    runtime_filter_desc->close(&_runtime_state);
+}
+
 TEST_F(RuntimeRangePrunerTest, update_1) {
     SlotDescriptor slot(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot};
