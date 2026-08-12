@@ -529,19 +529,39 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAdls2WorkloadIdentityStaysAcceptedEvenThoughTheTokenFileIsNotStored()
-            throws DdlException {
-        // The token file has no field in ADLS2CredentialInfo, so it is dropped and the volume reads
-        // back as a managed identity. CREATE_STORAGE_VOLUME.md documents this authentication, so it
-        // is warned about rather than refused - refusing it would withdraw a documented capability.
+    public void testAdls2RejectsWorkloadIdentityBecauseTheTokenFileIsNotStored() {
+        // ADLS2CredentialInfo has no token file field, so the token lives only in the params of the
+        // FE that created the volume: a read-back turns it into a managed identity, and the file
+        // store is also the only credential a lake table's storage location carries. The English and
+        // Chinese pages were corrected together with this, so the form is refused outright.
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
         storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
         storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
         storageParams.put(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/secrets/azure/token");
 
-        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AZURE_ADLS2_OAUTH2_TOKEN_FILE), e.getMessage());
+    }
+
+    @Test
+    public void testCopyingAnAzblobSasVolumeKeepsItUsable() throws DdlException {
+        // The container comes from the locations, not from the params, so a copy that rebuilt the
+        // configuration from the raw params alone fell through to HDFS and made a usable SAS volume
+        // look broken - which then failed a comment-only ALTER on the type guard in toFileStoreInfo.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
                 storageParams, true, "");
+        Assertions.assertTrue(sv.isCredentialUsable());
+
+        StorageVolume copied = new StorageVolume(sv);
+        Assertions.assertTrue(copied.isCredentialUsable());
+        // The copy must still serialise to its own type, which is what a write-back needs.
+        Assertions.assertEquals(FileStoreType.AZBLOB, copied.toFileStoreInfo().getFsType());
     }
 
     @Test

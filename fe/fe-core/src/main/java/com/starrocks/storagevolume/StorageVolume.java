@@ -17,7 +17,6 @@ package com.starrocks.storagevolume;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
@@ -50,7 +49,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
@@ -198,8 +196,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.enabled = sv.enabled;
         this.vTabletId = sv.vTabletId;
         this.vTabletGroupId = sv.vTabletGroupId;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
-        this.credentialUsable = sv.credentialUsable;
+        // Same derivation as the main constructor: an AZBLOB credential takes its container from the
+        // locations rather than from the properties, so rebuilding from the raw params alone would
+        // fall through the cloud providers to the HDFS one and make a perfectly usable volume look
+        // broken. Usability follows the rebuilt configuration for the same reason - a copied flag
+        // would disagree with the configuration this copy actually holds.
+        Map<String, String> configurationParams = new HashMap<>(sv.params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
+        this.credentialUsable = isValidCloudConfiguration(this.svt, this.cloudConfiguration);
         this.params = new HashMap<>(sv.params);
         validateStorageVolumeConstraints();
     }
@@ -369,11 +374,16 @@ public class StorageVolume implements Writable, GsonPostProcessable {
      * both ways on purpose: the file store records no OAuth2 flow, so the read-back path infers one,
      * and a property it infers is as much of a mode change as a property it drops.
      *
-     * <p>Two kinds of loss are knowingly left alone because refusing them would take away something
-     * users have today rather than protect them: the ADLS2 workload identity, which is documented
-     * and only warned about below, and the AWS web identity profile, which is stored as an assume
-     * role or a default credential. Both deserve their own change - a token file field in the file
-     * store for the former - rather than being turned into errors by this fix.
+     * <p>The ADLS2 workload identity is refused by this comparison. Its token file has no field in
+     * {@link ADLS2CredentialInfo}, so it lives only in the params of the FE that created the volume:
+     * a read-back turns it into a managed identity, and the file store is also the only credential a
+     * lake table's storage location carries, so nothing downstream ever sees the token. The English
+     * and Chinese CREATE STORAGE VOLUME pages used to offer it and were corrected together with this
+     * change. Supporting it needs a token file field in the file store, not a lenient check here.
+     *
+     * <p>The AWS web identity profile loses just as much - it is stored as an assume role or a
+     * default credential - but volumes relying on it exist in the wild, so turning that into an
+     * error belongs in its own change.
      *
      * <p>The restored parameters go through the same {@link #preprocessAuthenticationIfNeeded}
      * derivation as the incoming ones, otherwise fields derived from the locations rather than the
@@ -406,26 +416,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
             return;
         }
-        Set<String> tolerated = ImmutableSet.of();
-        if (isCredentialPropertySet(params, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE)) {
-            // A workload identity is a documented way to reach ADLS2 - see the "If you use Workload
-            // Identity" recipe in CREATE_STORAGE_VOLUME.md - yet ADLS2CredentialInfo has no field
-            // for the token file: it carries the shared key, the SAS token, the tenant, the client,
-            // the client secret, the certificate path and the authority host. The token file is
-            // therefore dropped and the volume reads back as a managed identity. Withdrawing a
-            // documented capability is not this fix's call, so warn instead of rejecting and leave
-            // the repair to the only place it can happen, a token file field in the file store.
-            // Only the two properties that follow from this are tolerated, so anything else the
-            // file store would drop is still refused.
-            LOG.warn("Storage volume '{}' authenticates to ADLS2 with a workload identity. The token " +
-                    "file is not part of the stored credential, so once the volume is read back it " +
-                    "authenticates as a managed identity instead.", name);
-            tolerated = ImmutableSet.of(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE,
-                    CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY);
-        }
-        Set<String> toleratedProperties = tolerated;
         List<String> changedProperties = AZURE_CREDENTIAL_PROPERTIES.stream()
-                .filter(key -> !toleratedProperties.contains(key))
                 .filter(key -> isCredentialPropertySet(params, key) != isCredentialPropertySet(restored, key))
                 .sorted()
                 .collect(Collectors.toList());
