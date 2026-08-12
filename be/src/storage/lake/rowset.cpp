@@ -411,10 +411,9 @@ Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<
     if (_tablet_schema != nullptr && _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
         _tablet_schema->has_separate_sort_key()) {
         if (shared_segment_range.has_value()) {
-            LOG_EVERY_N(WARNING, 100)
-                    << "withhold tablet range from shared segment: primary-key tablet orders its segments by a "
-                       "separate sort key, so the range has no rowid interval. tablet="
-                    << tablet_id() << ", rowset=" << metadata().id() << ", segment_idx=" << segment_idx;
+            LOG(WARNING) << "withhold tablet range from shared segment: primary-key tablet orders its segments by "
+                            "a separate sort key, so the range has no rowid interval. tablet="
+                         << tablet_id() << ", rowset=" << metadata().id() << ", segment_idx=" << segment_idx;
         }
         return Status::OK();
     }
