@@ -1108,6 +1108,37 @@ public class GlobalTransactionMgrTest {
         Assertions.assertEquals(1, followerTransMgr.getTransactionNum());
     }
 
+    // A terminal-state cache entry (populated on eviction, in memory only) must survive an image
+    // save/load, otherwise a checkpoint (which evicts before saveImage) followed by a restart/failover
+    // would answer a recommit with "transaction not found". End-to-end regression for that P1 gap.
+    @Test
+    public void testSaveLoadTerminalStateCache() throws Exception {
+        DatabaseTransactionMgr masterDbMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        // Seed the cache as a real count-eviction would (clearTransactionState -> cache.put).
+        masterDbMgr.restoreTerminalStateCacheRecord(987654321L, "evicted_label", TransactionStatus.VISIBLE, null,
+                System.currentTimeMillis(), LoadJobSourceType.BYPASS_WRITE);
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        masterTransMgr.saveTransactionStateV2(pseudoImage.getImageWriter());
+
+        GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
+        followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(pseudoImage.getJsonReader());
+        followerTransMgr.loadTransactionStateV2(reader);
+        reader.close();
+
+        // The follower, which never saw the original transaction, resolves the evicted outcome from
+        // the restored cache instead of returning UNKNOWN.
+        DatabaseTransactionMgr followerDbMgr =
+                followerTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        Assertions.assertEquals(TransactionStatus.VISIBLE, followerDbMgr.getTxnState(987654321L).getStatus());
+        TransactionStateSnapshot byLabel = followerDbMgr.getLabelState("evicted_label");
+        Assertions.assertEquals(TransactionStatus.VISIBLE, byLabel.getStatus());
+        // The source type must survive the image round-trip, so a source-gated handler (BypassWrite)
+        // can still validate the evicted outcome after a checkpoint/restart.
+        Assertions.assertEquals(LoadJobSourceType.BYPASS_WRITE, byLabel.getSourceType());
+    }
+
     @Test
     public void testRetryCommitOnRateLimitExceededTimeout()
             throws StarRocksException {
@@ -1260,6 +1291,31 @@ public class GlobalTransactionMgrTest {
                         Collections.emptyList(), Collections.emptyList(), 10, null));
         Assertions.assertTrue(exception.getMessage().contains("transaction not found: 1001"));
         Assertions.assertFalse(exception.getMessage().contains("Cannot invoke"));
+    }
+
+    // A prepared-transaction recommit can race count-eviction: the pre-check sees a live transaction, but the
+    // rate-limit-aware helper re-reads it (commitPreparedTransactionUnderIntensiveDbLock ->
+    // getTransactionStateOrThrow) after removeExpiredTxns has moved the outcome into the terminal-state
+    // cache, so the helper throws TransactionNotFoundException. The recommit must then be answered from the
+    // cache instead of being surfaced as "transaction not found".
+    @Test
+    public void testCommitPreparedFallsBackToCacheWhenEvictedMidCommit() throws StarRocksException {
+        Database db = new Database(10, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+
+        doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        // Pre-check sees a live transaction...
+        doReturn(new TransactionState()).when(globalTransactionMgr).getTransactionState(db.getId(), 1001L);
+        // ...but the rate-limit-aware helper's own re-read races a count-eviction and throws not-found.
+        doThrow(new TransactionNotFoundException(1001L))
+                .when(globalTransactionMgr).retryCommitPreparedOnRateLimitExceeded(db, 1001L, 10L);
+        // The terminal cache now holds the outcome, so the db-mgr path resolves it idempotently.
+        doReturn(new VisibleStateWaiter(new TransactionState()))
+                .when(dbTransactionMgr).commitPreparedTransaction(1001L);
+
+        // Must not surface TransactionNotFoundException: the recommit is answered from the cache.
+        Assertions.assertDoesNotThrow(() -> globalTransactionMgr.commitPreparedTransaction(db, 1001L, 10L));
     }
 
     @Test

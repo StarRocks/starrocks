@@ -21,6 +21,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
@@ -70,8 +71,10 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         TransactionResult result = null;
         switch (txnOperation) {
             case TXN_BEGIN:
-            case TXN_PREPARE:
             case TXN_LOAD:
+                break;
+            case TXN_PREPARE:
+                result = handlePrepareTransaction(db, label);
                 break;
             case TXN_COMMIT:
                 result = handleCommitTransaction(db, label, timeoutMillis);
@@ -86,11 +89,42 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         return new ResultWrapper(result);
     }
 
+    // A PREPARE of a live transaction is handled by redirecting to the BE (result stays null). But a
+    // PREPARE retry of a count-evicted transaction is routed here even for a bypass-write client
+    // (source_type is omitted on retry), and redirecting it through the now-expired coordinator cache
+    // would fail. Unlike the bypass-write handler this path is source-agnostic on the live path too, so
+    // it answers regardless of the cached source type. When the full state is gone, answer idempotently
+    // from the terminal-state cache, exactly like a commit retry: a VISIBLE/COMMITTED outcome is success,
+    // ABORTED fails, and a truly unknown label is not found.
+    private TransactionResult handlePrepareTransaction(Database db, String label) throws StarRocksException {
+        long dbId = db.getId();
+        // Decide purely from getLabelStatus (do NOT call getLabelTransactionState here: the normal
+        // PREPARE redirect path relies on its own call to that method, and an extra one would disturb
+        // it). A terminal (VISIBLE/COMMITTED/ABORTED) status means the full state is gone but the
+        // outcome is cached -> answer the retry idempotently, exactly like a commit retry. PREPARED
+        // (live) or UNKNOWN (state lives on the coordinator BE) fall through to a null result -> BE
+        // redirect, preserving the ordinary stream-load PREPARE path.
+        TransactionStatus status =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label).getStatus();
+        if (status == TransactionStatus.VISIBLE || status == TransactionStatus.COMMITTED
+                || status == TransactionStatus.ABORTED) {
+            return commitEvictedTransactionByLabel(dbId, label);
+        }
+        return null;
+    }
+
     private TransactionResult handleCommitTransaction(Database db,
                                                       String label,
                                                       long timeoutMillis) throws StarRocksException {
         long dbId = db.getId();
-        TransactionState txnState = getTxnState(dbId, label);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (txnState == null) {
+            // The full transaction state may have been evicted (count-based eviction ignores age).
+            // Resolve the terminal outcome from the cache by label so a savepoint/resume recommit is
+            // answered definitively instead of "no transaction found".
+            return commitEvictedTransactionByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -120,7 +154,12 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
     private TransactionResult handleRollbackTransaction(Database db,
                                                         String label) throws StarRocksException {
         long dbId = db.getId();
-        TransactionState txnState = getTxnState(dbId, label);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (txnState == null) {
+            // Evicted (see handleCommitTransaction); resolve the terminal outcome from the cache.
+            return rollbackEvictedTransactionByLabel(dbId, label);
+        }
         long txnId = txnState.getTransactionId();
         TransactionStatus txnStatus = txnState.getTransactionStatus();
         TransactionResult result = new TransactionResult();
@@ -147,13 +186,49 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         return result;
     }
 
-    private static TransactionState getTxnState(long dbId, String label) throws StarRocksException {
-        TransactionState txnState = GlobalStateMgr.getCurrentState()
-                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
-        if (null == txnState) {
-            throw new StarRocksException(String.format("No transaction found by label %s", label));
+    // Resolve a commit for a transaction whose full state has been evicted, from the terminal-state
+    // cache (by label). VISIBLE/COMMITTED -> idempotent success; ABORTED -> cannot-commit; otherwise
+    // genuinely unknown -> not found. Mirrors the in-map status branches in handleCommitTransaction.
+    private static TransactionResult commitEvictedTransactionByLabel(long dbId, String label) throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case COMMITTED:
+            case VISIBLE:
+                result.setOKMsg(String.format("Transaction has already committed, label is %s", label));
+                TransactionOperationHandler.addCachedTxnId(result, snapshot);
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case ABORTED:
+                throw new StarRocksException(
+                        String.format("Can not commit ABORTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
         }
-        return txnState;
+        return result;
+    }
+
+    // Rollback counterpart of commitEvictedTransactionByLabel.
+    private static TransactionResult rollbackEvictedTransactionByLabel(long dbId, String label)
+            throws StarRocksException {
+        TransactionStateSnapshot snapshot =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(dbId, label);
+        TransactionResult result = new TransactionResult();
+        switch (snapshot.getStatus()) {
+            case ABORTED:
+                result.setOKMsg(String.format("Transaction has already aborted, label is %s", label));
+                TransactionOperationHandler.addCachedTxnId(result, snapshot);
+                result.addResultEntry(TransactionResult.LABEL_KEY, label);
+                break;
+            case COMMITTED:
+            case VISIBLE:
+                throw new StarRocksException(
+                        String.format("Can not abort COMMITTED transaction, label is %s", label));
+            default:
+                throw new StarRocksException(String.format("No transaction found by label %s", label));
+        }
+        return result;
     }
 
 }
