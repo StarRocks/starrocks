@@ -1246,6 +1246,44 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return publishVersionTasks;
     }
 
+    /**
+     * Merge the first-load per-tablet stats each BE reported through its publish task into the
+     * partition commit infos.
+     * <p>
+     * Must be called while holding this transaction's write lock, immediately before the state is
+     * snapshotted. That makes the finishing thread the only writer of
+     * {@link PartitionCommitInfo#getTabletStats()}: the thrift finishTask handlers only ever write to
+     * their own {@link PublishVersionTask}, so nothing mutates the commit infos while they are being
+     * copied. Doing it the other way round - handler threads writing the commit infos directly - is
+     * what threw ConcurrentModificationException out of PublishVersionDaemon in issue #77595.
+     * <p>
+     * Idempotent, so a transaction whose finish is retried simply re-applies the same stats.
+     */
+    public void applyPublishTaskTabletStats() {
+        // TODO(stephen): support insert into multiple tables in a transaction
+        if (sourceType != LoadJobSourceType.INSERT_STREAMING || idToTableCommitInfos.size() != 1 ||
+                publishVersionTasks.isEmpty()) {
+            return;
+        }
+        TableCommitInfo tableCommitInfo = idToTableCommitInfos.values().iterator().next();
+        if (tableCommitInfo == null) {
+            return;
+        }
+        for (PublishVersionTask task : publishVersionTasks.values()) {
+            // An unfinished task has not published its stats yet; reading them would be a torn read
+            // of a report still in flight. Its stats land on the next finish attempt, if any.
+            if (!task.isFinished()) {
+                continue;
+            }
+            task.getFirstLoadTabletStats().forEach((partitionId, tabletStats) -> {
+                PartitionCommitInfo commitInfo = tableCommitInfo.getPartitionCommitInfo(partitionId);
+                if (commitInfo != null) {
+                    commitInfo.putAllTabletStats(tabletStats);
+                }
+            });
+        }
+    }
+
     public void clearAfterPublished() {
         publishVersionTasks.clear();
         finishChecker = null;
