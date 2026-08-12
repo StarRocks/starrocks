@@ -170,10 +170,15 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         if (auto st = normalize_txn_log_before_save(&normalized); st.ok()) {
             _response->add_txn_logs()->Swap(&normalized);
             if (context->status.ok()) {
-                // Only cache a log that will actually become durable. Once any tablet in the request
-                // fails, the aggregator skips write_combined_txn_log() altogether, so a failed
-                // tablet's log exists nowhere remotely and its txn is headed for abort -- caching it
-                // would put an entry in the metacache that no publish can ever validate against.
+                // Skip a tablet whose own compaction failed -- publish will never ask for its log.
+                // That is ALL this guard establishes; it does not make the cached log guaranteed
+                // durable. write_combined_txn_log() is gated on the whole AggregateCompactRequest
+                // succeeding (FE pins allow_partial_success to false on this path), so when a
+                // SIBLING tablet fails this log is cached while the combined object is never
+                // written, and the entry then survives until LRU eviction -- abort_txn()'s combined
+                // branch bails out on the NotFound before reaching collect_files_in_log(), the only
+                // place that erases the per-tablet key. Harmless: txn_id is never reused, so no
+                // later publish can read the stale entry.
                 cache_txn_log(*context);
             }
         } else {
