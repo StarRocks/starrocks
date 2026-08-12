@@ -463,6 +463,9 @@ public:
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
 
+    // True when NullableColumn's data/null columns are readable as is; a lazily filled subclass must override to false.
+    virtual bool can_access_nullable_data() const { return false; }
+
     // If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
     // Shallow: doesn't do recursive calls; don't do call for itself.
     virtual void mutate_each_subcolumn() {}

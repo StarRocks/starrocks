@@ -197,25 +197,63 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
         // Auxiliary data structure for Chunk::append
         std::pair<size_t, size_t> range;
 
-        MergeIterator(const InputSegment& input) : input(input) {}
+        // Views of `run`'s orderby columns, only valid while `run` is the one they were built from
+        std::vector<ColumnCompareView> views;
+        const size_t num_sort_columns;
+
+        MergeIterator(const InputSegment& input, size_t num_sort_columns)
+                : input(input), num_sort_columns(num_sort_columns) {
+            views.reserve(num_sort_columns);
+        }
+
+        // The only place allowed to move the run pointer, so that the views can never outlive their run.
+        // An exhausted iterator can land on an empty run, whose orderby columns were never evaluated.
+        void set_run(const SortedRun* new_run) {
+            run = new_run;
+            views.clear();
+            if (run == nullptr || run->num_rows() == 0) {
+                return;
+            }
+            DCHECK_GE(run->num_columns(), num_sort_columns);
+            for (size_t col = 0; col < num_sort_columns; col++) {
+                views.emplace_back(*run->get_column(col));
+            }
+        }
+
+        bool debug_views_match_run() const {
+            if (run == nullptr || run->num_rows() == 0) {
+                return views.empty();
+            }
+            if (views.size() != num_sort_columns) {
+                return false;
+            }
+            for (size_t col = 0; col < views.size(); col++) {
+                if (!views[col].debug_source_unchanged(*run->get_column(col))) {
+                    return false;
+                }
+            }
+            return true;
+        }
     };
 
-    MergeIterator l_it(left);
+    const size_t num_sort_columns = descs.num_columns();
+
+    MergeIterator l_it(left, num_sort_columns);
     auto l_run_opt = left.runs.get_run_idx(li);
     if (l_run_opt.has_value()) {
         l_it.run_idx = l_run_opt.value().first;
         l_it.offset = l_run_opt.value().second;
-        l_it.run = &left.runs.get_run(l_it.run_idx);
+        l_it.set_run(&left.runs.get_run(l_it.run_idx));
         DCHECK_GE(l_it.offset, l_it.run->start_index());
         DCHECK_LT(l_it.offset, l_it.run->end_index());
     }
 
-    MergeIterator r_it(right);
+    MergeIterator r_it(right, num_sort_columns);
     auto r_run_opt = right.runs.get_run_idx(ri);
     if (r_run_opt.has_value()) {
         r_it.run_idx = r_run_opt.value().first;
         r_it.offset = r_run_opt.value().second;
-        r_it.run = &right.runs.get_run(r_it.run_idx);
+        r_it.set_run(&right.runs.get_run(r_it.run_idx));
         DCHECK_GE(r_it.offset, r_it.run->start_index());
         DCHECK_LT(r_it.offset, r_it.run->end_index());
     }
@@ -252,15 +290,16 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
     auto forward_iterator = [](MergeIterator& it) {
         DCHECK(it.run != nullptr);
         if (it.offset >= it.run->end_index()) {
-            it.run = nullptr;
+            const SortedRun* next = nullptr;
             do {
                 it.run_idx++;
                 if (it.run_idx >= it.input.runs.num_chunks()) {
                     break;
                 }
-                it.run = &it.input.runs.get_run(it.run_idx);
-                it.offset = it.run->start_index();
-            } while (it.run->num_rows() == 0);
+                next = &it.input.runs.get_run(it.run_idx);
+                it.offset = next->start_index();
+            } while (next->num_rows() == 0);
+            it.set_run(next);
         }
     };
 
@@ -334,7 +373,9 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
             };
 
             auto compare = [&descs, &l_it, &r_it]() {
-                return l_it.run->compare_row(descs, *r_it.run, l_it.offset, r_it.offset);
+                DCHECK(l_it.debug_views_match_run());
+                DCHECK(r_it.debug_views_match_run());
+                return compare_run_row(descs, l_it.views, l_it.offset, r_it.views, r_it.offset);
             };
             if (compare() <= 0) {
                 auto satisfy = [&compare]() { return compare() <= 0; };

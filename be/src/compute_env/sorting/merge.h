@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/nullable_column.h"
 #include "column/sorting/sort_permute.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
@@ -27,6 +28,108 @@
 #include "types/datum.h"
 
 namespace starrocks {
+
+// A merge input column, unpacked into the data and null columns behind it whenever that is safe, so that
+// comparing a row costs one virtual call instead of two `is_null()` plus a `compare_at` rechecking the null.
+// A view aliases the column it was built from: it must not outlive the merge call that built it, and the
+// columns it points at must not be appended to, reset or swapped while it is alive.
+struct ColumnCompareView {
+    const Column* original = nullptr;
+    // `data` is `original` and `nulls` is null unless the column was unpacked.
+    const Column* data = nullptr;
+    const NullColumn* nulls = nullptr;
+    // Snapshot of NullableColumn::has_null(), which its is_null() consults before the bitmap and which
+    // callers are free to leave stale (see BoolOrAggregateFunction::empty_result and resize()).
+    bool has_null = false;
+#ifndef NDEBUG
+    size_t debug_num_rows = 0;
+    const uint8_t* debug_null_data = nullptr;
+#endif
+
+    ColumnCompareView() = default;
+
+    // The condition is a capability, never a type name, so a new column class defaults to the general path.
+    explicit ColumnCompareView(const Column& column) : original(&column), data(&column) {
+        if (column.is_nullable() && !column.is_constant() && column.can_access_nullable_data()) {
+            const auto& nullable = down_cast<const NullableColumn&>(column);
+            data = nullable.data_column().get();
+            nulls = nullable.null_column().get();
+            has_null = nullable.has_null();
+        }
+#ifndef NDEBUG
+        debug_num_rows = column.size();
+        debug_null_data = null_data();
+#endif
+    }
+
+    const uint8_t* null_data() const { return nulls == nullptr ? nullptr : nulls->immutable_data().data(); }
+
+    // Catches a source column whose object, length or NULL flag changed behind a view still being compared
+    // with. In-place writes into the data or bitmap buffers keep every field below equal and go unnoticed.
+    bool debug_source_unchanged(const Column& column) const {
+#ifdef NDEBUG
+        return true;
+#else
+        // Compare the pointers first: a replaced inner column makes the buffer address stale to read.
+        if (original != &column) {
+            return false;
+        }
+        const ColumnCompareView current(column);
+        return data == current.data && nulls == current.nulls && has_null == current.has_null &&
+               debug_num_rows == column.size() && debug_null_data == current.null_data();
+#endif
+    }
+};
+
+// Compare one row of two columns while merging sorted runs. The returned value is in the ascending
+// space, so the caller still has to flip it by `desc.sort_order`.
+//
+// The position of a row-level NULL is decided by `desc.null_first`, which is already flipped by the
+// sort order to compensate for that final flip. The values are compared with the direction-free
+// `desc.nan_direction()` instead, because that is the hint every run was sorted with (see
+// `ColumnSorter` in column/sorting/sort_column.cpp, which leaves the direction to the sorter). Handing
+// the flipped `null_first` to the value comparison would order NULL elements nested in ARRAY/STRUCT
+// the opposite way of the per-run sort, and merging runs under a NULL semantics they were not sorted
+// with degenerates the output into a concatenation of the runs.
+inline int compare_column_row(const SortDesc& desc, const ColumnCompareView& left, size_t lhs_row,
+                              const ColumnCompareView& right, size_t rhs_row) {
+    // Both sides fall back together: comparing an unpacked column against a wrapper would mix two levels.
+    // Only this all-or-nothing fast path carries the NULL semantics below; the general path keeps whatever
+    // is_null() plus NullableColumn::compare_at() do, which still disagree on a column with a stale flag.
+    const bool unpacked = left.nulls != nullptr && right.nulls != nullptr;
+    // Reading the flag before the bitmap is the is_null() half of the old comparison, kept because the flag
+    // is the same signal ColumnSorter's `!has_null()` fast path sorted the run by. It deliberately does not
+    // follow NullableColumn::compare_at(), which reads the bitmap alone and would order a stale row against
+    // the sort that produced the run.
+    const bool lhs_null =
+            unpacked ? left.has_null && left.nulls->immutable_data()[lhs_row] != 0 : left.original->is_null(lhs_row);
+    const bool rhs_null =
+            unpacked ? right.has_null && right.nulls->immutable_data()[rhs_row] != 0 : right.original->is_null(rhs_row);
+    if (lhs_null || rhs_null) {
+        if (lhs_null && rhs_null) {
+            return 0;
+        }
+        return lhs_null ? desc.null_first : -desc.null_first;
+    }
+    if (unpacked) {
+        return left.data->compare_at(lhs_row, rhs_row, *right.data, desc.nan_direction());
+    }
+    return left.original->compare_at(lhs_row, rhs_row, *right.original, desc.nan_direction());
+}
+
+// Compare one row of two runs, column by column, stopping at the first column that orders them.
+inline int compare_run_row(const SortDescs& descs, const std::vector<ColumnCompareView>& left, size_t lhs_row,
+                           const std::vector<ColumnCompareView>& right, size_t rhs_row) {
+    for (int i = 0; i < descs.num_columns(); i++) {
+        const SortDesc desc = descs.get_column_desc(i);
+        int x = compare_column_row(desc, left[i], lhs_row, right[i], rhs_row);
+        if (x != 0) {
+            return x * desc.sort_order;
+        }
+    }
+    return 0;
+}
+
 // SortedRun represents part of sorted chunk, specified by the range
 // The chunk is sorted based on `orderby` columns
 struct SortedRun {

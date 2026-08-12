@@ -94,6 +94,7 @@ public:
     void update_has_null();
 
     bool is_nullable() const override { return true; }
+    bool can_access_nullable_data() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
     bool is_variant() const override { return _data_column->is_variant(); }
     bool is_array() const override { return _data_column->is_array(); }

@@ -24,10 +24,12 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/sorting/sort_permute.h"
@@ -314,6 +316,222 @@ TEST_F(SortRunConsistencyTest, nullable_int_keeps_null_position) {
     expect_order(type, column, asc_nulls_first(), {1, 5, 2, 0, 6, 7, 4, 3});
     expect_order(type, column, desc_nulls_last(), {3, 4, 7, 6, 0, 2, 5, 1});
     expect_order(type, column, desc_nulls_first(), {1, 3, 4, 7, 6, 0, 2, 5});
+}
+
+static MutableColumnPtr build_adaptive_int_column(AdaptiveNullableColumn::State state) {
+    auto column = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+    switch (state) {
+    case AdaptiveNullableColumn::State::kUninitialized:
+        break;
+    case AdaptiveNullableColumn::State::kNull:
+        CHECK(column->append_nulls(3));
+        break;
+    case AdaptiveNullableColumn::State::kConstant:
+        for (int i = 0; i < 3; i++) {
+            column->append_default_not_null_value();
+        }
+        break;
+    case AdaptiveNullableColumn::State::kNotConstant:
+        for (int i = 0; i < 3; i++) {
+            column->append_datum(Datum(i));
+        }
+        break;
+    case AdaptiveNullableColumn::State::kMaterialized:
+        CHECK(column->append_nulls(1));
+        column->append_datum(Datum(1));
+        break;
+    }
+    CHECK(state == column->state());
+    return column;
+}
+
+// A column is unpacked into its data and null columns only if it says both are readable as is. Everything
+// else keeps the general path, and asking must not materialize anything, because the merge asks from every
+// worker thread at once while the inputs are supposed to be read-only.
+class ColumnCompareViewTest : public testing::Test {
+protected:
+    static void expect_general_path(const Column& column) {
+        ColumnCompareView view(column);
+        EXPECT_EQ(&column, view.original);
+        EXPECT_EQ(&column, view.data);
+        EXPECT_EQ(nullptr, view.nulls);
+    }
+
+    static void expect_unpacked(const Column& column) {
+        const auto& nullable = down_cast<const NullableColumn&>(column);
+        ColumnCompareView view(column);
+        EXPECT_EQ(&column, view.original);
+        EXPECT_EQ(nullable.data_column().get(), view.data);
+        EXPECT_EQ(nullable.null_column().get(), view.nulls);
+    }
+};
+
+TEST_F(ColumnCompareViewTest, nullable_column_is_unpacked) {
+    MutableColumnPtr column = build_nullable_int_column({1, std::nullopt, 3});
+    ASSERT_TRUE(column->can_access_nullable_data());
+    expect_unpacked(*column);
+}
+
+TEST_F(ColumnCompareViewTest, plain_and_constant_columns_keep_the_general_path) {
+    MutableColumnPtr plain = build_int_column({1, 2, 3});
+    EXPECT_FALSE(plain->can_access_nullable_data());
+    expect_general_path(*plain);
+
+    // A constant NULL column reports the is_nullable() of the column it wraps, yet down_cast-ing it would be UB.
+    auto constant_null = ConstColumn::create(build_nullable_int_column({std::nullopt}), 3);
+    EXPECT_TRUE(constant_null->is_nullable());
+    EXPECT_FALSE(constant_null->can_access_nullable_data());
+    expect_general_path(*constant_null);
+
+    expect_general_path(*ConstColumn::create(build_int_column({7}), 3));
+}
+
+TEST_F(ColumnCompareViewTest, adaptive_column_is_unpacked_only_once_materialized) {
+    for (auto state : {AdaptiveNullableColumn::State::kUninitialized, AdaptiveNullableColumn::State::kNull,
+                       AdaptiveNullableColumn::State::kConstant, AdaptiveNullableColumn::State::kNotConstant}) {
+        MutableColumnPtr column = build_adaptive_int_column(state);
+        EXPECT_FALSE(column->can_access_nullable_data());
+
+        expect_general_path(*column);
+        // Building the view is the only thing asserted here: a full comparison would materialize the column.
+        EXPECT_TRUE(state == down_cast<AdaptiveNullableColumn*>(column.get())->state());
+    }
+
+    MutableColumnPtr materialized = build_adaptive_int_column(AdaptiveNullableColumn::State::kMaterialized);
+    ASSERT_TRUE(materialized->can_access_nullable_data());
+    expect_unpacked(*materialized);
+}
+
+// Several call sites write the null bitmap directly and leave has_null() false (BoolOrAggregateFunction's
+// empty_result, resize()). What the merge must agree with is the per-run sort, which skips NULL handling
+// entirely when has_null() is false -- so the comparison has to consult the flag before the bitmap, exactly
+// like is_null() does.
+TEST_F(ColumnCompareViewTest, stale_has_null_is_ordered_the_way_the_run_sort_orders_it) {
+    MutableColumnPtr owner = build_nullable_int_column({1, 2});
+    auto* nullable = down_cast<NullableColumn*>(owner.get());
+    nullable->null_column_data()[1] = 1;
+    ASSERT_FALSE(nullable->has_null());
+    ASSERT_FALSE(nullable->is_null(1)) << "is_null() consults has_null() before the bitmap";
+
+    ColumnPtr column = std::move(owner);
+    const ColumnCompareView view(*column);
+    ASSERT_NE(nullptr, view.nulls) << "the column is unpacked, so this exercises the fast path";
+
+    for (const SortDesc& desc : {SortDesc(true, true), SortDesc(false, false)}) {
+        const SortDescs descs(std::vector<int>{desc.sort_order}, std::vector<int>{desc.null_first});
+        SmallPermutation permutation = create_small_permutation(column->size());
+        const std::atomic<bool> cancel{false};
+        ASSERT_OK(sort_and_tie_columns(cancel, Columns{column}, descs, permutation));
+
+        const bool sort_puts_first_row_first = permutation[0].index_in_chunk == 0;
+        const int merged = compare_column_row(desc, view, 0, view, 1) * desc.sort_order;
+        EXPECT_EQ(sort_puts_first_row_first, merged < 0) << "sort_order: " << desc.sort_order;
+    }
+}
+
+// The two runs have to overlap to reach MergeTwoColumn at all: two disjoint runs are concatenated by
+// merge_sorted_chunks_two_way without ever comparing a row, which would leave these cases green and blind.
+class MergeTwoColumnTest : public testing::Test {
+protected:
+    using Values = std::vector<std::optional<int32_t>>;
+
+    static Values read_values(const Column& column, const std::vector<uint32_t>& rows) {
+        Values values;
+        for (uint32_t row : rows) {
+            values.emplace_back(column.is_null(row) ? std::nullopt
+                                                    : std::optional<int32_t>(column.get(row).get_int32()));
+        }
+        return values;
+    }
+
+    // Merge two single column runs, and report whether the output interleaved them, which only a row by row
+    // merge can produce.
+    static Values merge_two_runs(const SortDescs& descs, const ColumnPtr& left, const ColumnPtr& right,
+                                 bool* interleaved) {
+        auto make_run = [](const ColumnPtr& column) {
+            ChunkPtr chunk = std::make_shared<Chunk>(Columns{column}, Chunk::SlotHashMap{{0, 0}});
+            return SortedRun(chunk, Columns{column});
+        };
+
+        Permutation perm;
+        CHECK(merge_sorted_chunks_two_way(descs, make_run(left), make_run(right), &perm).ok());
+
+        Values values;
+        bool seen_right = false;
+        *interleaved = false;
+        for (const auto& item : perm) {
+            const Column& column = item.chunk_index == 0 ? *left : *right;
+            values.emplace_back(column.is_null(item.index_in_chunk)
+                                        ? std::nullopt
+                                        : std::optional<int32_t>(column.get(item.index_in_chunk).get_int32()));
+            if (item.chunk_index == 1) {
+                seen_right = true;
+            } else if (seen_right) {
+                *interleaved = true;
+            }
+        }
+        return values;
+    }
+
+    // The order the per-run sort itself produces for all the rows at once, the merge must reproduce it.
+    static Values sort_all(const SortDescs& descs, const Values& all) {
+        ColumnPtr column = build_nullable_int_column(all);
+        SmallPermutation perm = create_small_permutation(column->size());
+        const std::atomic<bool> cancel{false};
+        CHECK(sort_and_tie_columns(cancel, Columns{column}, descs, perm).ok());
+
+        std::vector<uint32_t> rows;
+        for (const auto& item : perm) {
+            rows.emplace_back(item.index_in_chunk);
+        }
+        return read_values(*column, rows);
+    }
+
+    static SortDescs desc_nulls_last() { return SortDescs(std::vector<bool>{false}, std::vector<bool>{false}); }
+    static SortDescs asc_nulls_first() { return SortDescs(std::vector<bool>{true}, std::vector<bool>{true}); }
+};
+
+TEST_F(MergeTwoColumnTest, merges_nullable_columns_the_way_the_sort_would) {
+    // Distinct values, so a single order satisfies both phases and the comparison below is unambiguous.
+    const Values left_values{9, 7, 4, std::nullopt};
+    const Values right_values{8, 6, 5, std::nullopt};
+    Values all = left_values;
+    all.insert(all.end(), right_values.begin(), right_values.end());
+
+    for (const auto& descs : {desc_nulls_last(), asc_nulls_first()}) {
+        Values left_sorted = sort_all(descs, left_values);
+        Values right_sorted = sort_all(descs, right_values);
+
+        bool interleaved = false;
+        Values merged = merge_two_runs(descs, build_nullable_int_column(left_sorted),
+                                       build_nullable_int_column(right_sorted), &interleaved);
+        EXPECT_TRUE(interleaved);
+        EXPECT_EQ(sort_all(descs, all), merged);
+    }
+}
+
+TEST_F(MergeTwoColumnTest, merges_materialized_adaptive_columns_the_way_the_sort_would) {
+    auto build_adaptive = [](const Values& values) {
+        auto column = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (const auto& value : values) {
+            value.has_value() ? column->append_datum(Datum(value.value())) : (void)column->append_nulls(1);
+        }
+        column->materialized_nullable();
+        CHECK(column->can_access_nullable_data());
+        return column;
+    };
+
+    const Values left_values{9, 7, 4, std::nullopt};
+    const Values right_values{8, 6, 5, std::nullopt};
+    Values all = left_values;
+    all.insert(all.end(), right_values.begin(), right_values.end());
+
+    const SortDescs descs = desc_nulls_last();
+    bool interleaved = false;
+    Values merged = merge_two_runs(descs, build_adaptive(sort_all(descs, left_values)),
+                                   build_adaptive(sort_all(descs, right_values)), &interleaved);
+    EXPECT_TRUE(interleaved);
+    EXPECT_EQ(sort_all(descs, all), merged);
 }
 
 } // namespace

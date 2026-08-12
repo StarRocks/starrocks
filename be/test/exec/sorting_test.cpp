@@ -713,6 +713,192 @@ TEST(MergePathTest, test1) {
     }
 }
 
+// A NULL row, and for the array an element that is NULL, which is the value the merge used to order the
+// opposite way of the per-run sort. Values are dense so both sides of the merge overlap everywhere.
+static MutableColumnPtr build_nullable_key_column(const TypeDescriptor& type_desc, bool use_array, int32_t count) {
+    MutableColumnPtr column = ColumnHelper::create_column(type_desc, true);
+    for (int32_t value = 0; value < count; value++) {
+        if (value % 17 == 0) {
+            column->append_nulls(1);
+        } else if (!use_array) {
+            column->append_datum(Datum(value));
+        } else {
+            DatumArray array;
+            array.emplace_back(value % 7 == 0 ? Datum() : Datum(value));
+            array.emplace_back(Datum(value));
+            column->append_datum(Datum(array));
+        }
+    }
+    down_cast<NullableColumn*>(column.get())->update_has_null();
+    return column;
+}
+
+static std::vector<std::string> debug_rows(const Column& column, size_t start, size_t count) {
+    std::vector<std::string> rows;
+    for (size_t i = 0; i < count; i++) {
+        rows.emplace_back(column.debug_item(start + i));
+    }
+    return rows;
+}
+
+// merge_path is the other row-by-row merge, and the only one whose iterators keep a comparison view alive
+// across run switches, so it needs its own coverage of the nullable shapes.
+static void test_merge_path_nullable(bool use_array, size_t runs_per_side, size_t processor_num,
+                                     size_t trailing_empty_runs, bool empty_run_in_the_middle, bool& success) {
+    auto runtime_state = create_runtime_state();
+    const TypeDescriptor type_desc =
+            use_array ? TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)) : TypeDescriptor(TYPE_INT);
+    // Descending with the NULLs last is the combination that made the merge disagree with the per-run sort.
+    const SortDescs sort_descs(std::vector<bool>{false}, std::vector<bool>{false});
+
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    exprs.emplace_back(std::make_unique<ColumnRef>(type_desc, 0));
+    sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
+    const Chunk::SlotHashMap map{{0, 0}};
+
+    constexpr int32_t kNumRows = 512;
+    ColumnPtr unsorted = build_nullable_key_column(type_desc, use_array, kNumRows);
+    SmallPermutation permutation = create_small_permutation(unsorted->size());
+    const std::atomic<bool> cancel{false};
+    ASSERT_OK(sort_and_tie_columns(cancel, Columns{unsorted}, sort_descs, permutation));
+
+    // Both sides take every other row of the fully sorted input, which keeps each side sorted while making
+    // the two overlap over their whole range.
+    MutableColumns sides;
+    sides.emplace_back(unsorted->clone_empty());
+    sides.emplace_back(unsorted->clone_empty());
+    for (size_t i = 0; i < permutation.size(); i++) {
+        sides[i % 2]->append(*unsorted, permutation[i].index_in_chunk, 1);
+    }
+
+    // A run over an empty chunk never evaluates its orderby exprs, so its orderby columns stay empty, and
+    // reading a column off one would go out of bounds.
+    auto append_empty_run = [&](SortedRuns& runs) {
+        auto empty_chunk = std::make_shared<Chunk>(Columns{unsorted->clone_empty()}, map);
+        SortedRun empty_run(std::move(empty_chunk), &sort_exprs);
+        EXPECT_TRUE(empty_run.orderby.empty());
+        runs.chunks.emplace_back(std::move(empty_run));
+    };
+
+    std::vector<SortedRuns> input_runs(2);
+    for (size_t side = 0; side < 2; side++) {
+        const size_t rows_per_run = sides[side]->size() / runs_per_side;
+        for (size_t run = 0; run < runs_per_side; run++) {
+            const size_t start = run * rows_per_run;
+            const size_t count = (run + 1 == runs_per_side) ? sides[side]->size() - start : rows_per_run;
+            MutableColumnPtr column = sides[side]->clone_empty();
+            column->append(*sides[side], start, count);
+            auto chunk = std::make_shared<Chunk>(Columns{std::move(column)}, map);
+            input_runs[side].chunks.emplace_back(SortedRun(std::move(chunk), &sort_exprs));
+            // An empty run between two non-empty ones: the iterator has to step over it and build views for
+            // the run behind it, which is a different branch than landing on a trailing empty run.
+            if (empty_run_in_the_middle && run == 0 && runs_per_side > 1) {
+                append_empty_run(input_runs[side]);
+            }
+        }
+        // The iterator lands on these once its side is exhausted.
+        for (size_t i = 0; i < trailing_empty_runs; i++) {
+            append_empty_run(input_runs[side]);
+        }
+    }
+
+    const size_t left_len = input_runs[0].num_rows();
+    const size_t right_len = input_runs[1].num_rows();
+    merge_path::InputSegment left(std::move(input_runs[0]), 0, left_len);
+    merge_path::InputSegment right(std::move(input_runs[1]), 0, right_len);
+
+    std::vector<merge_path::OutputSegment> dests;
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        auto dest_chunk = std::make_shared<Chunk>(Columns{unsorted->clone_empty()}, map);
+        Columns dest_orderby;
+        dest_orderby.emplace_back(unsorted->clone_empty());
+        SortedRun dest_run(std::move(dest_chunk), std::move(dest_orderby));
+        dests.emplace_back(std::move(dest_run), std::vector<int32_t>{-1}, left_len + right_len);
+    }
+
+    std::vector<std::thread> threads;
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        threads.emplace_back([&sort_descs, &left, &right, &dests, processor_idx, processor_num]() {
+            merge_path::merge(sort_descs, left, right, dests[processor_idx], processor_idx, processor_num);
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::vector<std::string> merged;
+    std::vector<std::string> merged_orderby;
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        auto& run = dests[processor_idx].run;
+        const auto rows = debug_rows(*run.chunk->get_column_by_index(0), run.start_index(), run.num_rows());
+        merged.insert(merged.end(), rows.begin(), rows.end());
+        const auto orderby_rows = debug_rows(*run.orderby[0], run.start_index(), run.num_rows());
+        merged_orderby.insert(merged_orderby.end(), orderby_rows.begin(), orderby_rows.end());
+    }
+
+    // The merge has to reproduce the order the per-run sort produces for all the rows at once.
+    std::vector<std::string> expected;
+    for (const auto& item : permutation) {
+        expected.emplace_back(unsorted->debug_item(item.index_in_chunk));
+    }
+    ASSERT_EQ(expected, merged);
+    ASSERT_EQ(expected, merged_orderby);
+
+    success = true;
+}
+
+TEST(MergePathTest, nullable_columns) {
+    for (bool use_array : {false, true}) {
+        for (size_t runs_per_side : {1, 3, 7}) {
+            for (size_t processor_num : {1, 2, 4}) {
+                bool success = false;
+                test_merge_path_nullable(use_array, runs_per_side, processor_num, 0, false, success);
+                ASSERT_TRUE(success) << "array: " << use_array << ", runs: " << runs_per_side;
+            }
+        }
+    }
+}
+
+// Runs over empty chunks carry no orderby column at all, and the iterator walks onto the trailing ones as it
+// runs out, which is where reading a column off the run would go out of bounds.
+TEST(MergePathTest, runs_over_empty_chunks) {
+    for (bool use_array : {false, true}) {
+        for (size_t runs_per_side : {1, 3}) {
+            for (size_t trailing_empty_runs : {1, 2}) {
+                for (size_t processor_num : {1, 2, 4}) {
+                    bool success = false;
+                    test_merge_path_nullable(use_array, runs_per_side, processor_num, trailing_empty_runs, false,
+                                             success);
+                    ASSERT_TRUE(success) << "array: " << use_array << ", runs: " << runs_per_side
+                                         << ", empty runs: " << trailing_empty_runs;
+                }
+            }
+        }
+    }
+}
+
+// The other empty-run branch: the iterator steps over an empty run and has to build views for the non-empty
+// run behind it, instead of stopping on the empty one.
+TEST(MergePathTest, empty_run_between_two_non_empty_runs) {
+    for (bool use_array : {false, true}) {
+        for (size_t runs_per_side : {2, 3}) {
+            for (size_t trailing_empty_runs : {0, 1}) {
+                for (size_t processor_num : {1, 2, 4}) {
+                    bool success = false;
+                    test_merge_path_nullable(use_array, runs_per_side, processor_num, trailing_empty_runs, true,
+                                             success);
+                    ASSERT_TRUE(success) << "array: " << use_array << ", runs: " << runs_per_side
+                                         << ", empty runs: " << trailing_empty_runs;
+                }
+            }
+        }
+    }
+}
+
 TEST(SortingTest, compare) {
     // any type
     std::vector<TypeDescriptor> type_lists;

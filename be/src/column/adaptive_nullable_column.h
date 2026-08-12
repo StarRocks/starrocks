@@ -109,6 +109,9 @@ public:
         _size = 0;
     }
 
+    // Before materialization the two internal columns are shorter than size(), so reading them directly is out.
+    bool can_access_nullable_data() const override { return _state == State::kMaterialized; }
+
     bool has_null() const override {
         switch (_state) {
         case State::kUninitialized: {
