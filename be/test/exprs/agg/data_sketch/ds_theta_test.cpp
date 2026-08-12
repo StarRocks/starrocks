@@ -147,7 +147,6 @@ TEST_F(DataSketchsThetaTest, TestCompactWireRoundTrip) {
     ASSERT_EQ(sz, actual);
 
     using alloc_type = DataSketchesTheta::alloc_type;
-    int64_t mem2 = 0;
     auto wrapped = datasketches::wrapped_compact_theta_sketch_alloc<alloc_type>::wrap(buf.data(), actual);
     int64_t apache_est = static_cast<int64_t>(wrapped.get_estimate());
     EXPECT_NEAR(apache_est, theta.estimate_cardinality(), 1);
@@ -191,7 +190,7 @@ TEST_F(DataSketchsThetaTest, TestIntersectBothEmpty) {
     Columns cols{make_binary_col(Slice()), make_binary_col(Slice())};
     auto result = DsThetaFunctions::ds_theta_intersect(local_ctx, cols);
     ASSERT_TRUE(result.ok()) << result.status().message();
-    auto slice = down_cast<BinaryColumn*>(result.value().get())->get_slice(0);
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
     ASSERT_GT(slice.size, 0u);
     EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
 }
@@ -207,7 +206,7 @@ TEST_F(DataSketchsThetaTest, TestIntersectOneEmpty) {
         Columns cols{make_binary_col(sk_slice), make_binary_col(Slice())};
         auto result = DsThetaFunctions::ds_theta_intersect(local_ctx, cols);
         ASSERT_TRUE(result.ok());
-        auto slice = down_cast<BinaryColumn*>(result.value().get())->get_slice(0);
+        auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
         EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
     }
     // empty lhs, non-empty rhs → empty
@@ -215,7 +214,7 @@ TEST_F(DataSketchsThetaTest, TestIntersectOneEmpty) {
         Columns cols{make_binary_col(Slice()), make_binary_col(sk_slice)};
         auto result = DsThetaFunctions::ds_theta_intersect(local_ctx, cols);
         ASSERT_TRUE(result.ok());
-        auto slice = down_cast<BinaryColumn*>(result.value().get())->get_slice(0);
+        auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
         EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
     }
 }
@@ -228,7 +227,7 @@ TEST_F(DataSketchsThetaTest, TestANotBEmptyLhs) {
     Columns cols{make_binary_col(Slice()), make_binary_col(sk_slice)};
     auto result = DsThetaFunctions::ds_theta_a_not_b(local_ctx, cols);
     ASSERT_TRUE(result.ok());
-    auto slice = down_cast<BinaryColumn*>(result.value().get())->get_slice(0);
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
     EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
 }
 
@@ -241,7 +240,7 @@ TEST_F(DataSketchsThetaTest, TestANotBEmptyRhs) {
     Columns cols{make_binary_col(sk_slice), make_binary_col(Slice())};
     auto result = DsThetaFunctions::ds_theta_a_not_b(local_ctx, cols);
     ASSERT_TRUE(result.ok());
-    auto slice = down_cast<BinaryColumn*>(result.value().get())->get_slice(0);
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
     EXPECT_NEAR(estimate_from_slice(slice), 500.0, 50.0);
 }
 
