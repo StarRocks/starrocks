@@ -259,8 +259,9 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
             for (const auto& r : current_group) {
                 group_ids.push_back(r->id());
             }
-            std::string reason =
-                    has_adjacency_gap ? " (adjacency gap)" : would_exceed_segments ? " (segment limit)" : "";
+            std::string reason = has_adjacency_gap       ? " (adjacency gap)"
+                                 : would_exceed_segments ? " (segment limit)"
+                                                         : "";
             VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " group " << valid_groups.size() << ": "
                     << current_group.size() << " rowsets, " << current_bytes << " bytes, " << current_segments
                     << " segments, ids=[" << JoinInts(group_ids, ",") << "]" << reason;
@@ -411,11 +412,10 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::split_rowse
         for (const auto& r : all_rowsets) {
             group_ids.push_back(r->id());
         }
-        std::string reason = stats.has_delete_predicate
-                                     ? "has_delete_predicate"
-                                     : (max_parallel <= 1)
-                                               ? "max_parallel<=1"
-                                               : not_enough_segments ? "not_enough_segments" : "data_size_small";
+        std::string reason = stats.has_delete_predicate ? "has_delete_predicate"
+                             : (max_parallel <= 1)      ? "max_parallel<=1"
+                             : not_enough_segments      ? "not_enough_segments"
+                                                        : "data_size_small";
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " fallback to normal compaction (" << reason
                 << "): " << all_rowsets.size() << " rowsets, " << stats.total_segments << " segments, "
                 << stats.total_bytes << " bytes, ids=[" << JoinInts(group_ids, ",") << "]";
@@ -853,10 +853,12 @@ void TabletParallelCompactionManager::abort_pending_states() {
         std::shared_ptr<CompactionTaskCallback> callback;
         int64_t tablet_id = 0;
         int64_t txn_id = 0;
+        int64_t version = 0;
         {
             std::lock_guard<std::mutex> lock(state->mutex);
             tablet_id = state->tablet_id;
             txn_id = state->txn_id;
+            version = state->version;
             if (state->total_subtasks_created == 0) {
                 // Nothing was ever submitted for this tablet, so its context is still in the scheduler's
                 // task queue and abort_all() takes care of it.
@@ -869,11 +871,23 @@ void TabletParallelCompactionManager::abort_pending_states() {
             callback = state->callback;
         }
         if (claimed && callback) {
-            LOG(WARNING) << "Completing parallel compaction on shutdown, its subtasks were dropped. tablet_id="
+            LOG(WARNING) << "Aborting parallel compaction on shutdown, its subtasks were dropped. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id;
-            // Reports whatever the finished subtasks produced; an incomplete set fails the merge, so the
-            // RPC finishes with an error instead of hanging.
-            finalize_tablet_completion(tablet_id, txn_id, state, callback);
+            // Report the same abort a serial compaction reports when stop() interrupts it (see
+            // CompactionScheduler::abort_compaction) rather than finalizing whatever the subtasks that did
+            // run produced. finalize_tablet_completion() would keep an OK status for such a partial set --
+            // it only fails when EVERY completed subtask failed, and dropped subtasks are not counted as
+            // failures at all -- and on the regular path it would then persist that partial (or, when
+            // nothing completed, empty) merged log, telling FE that a compaction happened which largely,
+            // or entirely, did not run.
+            auto context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version,
+                                                                   false /* force_base_compaction */,
+                                                                   callback->skip_write_txnlog(), callback);
+            // Marked merged so that CompactionScheduler::remove_states cleans this tablet's state up, and
+            // so list_tasks() keeps hiding it, exactly as for a finalized parallel compaction.
+            context->is_parallel_merged = true;
+            context->status = Status::Aborted("Parallel compaction aborted due to BE/CN shutdown!");
+            callback->finish_task(std::move(context));
         }
     }
 }
@@ -2042,11 +2056,10 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_subtask_group
 
     if (stats.total_bytes <= max_bytes_per_subtask || max_parallel <= 1 || stats.has_delete_predicate ||
         not_enough_segments) {
-        std::string reason = stats.has_delete_predicate
-                                     ? "has_delete_predicate"
-                                     : (max_parallel <= 1)
-                                               ? "max_parallel<=1"
-                                               : not_enough_segments ? "not_enough_segments" : "data_size_small";
+        std::string reason = stats.has_delete_predicate ? "has_delete_predicate"
+                             : (max_parallel <= 1)      ? "max_parallel<=1"
+                             : not_enough_segments      ? "not_enough_segments"
+                                                        : "data_size_small";
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " fallback to normal compaction (" << reason
                 << "): " << rowsets.size() << " rowsets, " << stats.total_segments << " segments, " << stats.total_bytes
                 << " bytes";

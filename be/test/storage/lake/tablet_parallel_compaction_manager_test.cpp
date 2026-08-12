@@ -7526,15 +7526,20 @@ TEST_F(TabletParallelCompactionManagerTest, test_abort_pending_states_completes_
 
     _manager->abort_pending_states();
 
-    // The RPC is completed instead of being left hanging. It completes with a failure -- the dropped
-    // subtask produced no result to merge -- which is the point: the caller learns rather than waits.
+    // The RPC is completed instead of being left hanging...
     EXPECT_TRUE(closure.is_finished());
+    // ...and it is completed as an abort, like a serial compaction interrupted by stop(). Reporting the
+    // tablet as failed is what keeps FE from committing this compaction.
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    // Nothing is published for the work that did run: subtask 0's log must not be merged and handed back
+    // as if the whole tablet had been compacted, because subtask 1's rowsets were never touched.
+    EXPECT_EQ(0, response.txn_logs_size());
 
     // Completion is claimed once, so a second settling pass must not complete the same tablet again:
     // finish_task() has already released the request and response that a second call would touch.
-    auto txn_logs_after_first = response.txn_logs_size();
     _manager->abort_pending_states();
-    EXPECT_EQ(txn_logs_after_first, response.txn_logs_size());
+    EXPECT_EQ(1, response.failed_tablets_size());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
