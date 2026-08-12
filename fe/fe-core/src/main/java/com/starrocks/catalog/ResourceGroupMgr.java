@@ -113,9 +113,6 @@ public class ResourceGroupMgr implements Writable {
     // holders of an older snapshot always see a consistent pre-alter view.
     private volatile ResourceGroupSnapshot snapshot = ResourceGroupSnapshot.EMPTY;
 
-    // Record the current short_query resource group.
-    // There can be only one short_query resource group.
-    private volatile ResourceGroup shortQueryResourceGroup = null;
 
     private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
@@ -161,10 +158,12 @@ public class ResourceGroupMgr implements Writable {
                 }
             }
 
-            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
+            ResourceGroup sqrg = snapshot.shortQueryResourceGroup;
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && sqrg != null
+                    && !(needReplace && sqrg.getName().equals(wg.getName()))) {
                 throw new DdlException(
                         String.format("There can be only one short_query RESOURCE_GROUP (%s)",
-                                shortQueryResourceGroup.getName()));
+                                sqrg.getName()));
             }
 
             if (wg.getClassifiers() != null && !wg.getClassifiers().isEmpty() &&

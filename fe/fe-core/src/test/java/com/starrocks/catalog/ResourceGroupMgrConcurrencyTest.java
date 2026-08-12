@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
@@ -518,7 +519,33 @@ public class ResourceGroupMgrConcurrencyTest {
         Assertions.assertNotNull(sqFromSnap, "shortQueryResourceGroup must be populated in snapshot");
         Assertions.assertEquals("sq_rg", sqFromSnap.getName());
     }
+
+    @Test
+    public void testDuplicateShortQueryGroupCreationFails() throws Exception {
+        ResourceGroup sqGroup = new ResourceGroup();
+        sqGroup.setName("sq1");
+        sqGroup.setId(888L);
+        sqGroup.setResourceGroupType(TWorkGroupType.WG_SHORT_QUERY);
+        sqGroup.setMemLimit(0.5);
+        sqGroup.setClassifiers(Collections.emptyList());
+
+        java.lang.reflect.Method addMethod =
+                ResourceGroupMgr.class.getDeclaredMethod("addResourceGroupInternal", ResourceGroup.class);
+        addMethod.setAccessible(true);
+        addMethod.invoke(mgr, sqGroup);
+
+        Map<String, String> props = Maps.newHashMap();
+        props.put("cpu_weight", "1");
+        props.put("mem_limit", "50%");
+        props.put("type", "short_query");
+        CreateResourceGroupStmt stmt2 = new CreateResourceGroupStmt("sq2", false, false,
+                Collections.emptyList(), props);
+        ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(stmt2);
+
+        Assertions.assertThrows(DdlException.class, () -> mgr.createResourceGroup(stmt2));
+    }
 }
+
 
 
 
