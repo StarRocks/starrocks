@@ -6,7 +6,7 @@ description: "通过 StarRocks Spark connector 从 Apache Spark DataFrame 或 SQ
 # 使用 Spark connector 导入数据（推荐）
 
 StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark™)，可以通过 Spark 导入数据至 StarRocks（推荐）。
-基本原理是对数据攒批后，通过 [Stream Load](./StreamLoad.md) 批量导入StarRocks。Connector 导入数据基于Spark DataSource V2 实现，
+基本原理是对数据攒批后，通过 [Stream Load](../StreamLoad.md) 批量导入StarRocks。Connector 导入数据基于Spark DataSource V2 实现，
 可以通过 Spark DataFrame 或 Spark SQL 创建 DataSource，支持 Batch 和 Structured Streaming。
 
 > **注意**
@@ -522,7 +522,7 @@ MySQL [test]> select * from score_board;
 
 ### 导入至主键表
 
-本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](../Load_to_Primary_Key_tables.md)。
 
 以下示例使用 Spark SQL。
 
