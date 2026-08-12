@@ -54,6 +54,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     static Status _handle_header(HttpRequest* req, std::string* json_header);
 
