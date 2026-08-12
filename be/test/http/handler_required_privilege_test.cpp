@@ -118,6 +118,7 @@ TEST(BeHandlerPrivilegeTest, meta_requires_OPERATE) {
 TEST(BeHandlerPrivilegeTest, dump_tablet_metadata_requires_OPERATE) {
     lake::DumpTabletMetadataAction h(nullptr);
     EXPECT_EQ(Priv::OPERATE, h.required_privilege());
+    EXPECT_TRUE(h.always_require_auth());
 }
 
 TEST(BeHandlerPrivilegeTest, compact_rocksdb_meta_requires_OPERATE) {

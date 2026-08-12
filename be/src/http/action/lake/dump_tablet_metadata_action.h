@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/concurrency/concurrent_limiter.h"
 #include "gutil/macros.h"
 #include "platform/http/http_handler.h"
 
@@ -24,16 +25,26 @@ class HttpRequest;
 
 namespace starrocks::lake {
 
+class TabletManager;
+
 class DumpTabletMetadataAction : public HttpHandler {
 public:
-    explicit DumpTabletMetadataAction(ExecEnv*) {}
+    explicit DumpTabletMetadataAction(ExecEnv*, TabletManager* tablet_manager = nullptr)
+            : _tablet_manager(tablet_manager) {}
     ~DumpTabletMetadataAction() override = default;
 
     DISALLOW_COPY_AND_MOVE(DumpTabletMetadataAction);
 
+    int on_header(HttpRequest* req) override;
     void handle(HttpRequest* req) override;
+    void free_handler_ctx(void* handler_ctx) override;
 
+    bool always_require_auth() const override { return true; }
     RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
+private:
+    TabletManager* _tablet_manager;
+    ConcurrentLimiter _limiter{1};
 };
 
 } // namespace starrocks::lake
