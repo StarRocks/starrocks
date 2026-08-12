@@ -15,6 +15,7 @@
 
 #include <cmath>
 
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "types/logical_type.h"
@@ -63,20 +64,32 @@ public:
         }
     }
 
+    // branch-4.1's GetContainer<LT>::get_data() casts the column it is handed straight to the
+    // concrete column type and has no (column, row) overload; on main it unwraps const/nullable
+    // wrappers itself. Spell that out here -- ColumnHelper::get_data_column() is exactly what
+    // main's GetContainer uses -- so a ConstColumn argument is read correctly instead of being
+    // reinterpreted.
+    static InputCppType get_arg_data(const Column* column, size_t row_num) {
+        const Column* data_column = ColumnHelper::get_data_column(column);
+        return GetContainer<LT>::get_data(data_column)[column->is_constant() ? 0 : row_num];
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK(ctx->get_num_args() == 2);
 
-        const auto* column0 = down_cast<const InputColumnType*>(columns[0]);
-        const auto* column1 = down_cast<const InputColumnType*>(columns[1]);
-
+        // An argument may still be a constant column here: the analyzer only rejects arguments
+        // that are already constant in the AST, but the optimizer can fold one into a literal
+        // afterwards (e.g. `covar_samp(a, b)` over an inlined one-row subquery), and the
+        // aggregator keeps constant arguments other than the first one packed as ConstColumn.
+        // GetContainer unwraps const/nullable wrappers and picks the right row index.
         this->data(state).count += 1;
 
         double oldMeanX = this->data(state).meanX;
-        InputCppType rowX = column0->immutable_data()[row_num];
+        InputCppType rowX = get_arg_data(columns[0], row_num);
 
         double oldMeanY = this->data(state).meanY;
-        InputCppType rowY = column1->immutable_data()[row_num];
+        InputCppType rowY = get_arg_data(columns[1], row_num);
 
         double newMeanX = (oldMeanX + (rowX - oldMeanX) / this->data(state).count);
         double newMeanY = (oldMeanY + (rowY - oldMeanY) / this->data(state).count);
@@ -170,19 +183,20 @@ public:
         bytes.resize(one_element_size * chunk_size);
         dst_column->get_offset().resize(chunk_size + 1);
 
-        const auto* src_column0 = down_cast<const InputColumnType*>(src[0].get());
-        const auto* src_column1 = down_cast<const InputColumnType*>(src[1].get());
+        // `src` may hold constant columns, see the comment in `update`.
+        const bool src0_is_const = src[0]->is_constant();
+        const bool src1_is_const = src[1]->is_constant();
 
         double meanX = {};
         double meanY = {};
         double c2 = 0;
 
         int64_t count = 1;
-        const auto src0_data = src_column0->immutable_data();
-        const auto src1_data = src_column1->immutable_data();
+        const auto src0_data = GetContainer<LT>::get_data(ColumnHelper::get_data_column(src[0].get()));
+        const auto src1_data = GetContainer<LT>::get_data(ColumnHelper::get_data_column(src[1].get()));
         for (size_t i = 0; i < chunk_size; ++i) {
-            meanX = static_cast<double>(src0_data[i]);
-            meanY = static_cast<double>(src1_data[i]);
+            meanX = static_cast<double>(src0_data[src0_is_const ? 0 : i]);
+            meanY = static_cast<double>(src1_data[src1_is_const ? 0 : i]);
             memcpy(bytes.data() + old_size, &meanX, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
             memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));
