@@ -221,12 +221,21 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         // cluster that was already snapshotting when it upgraded restores the configured name
         // straight from the image or the replayed log and never passes through that check. Without
         // this, every round would finish its local checkpoint work and then fail in HdfsUtil.
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                .getStorageVolumeByName(storageVolumeName);
-        if (sv != null && !sv.isCredentialUsable()) {
-            LOG.warn("Skipping the automated cluster snapshot: storage volume {} has a credential " +
-                    "that cannot be used, so no new restore point is being produced.", storageVolumeName);
-            return false;
+        try {
+            StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                    .getStorageVolumeByName(storageVolumeName);
+            if (sv != null && !sv.isCredentialUsable()) {
+                LOG.warn("Skipping the automated cluster snapshot: storage volume {} has a credential " +
+                        "that cannot be used, so no new restore point is being produced.", storageVolumeName);
+                return false;
+            }
+        } catch (Exception e) {
+            // Looking the volume up can fail for reasons that have nothing to do with its credential
+            // - starmgr being unreachable, say. Scheduling the round anyway leaves such a failure on
+            // the job's own error path, which counts consecutive failures and warns, rather than
+            // turning it into an aborted scheduler cycle here.
+            LOG.warn("Could not check the automated snapshot storage volume {} before scheduling",
+                    storageVolumeName, e);
         }
         return true;
     }
