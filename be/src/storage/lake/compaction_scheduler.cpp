@@ -560,9 +560,14 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
     auto result = [&]() -> StatusOr<int> {
         try {
             TEST_SYNC_POINT("CompactionScheduler::try_hand_off_to_parallel:create_parallel_tasks");
+            // Pass on the queue wait already recorded on this context: it is destroyed at the hand-off,
+            // so the merged context has to inherit it or CompactResponse under-reports the queue time by
+            // exactly the wait this hand-off introduces.
             return _parallel_mgr->create_parallel_tasks(tablet_id, txn_id, context->version, parallel_config,
                                                         context->callback, context->force_base_compaction,
-                                                        _threads.get(), acquire_token, release_token);
+                                                        _threads.get(), acquire_token, release_token,
+                                                        context->stats->in_queue_time_sec,
+                                                        context->stats->queue_wait_ns);
         } catch (const std::exception& e) {
             LOG(WARNING) << "Exception while planning parallel compaction, compacting serially instead. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id << ": " << e.what();

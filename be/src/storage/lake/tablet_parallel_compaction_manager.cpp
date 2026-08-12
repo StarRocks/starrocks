@@ -637,7 +637,8 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks(
 StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
-        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token) {
+        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token,
+        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -706,6 +707,12 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     // Step 3: Create and register tablet state
     ASSIGN_OR_RETURN(auto state_ptr, create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel,
                                                                       max_bytes, std::move(callback), release_token));
+    {
+        // Carry over the queue wait of the caller's context, which is about to be destroyed.
+        std::lock_guard<std::mutex> lock(state_ptr->mutex);
+        state_ptr->handoff_in_queue_time_sec = handoff_in_queue_time_sec;
+        state_ptr->handoff_queue_wait_ns = handoff_queue_wait_ns;
+    }
 
     // Step 4: Submit subtasks
     //
@@ -935,6 +942,10 @@ void TabletParallelCompactionManager::finalize_tablet_completion(
                 *(merged_context->stats) = *(merged_context->stats) + *(subtask_ctx->stats);
             }
         }
+        // Add the pre-hand-off queue wait once, not per subtask: it was spent by the single context that
+        // waited for a worker, not by each subtask.
+        merged_context->stats->in_queue_time_sec += state->handoff_in_queue_time_sec;
+        merged_context->stats->queue_wait_ns += state->handoff_queue_wait_ns;
 
         // Only mark as failed if ALL subtasks failed
         // If at least one subtask succeeded, the compaction is considered (partially) successful
