@@ -662,6 +662,21 @@ Accepted sizes range from 4 KB to 1 MB. The ceiling is where a point lookup stil
 costs a bounded amount: a 1 MB page reads a single row in roughly a tenth of a
 millisecond, and past that the bill grows faster than the ratio does.
 
+Two things decide whether the internal dictionary is actually built for a column,
+and neither is under the property's control:
+
+- The column has to end up plain-encoded. StarRocks picks the encoding from the
+  data, and a column with few distinct values is dictionary-encoded instead, which
+  already compresses it far better than anything here would. Setting the property
+  on such a column has no effect.
+- A column holding 256 rows or fewer is dictionary-encoded outright, so very small
+  tables never get an internal dictionary either.
+
+Neither case is an error and neither changes what the column is compressed with:
+the nominated columns are still ZSTD. `zstd_compression_dict_pages_written` and
+`zstd_compression_dict_bytes` show whether dictionaries are actually being
+produced.
+
 The property can also be changed later with
 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. The new setting
 governs data written from then on; segments that already exist are not rewritten

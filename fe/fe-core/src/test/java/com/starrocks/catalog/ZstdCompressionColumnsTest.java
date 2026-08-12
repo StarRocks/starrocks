@@ -343,44 +343,55 @@ public class ZstdCompressionColumnsTest {
 
     @Test
     public void testPerColumnPageSizeIsParsedAndEchoed() throws Exception {
-        // A page size may be attached to any nominated column; columns without one
-        // keep the BE default. Sizes are per column because the size that pays off
-        // depends on the column's row length.
-        starRocksAssert.withTable("CREATE TABLE test.t_page_size (\n" +
-                "k BIGINT NOT NULL, v STRING, j JSON\n" +
-                ") ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 " +
-                "PROPERTIES (\"replication_num\"=\"1\", \"zstd_compression_columns\"=\"v:1m, j\")");
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb("test").getTable("t_page_size");
+        // A page size may be attached to any nominated column; columns without one keep
+        // the BE default. The size is per column because what pays off depends on how
+        // large that column's rows are relative to a page.
+        starRocksAssert.withTable(createTableSql("t_page_size",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m, v2\""));
+        OlapTable table = getTable("t_page_size");
 
-        Assertions.assertEquals(Sets.newHashSet("v", "j"), table.getZstdCompressionColumnNames());
+        Assertions.assertEquals(Sets.newHashSet("v1", "v2"), table.getZstdCompressionColumnNames());
         Map<ColumnId, Integer> pageSizes = table.getZstdCompressionPageSizes();
         Assertions.assertNotNull(pageSizes);
-        Assertions.assertEquals(Integer.valueOf(1024 * 1024), pageSizes.get(ColumnId.create("v")));
-        Assertions.assertNull(pageSizes.get(ColumnId.create("j")));
+        Assertions.assertEquals(Integer.valueOf(1024 * 1024), pageSizes.get(ColumnId.create("v1")));
+        Assertions.assertNull(pageSizes.get(ColumnId.create("v2")));
 
-        // SHOW CREATE TABLE has to round-trip the size, or the statement it prints
-        // would silently create a differently-encoded table.
-        String show = table.getProperties().get(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
-        Assertions.assertTrue(show.contains("v:" + (1024 * 1024)), show);
+        // SHOW CREATE TABLE has to round-trip the size, or the statement it prints would
+        // silently create a differently-encoded table.
+        String show = showCreateTable("t_page_size");
+        Assertions.assertTrue(show.contains("v1:" + (1024 * 1024)), show);
+
+        // And the size has to reach the BE, not just sit in the catalog.
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId,
+                table.getIndexMetaByMetaId(baseIndexMetaId));
+        for (TColumn tColumn : schemaInfo.toTabletSchema().getColumns()) {
+            if ("v1".equalsIgnoreCase(tColumn.getColumn_name())) {
+                Assertions.assertTrue(tColumn.isUse_zstd_compression());
+                Assertions.assertEquals(1024 * 1024, tColumn.getZstd_compression_page_size());
+            } else if ("v2".equalsIgnoreCase(tColumn.getColumn_name())) {
+                Assertions.assertTrue(tColumn.isUse_zstd_compression());
+                Assertions.assertEquals(0, tColumn.getZstd_compression_page_size());
+            }
+        }
     }
 
     @Test
     public void testPageSizeOutOfRangeIsRejected() {
         // 1KB is below the floor and 4MB above the ceiling: a page that small holds
-        // nothing to compress, and one that large would be decompressed in full for
-        // a single row -- measured at ~2.6ms on 9KB rows, 45x the default page.
-        Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
-                "CREATE TABLE test.t_page_small (k BIGINT NOT NULL, v STRING) ENGINE=OLAP DUPLICATE KEY(k) " +
-                        "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\", " +
-                        "\"zstd_compression_columns\"=\"v:1k\")"));
-        Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
-                "CREATE TABLE test.t_page_big (k BIGINT NOT NULL, v STRING) ENGINE=OLAP DUPLICATE KEY(k) " +
-                        "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\", " +
-                        "\"zstd_compression_columns\"=\"v:4m\")"));
-        Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
-                "CREATE TABLE test.t_page_junk (k BIGINT NOT NULL, v STRING) ENGINE=OLAP DUPLICATE KEY(k) " +
-                        "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES (\"replication_num\"=\"1\", " +
-                        "\"zstd_compression_columns\"=\"v:abc\")"));
+        // nothing to compress, and one that large would be decompressed in full for a
+        // single row -- measured at ~2.6ms on 9KB rows, 45x the default page.
+        assertCreateTableFails("t_page_small", "v1:1k", "must be between");
+        assertCreateTableFails("t_page_big", "v1:4m", "must be between");
+        assertCreateTableFails("t_page_junk", "v1:abc", "Invalid page size");
+        assertCreateTableFails("t_page_empty", "v1:", "missing value");
+    }
+
+    private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> starRocksAssert.withTable(createTableSql(tableName,
+                        ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"" + spec + "\"")));
+        Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains(expectedMessage),
+                "unexpected message for '" + spec + "': " + e.getMessage());
     }
 }
