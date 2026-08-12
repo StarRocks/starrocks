@@ -1000,4 +1000,3 @@ df.printSchema()
 
 - Nested type inference is **not** automatic. You must supply `starrocks.column.types` for every nested column.
 - `DATE` and `DATETIME` fields inside nested types are returned as Spark `DateType` / `TimestampType` only when the declared type is provided. Without the declaration they fall back to `StringType`.
-

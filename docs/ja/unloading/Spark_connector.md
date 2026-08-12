@@ -1001,4 +1001,3 @@ df.printSchema()
 
 - ネストされた型は**自動的に推論されません**。すべてのネストされたカラムについて、`starrocks.column.types` を指定する必要があります。
 - ネストされた型内の `DATE` および `DATETIME` フィールドは、宣言された型を指定した場合にのみ、それぞれ Spark の `DateType` / `TimestampType` として返されます。型の指定がない場合は、`StringType` にフォールバックします。
-
