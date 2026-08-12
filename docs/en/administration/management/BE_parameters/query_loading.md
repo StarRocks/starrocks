@@ -754,6 +754,33 @@ This topic introduces the following types of BE configurations:
 - Description: Idle time before an unused vector index cache entry expires. The timer starts when the last cache handle is released, and a cache hit refreshes it when that handle is later released. Entries pinned by running queries are not removed. IVF-PQ list blocks are released together with their owning index entry and do not have independent TTLs. Values less than or equal to `0` disable expiration. A runtime change applies to subsequent handle releases and does not rewrite existing entry deadlines.
 - Introduced in: v4.2.0
 
+### enable_vector_index_cache_async_load_on_miss
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a top-level vector index cache miss makes the current query fall back to brute-force search while the index is loaded into the cache in the background. Concurrent misses for the same index share one background load and continue to use brute-force search until the index is ready. When this item is `false`, a cache miss loads the index synchronously. Enable it only when the expected cold-load latency is higher than the brute-force search cost and the cache has enough capacity for the query working set. A runtime change affects vector index readers initialized after the change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_async_load_threads
+
+- Default: 8
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Maximum number of workers in the vector index cache background-load thread pool. Workers are created on demand and retire after being idle for 60 seconds. Values less than or equal to `0` are adjusted to `1`. This item is read when StorageEnv initializes and requires a BE/CN restart to change.
+- Introduced in: v4.2.0
+
+### vector_index_cache_loading_wait_timeout_ms
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum time that each synchronous cache caller waits for an in-progress vector index load. When the wait times out, the caller receives a cache miss so the query path can fall back to brute-force search. The existing loader is not canceled and continues loading the index in the background. Each later caller starts its own wait with the configured timeout. Values less than or equal to `0` disable waiting. A runtime change applies to subsequent waits.
+- Introduced in: v4.2.0
+
 ### vector_adaptive_ef_alpha
 
 - Default: 1.0
