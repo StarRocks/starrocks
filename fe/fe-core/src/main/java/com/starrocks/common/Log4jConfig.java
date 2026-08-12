@@ -139,8 +139,8 @@ public class Log4jConfig extends XmlConfiguration {
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
 
-            "    <RollingFile name=\"FeaturesFile\" fileName=\"${profile_log_dir}/fe.features.log\" " +
-            "       filePattern=\"${profile_log_dir}/fe.features.log.${feature_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"FeaturesFile\" fileName=\"${feature_log_dir}/fe.features.log\" " +
+            "       filePattern=\"${feature_log_dir}/fe.features.log.${feature_file_pattern}-%i\">\n" +
             "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
