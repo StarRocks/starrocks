@@ -677,7 +677,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         if (enable_checksum) {
             // Protects each tablet's metadata page. The shared BundleTabletMetadataPB header
             // (schemas, tablet_to_schema, page pointers, and this checksum map itself) is protected
-            // separately by the footer crc32 written below.
+            // separately by the footer Adler-32 written below.
             (*bundle_meta.mutable_tablet_meta_page_checksum())[tablet_id] =
                     olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size());
         }
@@ -693,7 +693,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     std::string fixed_buf;
     uint64_t size_field_value = serialized_buf.size();
     if (enable_checksum) {
-        // Footer layout: [bundle_meta][crc32(bundle_meta)][size | flag]. The crc protects the shared
+        // Footer layout: [bundle_meta][adler32(bundle_meta)][size | flag]. The checksum protects the shared
         // bundle header (schemas, mappings, page pointers, per-page checksums); the high-bit flag in
         // the size lets readers tell this layout apart from the legacy [bundle_meta][size] with no
         // collision risk (a legacy size is always far below 2^63).
@@ -887,7 +887,7 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
 
     // The high bit of the size field marks the checksummed footer layout written when
     // lake_enable_protobuf_file_checksum is on:
-    //   [bundle_meta][crc32(bundle_meta)][size | flag]
+    //   [bundle_meta][adler32(bundle_meta)][size | flag]
     // versus the legacy footer [bundle_meta][size]. This is collision-free: a legacy size is bounded
     // by protobuf's 2GB message limit and so never has this bit set. Mask it off to get the real size.
     const bool checksummed = (raw_size_field & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;

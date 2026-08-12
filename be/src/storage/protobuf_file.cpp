@@ -132,8 +132,11 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     return st;
 }
 
-Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* message, std::string_view data,
-                                                uint64_t magic, bool allow_plain_protobuf_fallback) {
+namespace {
+
+Status load_from_buffer_impl(::google::protobuf::Message* message, std::string_view data, uint64_t magic,
+                             bool allow_plain_protobuf_fallback, bool strict_header_length) {
+    const size_t original_buffer_size = data.size();
     auto parse_plain = [&]() -> Status {
         // An empty buffer parses as an all-default protobuf message, which would mask a file
         // truncated to 0 bytes as a valid (empty) metadata/txn-log. A legacy headerless file is
@@ -169,6 +172,13 @@ Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* mes
     }
     data.remove_prefix(sizeof(unused_flag));
 
+    if (strict_header_length && (header.file_length != original_buffer_size || data.size() != header.protobuf_length)) {
+        const uint64_t declared_file_length = header.file_length;
+        const uint64_t declared_protobuf_length = header.protobuf_length;
+        return Status::Corruption(fmt::format(
+                "mismatched file length of protobuf data. real={} header={} protobuf_real={} protobuf_expect={}",
+                original_buffer_size, declared_file_length, data.size(), declared_protobuf_length));
+    }
     if (data.size() < header.protobuf_length) {
         return Status::Corruption(fmt::format("mismatched message size of protobuf data. real={} expect={}",
                                               data.size(), (int64_t)header.protobuf_length));
@@ -180,6 +190,18 @@ Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* mes
         return Status::Corruption(fmt::format("failed to parse protobuf data, data size {}", data.size()));
     }
     return Status::OK();
+}
+
+} // namespace
+
+Status ProtobufFileWithHeader::load_from_buffer(::google::protobuf::Message* message, std::string_view data,
+                                                uint64_t magic, bool allow_plain_protobuf_fallback) {
+    return load_from_buffer_impl(message, data, magic, allow_plain_protobuf_fallback, /*strict_header_length=*/false);
+}
+
+Status ProtobufFileWithHeader::load_from_buffer_strict(::google::protobuf::Message* message, std::string_view data,
+                                                       uint64_t magic, bool allow_plain_protobuf_fallback) {
+    return load_from_buffer_impl(message, data, magic, allow_plain_protobuf_fallback, /*strict_header_length=*/true);
 }
 
 Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync) {

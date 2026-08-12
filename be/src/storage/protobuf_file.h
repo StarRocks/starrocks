@@ -82,6 +82,10 @@ public:
                                    uint64_t magic = OLAP_FIX_HEADER_MAGIC_NUMBER,
                                    bool allow_plain_protobuf_fallback = false);
 
+    static Status load_from_buffer_strict(::google::protobuf::Message* message, std::string_view data,
+                                          uint64_t magic = OLAP_FIX_HEADER_MAGIC_NUMBER,
+                                          bool allow_plain_protobuf_fallback = false);
+
 private:
     std::string _path;
     std::shared_ptr<FileSystem> _fs;

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 
@@ -304,6 +305,36 @@ TEST(LakeProtobufFileTest, static_buffer_load_fallback) {
         TabletMetaPB out;
         ASSERT_TRUE(ProtobufFileWithHeader::load_from_buffer(&out, plain, LAKE_META_HEADER_MAGIC_NUMBER,
                                                              /*allow_plain_protobuf_fallback=*/false)
+                            .is_corruption());
+    }
+}
+
+TEST(LakeProtobufFileTest, strict_buffer_load_rejects_trailing_bytes) {
+    const std::string kFileName = lake_test_file_name();
+    DeferOp defer([&]() { std::filesystem::remove(kFileName); });
+
+    auto meta = make_sample_meta();
+    ProtobufFileWithHeader file(kFileName, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
+    ASSERT_OK(file.save(meta, true));
+    const auto valid_content = read_whole_file(kFileName);
+
+    {
+        auto content = valid_content;
+        content.push_back('\0');
+        TabletMetaPB out;
+        EXPECT_TRUE(ProtobufFileWithHeader::load_from_buffer_strict(&out, content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                    /*allow_plain_protobuf_fallback=*/true)
+                            .is_corruption());
+    }
+
+    {
+        auto content = valid_content;
+        constexpr size_t kFileLengthOffset = sizeof(uint64_t) + sizeof(uint32_t);
+        const uint64_t wrong_file_length = content.size() + 1;
+        std::memcpy(content.data() + kFileLengthOffset, &wrong_file_length, sizeof(wrong_file_length));
+        TabletMetaPB out;
+        EXPECT_TRUE(ProtobufFileWithHeader::load_from_buffer_strict(&out, content, LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                    /*allow_plain_protobuf_fallback=*/true)
                             .is_corruption());
     }
 }
