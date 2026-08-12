@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AuditLog;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
