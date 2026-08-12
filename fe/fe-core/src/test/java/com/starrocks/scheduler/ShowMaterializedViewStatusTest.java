@@ -18,15 +18,43 @@ package com.starrocks.scheduler;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TMaterializedViewStatus;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 public class ShowMaterializedViewStatusTest {
+
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
+    @Mocked
+    private TaskManager taskManager;
+
+    @BeforeEach
+    public void setUp() {
+        // fromTaskRuns looks up the task owner via the global task manager; keep it offline in this unit test
+        // (the mocked TaskManager returns null for getTask, so no task owner is resolved).
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getTaskManager();
+                result = taskManager;
+                minTimes = 0;
+            }
+        };
+    }
 
     @Test
     public void toThriftReturnsDefaultValuesWhenNoRefreshJobStatus() {
