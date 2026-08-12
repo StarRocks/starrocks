@@ -27,13 +27,13 @@
 //                         ScalarColumnIterator control case.
 //
 // With the default customer-scale input (49 rowsets, 99,470 rows, and a 76,800-byte
-// string in remaining JSON), BM_JsonMergeIterator should use substantially more
-// compaction memory. A representative run measured about 16.7 GB versus 3.2 GB for
-// BM_NonFlat. Exact process RSS depends on the allocator and machine.
+// string in remaining JSON), an unfixed baseline measured about 16.7 GB versus 3.1 GB
+// for BM_NonFlat. With the result-lifetime and root-footprint fixes, the Flat JSON case
+// measured about 3.2 GB. Exact process RSS depends on the allocator and machine.
 //
 // Build and run
 // -------------
-// From the repository root, with an existing Release build:
+// From the repository root, with an existing Linux Release build:
 //
 //   cmake --build be/build_Release --target flat_json_vertical_compaction_mem_bench -j 16
 //   export STARROCKS_HOME="$PWD"
@@ -643,12 +643,15 @@ StatusOr<PreparedTablet> prepare_tablet(JsonIteratorMode iterator_mode, const Be
     return prepared;
 }
 
-int64_t column_reader_tree_footprint_bytes(const ColumnReader* reader) {
-    int64_t result = reader->total_mem_footprint();
-    if (reader->sub_readers() != nullptr) {
-        for (const auto& child : *reader->sub_readers()) {
-            result += column_reader_tree_footprint_bytes(child.get());
-        }
+int64_t column_reader_leaf_footprint_bytes(const ColumnReader* reader) {
+    const auto* sub_readers = reader->sub_readers();
+    if (sub_readers == nullptr || sub_readers->empty()) {
+        return reader->total_mem_footprint();
+    }
+
+    int64_t result = 0;
+    for (const auto& child : *sub_readers) {
+        result += column_reader_leaf_footprint_bytes(child.get());
     }
     return result;
 }
@@ -667,7 +670,7 @@ struct SegmentInspection {
     int64_t flat_segments_with_remaining_json = 0;
     int64_t json_merge_iterators = 0;
     int64_t json_root_reader_footprint_bytes = 0;
-    int64_t json_reader_tree_footprint_bytes = 0;
+    int64_t json_leaf_reader_footprint_bytes = 0;
     int64_t column_group_root_reader_footprint_bytes = 0;
     int64_t min_flat_json_child_reader_count = std::numeric_limits<int64_t>::max();
     int64_t max_flat_json_child_reader_count = 0;
@@ -704,7 +707,7 @@ StatusOr<SegmentInspection> inspect_segments(const PreparedTablet& prepared) {
                 return Status::InternalError("JSON column reader is missing from an input segment");
             }
             inspection.json_root_reader_footprint_bytes += json_reader->total_mem_footprint();
-            inspection.json_reader_tree_footprint_bytes += column_reader_tree_footprint_bytes(json_reader);
+            inspection.json_leaf_reader_footprint_bytes += column_reader_leaf_footprint_bytes(json_reader);
 
             const bool is_flat = json_reader->sub_readers() != nullptr && !json_reader->sub_readers()->empty();
             if (is_flat) {
@@ -933,9 +936,11 @@ Status validate_observations(JsonIteratorMode iterator_mode, const BenchConfig& 
                     kMainDocumentExtractedPathCount + 1, inspection.min_flat_json_child_reader_count,
                     inspection.max_flat_json_child_reader_count));
         }
-        if (inspection.json_reader_tree_footprint_bytes <= inspection.json_root_reader_footprint_bytes) {
-            return Status::InternalError(
-                    "Flat JSON reader-tree footprint is not larger than its root-reader footprint");
+        if (inspection.json_root_reader_footprint_bytes <= 0 ||
+            inspection.json_root_reader_footprint_bytes != inspection.json_leaf_reader_footprint_bytes) {
+            return Status::InternalError(fmt::format(
+                    "Flat JSON root-reader footprint {} does not match its leaf-reader footprint {}",
+                    inspection.json_root_reader_footprint_bytes, inspection.json_leaf_reader_footprint_bytes));
         }
     } else {
         if (inspection.flat_segments != 0 || inspection.json_merge_iterators != 0) {
