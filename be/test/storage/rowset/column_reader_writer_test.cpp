@@ -1357,27 +1357,38 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pa
 // The other half of the same rule: on data the dictionary does help, it is kept
 // and the column really does get smaller.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {
-    // Rows large enough that a page holds only a few of them, all sharing a long
-    // preamble. A plain page has to spell that preamble out again; the dictionary
-    // carries it once for the whole column. This is the shape the feature exists
-    // for, and it is deliberately NOT "hundreds of near-identical rows per page",
-    // where a plain page already captures the repetition by itself.
-    const int N = 300;
+    // A row about the size of a page, so a page holds one of them and there is no
+    // repetition inside a page for a plain codec to find. Every row opens with the
+    // same long preamble, which a plain page has to spell out again and again while
+    // the dictionary carries it once for the whole column. This is the shape the
+    // feature exists for, and it is deliberately NOT "hundreds of near-identical
+    // rows per page", where a plain page already captures the repetition by itself
+    // and a dictionary is rightly turned down. Over 256 rows, or the encoding
+    // speculation would pick DICT_ENCODING outright and the dictionary path would
+    // never run.
+    const int N = 400;
+    uint64_t r = 12345678901234567ULL;
+    auto next_char = [&r]() {
+        r ^= r << 13;
+        r ^= r >> 7;
+        r ^= r << 17;
+        return static_cast<char>('a' + (r % 26));
+    };
+    // The preamble carries no repetition of its own, so a plain page cannot shrink
+    // it -- only the fact that every row repeats it can, and that is exactly what a
+    // page-sized window cannot see and a dictionary can.
     std::string preamble;
-    for (int i = 0; i < 500; i++) {
-        preamble += strings::Substitute(R"({"field_$0":"a recurring configuration value number $0"},)", i % 50);
+    preamble.reserve(50000);
+    for (int j = 0; j < 50000; j++) {
+        preamble.push_back(next_char());
     }
     std::vector<std::string> strs(N);
     std::vector<Slice> slices;
     slices.reserve(N);
-    uint64_t r = 12345678901234567ULL;
     for (int i = 0; i < N; i++) {
         std::string v = preamble;
-        for (int j = 0; j < 5000; j++) {
-            r ^= r << 13;
-            r ^= r >> 7;
-            r ^= r << 17;
-            v.push_back(static_cast<char>('a' + (r % 26)));
+        for (int j = 0; j < 12000; j++) {
+            v.push_back(next_char());
         }
         strs[i] = std::move(v);
         slices.emplace_back(strs[i]);
@@ -1534,17 +1545,18 @@ TEST_F(ColumnReaderWriterTest, DISABLED_zstd_dict_auto_matrix) {
         bool dummy = false;
         bool forced_has = false;
         bool auto_has = false;
-        write_once(false, page, 0.02, "nodict", &nodict, &dummy);
+        write_once(false, page, 0.10, "nodict", &nodict, &dummy);
         // A negative threshold makes the trial keep the dictionary whatever it
         // measures, which is how we learn what keeping it would have cost.
         write_once(true, page, -1.0, "forced", &forced, &forced_has);
-        write_once(true, page, 0.02, "auto", &automatic, &auto_has);
+        write_once(true, page, 0.10, "auto", &automatic, &auto_has);
 
         // What matters is the outcome, not which way the flag went: the automatic
         // choice has to land on the better of the two, within the margin it is
-        // allowed to decline a dictionary for.
+        // allowed to decline a dictionary for -- a dictionary worth less than that
+        // is deliberately turned down.
         const uint64_t best = std::min(nodict, forced);
-        const bool ok = automatic <= static_cast<uint64_t>(static_cast<double>(best) * 1.02);
+        const bool ok = automatic <= static_cast<uint64_t>(static_cast<double>(best) * 1.10);
         fprintf(stderr, "  %-8u %12.2f %12.2f %12.2f %8s %7.2f%% %8s\n", page / 1024, nodict / 1048576.0,
                 forced / 1048576.0, automatic / 1048576.0, auto_has ? "字典" : "无字典",
                 100.0 * (static_cast<double>(automatic) / static_cast<double>(best) - 1.0), ok ? "OK" : "MISMATCH");

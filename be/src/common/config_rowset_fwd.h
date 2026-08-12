@@ -120,6 +120,21 @@ CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
 // empty first page and permanently marking the column dict-ready.
 CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
 
+// How much smaller the trial pages must get before the per-column compression
+// dictionary is kept, as a fraction. The writer compresses the first
+// kZstdDictTrialPages pages after the sample both ways and compares; below this
+// the dictionary is dropped for the whole column.
+//
+// A dictionary is not free: a page of its own per column per segment, a load per
+// segment on every read, and a decision that cannot be revisited once pages
+// reference it. So the default asks for a clear win rather than a measurable one.
+// Measured across 13 corpora x 3 page sizes: at 0.10 the dictionary is kept only
+// where it earns 10%+ (agent-log columns and replayed text at 64KB), and the cost
+// is turning down gains of 5-9% that cluster at 256KB pages, where a plain page
+// already captures most of the repetition. Lower it to about 0.05 to take those
+// too. Values below 0 are treated as 0.
+CONF_mDouble(zstd_compression_dict_min_gain, "0.10");
+
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");

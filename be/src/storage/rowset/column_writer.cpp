@@ -79,7 +79,11 @@ namespace starrocks {
 
 ColumnWriterOptions::ColumnWriterOptions()
         : data_page_size(config::data_page_size),
-          zstd_compression_dict_sample_bytes(config::zstd_compression_dict_sample_bytes) {}
+          zstd_compression_dict_sample_bytes(config::zstd_compression_dict_sample_bytes),
+          // Clamped, because a negative value would mean "keep the dictionary
+          // whatever it measures". Tests reach that on purpose by setting the field
+          // directly; an operator should not reach it by mis-typing a config.
+          zstd_compression_dict_min_gain(std::max(0.0, config::zstd_compression_dict_min_gain)) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -760,11 +764,11 @@ Status ScalarColumnWriter::finish_current_page() {
             const uint64_t saved = _zstd_compression_dict_trial_without > _zstd_compression_dict_trial_with
                                            ? _zstd_compression_dict_trial_without - _zstd_compression_dict_trial_with
                                            : 0;
-            // One condition: the saving has to be worth more than the noise. The
-            // other half of the rule is structural rather than arithmetic -- a
-            // column too short to finish the trial never gets a dictionary at all,
-            // which is the right answer for it, because the dictionary page is
-            // roughly a page in size and cannot pay for itself over a handful.
+            // One condition: the saving has to be large, not merely real. The other
+            // half of the rule is structural rather than arithmetic -- a column too
+            // short to finish the trial never gets a dictionary at all, which is the
+            // right answer for it, because the dictionary page is roughly a page in
+            // size and cannot pay for itself over a handful.
             const bool worth_the_margin =
                     static_cast<double>(saved) >=
                     static_cast<double>(_zstd_compression_dict_trial_without) * _opts.zstd_compression_dict_min_gain;

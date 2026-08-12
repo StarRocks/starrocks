@@ -111,9 +111,9 @@ struct ColumnWriterOptions {
     // referencing it. Only meaningful for ZSTD PLAIN string/JSON columns.
     bool use_zstd_compression = false;
     // How much smaller the trial pages have to get before the per-column dictionary
-    // is kept. Tests lower it to force a decision either way; production leaves it
-    // alone.
-    double zstd_compression_dict_min_gain = 0.02;
+    // is kept. Defaults to config::zstd_compression_dict_min_gain; tests set it
+    // directly, including to a negative value, to force a decision either way.
+    double zstd_compression_dict_min_gain = 0.10;
     // Initialized from config::zstd_compression_dict_sample_bytes in the constructor
     // (config.h is deliberately not included by this header).
     uint32_t zstd_compression_dict_sample_bytes;

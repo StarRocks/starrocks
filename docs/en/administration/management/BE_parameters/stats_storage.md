@@ -271,6 +271,15 @@ This topic introduces the following types of BE configurations:
 - Description: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 - Introduced in: -
 
+### zstd_compression_dict_min_gain
+
+- Default: 0.10
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: How much smaller the trial pages must get, as a fraction, before the per-column compression dictionary is kept. The writer compresses the first pages after the sample both with and without the dictionary and compares; below this threshold the dictionary is dropped for the whole column and the column is written as plain ZSTD. A dictionary is not free -- it costs a page of its own per column per segment, a load per segment on every read, and the choice cannot be revisited once data pages reference it -- so the default asks for a clear win rather than a measurable one. Measured across 13 datasets and 3 page sizes, `0.10` keeps the dictionary only where it earns 10% or more, and the cost is turning down gains of 5-9% that cluster at 256 KB pages, where a plain page already captures most of the repetition; lower the value to about `0.05` to take those as well. Values below `0` are treated as `0`. This parameter takes effect only when `enable_zstd_compression_dict` is `true`, and only for data written after the change.
+- Introduced in: v4.2
+
 ### zstd_compression_dict_min_sample_bytes
 
 - Default: 1024

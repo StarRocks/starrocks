@@ -842,6 +842,7 @@
         "enable_zstd_compression_dict",
         "zstd_compression_dict_sample_bytes",
         "zstd_compression_dict_min_sample_bytes",
+        "zstd_compression_dict_min_gain",
         "dictionary_encoding_ratio_for_non_string_column",
         "dictionary_speculate_min_chunk_size",
         "metadata_cache_memory_limit_percent",

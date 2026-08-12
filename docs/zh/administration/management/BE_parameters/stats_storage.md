@@ -277,6 +277,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：单次 Compaction 打印 Trace 的时间阈值，如果单次 Compaction 时间超过该阈值就打印 Trace。
 - 引入版本：-
 
+### zstd_compression_dict_min_gain
+
+- 默认值：0.10
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：试压页至少要小多少（以比例表示），列级压缩字典才会被保留。写入端会把采样页之后的若干个页分别用「带字典」和「不带字典」压一遍做对比；低于该阈值时整列放弃字典，改为普通 ZSTD 压缩。字典不是免费的——每列每个 Segment 要多存一个字典页，读取时每个 Segment 要加载一次，而且一旦有数据页引用了它，这个决定就无法回退——因此默认值要求的是「明显更优」而非「可测量的更优」。在 13 份数据集 × 3 档页大小上实测：取 `0.10` 时字典只在收益达到 10% 以上的场景被保留，代价是放弃了一批 5%~9% 的收益（集中在 256 KB 页，那里页内已经吃掉了大部分重复）；若希望把这批也拿到，可下调到约 `0.05`。小于 `0` 的取值按 `0` 处理。该参数仅在 `enable_zstd_compression_dict` 为 `true` 时生效，且只影响修改之后写入的数据。
+- 引入版本：v4.2
+
 ### zstd_compression_dict_min_sample_bytes
 
 - 默认值：1024
