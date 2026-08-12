@@ -29,6 +29,12 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+>>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
 import com.starrocks.thrift.TMaterializedViewStatus;
 
 import java.util.ArrayList;
@@ -662,4 +668,102 @@ public class ShowMaterializedViewStatus {
                 ", lastJobTaskRunStatus=" + lastJobTaskRunStatus +
                 '}';
     }
+<<<<<<< HEAD
+=======
+
+    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
+        StringBuilder originStmtBuilder = new StringBuilder(
+                "create materialized view " + mv +
+                        " as select ");
+        String groupByString = "";
+        for (Column column : mvMeta.getSchema()) {
+            if (column.isKey()) {
+                groupByString += column.getName() + ",";
+            }
+        }
+        originStmtBuilder.append(groupByString);
+        for (Column column : mvMeta.getSchema()) {
+            if (!column.isKey()) {
+                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                        .append(column.getName()).append(")").append(",");
+            }
+        }
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                .append(groupByString);
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        return originStmtBuilder.toString();
+    }
+
+    private static ShowMaterializedViewStatus getASyncMVStatus(String dbName,
+                                                               MaterializedView mvTable,
+                                                               List<TaskRunStatus> taskTaskStatusJob) {
+        try {
+            return ShowMaterializedViewStatus.of(dbName, mvTable, taskTaskStatusJob);
+        } catch (Exception e) {
+            long mvId = mvTable.getId();
+            LOG.warn("get async mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
+                    mvId, dbName, mvTable.getName(), e.getMessage());
+            return new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
+        }
+    }
+
+    private static ShowMaterializedViewStatus getSyncMVStatus(String dbName,
+                                                              OlapTable olapTable,
+                                                              MaterializedIndexMeta mvMeta) {
+        try {
+            return ShowMaterializedViewStatus.of(dbName, olapTable, mvMeta);
+        } catch (Exception e) {
+            final long indexMetaId = mvMeta.getIndexMetaId();
+            LOG.warn("get sync mv status failed, mv meta Id: {}, dbName: {}, mvName: {}, error: {}",
+                    indexMetaId, dbName, olapTable.getIndexNameByMetaId(indexMetaId), e.getMessage());
+            return new ShowMaterializedViewStatus(indexMetaId, dbName, olapTable.getIndexNameByMetaId(indexMetaId));
+        }
+    }
+
+    public static List<ShowMaterializedViewStatus> listMaterializedViewStatus(
+            String dbName,
+            List<MaterializedView> mvs,
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
+        final List<ShowMaterializedViewStatus> rowSets = Lists.newArrayList();
+
+        // Now there are two MV cases:
+        //  1. Table's type is MATERIALIZED_VIEW, this is the new MV type which the MV table is separated from
+        //     the base table and supports multi table in MV definition.
+        //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
+        //     table and only supports single table in MV definition.
+        final Map<String, List<TaskRunStatus>> taskNameToStatusMap = Maps.newHashMap();
+        if (!mvs.isEmpty()) {
+            try {
+                taskNameToStatusMap.putAll(GlobalStateMgr.getCurrentState().getTaskManager()
+                        .listMVRefreshedTaskRunStatus(dbName,
+                                mvs.stream()
+                                        .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                                        .collect(Collectors.toSet())
+                        ));
+            } catch (Exception e) {
+                // If the outer user query has already exhausted its query_timeout budget, the internal
+                // task_run_history read hit that timeout: surface it as a timeout so the outer query exits,
+                // instead of silently falling back to unknown refresh status.
+                if (SimpleExecutor.outerRemainingQueryTimeoutS() <= 0) {
+                    throw new StarRocksPlannerException(
+                            "querying information_schema.materialized_views exceeded query_timeout while "
+                                    + "reading task run history", ErrorType.INTERNAL_ERROR);
+                }
+                LOG.warn("Failed to list MV refreshed task run status, fallback to unknown status. db: {}",
+                        dbName, e);
+            }
+        }
+        // async materialized views
+        mvs.forEach(mvTable ->
+                rowSets.add(getASyncMVStatus(dbName, mvTable, taskNameToStatusMap.getOrDefault(
+                        TaskBuilder.getMvTaskName(mvTable.getId()), Lists.newArrayList())))
+        );
+        // sync materialized views
+        singleTableMVs.forEach(singleTableMV ->
+                rowSets.add(getSyncMVStatus(dbName, singleTableMV.first, singleTableMV.second))
+        );
+        return rowSets;
+    }
+>>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
 }

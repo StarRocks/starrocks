@@ -115,6 +115,48 @@ public class SimpleExecutor {
         try {
             ConnectContext context = createConnectContext();
 
+<<<<<<< HEAD
+=======
+    /**
+     * Same as {@link #executeDQL(String)} but bounds the internal query with an explicit
+     * {@code query_timeout} (seconds) instead of the default {@code statistic_collect_query_timeout}.
+     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views}
+     * or {@code lookup_string}) so they never outlive the outer user query.
+     */
+    public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+        ConnectContext prev = ConnectContext.get();
+        try {
+            ConnectContext context = createConnectContext();
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    /**
+     * Remaining time budget (in seconds) derived from the outer (triggering) user query's
+     * {@code query_timeout}: {@code query_timeout - elapsed}. Serving-path internal queries should be
+     * bounded by this so a single one cannot outlive the outer query. When there is no outer user query
+     * (background jobs), falls back to {@code statistic_collect_query_timeout} to keep the old behavior.
+     * The returned value may be {@code <= 0}, meaning the outer query has already exhausted its budget.
+     */
+    public static int outerRemainingQueryTimeoutS() {
+        ConnectContext outer = ConnectContext.get();
+        if (outer == null || outer.getStartTime() <= 0) {
+            return (int) Config.statistic_collect_query_timeout;
+        }
+        long elapsedSeconds = (System.currentTimeMillis() - outer.getStartTime()) / 1000;
+        return (int) (outer.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+    }
+
+    public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+        try {
+>>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
