@@ -15,12 +15,22 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.qe.ShowMaterializedViewStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
+>>>>>>> 1e9b5b1412 ([BugFix] Bound information_schema.materialized_views internal queries by query_timeout (#77585))
 import com.starrocks.thrift.TMaterializedViewStatus;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 public class ShowMaterializedViewStatusTest {
 
@@ -91,5 +101,54 @@ public class ShowMaterializedViewStatusTest {
         TMaterializedViewStatus thriftStatus = viewStatus.toThrift();
 
         Assertions.assertEquals("2025-01-01 10:05:00", thriftStatus.getLast_refresh_time());
+    }
+
+    @Test
+    public void listMaterializedViewStatusPropagatesTimeoutWhenBudgetExhausted(
+            @Mocked MaterializedView mv, @Mocked SimpleExecutor simpleExecutor) {
+        // The internal task_run_history read failed (e.g. its BE scan is stuck) AND the outer user query has
+        // already burned its whole query_timeout budget: the listing must surface the timeout so the outer
+        // information_schema.materialized_views query exits, instead of silently reporting unknown status.
+        new Expectations() {
+            {
+                mv.getId();
+                result = 1L;
+                minTimes = 0;
+
+                taskManager.listMVRefreshedTaskRunStatus(anyString, (Set<String>) any);
+                result = new RuntimeException("internal task_run_history read timed out");
+                minTimes = 0;
+
+                SimpleExecutor.outerRemainingQueryTimeoutS();
+                result = -1;
+                minTimes = 0;
+            }
+        };
+
+        StarRocksPlannerException e = Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> ShowMaterializedViewStatus.listMaterializedViewStatus(
+                        "testDb", Collections.singletonList(mv), Collections.emptyList()));
+        Assertions.assertTrue(e.getMessage().contains("exceeded query_timeout"), e.getMessage());
+    }
+
+    @Test
+    public void listMaterializedViewStatusFallsBackWhenBudgetRemains(
+            @Mocked MaterializedView mv, @Mocked SimpleExecutor simpleExecutor) {
+        // Same internal failure, but the outer query still has budget left: swallow it and fall back to
+        // unknown refresh status (previous behavior) rather than failing the whole query.
+        new Expectations() {
+            {
+                taskManager.listMVRefreshedTaskRunStatus(anyString, (Set<String>) any);
+                result = new RuntimeException("internal task_run_history read failed");
+                minTimes = 0;
+
+                SimpleExecutor.outerRemainingQueryTimeoutS();
+                result = 100;
+                minTimes = 0;
+            }
+        };
+
+        Assertions.assertDoesNotThrow(() -> ShowMaterializedViewStatus.listMaterializedViewStatus(
+                "testDb", Collections.singletonList(mv), Collections.emptyList()));
     }
 }
