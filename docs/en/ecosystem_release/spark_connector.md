@@ -23,16 +23,66 @@ displayed_sidebar: docs
 
 **Version requirements:**
 
-| Spark connector | Spark            | StarRocks     | Java | Scala |
-| --------------- | ---------------- | ------------- | ---- | ----- |
-| 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
+| Spark connector | Spark              | StarRocks      | Java | Scala |
+| --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
+| 1.0.0           | 3.x                | 1.18 and later | 8    | 2.12  |
+| 1.0.0           | 2.x                | 1.18 and later | 8    | 2.11  |
 
 ## Release notes
 
 ### 1.1
 
+<<<<<<< HEAD
 ### 1.1.2
+=======
+#### 1.1.4
+
+This release mainly includes some features and improvements.
+
+**Features**
+
+- Added support for StarRocks catalog. [#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- Added support for `bitmap_hash64`. [#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- Supports nested fields (Structs, Arrays, and Maps). [#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- Supports reading and writing through Spark catalog. [#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- Supports Spark 4.0 and Scala 2.13. [#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**Improvements**
+
+- Added the security policy. [#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**BugFix**
+
+- Incorrect filter pushdown in DataSource V2. [#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
+
+#### 1.1.3
+
+This release mainly includes some features and improvements.
+
+**Features**
+
+- Sink supports LZ4 compression. [#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**Improvements**
+
+- Supports reading and writing StarRocks DATETIME data type with microseconds. [#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- Supports configuring the socket timeout for write. [#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- Enlarged the maximum string length of `jackson-core`. [#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**BugFix**
+
+- Parse error caused by keywords used as column names. (After the bug fix, quotes are added to column names in BuildScan.) [#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- Exception caused by that `java.lang.String` is not a valid external type for DATE/TIMESTAMP. [#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- The JSON type was written incorrectly. [#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
+>>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 **Features**
 

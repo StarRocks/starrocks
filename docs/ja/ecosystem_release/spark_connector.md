@@ -23,16 +23,64 @@ displayed_sidebar: docs
 
 **バージョン要件:**
 
-| Spark connector | Spark            | StarRocks     | Java | Scala |
+| Spark コネクタ    | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
-| 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
+| 1.1.4           | 4.0, 4.1            | 2.5  以降  | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5       | 2.5  以降  | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
 
 ## リリースノート
 
 ### 1.1
 
+<<<<<<< HEAD
 ### 1.1.2
+=======
+#### 1.1.4
+
+このリリースでは、いくつかの新機能と改善を含んでいます。
+
+**新機能**
+
+- StarRocks catalog をサポートしました。[#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- `bitmap_hash64` をサポートしました。[#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- Struct、Array、Map などのネストされたフィールドをサポートしました。[#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- Spark catalog を介したデータの読み取りおよび書き込みをサポートしました。[#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- Spark 4.0 および Scala 2.13 をサポートしました。[#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**改善**
+
+- セキュリティポリシーを追加しました。[#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**バグ修正**
+
+- DataSource V2 におけるフィルタープッシュダウンの処理を修正しました。[#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
+
+#### 1.1.3
+
+このリリースでは、いくつかの新機能と改善を含んでいます。
+
+**新機能**
+
+- Sink が LZ4 圧縮をサポートしました。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**改善**
+
+- マイクロ秒を含む StarRocks の DATETIME 型の読み書きに対応しました。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 書き込み処理のソケットタイムアウトを設定できるようになりました。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- `jackson-core` の最大文字列長を拡張しました。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**バグ修正**
+
+- カラム名にキーワードが使用されたことで発生する解析エラーを修正しました。（修正後、BuildScan ではカラム名に引用符が付加されます。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- `java.lang.String` が DATE/TIMESTAMP の有効な外部型でないことによって発生する例外を修正しました。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- JSON 型の書き込みに関する誤りを修正しました。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
+>>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 **機能**
 

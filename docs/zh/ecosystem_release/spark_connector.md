@@ -25,16 +25,64 @@ displayed_sidebar: docs
 
 **版本要求：**
 
-| Connector | Spark         | StarRocks  | Java | Scala |
-| --------- | ------------- | ---------- | ---- | ----- |
-| 1.1.1     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
-| 1.1.0     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
+| Spark connector | Spark              | StarRocks     | Java | Scala |
+| --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 ## 发布记录
 
 ### 1.1
 
+<<<<<<< HEAD
 ### 1.1.2
+=======
+#### 1.1.4
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- 新增对 StarRocks catalog 的支持。[#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- 新增对 `bitmap_hash64` 的支持。[#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- 支持嵌套字段（Struct、Array 和 Map）。[#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- 支持通过 Spark catalog 进行数据读写。[#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- 支持 Spark 4.0 和 Scala 2.13。[#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**功能优化**
+
+- 新增安全策略。[#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**问题修复**
+
+- 修复 DataSource V2 中的过滤器下推错误。[#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
+
+#### 1.1.3
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- Sink 支持 LZ4 压缩算法。[#110](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/110)
+
+**功能优化**
+
+- 支持读取和写入带有微秒的 StarRocks DATETIME 数据类型。[#123](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/123)
+- 支持配置写入操作的 Socket 超时时间。[#122](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/122)
+- 增大了 `jackson-core` 的最大字符串长度。[#129](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/129)
+
+**问题修复**
+
+- 修复了由于列名使用关键字导致的解析错误。（修复后，BuildScan 中会为列名添加引号。）[#103](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/103)
+- 修复了由于 `java.lang.String` 不是 DATE/TIMESTAMP 类型的有效外部类型而引发的异常。[#111](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/111)
+- 修复了 JSON 类型写入错误的问题。[#115](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/115)
+
+#### 1.1.2
+>>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 **新增特性**
 

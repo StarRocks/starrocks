@@ -12,15 +12,18 @@ StarRocks は、Apache Spark™ 用に開発したコネクタである StarRock
 
 ## バージョン要件
 
-| Spark コネクタ | Spark            | StarRocks     | Java | Scala |
+| Spark コネクタ    | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 以降   | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, または 3.4 | 2.5 以降 | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, または 3.4 | 2.5 以降 | 8    | 2.12  |
+| 1.1.4           | 4.0, 4.1            | 2.5  以降  | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5       | 2.5  以降  | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5  | 2.5 以降   | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, または 3.4 | 2.5 以降   | 8    | 2.12  |
 
 > **注意**
 >
-> - Spark コネクタの異なるバージョン間の動作の変更については、[Upgrade Spark connector](#upgrade-spark-connector) を参照してください。
+> - Spark コネクタの異なるバージョン間の動作の変更については、[Upgrade Spark connector](#spark-コネクタのアップグレード) を参照してください。
 > - Spark コネクタはバージョン 1.1.1 以降、MySQL JDBC ドライバを提供していません。ドライバを手動で Spark クラスパスにインポートする必要があります。ドライバは [MySQL サイト](https://dev.mysql.com/downloads/connector/j/) または [Maven Central](https://repo1.maven.org/maven2/mysql/mysql-connector-java/) で見つけることができます。
 
 ## Spark コネクタの取得
@@ -88,149 +91,171 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
 
 ## パラメータ
 
-### starrocks.fe.http.url
+### `starrocks.fe.http.url`
 
-**必須**:  YES<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  StarRocks クラスター内の FE の HTTP URL。複数の URL を指定することができ、カンマ（,）で区切る必要があります。形式: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。バージョン 1.1.1 以降、URL に `http://` プレフィックスを追加することもできます。例：`http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。
+- **必須**: YES
+- **デフォルト値**: なし
+- **説明**: StarRocks クラスター内の FE の HTTP URL。複数の URL を指定することができ、カンマ（,）で区切る必要があります。形式: `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。バージョン 1.1.1 以降、URL に `http://` プレフィックスを追加することもできます。例：`http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。
 
-### starrocks.fe.jdbc.url
+### `starrocks.fe.jdbc.url`
 
-**必須**:  YES<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  FE の MySQL サーバーに接続するために使用されるアドレス。形式: `jdbc:mysql://<fe_host>:<fe_query_port>`。
+- **必須**: YES
+- **デフォルト値**: なし
+- **説明**: FE の MySQL サーバーに接続するために使用されるアドレス。形式: `jdbc:mysql://<fe_host>:<fe_query_port>`。
 
-### starrocks.table.identifier
+### `starrocks.table.identifier`
 
-**必須**:  YES<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  StarRocks テーブルの名前。形式: `<database_name>.<table_name>`。
+- **必須**: YES
+- **デフォルト値**: なし
+- **説明**: StarRocks テーブルの名前。形式: `<database_name>.<table_name>`。
 
-### starrocks.user
+### `starrocks.user`
 
-**必須**:  YES<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../sql-reference/sql-statements/account-management/GRANT.md) を持っている必要があります。
+- **必須**: YES
+- **デフォルト値**: なし
+- **説明**: StarRocks クラスターアカウントのユーザー名。ユーザーは StarRocks テーブルに対する [SELECT および INSERT 権限](../sql-reference/sql-statements/account-management/GRANT.md) を持っている必要があります。
 
-### starrocks.password
+### `starrocks.password`
 
-**必須**:  YES<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  StarRocks クラスターアカウントのパスワード。
+- **必須**: YES
+- **デフォルト値**: なし
+- **説明**: StarRocks クラスターアカウントのパスワード。
 
-### starrocks.write.label.prefix
+### `starrocks.write.label.prefix`
 
-**必須**:  NO<br/>
-**デフォルト値**:  spark-<br/>
-**説明**:  Stream Load で使用されるラベルプレフィックス。
+- **必須**: NO
+- **デフォルト値**: `spark-`
+- **説明**: Stream Load で使用されるラベルプレフィックス。
 
-### starrocks.write.enable.transaction-stream-load
+### `starrocks.write.enable.transaction-stream-load`
 
-**必須**:  NO<br/>
-**デフォルト値**:  TRUE<br/>
-**説明**:  [Stream Load トランザクションインターフェース](../loading/Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
+- **必須**: NO
+- **デフォルト値**: `TRUE`
+- **説明**: [Stream Load トランザクションインターフェース](../loading/Stream_Load_transaction_interface.md) を使用してデータをロードするかどうか。StarRocks v2.5 以降が必要です。この機能は、トランザクション内でより多くのデータを少ないメモリ使用量でロードし、パフォーマンスを向上させます。<br/> **注意:** バージョン 1.1.1 以降、このパラメータは `starrocks.write.max.retries` の値が非正の場合にのみ有効です。なぜなら、Stream Load トランザクションインターフェースはリトライをサポートしていないためです。
 
-### starrocks.write.buffer.size
+### `starrocks.write.buffer.size`
 
-**必須**:  NO<br/>
-**デフォルト値**:  104857600<br/>
-**説明**:  一度に StarRocks に送信される前にメモリ内に蓄積できるデータの最大サイズ。このパラメータを大きな値に設定すると、ロードパフォーマンスが向上しますが、ロードの遅延が増加する可能性があります。
+- **必須**: NO
+- **デフォルト値**: `104857600`
+- **説明**: 一度に StarRocks に送信される前にメモリ内に蓄積できるデータの最大サイズ。このパラメータを大きな値に設定すると、ロードパフォーマンスが向上しますが、ロードの遅延が増加する可能性があります。
 
-### starrocks.write.buffer.rows
+### `starrocks.write.buffer.rows`
 
-**必須**:  NO<br/>
-**デフォルト値**:  Integer.MAX_VALUE<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。一度に StarRocks に送信される前にメモリ内に蓄積できる行の最大数。
+- **必須**: NO
+- **デフォルト値**: Integer.MAX_VALUE
+- **説明**: バージョン 1.1.1 以降でサポートされています。一度に StarRocks に送信される前にメモリ内に蓄積できる行の最大数。
 
-### starrocks.write.flush.interval.ms
+### `starrocks.write.flush.interval.ms`
 
-**必須**:  NO<br/>
-**デフォルト値**:  300000<br/>
-**説明**:  データが StarRocks に送信される間隔。このパラメータはロードの遅延を制御するために使用されます。
+- **必須**: NO
+- **デフォルト値**: `300000`
+- **説明**: データが StarRocks に送信される間隔。このパラメータはロードの遅延を制御するために使用されます。
 
-### starrocks.write.max.retries
+### `starrocks.write.max.retries`
 
-**必須**:  NO<br/>
-**デフォルト値**:  3<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。ロードが失敗した場合に同じバッチのデータに対して Stream Load を再試行する回数。<br/> **注意:** Stream Load トランザクションインターフェースはリトライをサポートしていないため、このパラメータが正の場合、コネクタは常に Stream Load インターフェースを使用し、`starrocks.write.enable.transaction-stream-load` の値を無視します。
+- **必須**: NO
+- **デフォルト値**: `3`
+- **説明**: バージョン 1.1.1 以降でサポートされています。ロードが失敗した場合に同じバッチのデータに対して Stream Load を再試行する回数。
 
-### starrocks.write.retry.interval.ms
+:::note
+Stream Load トランザクションインターフェースはリトライをサポートしていないため、このパラメータが正の場合、コネクタは常に Stream Load インターフェースを使用し、`starrocks.write.enable.transaction-stream-load` の値を無視します。
+:::
 
-**必須**:  NO<br/>
-**デフォルト値**:  10000<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。ロードが失敗した場合に同じバッチのデータに対して Stream Load を再試行する間隔。
+### `starrocks.write.retry.interval.ms`
 
-### starrocks.columns
+- **必須**: NO
+- **デフォルト値**: `10000`
+- **説明**: バージョン 1.1.1 以降でサポートされています。ロードが失敗した場合に同じバッチのデータに対して Stream Load を再試行する間隔。
 
-**必須**:  NO<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  データをロードしたい StarRocks テーブルの列。複数の列を指定することができ、カンマ（,）で区切る必要があります。例：`"col0,col1,col2"`。
+### `starrocks.write.use_bitmap_hash64`
 
-### starrocks.column.types
+- **必須**: NO
+- **デフォルト値**: `false`
+- **説明**: バージョン 1.1.3 以降でサポートされています。ビットマップの生成に 64 ビットのハッシュ関数を使用するかどうか。デフォルトでは 32 ビットのハッシュ関数が使用されます。
 
-**必須**: NO<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。StarRocks テーブルから推測されるデフォルトのデータ型と[デフォルトマッピング](#data-type-mapping-between-spark-and-starrocks)を使用する代わりに、Spark 用の列データ型をカスタマイズします。パラメータ値は Spark の [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) の出力と同じ DDL 形式のスキーマです。例：`col0 INT, col1 STRING, col2 BIGINT`。カスタマイズが必要な列のみを指定する必要があります。使用例として、[BITMAP](#load-data-into-columns-of-bitmap-type) または [HLL](#load-data-into-columns-of-hll-type) 型の列にデータをロードすることが挙げられます。
+### `starrocks.columns`
 
-### starrocks.write.properties.*
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: データをロードしたい StarRocks テーブルの列。複数の列を指定することができ、カンマ（,）で区切る必要があります。例：`"col0,col1,col2"`。
 
-**必須**:  NO<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
+### `starrocks.column.types`
 
-### starrocks.write.properties.format
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: バージョン 1.1.1 以降でサポートされています。StarRocks テーブルから推測されるデフォルトのデータ型と[デフォルトマッピング](#spark-と-starrocks-のデータ型マッピング)を使用する代わりに、Spark 用の列データ型をカスタマイズします。パラメータ値は Spark の [StructType#toDDL](https://github.com/apache/spark/blob/master/sql/api/src/main/scala/org/apache/spark/sql/types/StructType.scala#L449) の出力と同じ DDL 形式のスキーマです。例：`col0 INT, col1 STRING, col2 BIGINT`。カスタマイズが必要な列のみを指定する必要があります。使用例として、[BITMAP](#bitmap-型の列にデータをロード) または [HLL](#hll-型の列にデータをロード) 型の列にデータをロードすることが挙げられます。
 
-**必須**:  NO<br/>
-**デフォルト値**:  CSV<br/>
-**説明**:  Spark コネクタがデータを StarRocks に送信する前に各バッチのデータを変換する際のファイル形式。有効な値：CSV および JSON。
+### `starrocks.write.properties.*`
 
-### starrocks.write.properties.row_delimiter
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: Stream Load の動作を制御するために使用されるパラメータ。例えば、パラメータ `starrocks.write.properties.format` はロードされるデータの形式を指定します。サポートされているパラメータとその説明のリストについては、[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を参照してください。
 
-**必須**:  NO<br/>
-**デフォルト値**:  \n<br/>
-**説明**:  CSV 形式のデータの行区切り文字。
+### `starrocks.write.properties.format`
 
-### starrocks.write.properties.column_separator
+- **必須**: NO
+- **デフォルト値**: `CSV`
+- **説明**: Spark コネクタがデータを StarRocks に送信する前に各バッチのデータを変換する際のファイル形式。有効な値：CSV および JSON。
 
-**必須**:  NO<br/>
-**デフォルト値**:  \t<br/>
-**説明**:  CSV 形式のデータの列区切り文字。
+### `starrocks.write.properties.row_delimiter`
 
-### starrocks.write.properties.partial_update
+- **必須**: NO
+- **デフォルト値**: `\n`
+- **説明**: CSV 形式のデータの行区切り文字。
 
-**必須**:  NO<br/>
-**デフォルト値**: `FALSE`<br/>
-**説明**: 部分更新を使用するかどうか。有効な値：`TRUE` および `FALSE`。デフォルト値：`FALSE`、この機能を無効にすることを示します。
+### `starrocks.write.properties.column_separator`
 
-### starrocks.write.properties.partial_update_mode
+- **必須**: NO
+- **デフォルト値**: `\t`
+- **説明**: CSV 形式のデータの列区切り文字。
 
-**必須**:  NO<br/>
-**デフォルト値**: `row`<br/>
-**説明**: 部分更新のモードを指定します。有効な値：`row` および `column`。<ul><li>値 `row`（デフォルト）は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
+### `starrocks.write.properties.partial_update`
 
-### starrocks.write.num.partitions
+- **必須**: NO
+- **デフォルト値**: `FALSE`
+- **説明**: 部分更新を使用するかどうか。有効な値：`TRUE` および `FALSE`。デフォルト値：`FALSE`、この機能を無効にすることを示します。
 
-**必須**:  NO<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  Spark がデータを書き込む際に並行して使用できるパーティションの数。データ量が少ない場合、パーティションの数を減らしてロードの同時実行性と頻度を下げることができます。このパラメータのデフォルト値は Spark によって決定されます。ただし、この方法は Spark Shuffle コストを引き起こす可能性があります。
+### `starrocks.write.properties.partial_update_mode`
 
-### starrocks.write.partition.columns
+- **必須**: NO
+- **デフォルト値**: `row`
+- **説明**: 部分更新のモードを指定します。有効な値：`row` および `column`。<ul><li>値 `row`（デフォルト）は行モードでの部分更新を意味し、多くの列と小さなバッチでのリアルタイム更新に適しています。</li><li>値 `column` は列モードでの部分更新を意味し、少ない列と多くの行でのバッチ更新に適しています。このようなシナリオでは、列モードを有効にすると更新速度が速くなります。例えば、100 列のテーブルで、すべての行に対して 10 列（全体の 10%）のみが更新される場合、列モードの更新速度は 10 倍速くなります。</li></ul>
 
-**必須**:  NO<br/>
-**デフォルト値**:  なし<br/>
-**説明**:  Spark のパーティション列。このパラメータは `starrocks.write.num.partitions` が指定されている場合にのみ有効です。このパラメータが指定されていない場合、書き込まれるすべての列がパーティションに使用されます。
+### `starrocks.write.num.partitions`
 
-### starrocks.timezone
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: Spark がデータを書き込む際に並行して使用できるパーティションの数。データ量が少ない場合、パーティションの数を減らしてロードの同時実行性と頻度を下げることができます。このパラメータのデフォルト値は Spark によって決定されます。ただし、この方法は Spark Shuffle コストを引き起こす可能性があります。
 
-**必須**:  NO<br/>
-**デフォルト値**:  JVM のデフォルトタイムゾーン<br/>
-**説明**:  バージョン 1.1.1 以降でサポートされています。Spark の `TimestampType` を StarRocks の `DATETIME` に変換する際に使用されるタイムゾーン。デフォルトは `ZoneId#systemDefault()` によって返される JVM のタイムゾーンです。形式は `Asia/Shanghai` のようなタイムゾーン名、または `+08:00` のようなゾーンオフセットで指定できます。
+### `starrocks.write.partition.columns`
+
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: Spark のパーティション列。このパラメータは `starrocks.write.num.partitions` が指定されている場合にのみ有効です。このパラメータが指定されていない場合、書き込まれるすべての列がパーティションに使用されます。
+
+### `starrocks.timezone`
+
+- **必須**: NO
+- **デフォルト値**: JVM のデフォルトタイムゾーン
+- **説明**: バージョン 1.1.1 以降でサポートされています。Spark の `TimestampType` を StarRocks の `DATETIME` に変換する際に使用されるタイムゾーン。デフォルトは `ZoneId#systemDefault()` によって返される JVM のタイムゾーンです。形式は `Asia/Shanghai` のようなタイムゾーン名、または `+08:00` のようなゾーンオフセットで指定できます。
+
+### `starrocks.write.socket.timeout.ms`
+
+- **必須**: NO
+- **デフォルト値**: `-1`
+- **説明**: バージョン 1.1.3 以降でサポートされています。HTTP クライアントがデータを待機する時間。単位：ms。デフォルト値 `-1` は、タイムアウトがないことを意味します。
+
+### `starrocks.write.properties.compression`
+
+- **必須**: NO
+- **デフォルト値**: なし
+- **説明**: バージョン 1.1.3 以降でサポートされています。Stream Load で使用される圧縮アルゴリズム。有効な値：`lz4_frame`。JSON 形式の圧縮には、データベース v3.2.7 以降が必要です。CSV 形式の圧縮には、データベースのバージョンに関する要件はありません。
 
 ## Spark と StarRocks のデータ型マッピング
 
 - デフォルトのデータ型マッピングは以下の通りです：
 
-  | Spark データ型 | StarRocks データ型                                          |
+  | Spark データ型   | StarRocks データ型                                            |
   | --------------- | ------------------------------------------------------------ |
   | BooleanType     | BOOLEAN                                                      |
   | ByteType        | TINYINT                                                      |
@@ -244,14 +269,16 @@ Spark コネクタ JAR ファイルの命名形式は `starrocks-spark-connector
   | StringType      | CHAR                                                         |
   | StringType      | VARCHAR                                                      |
   | StringType      | STRING                                                       |
-  | StringType      | JSON                                                       |
+  | StringType      | JSON                                                         |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
-  | ArrayType       | ARRAY <br /> **注意:** <br /> **バージョン 1.1.1 以降でサポートされています**。詳細な手順については、[Load data into columns of ARRAY type](#load-data-into-columns-of-array-type) を参照してください。 |
+  | ArrayType       | ARRAY<br />**注意:**<br />バージョン 1.1.1 以降でサポートされています。詳細な手順については、[Load data into columns of ARRAY type](#array-型の列にデータをロード) を参照してください。 |
+  | MapType         | MAP<br />**注意:**<br />バージョン 1.1.3 以降でサポートされています。詳細な手順については、[ネストされた列の読み込み](#ネストしたカラムstructarraymapのロード)を参照してください。 |
+  | StructType      | STRUCT<br />**注意:**<br />バージョン 1.1.3 以降でサポートされています。詳細な手順については、[ネストされた列の読み込み](#ネストしたカラムstructarraymapのロード)を参照してください。 |
 
 - データ型マッピングをカスタマイズすることもできます。
 
-  例えば、StarRocks テーブルに BITMAP および HLL 列が含まれているが、Spark はこれらのデータ型をサポートしていません。Spark で対応するデータ型をカスタマイズする必要があります。詳細な手順については、[BITMAP](#load-data-into-columns-of-bitmap-type) および [HLL](#load-data-into-columns-of-hll-type) 列にデータをロードする方法を参照してください。**BITMAP および HLL はバージョン 1.1.1 以降でサポートされています**。
+  例えば、StarRocks テーブルに BITMAP および HLL 列が含まれているが、Spark はこれらのデータ型をサポートしていません。Spark で対応するデータ型をカスタマイズする必要があります。詳細な手順については、[BITMAP](#bitmap-型の列にデータをロード) および [HLL](#hll-型の列にデータをロード) 列にデータをロードする方法を参照してください。**BITMAP および HLL はバージョン 1.1.1 以降でサポートされています**。
 
 ## Spark コネクタのアップグレード
 
@@ -289,7 +316,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### ネットワーク設定
 
-Spark が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認します。
+Spark が配置されているマシンが、StarRocks クラスターの FE ノードに `http_port`（デフォルト: `8030`）および `query_port`（デフォルト: `9030`）を介してアクセスでき、BE ノードに `be_http_port`（デフォルト: `8040`）を介してアクセスできることを確認します。
 
 #### Spark 環境のセットアップ
 
@@ -707,9 +734,15 @@ DISTRIBUTED BY HASH(`id`);
     2 rows in set (0.01 sec)
     ```
 
+<<<<<<< HEAD
 > **注意:**
 >
 > コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 関数を使用します。
+=======
+:::note
+コネクタは [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 関数を使用して、Spark の `TINYINT`、`SMALLINT`、`INTEGER`、および `BIGINT` 型のデータを StarRocks の `BITMAP` 型に変換し、他の Spark データ型には [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md)、[`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 関数を使用します。
+:::
+>>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 ### HLL 型の列にデータをロード
 
@@ -830,3 +863,69 @@ DISTRIBUTED BY HASH(`id`);
    +------+-----------------------+--------------------+
    2 rows in set (0.01 sec)
    ```
+
+## ネストしたカラム（STRUCT、ARRAY、MAP）のロード
+
+ネストしたカラムのロードは、バージョン 1.1.3 以降でサポートされています。
+
+Spark Connector は、`STRUCT`、`ARRAY`、`MAP` 型の StarRocks カラムへのデータ書き込みをサポートしています。データを正しくシリアライズできるように、`starrocks.column.types` オプションを使用して StarRocks カラムの型を指定する必要があります。
+
+### ネストしたデータ型のマッピング
+
+ネストした値は、Stream Load を使用して StarRocks に送信する前に、JSON 互換の文字列としてシリアライズされます。
+
+- `STRUCT` カラムは JSON オブジェクトとしてシリアライズされます: `{"field1": value1, "field2": value2}`。
+- `ARRAY` カラムは JSON 配列としてシリアライズされます: `[value1, value2, ...]`。
+- `MAP` カラムは JSON オブジェクトとしてシリアライズされます: `{"key1": value1, "key2": value2}`。
+
+### 例
+
+次の StarRocks テーブルがあるとします。
+
+```SQL
+CREATE TABLE nested_tbl (
+    id          INT,
+    info        STRUCT<type STRING, phone BIGINT>,
+    tags        ARRAY<STRING>,
+    attributes  MAP<STRING, STRING>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4;
+```
+
+Spark からデータを書き込みます。
+
+```Scala
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
+
+val schema = StructType(Seq(
+  StructField("id", IntegerType),
+  StructField("info", StructType(Seq(
+    StructField("type", StringType),
+    StructField("phone", LongType)
+  ))),
+  StructField("tags", ArrayType(StringType)),
+  StructField("attributes", MapType(StringType, StringType))
+))
+
+val data = Seq(
+  Row(1, Row("admin", 123456789L), Seq("spark", "starrocks"), Map("env" -> "prod"))
+)
+
+val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+val columnTypes =
+  "info STRUCT<type STRING, phone BIGINT>, " +
+  "tags ARRAY<STRING>, " +
+  "attributes MAP<STRING, STRING>"
+
+df.write.format("starrocks")
+  .option("starrocks.fenodes", "127.0.0.1:8030")
+  .option("starrocks.table.identifier", "test.nested_tbl")
+  .option("starrocks.user", "root")
+  .option("starrocks.password", "")
+  .option("starrocks.column.types", columnTypes)
+  .mode("append")
+  .save()
+```

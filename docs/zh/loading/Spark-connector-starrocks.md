@@ -14,11 +14,14 @@ StarRocks 提供 Apache Spark™ 连接器 (StarRocks Connector for Apache Spark
 
 ## 版本要求
 
-| Connector | Spark           | StarRocks | Java  | Scala |
-|----------|-----------------|-----------|-------| ---- |
-| 1.1.2    | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上   | 8    | 2.12  |
-| 1.1.1    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
-| 1.1.0    | 3.2, 3.3, 3.4   | 2.5 及以上 | 8     | 2.12 |
+| Spark connector | Spark              | StarRocks     | Java | Scala |
+| --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 > **注意**
 >
@@ -93,30 +96,151 @@ connector jar包的命名格式如下
 
 ## 参数说明
 
-| 参数                                             | 是否必填   | 默认值 | 描述                                                                                                                                                                                                                    |
-|------------------------------------------------|-------- | ---- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| starrocks.fe.http.url                          | 是      | 无 | FE 的 HTTP 地址，支持输入多个FE地址，使用逗号 , 分隔。格式为 `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。自版本 1.1.1 开始，您还可以在 URL 中添加 `http://` 前缀，例如 `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。|
-| starrocks.fe.jdbc.url                          | 是      | 无 | FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。                                                                                                                                                    |
-| starrocks.table.identifier                     | 是      | 无 | StarRocks 目标表的名称，格式为 `<database_name>.<table_name>`。                                                                                                                                                                    |
-| starrocks.user                                 | 是      | 无 | StarRocks 集群账号的用户名。使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT  权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。                                                                                                                                                                                                   |
-| starrocks.password                             | 是      | 无 | StarRocks 集群账号的用户密码。                                                                                                                                                                                                  |
-| starrocks.write.label.prefix                   | 否      | spark- | 指定Stream Load使用的label的前缀。                                                                                                                                                                                             |
-| starrocks.write.enable.transaction-stream-load | 否      | true | 是否使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。<br/> **注意：**<br/> 自 1.1.1 版本以来，只有当  `starrocks.write.max.retries` 的值为非正数时，此参数才会生效，因为 Stream Load 事务接口不支持重试。                                                               |
-| starrocks.write.buffer.size                    | 否      | 104857600 | 积攒在内存中的数据量，达到该阈值后数据一次性发送给 StarRocks，支持带单位`k`, `m`, `g`。增大该值能提高导入性能，但会带来写入延迟。                                                                                                                                                              |
-| starrocks.write.buffer.rows                    | 否      | Integer.MAX_VALUE | 自 1.1.1 版本起支持。积攒在内存中的数据行数，达到该阈值后数据一次性发送给 StarRocks。                                                                                                                                                              |
-| starrocks.write.flush.interval.ms              | 否      | 300000 | 数据攒批发送的间隔，用于控制数据写入StarRocks的延迟。                                                                                                                                                                                       |
-| starrocks.write.max.retries                    | 否       | 3             | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 导入该批数据的重试次数上线。<br/> **注意：**由于 Stream Load 事务接口不支持重试。如果此参数为正数，则 Spark connector 始终使用 Stream Load 接口，并忽略 `starrocks.write.enable.transaction-stream-load` 的值。|
-| starrocks.write.retry.interval.ms              | 否       | 10000         | 自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 尝试再次导入该批数据的时间间隔。|
-| starrocks.columns                              | 否      | 无 | 支持向 StarRocks 表中写入部分列，通过该参数指定列名，多个列名之间使用逗号 (,) 分隔，例如"c0,c1,c2"。                                                                                                                                                       |
-| starrocks.write.properties.*                   | 否      | 无 | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。 |
-| starrocks.write.properties.format              | 否      | CSV | 指定导入数据的格式，取值为 CSV 和 JSON。connector 会将每批数据转换成相应的格式发送给 StarRocks。                                                                                                                                             |
-| starrocks.write.properties.row_delimiter       | 否      | \n | 使用CSV格式导入时，用于指定行分隔符。                                                                                                                                                                                                  |
-| starrocks.write.properties.column_separator    | 否      | \t | 使用CSV格式导入时，用于指定列分隔符。                                                                                                                                                                                                  |
-| starrocks.write.properties.partial_update      | 否      | `FALSE` | 是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。默认值：`FALSE`。                                                                                                                                                                                             |
-| starrocks.write.properties.partial_update_mode | 否      | `row` | 指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul> |
-| starrocks.write.num.partitions                 | 否      | 无 | Spark用于并行写入的分区数，数据量小时可以通过减少分区数降低导入并发和频率，默认分区数由Spark决定。使用该功能可能会引入 Spark Shuffle cost。                                                                                                                                  |
-| starrocks.write.partition.columns              | 否      | 无 | 用于Spark分区的列，只有指定 starrocks.write.num.partitions 后才有效，如果不指定则使用所有写入的列进行分区                                                                                                                                               |
-| starrocks.timezone | 否 | JVM 默认时区|自 1.1.1 版本起支持。StarRocks 的时区。用于将 Spark 的 `TimestampType` 类型的值转换为 StarRocks 的 `DATETIME` 类型的值。默认为 `ZoneId#systemDefault()` 返回的 JVM 时区。格式可以是时区名称，例如 Asia/Shanghai，或时区偏移，例如 +08:00。|
+### `starrocks.fe.http.url`
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：FE 的 HTTP 地址，支持输入多个FE地址，使用逗号 , 分隔。格式为 `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>`。自版本 1.1.1 开始，您还可以在 URL 中添加 `http://` 前缀，例如 `http://<fe_host1>:<fe_http_port1>,http://<fe_host2>:<fe_http_port2>`。
+
+### `starrocks.fe.jdbc.url`
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：FE 的 MySQL Server 连接地址。格式为 `jdbc:mysql://<fe_host>:<fe_query_port>`。
+
+### `starrocks.table.identifier`
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：StarRocks 目标表的名称，格式为 `<database_name>.<table_name>`。
+
+### `starrocks.user`
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：StarRocks 集群账号的用户名。使用 Spark connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT  权限。如果您的用户账号没有这些权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+
+### `starrocks.password`
+
+- **是否必填**：是
+- **默认值**：无
+- **描述**：StarRocks 集群账号的用户密码。
+
+### `starrocks.write.label.prefix`
+
+- **是否必填**：否
+- **默认值**：`spark-`
+- **描述**：指定Stream Load使用的label的前缀。
+
+### `starrocks.write.enable.transaction-stream-load`
+
+- **是否必填**：否
+- **默认值**：`true`
+- **描述**：是否使用 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)导入数据。要求 StarRocks 版本为 v2.5 或更高。此功能可以在一次导入事务中导入更多数据，同时减少内存使用量，提高性能。
+
+:::note
+自 1.1.1 版本以来，只有当  `starrocks.write.max.retries` 的值为非正数时，此参数才会生效，因为 Stream Load 事务接口不支持重试。
+:::
+
+### `starrocks.write.buffer.size`
+
+- **是否必填**：否
+- **默认值**：`104857600`
+- **描述**：积攒在内存中的数据量，达到该阈值后数据一次性发送给 StarRocks，支持带单位`k`, `m`, `g`。增大该值能提高导入性能，但会带来写入延迟。
+
+### `starrocks.write.buffer.rows`
+
+- **是否必填**：否
+- **默认值**：Integer.MAX_VALUE
+- **描述**：自 1.1.1 版本起支持。积攒在内存中的数据行数，达到该阈值后数据一次性发送给 StarRocks。
+
+### `starrocks.write.flush.interval.ms`
+
+- **是否必填**：否
+- **默认值**：300000
+- **描述**：数据攒批发送的间隔，用于控制数据写入StarRocks的延迟。
+
+### `starrocks.write.max.retries`
+
+- **是否必填**：否
+- **默认值**：`3`
+- **描述**：自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 导入该批数据的重试次数上线。
+
+:::note
+由于 Stream Load 事务接口不支持重试。如果此参数为正数，则 Spark connector 始终使用 Stream Load 接口，并忽略 `starrocks.write.enable.transaction-stream-load` 的值。
+:::
+
+### `starrocks.write.retry.interval.ms`
+
+- **是否必填**：否
+- **默认值**：`10000`
+- **描述**：自 1.1.1 版本起支持。如果一批数据导入失败，Spark connector 尝试再次导入该批数据的时间间隔。
+
+### `starrocks.write.use_bitmap_hash64`
+
+- **是否必填**：否
+- **默认值**：`false`
+- **描述**：自 1.1.3 版本起支持。是否使用 64 位哈希函数生成位图。默认使用 32 位哈希函数。
+
+### `starrocks.columns`
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：支持向 StarRocks 表中写入部分列，通过该参数指定列名，多个列名之间使用逗号 (,) 分隔，例如 `"c0,c1,c2"`。
+
+### `starrocks.write.properties.*`
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：指定 Stream Load 的参数，用于控制导入行为，例如使用 `starrocks.write.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。
+
+### `starrocks.write.properties.format`
+
+- **是否必填**：否
+- **默认值**：`CSV`
+- **描述**：指定导入数据的格式，取值为 CSV 和 JSON。connector 会将每批数据转换成相应的格式发送给 StarRocks。
+
+### `starrocks.write.properties.row_delimiter`
+
+- **是否必填**：否
+- **默认值**：`\n`
+- **描述**：使用CSV格式导入时，用于指定行分隔符。
+
+### `starrocks.write.properties.column_separator`
+
+- **是否必填**：否
+- **默认值**：`\t`
+- **描述**：使用CSV格式导入时，用于指定列分隔符。
+
+### `starrocks.write.properties.partial_update`
+
+- **是否必填**：否
+- **默认值**：`FALSE`
+- **描述**：是否使用部分列更新。取值包括 `TRUE` 和 `FALSE`。
+
+### `starrocks.write.properties.partial_update_mode`
+
+- **是否必填**：否
+- **默认值**：`row`
+- **描述**：指定部分更新的模式，取值包括 `row` 和 `column`。<ul><li>`row`（默认值），指定使用行模式执行部分更新，比较适用于较多列且小批量的实时更新场景。</li><li>`column`，指定使用列模式执行部分更新，比较适用于少数列并且大量行的批处理更新场景。在该场景，开启列模式，更新速度更快。例如，在一个包含 100 列的表中，每次更新 10 列（占比 10%）并更新所有行，则开启列模式，更新性能将提高 10 倍。</li></ul>
+
+### `starrocks.write.num.partitions`
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：Spark用于并行写入的分区数，数据量小时可以通过减少分区数降低导入并发和频率，默认分区数由Spark决定。使用该功能可能会引入 Spark Shuffle cost。
+
+### `starrocks.write.partition.columns`
+
+- **是否必填**：否
+- **默认值**：无
+- **描述**：用于Spark分区的列，只有指定 starrocks.write.num.partitions 后才有效，如果不指定则使用所有写入的列进行分区。
+
+### `starrocks.timezone`
+
+- **是否必填**：否
+- **默认值**：JVM 默认时区
+- **描述**：自 1.1.1 版本起支持。StarRocks 的时区。用于将 Spark 的 `TimestampType` 类型的值转换为 StarRocks 的 `DATETIME` 类型的值。默认为 `ZoneId#systemDefault()` 返回的 JVM 时区。格式可以是时区名称，例如 Asia/Shanghai，或时区偏移，例如 +08:00。
 
 ## 数据类型映射
 
@@ -136,10 +260,12 @@ connector jar包的命名格式如下
   | StringType      | CHAR                                                         |
   | StringType      | VARCHAR                                                      |
   | StringType      | STRING                                                       |
-  | StringType      | JSON                                                       |
+  | StringType      | JSON                                                         |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
-  | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#导入至-array-列). |
+  | ArrayType       | ARRAY<br />**说明:**<br />自版本 1.1.1 开始支持。详细步骤, 请参见 [导入至 ARRAY 类型的列](#导入至-array-列)。 |
+  | MapType         | MAP<br />**说明:**<br />自版本 1.1.3 开始支持。详细步骤, 请参见 [导入嵌套列](#导入嵌套列structarray-以及-map)。 |
+  | StructType      | STRUCT<br />**说明:**<br />自版本 1.1.3 开始支持。详细步骤, 请参见 [导入嵌套列](#导入嵌套列structarray-以及-map)。 |
 
 - 您还可以自定义数据类型映射。
 
@@ -186,7 +312,7 @@ DISTRIBUTED BY HASH(`id`)
 
 #### 网络配置
 
-确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Spark 所在机器能够访问 StarRocks 集群中 FE 节点的 `http_port`（默认 `8030`）和 `query_port` 端口（默认 `9030`），以及 BE 节点的 `be_http_port` 端口（默认 `8040`）。
 
 ### 使用 Spark DataFrame 写入数据
 
@@ -599,9 +725,15 @@ DISTRIBUTED BY HASH(`id`);
     2 rows in set (0.01 sec)
     ```
 
+<<<<<<< HEAD
 > **注意**
 >
 > 如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 函数进行转换。
+=======
+:::note
+如果 Spark 中该列的数据类型为 TINYINT、SMALLINT、INTEGER 或者 BIGINT 类型，则 Spark connector 使用 [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数将该列的数据转换为 StarRocks 中的 BITMAP 类型。如果 Spark 中该列为其它数据类型，则 Spark connector 使用 [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) 或 [`bitmap_hash64`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash64.md) 函数进行转换。
+:::
+>>>>>>> 8761f06538 ([Doc] Spark Connector 1.1.4 Doc (#77580))
 
 ### 导入至 HLL 列
 
@@ -720,3 +852,69 @@ DISTRIBUTED BY HASH(`id`);
    +------+-----------------------+--------------------+
    2 rows in set (0.01 sec)
    ```
+
+## 导入嵌套列（STRUCT、ARRAY 以及 MAP）
+
+从 1.1.3 版本开始支持导入嵌套列。
+
+Spark Connector 支持向 StarRocks 中 `STRUCT`、`ARRAY` 和 `MAP` 类型的列写入数据。您必须使用 `starrocks.column.types` 选项声明 StarRocks 列的类型，以便 Connector 能够正确序列化数据。
+
+### 嵌套数据类型映射
+
+嵌套值在通过 Stream Load 发送到 StarRocks 之前，会被序列化为与 JSON 兼容的字符串：
+
+- `STRUCT` 列会被序列化为 JSON 对象：`{"field1": value1, "field2": value2}`。
+- `ARRAY` 列会被序列化为 JSON 数组：`[value1, value2, ...]`。
+- `MAP` 列会被序列化为 JSON 对象：`{"key1": value1, "key2": value2}`。
+
+### 示例
+
+假设存在以下 StarRocks 表：
+
+```SQL
+CREATE TABLE nested_tbl (
+    id          INT,
+    info        STRUCT<type STRING, phone BIGINT>,
+    tags        ARRAY<STRING>,
+    attributes  MAP<STRING, STRING>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4;
+```
+
+从 Spark 写入数据：
+
+```Scala
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
+
+val schema = StructType(Seq(
+  StructField("id", IntegerType),
+  StructField("info", StructType(Seq(
+    StructField("type", StringType),
+    StructField("phone", LongType)
+  ))),
+  StructField("tags", ArrayType(StringType)),
+  StructField("attributes", MapType(StringType, StringType))
+))
+
+val data = Seq(
+  Row(1, Row("admin", 123456789L), Seq("spark", "starrocks"), Map("env" -> "prod"))
+)
+
+val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+val columnTypes =
+  "info STRUCT<type STRING, phone BIGINT>, " +
+  "tags ARRAY<STRING>, " +
+  "attributes MAP<STRING, STRING>"
+
+df.write.format("starrocks")
+  .option("starrocks.fenodes", "127.0.0.1:8030")
+  .option("starrocks.table.identifier", "test.nested_tbl")
+  .option("starrocks.user", "root")
+  .option("starrocks.password", "")
+  .option("starrocks.column.types", columnTypes)
+  .mode("append")
+  .save()
+```
