@@ -487,6 +487,19 @@ message TxnLogPB {
         // cloud-native PK index can account tombstone volume toward its rebuild-rows threshold.
         // If del_num_rows_size() < dels_meta_size(), missing entries are treated as 0.
         repeated int64 del_num_rows = 23;
+        // Pre-built tombstone sstables for the del files, parallel to `dels_meta` (index by del_id). Built
+        // at import time when the serialized del-file size reaches pk_index_eager_build_threshold_bytes.
+        // When present for a del file, publish ingests it directly to avoid accumulating tombstones in the
+        // persistent-index memtable and causing additional flushes. The deleted keys' rss_rowid is still
+        // reverse-looked-up from the existing index to build the delete vector, and that lookup can run in
+        // parallel in both erase paths. The array, when populated, is the same length as dels_meta; a per-entry
+        // EMPTY FileMetaPB (empty name) means that del file has no tombstone sstable (below the threshold) and
+        // publish falls back to the memtable erase path. A totally empty array (size != dels_meta_size) is the
+        // downgrade-safe default and the behavior for pre-upgrade writers.
+        // del_sst_ranges carries the key range of each tombstone sstable (for tablet split), parallel to
+        // del_ssts.
+        repeated FileMetaPB del_ssts = 24;
+        repeated PersistentIndexSstableRangePB del_sst_ranges = 25;
     }
 
     message OpCompaction {
