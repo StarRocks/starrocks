@@ -1056,10 +1056,15 @@ public class PropertyAnalyzer {
     // Returns the set of column names that should use a compression dictionary (a ZSTD dictionary), or null if the
     // property is not present.
     // The page is also the unit of the page cache and of a point lookup, so the size
-    // is bounded on both ends: below 4KB a page holds too little to compress, and
-    // above 16MB one row lookup would decompress 16MB.
+    // is bounded on both ends. Below 4KB a page holds too little to compress. The
+    // ceiling is 1MB because that is the largest size measured to still keep point
+    // lookups in a sane range: on 44KB rows a 1MB page reads one row in ~127us,
+    // while a 4MB page takes ~375us, and on 9KB rows a 4MB page costs ~2.6ms --
+    // 45x the default page. Sizes past 1MB buy more ratio only on data whose rows
+    // are large AND near-duplicates of each other, and not enough of it to justify
+    // handing every point lookup that bill.
     private static final int MIN_ZSTD_COMPRESSION_PAGE_SIZE = 4 * 1024;
-    private static final int MAX_ZSTD_COMPRESSION_PAGE_SIZE = 16 * 1024 * 1024;
+    private static final int MAX_ZSTD_COMPRESSION_PAGE_SIZE = 1024 * 1024;
 
     private static List<String> zstdCompressionColumnSpecs(String[] specs) {
         List<String> trimmed = Lists.newArrayListWithCapacity(specs.length);

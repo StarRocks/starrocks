@@ -34,6 +34,7 @@
 
 #include "storage/rowset/segment_writer.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -189,9 +190,14 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
 
         // Per-column data page size. Unset (0) keeps config::data_page_size, so a
-        // table that does not ask for one is written exactly as before.
+        // table that does not ask for one is written exactly as before. The bound
+        // mirrors the one the FE validates against; it is repeated here because the
+        // value arrives over the wire and the page size decides how much a single
+        // point lookup has to decompress.
         if (column.zstd_compression_page_size() > 0) {
-            opts.data_page_size = column.zstd_compression_page_size();
+            constexpr uint32_t kMinDataPageSize = 4 * 1024;
+            constexpr uint32_t kMaxDataPageSize = 1024 * 1024;
+            opts.data_page_size = std::clamp(column.zstd_compression_page_size(), kMinDataPageSize, kMaxDataPageSize);
         }
 
         // now we create zone map for key columns

@@ -1287,7 +1287,6 @@ TEST_F(ColumnReaderWriterTest, DISABLED_zstd_options_benchmark) {
             {"按列 ZSTD + 字典, 256KB 页", starrocks::ZSTD, true, 256 * 1024},
             {"按列 ZSTD, 1MB 页", starrocks::ZSTD, false, 1024 * 1024},
             {"按列 ZSTD + 字典, 1MB 页", starrocks::ZSTD, true, 1024 * 1024},
-            {"按列 ZSTD, 4MB 页", starrocks::ZSTD, false, 4 * 1024 * 1024},
     };
 
     for (const auto& arm : arms) {

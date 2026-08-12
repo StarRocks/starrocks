@@ -647,7 +647,7 @@ A column may also carry its own data page size, written after the column name:
 
 ```SQL
 PROPERTIES (
-    "zstd_compression_columns"="v1:4m, v2:256k, v3"
+    "zstd_compression_columns"="v1:1m, v2:256k, v3"
 )
 ```
 
@@ -658,7 +658,9 @@ times better with a large page. A column holding hundreds of rows per page alrea
 has that redundancy inside the page and gains almost nothing, while every point
 lookup would decompress the whole larger page. That is why the size is set per
 column. Columns written without a size keep the BE default (`data_page_size`).
-Accepted sizes range from 4 KB to 16 MB.
+Accepted sizes range from 4 KB to 1 MB. The ceiling is where a point lookup still
+costs a bounded amount: a 1 MB page reads a single row in roughly a tenth of a
+millisecond, and past that the bill grows faster than the ratio does.
 
 The property can also be changed later with
 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. The new setting
