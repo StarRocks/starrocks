@@ -820,6 +820,23 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     }
 }
 
+std::vector<std::shared_ptr<CompactionTaskCallback>> TabletParallelCompactionManager::collect_callbacks_for_txn(
+        int64_t txn_id) const {
+    std::vector<std::shared_ptr<CompactionTaskCallback>> callbacks;
+    std::lock_guard<std::mutex> lock(_states_mutex);
+    for (const auto& entry : _tablet_states) {
+        const auto& state = entry.second;
+        if (state == nullptr) {
+            continue;
+        }
+        std::lock_guard<std::mutex> state_lock(state->mutex);
+        if (state->txn_id == txn_id && state->callback != nullptr) {
+            callbacks.push_back(state->callback);
+        }
+    }
+    return callbacks;
+}
+
 // Declares that no further subtasks will be registered for this tablet, then runs the completion
 // transition if every subtask has already finished in the meantime.
 //
@@ -1592,11 +1609,23 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     // inside the lambda, we safely check if the state still exists before accessing it.
     auto cancel_func = [this, tablet_id, txn_id, subtask_id, version]() {
         // Check if tablet state still exists - if not, the compaction has been cancelled/timed out
-        if (get_tablet_state(tablet_id, txn_id) == nullptr) {
+        auto state = get_tablet_state(tablet_id, txn_id);
+        if (state == nullptr) {
             return Status::Cancelled(strings::Substitute(
                     "Tablet parallel compaction state has been cleaned up: tablet_id=$0, txn_id=$1, "
                     "version=$2, subtask_id=$3",
                     tablet_id, txn_id, version, subtask_id));
+        }
+        // Also honour a cancellation of the originating request. abort() and the request deadline are
+        // recorded on the callback, not on the tablet state, so without this a subtask keeps burning IO
+        // and CPU to completion for a txn that FE has already given up on.
+        std::shared_ptr<CompactionTaskCallback> callback;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            callback = state->callback;
+        }
+        if (callback != nullptr) {
+            RETURN_IF_ERROR(callback->has_error());
         }
         return Status::OK();
     };
@@ -2511,11 +2540,23 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
     const auto& compaction_task = compaction_task_or.value();
     // Execute compaction
     auto cancel_func = [this, tablet_id, txn_id, subtask_id, version]() {
-        if (get_tablet_state(tablet_id, txn_id) == nullptr) {
+        auto state = get_tablet_state(tablet_id, txn_id);
+        if (state == nullptr) {
             return Status::Cancelled(strings::Substitute(
                     "Tablet parallel compaction state has been cleaned up: tablet_id=$0, txn_id=$1, "
                     "version=$2, subtask_id=$3",
                     tablet_id, txn_id, version, subtask_id));
+        }
+        // Also honour a cancellation of the originating request. abort() and the request deadline are
+        // recorded on the callback, not on the tablet state, so without this a subtask keeps burning IO
+        // and CPU to completion for a txn that FE has already given up on.
+        std::shared_ptr<CompactionTaskCallback> callback;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            callback = state->callback;
+        }
+        if (callback != nullptr) {
+            RETURN_IF_ERROR(callback->has_error());
         }
         return Status::OK();
     };
@@ -2922,11 +2963,23 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     auto compaction_task = compaction_task_or.value();
 
     auto cancel_func = [this, tablet_id, txn_id, subtask_id, version]() {
-        if (get_tablet_state(tablet_id, txn_id) == nullptr) {
+        auto state = get_tablet_state(tablet_id, txn_id);
+        if (state == nullptr) {
             return Status::Cancelled(strings::Substitute(
                     "Tablet parallel compaction state has been cleaned up: tablet_id=$0, txn_id=$1, "
                     "version=$2, subtask_id=$3",
                     tablet_id, txn_id, version, subtask_id));
+        }
+        // Also honour a cancellation of the originating request. abort() and the request deadline are
+        // recorded on the callback, not on the tablet state, so without this a subtask keeps burning IO
+        // and CPU to completion for a txn that FE has already given up on.
+        std::shared_ptr<CompactionTaskCallback> callback;
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            callback = state->callback;
+        }
+        if (callback != nullptr) {
+            RETURN_IF_ERROR(callback->has_error());
         }
         return Status::OK();
     };

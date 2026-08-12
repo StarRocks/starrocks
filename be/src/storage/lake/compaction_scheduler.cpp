@@ -753,6 +753,25 @@ Status CompactionScheduler::abort(int64_t txn_id) {
             return Status::OK();
         }
     }
+    l.unlock();
+
+    // A tablet handed off to parallel subtasks has no node in _contexts between the hand-off and its
+    // merged context being appended, so the walk above misses it and would report the whole txn as not
+    // found. Ask the parallel manager instead; its subtasks poll the callback through their cancel_func,
+    // so marking it is what actually stops them.
+    //
+    // The lock was released first on purpose: the existing order is _contexts_lock -> _states_mutex
+    // (remove_states() -> cleanup_tablet()), and update_status() takes the callback's own mutex, so
+    // neither is held here.
+    if (_parallel_mgr != nullptr) {
+        auto callbacks = _parallel_mgr->collect_callbacks_for_txn(txn_id);
+        for (auto& cb : callbacks) {
+            cb->update_status(Status::Aborted("aborted on demand"));
+        }
+        if (!callbacks.empty()) {
+            return Status::OK();
+        }
+    }
     return Status::NotFound(fmt::format("no compaction task with txn id {}", txn_id));
 }
 

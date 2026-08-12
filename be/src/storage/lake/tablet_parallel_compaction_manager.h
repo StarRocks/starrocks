@@ -223,6 +223,12 @@ public:
     void on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
                              std::unique_ptr<CompactionTaskContext> context);
 
+    // Collects the request callbacks of every tablet currently being compacted in parallel under |txn_id|.
+    // CompactionScheduler::abort() needs this because a tablet handed off to subtasks has no node in
+    // CompactionScheduler::_contexts between the hand-off and the merged context being appended, so a walk
+    // of that list alone reports the txn as not found and cancels nothing.
+    std::vector<std::shared_ptr<CompactionTaskCallback>> collect_callbacks_for_txn(int64_t txn_id) const;
+
     // Declare that no further subtasks will be registered for |tablet_id|, and run the completion
     // transition if they have all finished already. Must be called on every path that stops registering
     // subtasks while leaving some running; see TabletParallelCompactionState::submission_done.
