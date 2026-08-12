@@ -637,8 +637,8 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks(
 StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
-        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token,
-        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns) {
+        const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, int64_t handoff_in_queue_time_sec,
+        int64_t handoff_queue_wait_ns) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0

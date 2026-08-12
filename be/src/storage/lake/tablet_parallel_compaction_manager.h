@@ -223,8 +223,8 @@ public:
                                         const TabletParallelConfig& config,
                                         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction,
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
-                                        const ReleaseTokenFunc& release_token,
-                                        int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0);
+                                        const ReleaseTokenFunc& release_token, int64_t handoff_in_queue_time_sec = 0,
+                                        int64_t handoff_queue_wait_ns = 0);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
