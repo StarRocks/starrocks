@@ -681,7 +681,7 @@ Release Date: February 14, 2026
 - Introduced host-level sorting for Iceberg table sink, controlled by the system variable `connector_sink_sort_scope` (Default: FILE), to organize data layout for better read performance. [#68121](https://github.com/StarRocks/starrocks/pull/68121)
 - Improved error messages for Iceberg partition transform functions (for example, `bucket`, `truncate`) when the argument count is incorrect. [#68349](https://github.com/StarRocks/starrocks/pull/68349)
 - Refactored table property handling to improve support for different file formats (ORC/Parquet) and compression codecs in Iceberg tables. [#68588](https://github.com/StarRocks/starrocks/pull/68588)
-- Added table-level query timeout configuration `table_query_timeout` for fine-grained control (Priority: Session > Table > Cluster). [#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- Added table-level query timeout configuration `table_query_timeout` for fine-grained control (Priority: Session `>` Table `>` Cluster). [#67547](https://github.com/StarRocks/starrocks/pull/67547)
 - Supports the `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` statement to view automated snapshot status and schedule. [#68455](https://github.com/StarRocks/starrocks/pull/68455)
 - Supports displaying the original user-defined SQL with comments in `SHOW CREATE VIEW`. [#68040](https://github.com/StarRocks/starrocks/pull/68040)
 - Exposed Merge Commit-enabled Stream Load tasks in `information_schema.loads` for better observability. [#67879](https://github.com/StarRocks/starrocks/pull/67879)
