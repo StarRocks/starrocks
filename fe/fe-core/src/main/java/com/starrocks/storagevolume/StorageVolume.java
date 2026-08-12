@@ -336,10 +336,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         }
     }
 
-    private boolean isValidCloudConfiguration() {
-        return isValidCloudConfiguration(svt, cloudConfiguration);
-    }
-
     private static boolean isValidCloudConfiguration(StorageVolumeType svt, CloudConfiguration configuration) {
         switch (svt) {
             case S3:
