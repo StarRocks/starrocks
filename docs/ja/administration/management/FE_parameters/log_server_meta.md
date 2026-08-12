@@ -424,7 +424,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：No
-- 説明：FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用して、プロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` や `fe.features.log` のようなファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって管理されます。タイムスタンプのサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリへの書き込みおよびローテーション/削除の権限を持っていることを確認してください。
+- 説明：FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用して、プロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` のようなファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって管理されます。タイムスタンプのサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリへの書き込みおよびローテーション/削除の権限を持っていることを確認してください。
 - 導入時期：v3.2.5
 
 
