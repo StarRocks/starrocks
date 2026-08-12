@@ -332,18 +332,37 @@ private:
 
     uint64_t _total_mem_footprint = 0;
 
-    // compression dict column-level compression dictionary (a ZSTD dictionary) (write side). Lazily built from the
-    // first eligible page's encoded values; page 0 itself and every subsequent
-    // data page are then compressed referencing it. See finish_current_page()
-    // (sampling gate) and write_data() (dict page emission).
+    // Write side of the per-column ZSTD compression dictionary. Lazily built from
+    // the first eligible page's encoded values; every page AFTER that one is then
+    // compressed referencing it. See finish_current_page() (sampling gate) and
+    // write_data() (dict page emission).
+    //
+    // The page the sample came from is compressed WITHOUT the dictionary. It would
+    // otherwise compress against itself, which tells us nothing about whether the
+    // dictionary is worth keeping -- and the reader decodes a no-dict frame
+    // identically whether or not a raw-content dictionary is referenced, so a plain
+    // page 0 in a dictionary column is safe.
     std::unique_ptr<compression::ZstdCDict> _compression_cdict;
     std::string _zstd_compression_dict_sample; // dict bytes, persisted as the dict page
     bool _zstd_compression_dict_ready = false; // _compression_cdict has been built
     bool _cdict_used = false;                  // at least one data page was actually dict-compressed
+    // Whether the dictionary has been put to the test yet. The first page compressed
+    // after the dictionary exists is compressed BOTH ways and the smaller result is
+    // kept; if the dictionary did not win by a clear margin it is abandoned for the
+    // whole column, which is what keeps it from costing anything on data it cannot
+    // help (incompressible bytes, rows so large a page holds one of them, columns
+    // whose redundancy a plain page already captures).
+    bool _zstd_compression_dict_proven = false;
+    // Set when the trial rejected the dictionary. The decision is final for the
+    // whole column: without it the sampling gate below, which only asks whether a
+    // dictionary exists right now, would simply build another one from a later page
+    // and that one would never be put to the test.
+    bool _zstd_compression_dict_abandoned = false;
+    // Set for exactly the page the dictionary was sampled from, so that page is
+    // compressed plainly instead of against itself.
+    bool _sampling_page = false;
     // Level to bake into the CDict (-1 = zstd default).
     int _effective_compression_level() const;
-    // Compress one already-assembled body and push it as a page.
-    Status _compress_and_push_page(std::vector<OwnedSlice> body, PageFooterPB footer);
 
     Buffer<Slice> _slice_buf;
 };

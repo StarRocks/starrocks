@@ -646,33 +646,6 @@ int ScalarColumnWriter::_effective_compression_level() const {
                    : -1;
 }
 
-Status ScalarColumnWriter::_compress_and_push_page(std::vector<OwnedSlice> body, PageFooterPB footer) {
-    std::vector<Slice> slices;
-    slices.reserve(body.size());
-    for (auto& part : body) {
-        if (part.slice().size > 0) {
-            slices.emplace_back(part.slice());
-        }
-    }
-    const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
-    faststring compressed_body;
-    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, slices,
-                                               &compressed_body, cdict));
-    auto page = std::make_unique<Page>();
-    page->footer = std::move(footer);
-    if (compressed_body.size() == 0) {
-        // Not worth compressing: keep the raw body (a legal page state).
-        page->data = std::move(body);
-    } else {
-        page->data.emplace_back(compressed_body.build());
-        if (cdict != nullptr) {
-            _cdict_used = true;
-        }
-    }
-    _push_back_page(page.release());
-    return Status::OK();
-}
-
 Status ScalarColumnWriter::finish_current_page() {
     if (_zone_map_index_builder != nullptr) {
         RETURN_IF_ERROR(_zone_map_index_builder->flush());
@@ -723,8 +696,8 @@ Status ScalarColumnWriter::finish_current_page() {
     // page's encoded values, BEFORE compressing this page, so page 0 itself is
     // dict-compressed. Best-effort: any failure just leaves the column without a
     // compression dict; it never fails the flush.
-    if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && _compress_codec != nullptr &&
-        _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
+    if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
+        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
         _encoding_info->encoding() == PLAIN_ENCODING && _page_builder->count() > 0 &&
         encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
         // The first data page of a compression-dict column must be format v2 so that even an
@@ -743,17 +716,61 @@ Status ScalarColumnWriter::finish_current_page() {
         if (cdict_or.ok()) {
             _compression_cdict = std::move(cdict_or.value());
             _zstd_compression_dict_ready = true;
+            // This page is the sample; compressing it against itself would be both
+            // free and meaningless; it goes out plain and the NEXT page decides
+            // whether the dictionary is worth keeping.
+            _sampling_page = true;
         } else {
             _zstd_compression_dict_sample.clear(); // degrade: this column gets no compression dict
             StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
         }
     }
     const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
+    if (_sampling_page) {
+        // The dictionary was sampled from this very page. Compressing it against
+        // itself would collapse it to almost nothing and would prove nothing about
+        // the rest of the column, so this page goes out plain. That is safe: the
+        // reader decodes a no-dict frame identically whether or not a raw-content
+        // dictionary is referenced.
+        _sampling_page = false;
+        cdict = nullptr;
+    }
 
     // trying to compress page body
     faststring compressed_body;
-    RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
-                                               &compressed_body, cdict));
+    if (cdict != nullptr && !_zstd_compression_dict_proven) {
+        // First page compressed since the dictionary was built. Compress it both
+        // ways and keep the dictionary only if it earns its place. Whether a
+        // dictionary pays is a property of the data, so it is measured on one page
+        // rather than guessed from row length or page size, and this decides it for
+        // the whole column. Runs once per column per segment.
+        _zstd_compression_dict_proven = true;
+        faststring plain_body;
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &plain_body, nullptr));
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, cdict));
+        // compress_page_body returns an empty body when compressing did not save
+        // enough to be worth it; that case means "the uncompressed size".
+        const size_t raw_size = Slice::compute_total_size(body);
+        const size_t with_dict = compressed_body.size() == 0 ? raw_size : compressed_body.size();
+        const size_t without_dict = plain_body.size() == 0 ? raw_size : plain_body.size();
+        // The margin keeps a dictionary that merely breaks even from costing a page
+        // per column per segment plus the read-side work of loading it.
+        constexpr double kMinDictGain = 0.02;
+        if (static_cast<double>(with_dict) > static_cast<double>(without_dict) * (1.0 - kMinDictGain)) {
+            _compression_cdict.reset();
+            _zstd_compression_dict_sample.clear();
+            _zstd_compression_dict_ready = false;
+            _zstd_compression_dict_abandoned = true;
+            cdict = nullptr;
+            compressed_body.swap(plain_body);
+            StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+        }
+    } else {
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, cdict));
+    }
     if (compressed_body.size() == 0) {
         // page body is uncompressed
         double space_saving =

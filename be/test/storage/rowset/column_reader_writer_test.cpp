@@ -1220,6 +1220,149 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
     }
 }
 
+// A dictionary that cannot pay for itself must be dropped rather than written.
+// Incompressible values are the clearest case: the dictionary has nothing to
+// offer, and keeping it would cost a page per column per segment plus the work
+// of loading it on every read.
+TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pay) {
+    const int N = 4000;
+    // Pseudo-random bytes: distinct, high-entropy, nothing to share between rows.
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    uint64_t r = 88172645463325252ULL;
+    for (int i = 0; i < N; i++) {
+        std::string v;
+        v.reserve(512);
+        for (int j = 0; j < 512; j++) {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            v.push_back(static_cast<char>('a' + (r % 26)));
+        }
+        strs[i] = std::move(v);
+        slices.emplace_back(strs[i]);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    auto write_once = [&](bool use_dict, ColumnMetaPB* meta, uint64_t* out_size) {
+        const std::string fname = strings::Substitute("$0/zstd_dict_pay_$1.data", TEST_DIR, use_dict ? 1 : 0);
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = meta;
+            meta->set_column_id(0);
+            meta->set_unique_id(0);
+            meta->set_type(TYPE_VARCHAR);
+            meta->set_length(1024 * 1024);
+            meta->set_encoding(PLAIN_ENCODING);
+            meta->set_compression(starrocks::ZSTD);
+            meta->set_compression_level(-1);
+            meta->set_is_nullable(true);
+            writer_opts.use_zstd_compression = use_dict;
+            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            ASSERT_OK(writer->append(*col));
+            ASSERT_OK(writer->finish());
+            ASSERT_OK(writer->write_data());
+            ASSERT_OK(writer->write_ordinal_index());
+            ASSERT_OK(wfile->close());
+        }
+        ASSIGN_OR_ABORT(const uint64_t size, _fs->get_file_size(fname));
+        *out_size = size;
+    };
+
+    ColumnMetaPB dict_meta;
+    ColumnMetaPB plain_meta;
+    uint64_t with_dict = 0;
+    uint64_t without_dict = 0;
+    write_once(true, &dict_meta, &with_dict);
+    write_once(false, &plain_meta, &without_dict);
+
+    ASSERT_EQ(PLAIN_ENCODING, dict_meta.encoding());
+    // No dictionary page, because the trial found it did not pay.
+    EXPECT_FALSE(dict_meta.has_zstd_compression_dict_page());
+    // And the column costs the same as if the feature had never been asked for.
+    EXPECT_EQ(without_dict, with_dict);
+}
+
+// The other half of the same rule: on data the dictionary does help, it is kept
+// and the column really does get smaller.
+TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {
+    // Rows large enough that a page holds only a few of them, all sharing a long
+    // preamble. A plain page has to spell that preamble out again; the dictionary
+    // carries it once for the whole column. This is the shape the feature exists
+    // for, and it is deliberately NOT "hundreds of near-identical rows per page",
+    // where a plain page already captures the repetition by itself.
+    const int N = 300;
+    std::string preamble;
+    for (int i = 0; i < 500; i++) {
+        preamble += strings::Substitute(R"({"field_$0":"a recurring configuration value number $0"},)", i % 50);
+    }
+    std::vector<std::string> strs(N);
+    std::vector<Slice> slices;
+    slices.reserve(N);
+    uint64_t r = 12345678901234567ULL;
+    for (int i = 0; i < N; i++) {
+        std::string v = preamble;
+        for (int j = 0; j < 5000; j++) {
+            r ^= r << 13;
+            r ^= r >> 7;
+            r ^= r << 17;
+            v.push_back(static_cast<char>('a' + (r % 26)));
+        }
+        strs[i] = std::move(v);
+        slices.emplace_back(strs[i]);
+    }
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    col->reserve(N);
+    col->append_strings(slices);
+
+    auto write_once = [&](bool use_dict, ColumnMetaPB* meta, uint64_t* out_size) {
+        const std::string fname = strings::Substitute("$0/zstd_dict_pays_$1.data", TEST_DIR, use_dict ? 1 : 0);
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = meta;
+            meta->set_column_id(0);
+            meta->set_unique_id(0);
+            meta->set_type(TYPE_VARCHAR);
+            meta->set_length(1024 * 1024);
+            meta->set_encoding(PLAIN_ENCODING);
+            meta->set_compression(starrocks::ZSTD);
+            meta->set_compression_level(-1);
+            meta->set_is_nullable(true);
+            writer_opts.use_zstd_compression = use_dict;
+            TabletColumn column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            ASSERT_OK(writer->append(*col));
+            ASSERT_OK(writer->finish());
+            ASSERT_OK(writer->write_data());
+            ASSERT_OK(writer->write_ordinal_index());
+            ASSERT_OK(wfile->close());
+        }
+        ASSIGN_OR_ABORT(const uint64_t size, _fs->get_file_size(fname));
+        *out_size = size;
+    };
+
+    ColumnMetaPB dict_meta;
+    ColumnMetaPB plain_meta;
+    uint64_t with_dict = 0;
+    uint64_t without_dict = 0;
+    write_once(true, &dict_meta, &with_dict);
+    write_once(false, &plain_meta, &without_dict);
+
+    ASSERT_EQ(PLAIN_ENCODING, dict_meta.encoding());
+    EXPECT_TRUE(dict_meta.has_zstd_compression_dict_page());
+    EXPECT_LT(with_dict, without_dict) << "with_dict=" << with_dict << " without_dict=" << without_dict;
+}
+
 // ---------------------------------------------------------------------------
 // Benchmark, not a correctness test: compares what the three per-column knobs
 // (ZSTD codec, shared dictionary, page size) actually buy on a real dataset.
