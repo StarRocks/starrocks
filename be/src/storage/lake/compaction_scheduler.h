@@ -94,6 +94,10 @@ public:
 private:
     const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
 
+    // Cache a txn log that this node produced but handed to the aggregator to persist, so that the
+    // following publish does not have to read the combined txn log back from object storage.
+    void cache_txn_log(const CompactionTaskContext& context);
+
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
     const CompactRequest* _request;
