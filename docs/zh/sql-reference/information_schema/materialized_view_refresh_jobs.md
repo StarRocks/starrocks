@@ -22,7 +22,7 @@ description: "materialized_view_refresh_jobs 提供物化视图刷新的作业�
 | RESOURCE_GROUP                     | 刷新作业所使用的资源组。该值为物化视图所配置的 `resource_group` 属性；未配置时返回 `default_mv_wg`。 |
 | CREATOR                            | 创建物化视图的用户（即 create-user;运行身份见 RUN_AS_USER）。                         |
 | SUBMIT_USER                        | 提交刷新作业的用户。对于手动刷新，该值为发起刷新的用户；对于周期性刷新或基表变更触发的刷新，则由系统提交。 |
-| RUN_AS_USER                        | 刷新实际使用的运行用户身份。creator-based 授权（默认，`mv_use_creator_based_authorization=true`）下为物化视图的创建者；root-based 授权下为 `'root'@'%'`。 |
+| RUN_AS_USER                        | 刷新实际使用的运行用户身份。creator-based 授权（默认，`mv_use_creator_based_authorization=true`）下为物化视图的创建者；root-based 授权下为 `'root'@'%'`。该配置项同时也控制用于构建物化视图查询改写执行计划缓存的用户身份。参见 [`mv_use_creator_based_authorization`](../../administration/management/FE_parameters/shared_lake_other.md)。 |
 | SUBMIT_TIME                        | 作业提交的时间（第一个 task run 的创建时间）。               |
 | REFRESH_STATE                      | 作业的状态，由最后一个 task run 汇总而来。有效值：`PENDING`、`RUNNING`、`FAILED`、`SUCCESS` 和 `SKIPPED`。 |
 | FINISH_TIME                        | 作业完成的时间。如果作业尚未完成，则为 `NULL`。             |

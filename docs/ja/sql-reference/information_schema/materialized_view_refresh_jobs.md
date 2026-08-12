@@ -22,7 +22,7 @@ description: "materialized_view_refresh_jobs はマテリアライズドビュ�
 | RESOURCE_GROUP                     | リフレッシュジョブが使用するリソースグループ。これはマテリアライズドビューに設定された `resource_group` プロパティです。設定されていない場合は `default_mv_wg` を返します。 |
 | CREATOR                            | マテリアライズドビューを作成したユーザー（create-user。実行時の identity は RUN_AS_USER を参照）。 |
 | SUBMIT_USER                        | リフレッシュジョブを送信したユーザー。手動リフレッシュの場合はそれを発行したユーザーであり、定期リフレッシュやベーステーブル変更によるリフレッシュの場合はシステムによって送信されます。 |
-| RUN_AS_USER                        | リフレッシュが実際に実行されるユーザー ID。creator-based 認可（デフォルト、`mv_use_creator_based_authorization=true`）では実体化ビューの作成者、root-based 認可では `'root'@'%'`。 |
+| RUN_AS_USER                        | リフレッシュが実際に実行されるユーザー ID。creator-based 認可（デフォルト、`mv_use_creator_based_authorization=true`）では実体化ビューの作成者、root-based 認可では `'root'@'%'`。この設定は、クエリリライト用のマテリアライズドビューのプランキャッシュを構築する際に使用される ID も制御します。[`mv_use_creator_based_authorization`](../../administration/management/FE_parameters/shared_lake_other.md) を参照してください。 |
 | SUBMIT_TIME                        | ジョブが送信された時間（最初の task run の作成時間）。       |
 | REFRESH_STATE                      | ジョブの状態。最後の task run から集約されます。有効な値: `PENDING`、`RUNNING`、`FAILED`、`SUCCESS`、`SKIPPED`。 |
 | FINISH_TIME                        | ジョブが終了した時間。ジョブが終了していない場合は `NULL`。 |

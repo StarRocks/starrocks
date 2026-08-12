@@ -1288,6 +1288,15 @@ This topic introduces the following types of FE configurations:
 - Description: The default try lock timeout for materialized view refresh to try the DB lock of its base table/materialized view.
 - Introduced in: v3.3.0
 
+### `mv_use_creator_based_authorization`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the user identity used to authorize a materialized view's background operations. This covers both refresh tasks and building the plan cache used for query rewrite. When set to `true` (the default, creator-based authorization), these operations are authorized as the materialized view's creator, with all of the creator's roles activated. When set to `false` (root-based authorization), they are authorized as `'root'@'%'`, meaning the materialized view's plans are built with ROOT privileges. Set it to `false` for compatibility with LDAP-authenticated clusters.
+- Introduced in: v3.5.5
+
 ### `oauth2_auth_server_url`
 
 - Default: Empty string
