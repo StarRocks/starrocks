@@ -4,8 +4,8 @@
 
 接受任何使用默认哈希种子、以标准 Apache DataSketches C++ 紧凑 theta 格式写入的草图，包括：
 
-- [`ds_theta_accumulate`](./ds_theta_accumulate.md)（从原始值构建）
-- [`ds_theta_combine`](./ds_theta_combine.md)（跨行合并）
+- [`ds_theta_accumulate`](../aggregate-functions/ds_theta_accumulate.md)（从原始值构建）
+- [`ds_theta_combine`](../aggregate-functions/ds_theta_combine.md)（跨行合并）
 - [`ds_theta_union`](./ds_theta_union.md)、[`ds_theta_intersect`](./ds_theta_intersect.md)、[`ds_theta_a_not_b`](./ds_theta_a_not_b.md)（成对集合运算）
 - 从 Parquet、Iceberg 或其他 Apache DataSketches 消费者作为原始 `VARBINARY` 加载的外部草图
 

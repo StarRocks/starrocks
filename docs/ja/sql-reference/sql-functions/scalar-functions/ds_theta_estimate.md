@@ -4,8 +4,8 @@
 
 デフォルトのハッシュシードを用いた標準的な Apache DataSketches C++ コンパクト theta フォーマットで書き込まれた任意のスケッチを受け付けます。以下を含みます:
 
-- [`ds_theta_accumulate`](./ds_theta_accumulate.md)（生の値から構築）
-- [`ds_theta_combine`](./ds_theta_combine.md)（行をまたいで合併）
+- [`ds_theta_accumulate`](../aggregate-functions/ds_theta_accumulate.md)（生の値から構築）
+- [`ds_theta_combine`](../aggregate-functions/ds_theta_combine.md)（行をまたいで合併）
 - [`ds_theta_union`](./ds_theta_union.md)、[`ds_theta_intersect`](./ds_theta_intersect.md)、[`ds_theta_a_not_b`](./ds_theta_a_not_b.md)（ペアごとの集合演算）
 - Parquet、Iceberg または他の Apache DataSketches コンシューマから生の `VARBINARY` として読み込まれた外部スケッチ
 

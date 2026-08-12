@@ -11,8 +11,8 @@ output row per input row.
 Accepts any sketch written in the standard Apache DataSketches C++ compact theta
 format with the default hash seed, including sketches produced by:
 
-- [`ds_theta_accumulate`](./ds_theta_accumulate.md) (build from raw values)
-- [`ds_theta_combine`](./ds_theta_combine.md) (union across rows)
+- [`ds_theta_accumulate`](../aggregate-functions/ds_theta_accumulate.md) (build from raw values)
+- [`ds_theta_combine`](../aggregate-functions/ds_theta_combine.md) (union across rows)
 - [`ds_theta_union`](./ds_theta_union.md), [`ds_theta_intersect`](./ds_theta_intersect.md),
   [`ds_theta_a_not_b`](./ds_theta_a_not_b.md) (pairwise set ops)
 - Externally produced sketches loaded as raw `VARBINARY` from Parquet, Iceberg,

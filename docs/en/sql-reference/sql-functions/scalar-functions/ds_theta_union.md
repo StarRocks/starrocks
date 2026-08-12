@@ -9,7 +9,7 @@ Returns a single serialized compact sketch whose distinct count estimates
 `|A ∪ B|`. Returns `NULL` if either input is `NULL`.
 
 For an aggregate-style union over many sketches at once, use
-[ds_theta_combine](./ds_theta_combine.md).
+[ds_theta_combine](../aggregate-functions/ds_theta_combine.md).
 
 ## Syntax
 
