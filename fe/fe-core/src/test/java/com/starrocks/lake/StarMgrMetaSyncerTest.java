@@ -472,8 +472,8 @@ public class StarMgrMetaSyncerTest {
                     return Lists.newArrayList(10L, 11L);
                 }
                 if (groupId == recycledShardGroupId) {
-                    throw new DdlException("Failed to list shards in group " + recycledShardGroupId +
-                            ". error:NOT_EXIST:shard group " + recycledShardGroupId + " not exist.");
+                    throw new DdlException("arbitrary message",
+                            new StarClientException(StatusCode.NOT_EXIST, "arbitrary cause message"));
                 }
                 return Lists.newArrayList();
             }

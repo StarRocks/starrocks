@@ -18,8 +18,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -674,8 +676,8 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
     }
 
     private boolean isShardGroupNotExist(DdlException e) {
-        String message = e.getMessage();
-        return message != null && (message.contains("NOT_EXIST") || message.contains("not exist"));
+        return e.getCause() instanceof StarClientException
+                && ((StarClientException) e.getCause()).getCode() == StatusCode.NOT_EXIST;
     }
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
