@@ -50,6 +50,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: DiagnoseDaemon が `STACK_TRACE` リクエストに対して行う連続したスタックトレース診断の最小時間間隔を制御します。診断リクエストが到着したとき、最後の収集が `diagnose_stack_trace_interval_ms` ミリ秒未満であれば、デーモンはスタックトレースの収集およびログ出力をスキップします。頻繁なスタックダンプによる CPU 負荷やログ量を減らすためにこの値を大きくし、短期間の問題をデバッグするためにより頻繁なトレースを取得したい場合（例えば TabletsChannel::add_chunk が長時間ブロックするロードのフェイルポイントシミュレーションなど）には値を小さくしてください。
 - 導入バージョン: v3.5.0
 
+### lake_compact_slow_log_ms
+
+- デフォルト: 5000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: はい
+- 説明: Lake Compaction の詳細な Profile スローログを出力するための実行時間しきい値です。通常の Compaction Attempt または並列 Compaction Subtask の完了後、その Attempt または Subtask の実行時間がこの値以上の場合にのみ、StarRocks はタスク識別子、ステータス、完全な JSON Profile を含む INFO ログを出力します。`0` に設定すると、完了したすべての Attempt または Subtask が記録されます。INFO ログの量を減らすには、この値を大きくします。
+- 導入バージョン: -
+
 ### log_buffer_level
 
 - デフォルト: 空の文字列

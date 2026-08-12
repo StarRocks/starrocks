@@ -86,6 +86,17 @@ TEST(DynamicCacheTest, cache2) {
     }
 }
 
+TEST(DynamicCacheTest, release_last_pin_evicts_if_over_capacity) {
+    DynamicCache<int32_t, int64_t> cache(/*capacity=*/1);
+    auto* entry = cache.get_or_create(1);
+    EXPECT_FALSE(cache.update_object_size(entry, 2));
+    EXPECT_EQ(2, cache.size());
+
+    EXPECT_TRUE(cache.release_with_expire_time_evict_if_over_capacity(entry, MonotonicMillis() + 1000));
+    EXPECT_EQ(0, cache.size());
+    EXPECT_EQ(0, cache.object_size());
+}
+
 // Default tracker accounting is additive: a plain consume() walks the ancestor
 // chain, so the cache tracker AND its root (process) tracker both grow. This is the
 // long-standing behavior other DynamicCache users rely on.

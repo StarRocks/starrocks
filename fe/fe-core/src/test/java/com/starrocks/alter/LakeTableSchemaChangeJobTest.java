@@ -338,6 +338,81 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
+    // ADD INDEX ... USING GIN carries a table-level index change, so light-weight tablet creation must be
+    // disabled: the shadow tablet's on-demand schema would otherwise be built from the table's pre-alter
+    // index set (only written back at job finish) and the rewritten segments would silently lack the index.
+    @Test
+    public void testIndexChangeDisablesLightWeightTabletCreation() throws Exception {
+        boolean savedEnableGin = Config.enable_experimental_gin;
+        Config.enable_experimental_gin = true;
+        try {
+            LakeTable ginTable = createTable(connectContext,
+                        "CREATE TABLE t_gin(c0 INT, c1 VARCHAR(64)) duplicate key(c0) distributed by hash(c0) buckets "
+                                    + NUM_BUCKETS);
+            alterTable(connectContext, "ALTER TABLE t_gin SET ('light_weight_tablet_creation' = 'true')");
+            Assertions.assertTrue(ginTable.isLightWeightTabletCreation());
+
+            AtomicBoolean sendCalled = new AtomicBoolean(false);
+            new MockUp<LakeTableSchemaChangeJob>() {
+                @Mock
+                public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                                 MarkedCountDownLatch<Long, Long> countDownLatch,
+                                                 long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                                 AtomicBoolean isCancelling) throws AlterCancelException {
+                    sendCalled.set(true);
+                }
+            };
+
+            alterTable(connectContext,
+                        "ALTER TABLE t_gin ADD INDEX idx_c1 (c1) USING GIN ('parser' = 'english')");
+            LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(ginTable);
+            schemaChangeJob.runPendingJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+            Assertions.assertTrue(sendCalled.get(),
+                        "an index change must fall back to normal tablet creation even when "
+                                    + "light_weight_tablet_creation is enabled");
+
+            schemaChangeJob.cancel("test");
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        } finally {
+            Config.enable_experimental_gin = savedEnableGin;
+        }
+    }
+
+    // Same contract for a bloom filter change; a mixed add+drop is used because a pure add or drop takes the
+    // lake IDG fast path (no shadow tablet) and would not produce a LakeTableSchemaChangeJob at all.
+    @Test
+    public void testBloomFilterChangeDisablesLightWeightTabletCreation() throws Exception {
+        LakeTable bfTable = createTable(connectContext,
+                    "CREATE TABLE t_bf(c0 INT, c1 VARCHAR(64), c2 VARCHAR(64)) duplicate key(c0) "
+                                + "distributed by hash(c0) buckets " + NUM_BUCKETS
+                                + " properties('bloom_filter_columns' = 'c1')");
+        alterTable(connectContext, "ALTER TABLE t_bf SET ('light_weight_tablet_creation' = 'true')");
+        Assertions.assertTrue(bfTable.isLightWeightTabletCreation());
+
+        AtomicBoolean sendCalled = new AtomicBoolean(false);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                             MarkedCountDownLatch<Long, Long> countDownLatch,
+                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
+                                             AtomicBoolean isCancelling) throws AlterCancelException {
+                sendCalled.set(true);
+            }
+        };
+
+        alterTable(connectContext, "ALTER TABLE t_bf SET ('bloom_filter_columns' = 'c2')");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(bfTable);
+        schemaChangeJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertTrue(sendCalled.get(),
+                    "a bloom filter change must fall back to normal tablet creation even when "
+                                + "light_weight_tablet_creation is enabled");
+
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
     @Test
     public void testPreviousTxnNotFinished() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();

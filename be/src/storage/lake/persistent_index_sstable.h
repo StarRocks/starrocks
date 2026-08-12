@@ -55,6 +55,14 @@ public:
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
+    // Build an sstable that contains only tombstone entries (NullIndexValue) for the given keys, all at
+    // |version|. Used to apply a large pure-delete without accumulating tombstones in the memtable and
+    // triggering additional flushes. |keys| MUST be sorted ascending (bytewise) and deduplicated, as required
+    // by TableBuilder. Each entry is encoded exactly like a memtable-flushed tombstone
+    // (rssid == rowid == UINT32_MAX), so reads and compaction treat it identically.
+    static Status build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version, WritableFile* wf,
+                                          uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
+
     // multi_get can get multi keys at onces
     // |keys| : Address point to first element of key array.
     // |key_indexes| : the index of key array that we actually want to get.

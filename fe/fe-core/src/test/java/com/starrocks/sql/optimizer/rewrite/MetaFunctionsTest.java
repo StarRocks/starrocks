@@ -204,7 +204,7 @@ public class MetaFunctionsTest extends MVTestBase {
             // normal
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql) {
+                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                     MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
                     record.data = Lists.newArrayList("v1");
                     String json = GsonUtils.GSON.toJson(record);
@@ -220,7 +220,7 @@ public class MetaFunctionsTest extends MVTestBase {
             // record not found
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql) {
+                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                     throw new RuntimeException("query failed if record not exist in dict table");
                 }
             };
